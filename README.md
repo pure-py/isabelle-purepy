@@ -3,16 +3,17 @@
 This is an experiment of how a formalisation of PurePy could look like in Isabelle/HOL.
 
 This tries to find out:
-    - How easy it is to translate from Ott to Isabelle/HOL 
-    - How easy it is to automatically extract an evaluation function from the given inductive semantics rules
-    - How easy it is extract an executable OCaml evaluator from the formalisation
+
+- How easy it is to translate from Ott to Isabelle/HOL 
+- How easy it is to automatically extract an evaluation function from the given inductive semantics rules
+- How easy it is extract an executable OCaml evaluator from the formalisation
 
 Currently, only a really small subset of the expression syntax + semantics is formalised
 
 ## File contents
 
 | File              | Content                                           |
- ------------------- ---------------------------------------------------
+|-------------------|---------------------------------------------------|
 | `Syntax.thy`      | Syntax definition (to be generated from Ott)      |
 | `Semantics.thy`   | Semantics definition as inductive predicate       |
 | `Eval.thy`        | Semantics definition as recursive function        |
