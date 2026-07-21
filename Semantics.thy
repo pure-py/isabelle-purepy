@@ -6,9 +6,9 @@ datatype val =
       VLit literal
     | VList "val list" 
     | VTuple "val list"
-    | VClosure "vname \<Rightarrow> val" "vname list" expr
+    | VClosure "(vname \<times> val) list" "vname list" expr
 
-type_synonym "\<rho>" = "vname \<Rightarrow> val"
+type_synonym "\<rho>" = "(vname \<times> val) list"
 
 datatype r =
       Assigns "\<rho>"
@@ -40,7 +40,7 @@ definition unop_eval :: "uop \<Rightarrow> val \<Rightarrow> val option" where
 
 inductive expr_eval :: "\<rho> \<Rightarrow> expr \<Rightarrow> val \<Rightarrow> bool" ("_ \<turnstile>\<^sub>e _ \<Rightarrow> _" [60,0,60] 60)
 where
-EvalVar: "\<rho> \<turnstile>\<^sub>e Var x \<Rightarrow> \<rho> x" |
+EvalVar: "\<lbrakk> map_of \<rho> x = Some v \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>e Var x \<Rightarrow> v" |
 EvalLit: "\<rho> \<turnstile>\<^sub>e Literal l \<Rightarrow> VLit l" |
 EvalBinOp: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e1 \<Rightarrow> v1 ; \<rho> \<turnstile>\<^sub>e e2 \<Rightarrow> v2 ; binop_eval op v1 v2 = Some v' \<rbrakk> \<Longrightarrow> 
     \<rho> \<turnstile>\<^sub>e BinOp op e1 e2 \<Rightarrow> v'" |

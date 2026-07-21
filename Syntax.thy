@@ -6,7 +6,7 @@ type_alias vname = string
 type_alias fname = string
 type_alias cname = string
 
-datatype literal = Number int | Bool bool | None
+datatype literal = Number int | Bool bool | LitNone
 
 datatype bop = Or | And | Eq | Neq | Lt | Leq | Gt | Geq | Add | Sub | Mul | Div
 datatype uop = Not | Neg
