@@ -20,6 +20,7 @@ datatype expr =
     | List "expr list"              (* [10, 20, 40] *)
     | Tuple "expr list"             (* (10, 20, True) *)
     | Lambda "vname list" expr      (* lambda x: x * 2 *)
+    | Call expr "expr list"         (* f (1, 2, False) *)
 
 datatype stmt =
       Pass
@@ -29,10 +30,11 @@ datatype stmt =
     | AssertMsg expr expr
     | ReturnNone
     | Return expr
-    | If expr "stmt list" "(expr \<times> stmt list) list"
-    | IfElse  expr "stmt list" "(expr \<times> stmt list) list" "stmt list"
+    | If expr "stmt list" "(expr \<times> stmt list) list" "stmt list option"
     | MutualRegion "func list"
 
 and func = DefFunc fname "vname list" "stmt list"
+
+type_synonym block = "stmt list"
 
 end

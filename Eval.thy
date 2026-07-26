@@ -2,7 +2,7 @@ theory Eval
     imports Semantics
 begin
 
-fun 
+(* fun 
     eval_expr :: "\<rho> \<Rightarrow> expr \<Rightarrow> val option" and
     eval_exprs :: "\<rho> \<Rightarrow> expr list \<Rightarrow> val list option"
 where
@@ -41,6 +41,6 @@ where
      | Some v \<Rightarrow>
        (case eval_exprs \<rho> es of
           None \<Rightarrow> None
-        | Some vs \<Rightarrow> Some (v # vs)))"
+        | Some vs \<Rightarrow> Some (v # vs)))" *)
 
 end
