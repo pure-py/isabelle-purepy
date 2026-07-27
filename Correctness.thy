@@ -223,13 +223,13 @@ next
   case (EvalLambda \<rho> args e)
   then show ?case by (metis local.EvalLambda LambdaE)
 next
-  case (EvalBlock \<rho> s \<rho>' b r r')
-  from EvalBlock.hyps have
+  case (EvalBlockAssigns \<rho> s \<rho>' b r r')
+  from EvalBlockAssigns.hyps have
     h1: "\<rho> \<turnstile>\<^sub>s s \<Rightarrow> Assigns \<rho>'" and
     h2: "(\<rho> \<cdot> \<rho>') \<turnstile>\<^sub>b b \<Rightarrow> r" and
     h3: "Assigns \<rho>' \<bullet> r = Some r'"
     by auto
-  from EvalBlock.IH have
+  from EvalBlockAssigns.IH have
     ih1: "\<forall>rres. \<rho> \<turnstile>\<^sub>s s \<Rightarrow> rres \<longrightarrow> Assigns \<rho>' = rres" and
     ih2: "\<forall>rres. (\<rho> \<cdot> \<rho>') \<turnstile>\<^sub>b b \<Rightarrow> rres \<longrightarrow> r = rres"
     by auto
@@ -237,15 +237,55 @@ next
   proof (intro allI impI)
     fix rres
     assume "\<rho> \<turnstile>\<^sub>b (s # b) \<Rightarrow> rres"
-    then obtain \<rho>2' r2'' where
-      a1: "\<rho> \<turnstile>\<^sub>s s \<Rightarrow> Assigns \<rho>2'" and
-      a2: "(\<rho> \<cdot> \<rho>2') \<turnstile>\<^sub>b b \<Rightarrow> r2''" and
-      a3: "Assigns \<rho>2' \<bullet> r2'' = Some rres"
+    then consider
+        (Asn) \<rho>2' r2'' where
+          "\<rho> \<turnstile>\<^sub>s s \<Rightarrow> Assigns \<rho>2'"
+          "(\<rho> \<cdot> \<rho>2') \<turnstile>\<^sub>b b \<Rightarrow> r2''"
+          "Assigns \<rho>2' \<bullet> r2'' = Some rres"
+      | (Ret) v2 where
+          "\<rho> \<turnstile>\<^sub>s s \<Rightarrow> Returns v2"
+          "rres = Returns v2"
       by (cases rule: eval_block.cases) auto
-    from ih1 a1 have rho_eq: "\<rho>' = \<rho>2'" by blast
-    from a2 rho_eq have a2': "(\<rho> \<cdot> \<rho>') \<turnstile>\<^sub>b b \<Rightarrow> r2''" by simp
-    from ih2 a2' have r_eq: "r = r2''" by blast
-    from h3 a3 rho_eq r_eq show "r' = rres" by simp
+    then show "r' = rres"
+    proof cases
+      case Asn
+      from ih1 Asn(1) have rho_eq: "\<rho>' = \<rho>2'" by blast
+      from Asn(2) rho_eq have a2': "(\<rho> \<cdot> \<rho>') \<turnstile>\<^sub>b b \<Rightarrow> r2''" by simp
+      from ih2 a2' have r_eq: "r = r2''" by blast
+      from h3 Asn(3) rho_eq r_eq show ?thesis by simp
+    next
+      case Ret
+      from ih1 Ret(1) have "Assigns \<rho>' = Returns v2" by blast
+      then show ?thesis by simp
+    qed
+  qed
+next
+  case (EvalBlockReturns \<rho> s v b)
+  from EvalBlockReturns.hyps have h1: "\<rho> \<turnstile>\<^sub>s s \<Rightarrow> Returns v" by auto
+  from EvalBlockReturns.IH have ih1: "\<forall>rres. \<rho> \<turnstile>\<^sub>s s \<Rightarrow> rres \<longrightarrow> Returns v = rres" by auto
+  show ?case
+  proof (intro allI impI)
+    fix rres
+    assume "\<rho> \<turnstile>\<^sub>b (s # b) \<Rightarrow> rres"
+    then consider
+        (Asn) \<rho>2' r2'' where
+          "\<rho> \<turnstile>\<^sub>s s \<Rightarrow> Assigns \<rho>2'"
+          "(\<rho> \<cdot> \<rho>2') \<turnstile>\<^sub>b b \<Rightarrow> r2''"
+          "Assigns \<rho>2' \<bullet> r2'' = Some rres"
+      | (Ret) v2 where
+          "\<rho> \<turnstile>\<^sub>s s \<Rightarrow> Returns v2"
+          "rres = Returns v2"
+      by (cases rule: eval_block.cases) auto
+    then show "Returns v = rres"
+    proof cases
+      case Asn
+      from ih1 Asn(1) have "Returns v = Assigns \<rho>2'" by blast
+      then show ?thesis by simp
+    next
+      case Ret
+      from ih1 Ret(1) have "Returns v = Returns v2" by blast
+      with Ret(2) show ?thesis by simp
+    qed
   qed
 next
   case (EvalPass \<rho>)

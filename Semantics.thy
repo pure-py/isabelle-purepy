@@ -91,9 +91,11 @@ EvalCallDef:
   \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>e Call e args \<Rightarrow> r'" |
 EvalLambda: "\<rho> \<turnstile>\<^sub>e Lambda args e \<Rightarrow> \<langle>\<rho>, args, e\<rangle>\<^sub>\<lambda>" |
 
-EvalBlock:
+EvalBlockAssigns:
   "\<lbrakk> \<rho> \<turnstile>\<^sub>s s \<Rightarrow> (Assigns \<rho>') ; (\<rho> \<cdot> \<rho>') \<turnstile>\<^sub>b b \<Rightarrow> r ; (Assigns \<rho>') \<bullet> r = Some r' \<rbrakk>
   \<Longrightarrow> \<rho> \<turnstile>\<^sub>b (s # b) \<Rightarrow> r'" |
+EvalBlockReturns:
+  "\<lbrakk> \<rho> \<turnstile>\<^sub>s s \<Rightarrow> Returns v \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>b (s # b) \<Rightarrow> Returns v" |
 
 EvalPass: "\<rho> \<turnstile>\<^sub>s Pass \<Rightarrow> Assigns \<epsilon>" |
 EvalAssign: "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> v \<Longrightarrow> \<rho> \<turnstile>\<^sub>s Assign x e \<Rightarrow> Assigns [x \<mapsto> v]" |

@@ -81,14 +81,9 @@ apply (simp only: ex_even_odd_def)
 apply (erule eval_block.cases)
 apply (erule eval_block.cases)
 apply (simp add: func_even_def func_odd_def)
-using eval_block.cases by blast
+using eval_block.simps apply blast
+apply fastforce
+by blast
 
-lemma ex_even_odd_eval':
-    "\<epsilon> \<turnstile>\<^sub>b ex_even_odd \<Rightarrow> Assigns \<sigma>' \<Longrightarrow> \<sigma>' ''it'' = Some (VLit (Bool False))"
-apply (simp only: ex_even_odd_def)
-apply (erule eval_block.cases)
-apply (erule eval_block.cases)
-apply (simp add: func_even_def func_odd_def)
-using eval_block.cases by blast
 
 end
