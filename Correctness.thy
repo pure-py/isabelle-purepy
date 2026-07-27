@@ -10,7 +10,15 @@ inductive_cases CondExprE: "\<rho> \<turnstile>\<^sub>e CondExpr e1 e2 e3 \<Righ
 inductive_cases ListE: "\<rho> \<turnstile>\<^sub>e List es \<Rightarrow> v"
 inductive_cases TupleE: "\<rho> \<turnstile>\<^sub>e Tuple es \<Rightarrow> v"
 inductive_cases LambdaE: "\<rho> \<turnstile>\<^sub>e Lambda args e \<Rightarrow> v"
-inductive_cases CallE: "\<rho> \<turnstile>\<^sub>e Call f args \<Rightarrow> v"
+(* inductive_cases CallE: "\<rho> \<turnstile>\<^sub>e Call f args \<Rightarrow> v" *)
+
+inductive_cases
+  CallE[consumes 1, case_names CallLam CallDef]:
+    "\<rho> \<turnstile>\<^sub>e Call e args \<Rightarrow> v" and
+  IfE[consumes 1, case_names IfT IfF]:
+    "\<rho> \<turnstile>\<^sub>s If e b elifs else' \<Rightarrow> r" and
+  ElifConsE[consumes 1, case_names ElT ElF]:
+    "\<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f ((e, b) # elifs', else') \<Rightarrow> r"
 
 lemma list_all2_deterministic:
   assumes
@@ -29,120 +37,176 @@ apply blast
 apply (metis list.set_intros(1,2) list_all2_Cons1)
 done
 
-lemma determinism:
-  "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> v1 ; \<rho> \<turnstile>\<^sub>e e \<Rightarrow> v2 \<rbrakk> \<Longrightarrow> v1 = v2"
-proof (induction e arbitrary: \<rho> v1 v2)
-  case (Var x)
-  then show ?case
-  by (metis option.inject VarE)
-next
-  case (Literal x)
-  then show ?case
-  by (metis LitE)
-next
-  case (BinOp x1a e1 e2)
-  then show ?case
-  by (metis option.inject BinOpE)
-next
-  case (UnOp x1a e)
-  then show ?case
-  by (metis option.inject UnOpE)
-next
-  case (CondExpr e1 e2 e3)
-  then show ?case
-  by (metis (full_types) CondExprE literal.inject(2) val.inject(1))
-next
-  case (List x)
-  then show ?case
-  by (metis ListE list_all2_deterministic)
-next
-  case (Tuple x)
-  then show ?case
-  by (metis TupleE list_all2_deterministic)
-next
-  case (Lambda x1a e)
-  then show ?case
-  by (metis LambdaE)
-next
-  case (Call e x2a)
-  then show ?case
-  sorry
-qed
-
-lemma expr_eval_deterministic:
-    "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> v1 ; \<rho> \<turnstile>\<^sub>e e \<Rightarrow> v2 \<rbrakk> \<Longrightarrow> v1 = v2"
-apply (induction e arbitrary: \<rho> v1 v2)
-apply (erule VarE, erule VarE, simp)
-apply (erule LitE, erule LitE, simp)
-apply (erule BinOpE, erule BinOpE, force)
-apply (erule UnOpE, erule UnOpE, force)
-apply (erule CondExprE, erule CondExprE)
-using CondExprE apply blast+
-apply (erule ListE, erule ListE, blast intro: list_all2_deterministic)
-apply (erule TupleE, erule TupleE, blast intro: list_all2_deterministic)
-apply (erule LambdaE, erule LambdaE, simp)
-apply (erule CallE, erule CallE)
-try
-oops
-
-lemma eval_exprs_list_all2:
-  "eval_exprs \<rho> es = Some vs \<Longrightarrow> list_all2 (\<lambda>e v. eval_expr \<rho> e = Some v) es vs"
-proof (induction es arbitrary: vs)
+lemma list_all2_unique:
+  assumes "list_all2 (\<lambda>x y. P x y \<and> (\<forall>z. P x z \<longrightarrow> y = z)) xs ys"
+      and "list_all2 P xs zs"
+    shows "ys = zs"
+using assms
+proof (induction xs arbitrary: ys zs)
   case Nil
   then show ?case by simp
 next
-  case (Cons e es)
-  then show ?case
-    by (auto split: option.splits)
+  case (Cons x xs)
+  from Cons.prems(1) obtain y ys' where
+    ys: "ys = y # ys'" and
+    y_prop: "P x y \<and> (\<forall>z. P x z \<longrightarrow> y = z)" and
+    rest1: "list_all2 (\<lambda>x y. P x y \<and> (\<forall>z. P x z \<longrightarrow> y = z)) xs ys'"
+    by (auto simp: list_all2_Cons1)
+  from Cons.prems(2) obtain z zs' where
+    zs: "zs = z # zs'" and
+    z_prop: "P x z" and
+    rest2: "list_all2 P xs zs'"
+    by (auto simp: list_all2_Cons1)
+  from y_prop z_prop have "y = z" by blast
+  moreover from Cons.IH[OF rest1 rest2] have "ys' = zs'" .
+  ultimately show ?case using ys zs by simp
 qed
 
-lemma eval_expr_sound:
-    "eval_expr \<rho> e = Some v \<Longrightarrow> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> v"
-apply (induction e arbitrary: \<rho> v)
-apply (simp add: EvalVar)
-apply (simp add: EvalLit)
-apply (simp add: EvalBinOp)
-apply (metis (no_types, lifting) EvalBinOp not_Some_eq option.simps(4,5))
-apply (simp add: EvalUnOp)
-apply (metis EvalUnOp is_none_code(2) option.case_eq_if option.distinct(1) option.split_sel_asm)
-apply (simp split: option.splits val.splits literal.splits bool.splits)
-apply safe
-apply (rule EvalCondExprTrue, blast, blast)
-apply (rule EvalCondExprFalse, blast, blast)
-apply (simp add: EvalList)
-apply (smt (verit, ccfv_threshold) EvalList eval_exprs_list_all2 is_none_code(2) list.rel_mono_strong option.case_eq_if option.distinct(1) option.sel option.split_sel_asm)
-apply (simp add: EvalTuple)
-apply (smt (verit, ccfv_threshold) EvalTuple eval_exprs_list_all2 is_none_code(2) list.rel_mono_strong option.case_eq_if option.distinct(1) option.sel option.split_sel_asm)
-apply (metis option.inject eval_expr.simps(8) EvalLambda)
-sorry
+lemmas eval_induct = eval_expr_eval_block_eval_stmt_eval_elif.inducts
 
-lemma eval_exprs_complete_aux:
-  "list_all2 (\<lambda>e v. \<rho> \<turnstile>\<^sub>e e \<Rightarrow> v) es vs \<Longrightarrow>
-   (\<And>e v. e \<in> set es \<Longrightarrow> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> v \<Longrightarrow> eval_expr \<rho> e = Some v) \<Longrightarrow>
-   eval_exprs \<rho> es = Some vs"
-apply (induction es arbitrary: vs)
- apply simp
- using list.rel_cases 
- apply force
-done
+lemma determinism:
+  shows 
+      expr_det:  "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> v1 \<Longrightarrow> (\<forall>v2. \<rho> \<turnstile>\<^sub>e e \<Rightarrow> v2 \<longrightarrow> v1 = v2)"
+  and stmt_det:  "\<rho> \<turnstile>\<^sub>b b \<Rightarrow> rb1 \<Longrightarrow> (\<forall>rb2. \<rho> \<turnstile>\<^sub>b b \<Rightarrow> rb2 \<longrightarrow> rb1 = rb2)"
+  and block_det: "\<rho> \<turnstile>\<^sub>s s \<Rightarrow> rs1 \<Longrightarrow> (\<forall>rs2. \<rho> \<turnstile>\<^sub>s s \<Rightarrow> rs2 \<longrightarrow> rs1 = rs2)"
+  and elif_det:  "\<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f eb \<Rightarrow> re1 \<Longrightarrow> (\<forall>re2. \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f eb \<Rightarrow> re2 \<longrightarrow> re1 = re2)"
+proof (induction rule: eval_induct)
+  case (EvalVar \<rho> x v)
+  then show ?case by (metis VarE option.inject)
+next
+  case (EvalLit \<rho> l)
+  then show ?case using LitE by blast
+next
+  case (EvalBinOp \<rho> e1 v1 e2 v2 op v')
+  then show ?case by (metis BinOpE option.inject)
+next
+  case (EvalUnOp \<rho> e v op v')
+  then show ?case by (metis UnOpE option.inject)
+next
+  case (EvalCondExprTrue \<rho> c t v e)
+  then show ?case by (metis CondExprE literal.inject(2) val.inject(1))
+next
+  case (EvalCondExprFalse \<rho> c e v t)
+  then show ?case using CondExprE by blast
+next
+  case (EvalList \<rho> es vals)
+  from \<open>\<rho> \<turnstile>\<^sub>e List es \<Rightarrow> v2\<close> obtain vals' where
+    v2_eq: "v2 = VList vals'" and
+    ev: "list_all2 (\<lambda>e v. \<rho> \<turnstile>\<^sub>e e \<Rightarrow> v) es vals'"
+    by (cases rule: eval_expr.cases) auto
 
-lemma eval_expr_complete:
-    "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> v \<Longrightarrow> eval_expr \<rho> e = Some v"
-apply (induction e arbitrary: \<rho> v)
-        apply (metis eval_expr.simps(1) VarE)
-       apply (metis LitE eval_expr.simps(2))
-      apply (metis (no_types, lifting) BinOpE eval_expr.simps(3) option.simps(5))
-     apply (metis UnOpE eval_expr.simps(4) option.simps(5))
-    apply (simp split: option.splits val.splits literal.splits bool.splits)
-    (* apply (smt (verit, best) CondExprE literal.distinct(1,5) literal.inject(2) option.inject val.distinct(1,3,5) val.inject(1))
-   apply (simp add: EvalList)
-   apply (metis ListE eval_exprs_complete_aux option.case_eq_if option.distinct(1) option.sel)
-  apply (metis (lifting) TupleE eval_expr.simps(7) eval_exprs_complete_aux option.case_eq_if option.distinct(1) option.sel)
- apply (metis LambdaE eval_expr.simps(8)) *)
-sorry
+  from list_all2_unique[OF \<open>list_all2 (\<lambda>e v. \<rho> \<turnstile>\<^sub>e e \<Rightarrow> v \<and> (\<forall>x. \<rho> \<turnstile>\<^sub>e e \<Rightarrow> x \<longrightarrow> v = x)) es vals\<close> ev]
+  have "vals = vals'" .
+  with v2_eq show ?case sorry
+next
+  case (EvalTuple \<rho> es vals)
+  from \<open>\<rho> \<turnstile>\<^sub>e Tuple es \<Rightarrow> v2\<close> obtain vals' where
+    v2_eq: "v2 = VTuple vals'" and
+    ev: "list_all2 (\<lambda>e v. \<rho> \<turnstile>\<^sub>e e \<Rightarrow> v) es vals'"
+    by (cases rule: eval_expr.cases) auto
+  from list_all2_unique[OF \<open>list_all2 (\<lambda>e v. \<rho> \<turnstile>\<^sub>e e \<Rightarrow> v \<and> (\<forall>x. \<rho> \<turnstile>\<^sub>e e \<Rightarrow> x \<longrightarrow> v = x)) es vals\<close> ev]
+  have "vals = vals'" .
+  with v2_eq show ?case by simp
+next
+  case (EvalCallLambda \<rho> e \<rho>' xs e' args u' v)
+  from EvalCallLambda.hyps have
+    h1: "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> \<langle>\<rho>', xs, e'\<rangle>\<^sub>\<lambda>" and
+    h1u: "\<forall>z. \<rho> \<turnstile>\<^sub>e e \<Rightarrow> z \<longrightarrow> \<langle>\<rho>', xs, e'\<rangle>\<^sub>\<lambda> = z" and
+    h2: "list_all2 (\<lambda>e v. \<rho> \<turnstile>\<^sub>e e \<Rightarrow> v \<and> (\<forall>z. \<rho> \<turnstile>\<^sub>e e \<Rightarrow> z \<longrightarrow> v = z)) args u'" and
+    h3: "\<rho>'(xs [\<mapsto>] u') \<turnstile>\<^sub>e e' \<Rightarrow> v" and
+    h3u: "\<forall>z. \<rho>'(xs [\<mapsto>] u') \<turnstile>\<^sub>e e' \<Rightarrow> z \<longrightarrow> v = z"
+    sorry
+  from \<open>\<rho> \<turnstile>\<^sub>e Call e args \<Rightarrow> v2\<close> show ?case
+  proof (cases rule: CallE)
+    case (CallLam \<rho>2 xs2 e2' u2')
+    then show ?thesis sorry
+  next
+    case (CallDef \<rho>' ds j u' r)
+    then show ?thesis sorry
+  qed
+next
+  case (EvalCallDef \<rho> e \<rho>' ds j vs fs xs bs args u' r r')
+  then show ?case sorry
+next
+  case (EvalLambda \<rho> args e)
+  then show ?case by (metis local.EvalLambda LambdaE)
+next
+  case (EvalBlock \<rho> s \<rho>' b r r')
+  from EvalBlock.hyps have
+    h1: "\<rho> \<turnstile>\<^sub>s s \<Rightarrow> Assigns \<rho>'" and
+    h2: "(\<rho> \<cdot> \<rho>') \<turnstile>\<^sub>b b \<Rightarrow> r" and
+    h3: "Assigns \<rho>' \<bullet> r = Some r'"
+    by auto
 
-theorem expr_eval_correct:
-    "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> v \<longleftrightarrow> eval_expr \<rho> e = Some v"
-by (metis eval_expr_sound eval_expr_complete)
+  from \<open>\<rho> \<turnstile>\<^sub>b (s # b) \<Rightarrow> rb2\<close> obtain \<rho>2' r2'' where
+    a1: "\<rho> \<turnstile>\<^sub>s s \<Rightarrow> Assigns \<rho>2'" and
+    a2: "(\<rho> \<cdot> \<rho>2') \<turnstile>\<^sub>b b \<Rightarrow> r2''" and
+    a3: "Assigns \<rho>2' \<bullet> r2'' = Some rb2"
+    by (cases rule: eval_block.cases) auto
 
+  have step: "Assigns \<rho>' = Assigns \<rho>2'"
+    apply (rule EvalBlock.IH(1))
+    apply (rule a1)
+    done
+
+  from a2 rho_eq have a2': "(\<rho> \<cdot> \<rho>') \<turnstile>\<^sub>b b \<Rightarrow> r2''" by simp
+
+  have r_eq: "r = r2''"
+    using EvalBlock.IH(2)[OF a2'] by simp
+
+  from h3 a3 rho_eq r_eq show ?case by simp
+next
+  case (EvalPass \<rho>)
+  then show ?case by (simp add: eval_stmt.simps)
+next
+  case (EvalAssign \<rho> e v x)
+  from EvalAssign.hyps have 
+    h1: "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> v" and 
+    h1u: "\<forall>z. \<rho> \<turnstile>\<^sub>e e \<Rightarrow> z \<longrightarrow> v = z" 
+    by auto
+  from \<open>\<rho> \<turnstile>\<^sub>s Assign x e \<Rightarrow> r2\<close> obtain v2' where
+    req: "r2 = Assigns [x \<mapsto> v2']" and ev: "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> v2'"
+    by (cases rule: eval_stmt.cases) auto
+  from h1u ev have "v = v2'" by blast
+  with req show ?case by simp
+next
+  case (EvalExpr \<rho> e v)
+  then show ?case by (simp add: eval_stmt.simps)
+next
+  case (EvalAssert \<rho> e v)
+  then show ?case using eval_stmt.cases by blast
+next
+  case (EvalAssertMsg \<rho> e v e')
+  then show ?case using eval_stmt.cases by blast
+next
+  case (EvalReturnNone \<rho>)
+  then show ?case by (simp add: eval_stmt.simps)
+next
+  case (EvalReturn \<rho> e v)
+  then show ?case 
+  by (smt (verit, best) eval_stmt.simps stmt.distinct(11,25,37,47,55,61,67,69) stmt.inject(5))
+next
+  case (EvalIfTrue \<rho> e b r elifs else')
+  then show ?case 
+  using eval_stmt.simps by blast
+next
+  case (EvalIfFalse \<rho> e elifs else' r b)
+  then show ?case 
+  using eval_stmt.simps by blast
+next
+  case (EvalMutual vs \<rho> ds fs)
+  then show ?case sorry
+next
+  case (EvalElifEmpty \<rho> b r)
+  then show ?case
+  using eval_elif.simps list.distinct(1) by blast
+next
+  case (EvalElifTrue \<rho> e b r elifs' else')
+  then show ?case 
+  using eval_elif.simps by blast
+next
+  case (EvalElifFalse \<rho> e elifs' else' r b)
+  then show ?case
+  using eval_elif.simps by blast
+qed
 end

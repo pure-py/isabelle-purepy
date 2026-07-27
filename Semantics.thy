@@ -107,7 +107,7 @@ EvalReturnNone: "\<rho> \<turnstile>\<^sub>s ReturnNone \<Rightarrow> Returns (V
 EvalReturn: "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> v \<Longrightarrow> \<rho> \<turnstile>\<^sub>s Return e \<Rightarrow> Returns v" |
 EvalIfTrue: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> VLit (Bool True) ; \<rho> \<turnstile>\<^sub>b b \<Rightarrow> r \<rbrakk>
   \<Longrightarrow> \<rho> \<turnstile>\<^sub>s If e b elifs else' \<Rightarrow> r" |
-EvalIfFalse: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> VLit (Bool True) ; \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f (elifs, else') \<Rightarrow> r \<rbrakk>
+EvalIfFalse: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> VLit (Bool False) ; \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f (elifs, else') \<Rightarrow> r \<rbrakk>
   \<Longrightarrow> \<rho> \<turnstile>\<^sub>s If e b elifs else' \<Rightarrow> r" |
 EvalMutual: 
   "\<lbrakk> vs = map (\<lambda> i . \<langle>\<rho>, ds, i\<rangle>\<^sub>C) [0..<length ds]

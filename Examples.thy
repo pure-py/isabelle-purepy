@@ -73,13 +73,22 @@ where "ex_even_odd = [
     Assign ''it'' (Call (Var ''even'') [Literal (Number 10)])
 ]"
 
+thm ex_even_odd_def
+
 lemma ex_even_odd_eval:
     "\<epsilon> \<turnstile>\<^sub>b ex_even_odd \<Rightarrow> Assigns \<sigma>' \<Longrightarrow> \<sigma>' ''it'' = Some (VLit (Bool True))"
-apply (simp add: ex_even_odd_def func_even_def func_odd_def)
-apply (erule eval_block.cases eval_stmt.cases)
-apply simp+
+apply (simp only: ex_even_odd_def)
 apply (erule eval_block.cases)
 apply (erule eval_block.cases)
-by simp+
+apply (simp add: func_even_def func_odd_def)
+using eval_block.cases by blast
+
+lemma ex_even_odd_eval':
+    "\<epsilon> \<turnstile>\<^sub>b ex_even_odd \<Rightarrow> Assigns \<sigma>' \<Longrightarrow> \<sigma>' ''it'' = Some (VLit (Bool False))"
+apply (simp only: ex_even_odd_def)
+apply (erule eval_block.cases)
+apply (erule eval_block.cases)
+apply (simp add: func_even_def func_odd_def)
+using eval_block.cases by blast
 
 end
