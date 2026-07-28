@@ -62,8 +62,6 @@ next
   ultimately show ?case using ys zs by simp
 qed
 
-lemmas eval_induct = eval_expr_eval_block_eval_stmt_eval_elif.inducts
-
 lemma determinism:
   shows 
       expr_det:  "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> v1 \<Longrightarrow> (\<forall>v2. \<rho> \<turnstile>\<^sub>e e \<Rightarrow> v2 \<longrightarrow> v1 = v2)"
@@ -226,12 +224,12 @@ next
   case (EvalBlockAssigns \<rho> s \<rho>' b r r')
   from EvalBlockAssigns.hyps have
     h1: "\<rho> \<turnstile>\<^sub>s s \<Rightarrow> Assigns \<rho>'" and
-    h2: "(\<rho> \<cdot> \<rho>') \<turnstile>\<^sub>b b \<Rightarrow> r" and
+    h2: "(\<rho> ++ \<rho>') \<turnstile>\<^sub>b b \<Rightarrow> r" and
     h3: "Assigns \<rho>' \<bullet> r = Some r'"
     by auto
   from EvalBlockAssigns.IH have
     ih1: "\<forall>rres. \<rho> \<turnstile>\<^sub>s s \<Rightarrow> rres \<longrightarrow> Assigns \<rho>' = rres" and
-    ih2: "\<forall>rres. (\<rho> \<cdot> \<rho>') \<turnstile>\<^sub>b b \<Rightarrow> rres \<longrightarrow> r = rres"
+    ih2: "\<forall>rres. (\<rho> ++ \<rho>') \<turnstile>\<^sub>b b \<Rightarrow> rres \<longrightarrow> r = rres"
     by auto
   show ?case
   proof (intro allI impI)
@@ -240,7 +238,7 @@ next
     then consider
         (Asn) \<rho>2' r2'' where
           "\<rho> \<turnstile>\<^sub>s s \<Rightarrow> Assigns \<rho>2'"
-          "(\<rho> \<cdot> \<rho>2') \<turnstile>\<^sub>b b \<Rightarrow> r2''"
+          "(\<rho> ++ \<rho>2') \<turnstile>\<^sub>b b \<Rightarrow> r2''"
           "Assigns \<rho>2' \<bullet> r2'' = Some rres"
       | (Ret) v2 where
           "\<rho> \<turnstile>\<^sub>s s \<Rightarrow> Returns v2"
@@ -250,7 +248,7 @@ next
     proof cases
       case Asn
       from ih1 Asn(1) have rho_eq: "\<rho>' = \<rho>2'" by blast
-      from Asn(2) rho_eq have a2': "(\<rho> \<cdot> \<rho>') \<turnstile>\<^sub>b b \<Rightarrow> r2''" by simp
+      from Asn(2) rho_eq have a2': "(\<rho> ++ \<rho>') \<turnstile>\<^sub>b b \<Rightarrow> r2''" by simp
       from ih2 a2' have r_eq: "r = r2''" by blast
       from h3 Asn(3) rho_eq r_eq show ?thesis by simp
     next
@@ -270,7 +268,7 @@ next
     then consider
         (Asn) \<rho>2' r2'' where
           "\<rho> \<turnstile>\<^sub>s s \<Rightarrow> Assigns \<rho>2'"
-          "(\<rho> \<cdot> \<rho>2') \<turnstile>\<^sub>b b \<Rightarrow> r2''"
+          "(\<rho> ++ \<rho>2') \<turnstile>\<^sub>b b \<Rightarrow> r2''"
           "Assigns \<rho>2' \<bullet> r2'' = Some rres"
       | (Ret) v2 where
           "\<rho> \<turnstile>\<^sub>s s \<Rightarrow> Returns v2"

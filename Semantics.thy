@@ -1,5 +1,5 @@
 theory Semantics
-    imports Syntax HOL.Map
+    imports Syntax HOL.Map 
 begin
 
 datatype val =
@@ -12,15 +12,12 @@ datatype val =
 type_synonym \<rho> = "vname \<rightharpoonup> val"
 definition \<epsilon> :: \<rho> where "\<epsilon> = Map.empty"
 
-fun (sequential) "\<rho>_dot" :: "\<rho> \<Rightarrow> \<rho> \<Rightarrow> \<rho>" (infixl "\<cdot>" 70)
-where "\<rho> \<cdot> \<rho>' = \<rho> ++ \<rho>'"
-
 datatype r = Assigns \<rho> | Returns val
 
 fun (sequential) r_dot :: "r \<Rightarrow> r \<Rightarrow> r option" (infixl "\<bullet>" 70)
 where
-"Assigns \<rho> \<bullet> Assigns \<rho>' = Some (Assigns (\<rho> \<cdot> \<rho>'))" |
-"Assigns \<rho> \<bullet> Returns v = Some (Returns v)" |
+"(Assigns \<rho>) \<bullet> (Assigns \<rho>') = Some (Assigns (\<rho> ++ \<rho>'))" |
+"(Assigns \<rho>) \<bullet> (Returns v) = Some (Returns v)" |
 "_ \<bullet> _ = None"
 
 fun unwrap :: "r \<Rightarrow> val option"
@@ -92,7 +89,7 @@ EvalCallDef:
 EvalLambda: "\<rho> \<turnstile>\<^sub>e Lambda args e \<Rightarrow> \<langle>\<rho>, args, e\<rangle>\<^sub>\<lambda>" |
 
 EvalBlockAssigns:
-  "\<lbrakk> \<rho> \<turnstile>\<^sub>s s \<Rightarrow> (Assigns \<rho>') ; (\<rho> \<cdot> \<rho>') \<turnstile>\<^sub>b b \<Rightarrow> r ; (Assigns \<rho>') \<bullet> r = Some r' \<rbrakk>
+  "\<lbrakk> \<rho> \<turnstile>\<^sub>s s \<Rightarrow> (Assigns \<rho>') ; (\<rho> ++ \<rho>') \<turnstile>\<^sub>b b \<Rightarrow> r ; (Assigns \<rho>') \<bullet> r = Some r' \<rbrakk>
   \<Longrightarrow> \<rho> \<turnstile>\<^sub>b (s # b) \<Rightarrow> r'" |
 EvalBlockReturns:
   "\<lbrakk> \<rho> \<turnstile>\<^sub>s s \<Rightarrow> Returns v \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>b (s # b) \<Rightarrow> Returns v" |
@@ -121,5 +118,7 @@ EvalElifTrue: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> VLit (Bool 
   \<Longrightarrow> \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f ((e, b) # elifs', else') \<Rightarrow> r" |
 EvalElifFalse: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> VLit (Bool False) ; \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f (elifs', else') \<Rightarrow> r \<rbrakk>
   \<Longrightarrow> \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f ((e, b) # elifs', else') \<Rightarrow> r"
+
+lemmas eval_induct = eval_expr_eval_block_eval_stmt_eval_elif.inducts
 
 end
