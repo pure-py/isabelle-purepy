@@ -1,0 +1,32 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  ISABELLE_VERSION: Isabelle2025
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Isabelle
+        id: cache-isabelle
+        uses: actions/cache@v4
+        with:
+          path: ~/isabelle
+          key: ${{ runner.os }}-${{ env.ISABELLE_VERSION }}
+
+      - name: Install Isabelle
+        if: steps.cache-isabelle.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/isabelle
+          curl -sSfL "https://isabelle.in.tum.de/dist/${ISABELLE_VERSION}_linux.tar.gz" \
+            | tar -xz -C ~/isabelle --strip-components=1
+
+      - name: Build session
+        run: ~/isabelle/bin/isabelle build -v -o document=false -D .

@@ -10,6 +10,27 @@ This tries to find out:
 
 Currently, only a really small subset of the expression syntax + semantics is formalised
 
+## Building
+
+Install [Isabelle2025](https://isabelle.in.tum.de/). On macOS, either download
+`Isabelle2025_macos.tar.gz` and move `Isabelle2025.app` to `/Applications`, or run
+`brew install --cask isabelle`. Put the `isabelle` executable on `PATH`:
+
+```bash
+export PATH="/Applications/Isabelle2025.app/bin:$PATH"
+```
+
+Then check the proofs:
+
+```bash
+make build
+```
+
+`make document` also builds the session document, which needs LaTeX. If `isabelle` is not on `PATH`,
+pass it explicitly: `make build ISABELLE=/Applications/Isabelle2025.app/bin/isabelle`.
+
+GitHub Actions runs `make build` on every push (`.github/workflows/build.yml`).
+
 ## File contents
 
 | File              | Content                                           |
@@ -18,7 +39,7 @@ Currently, only a really small subset of the expression syntax + semantics is fo
 | `Semantics.thy`   | Semantics definition as inductive predicate       |
 | `Eval.thy`        | Semantics definition as recursive function        |
 | `Correctness.thy` | Correctness proof between the two semantics defs  |
-| `Exctraction.thy` | Extraction to OCaml (todo)                        |
+| `Extraction.thy` | Extraction to OCaml (todo)                        |
 
 ## Observations
 
