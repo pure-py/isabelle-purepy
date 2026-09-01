@@ -5,48 +5,17 @@ on:
   pull_request:
   workflow_dispatch:
 
-env:
-  # Primary site redirects to host runners cannot reach, so take distribution from mirror.
-  ISABELLE_VERSION: Isabelle2025-2
-  ISABELLE_MIRRORS: >-
-    https://proofcraft.systems/isabelle/dist
-    https://mirror.clarkson.edu/isabelle/dist
-
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
+    container:
+      # Official image, with HOL prebuilt. Runs as root so that checkout can write workspace.
+      image: makarius/isabelle:Isabelle2025-2
+      options: --user root
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache Isabelle
-        id: cache-isabelle
-        uses: actions/cache@v4
-        with:
-          path: ~/isabelle
-          key: ${{ runner.os }}-${{ env.ISABELLE_VERSION }}
-
-      - name: Install Isabelle
-        if: steps.cache-isabelle.outputs.cache-hit != 'true'
-        timeout-minutes: 25
-        run: |
-          mkdir -p ~/isabelle
-          for mirror in $ISABELLE_MIRRORS; do
-            echo "Fetching from $mirror"
-            # Give up on mirror that stalls or serves under 200 KB/s for a minute.
-            if curl -fL --connect-timeout 20 --max-time 1200 \
-                 --speed-limit 200000 --speed-time 60 \
-                 -w 'downloaded %{size_download} bytes at %{speed_download} B/s\n' \
-                 -o /tmp/isabelle.tar.gz \
-                 "$mirror/${ISABELLE_VERSION}_linux.tar.gz"; then
-              tar -xzf /tmp/isabelle.tar.gz -C ~/isabelle --strip-components=1
-              rm /tmp/isabelle.tar.gz
-              exit 0
-            fi
-            echo "$mirror did not serve ${ISABELLE_VERSION}"
-          done
-          exit 1
-
       - name: Build session
-        timeout-minutes: 15
-        run: ~/isabelle/bin/isabelle build -v -o document=false -D .
+        timeout-minutes: 20
+        run: /home/isabelle/Isabelle/bin/isabelle build -v -o document=false -D .
