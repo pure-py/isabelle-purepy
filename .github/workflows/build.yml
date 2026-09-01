@@ -6,7 +6,11 @@ on:
   workflow_dispatch:
 
 env:
-  ISABELLE_VERSION: Isabelle2025
+  # The primary site redirects to a host the runners cannot reach, so take the distribution from a mirror.
+  ISABELLE_VERSION: Isabelle2025-2
+  ISABELLE_MIRRORS: >-
+    https://mirror.clarkson.edu/isabelle/dist
+    https://proofcraft.systems/isabelle/dist
 
 jobs:
   build:
@@ -24,9 +28,18 @@ jobs:
       - name: Install Isabelle
         if: steps.cache-isabelle.outputs.cache-hit != 'true'
         run: |
+          set -o pipefail
           mkdir -p ~/isabelle
-          curl -sSfL "https://isabelle.in.tum.de/dist/${ISABELLE_VERSION}_linux.tar.gz" \
-            | tar -xz -C ~/isabelle --strip-components=1
+          for mirror in $ISABELLE_MIRRORS; do
+            echo "Trying $mirror"
+            if curl -sSfL --retry 3 --connect-timeout 20 \
+                 "$mirror/${ISABELLE_VERSION}_linux.tar.gz" \
+                 | tar -xz -C ~/isabelle --strip-components=1; then
+              exit 0
+            fi
+          done
+          echo "No mirror served ${ISABELLE_VERSION}" >&2
+          exit 1
 
       - name: Build session
         run: ~/isabelle/bin/isabelle build -v -o document=false -D .
