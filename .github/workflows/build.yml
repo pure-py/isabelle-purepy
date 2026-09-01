@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  # The primary site redirects to a host the runners cannot reach, so take the distribution from a mirror.
+  # Primary site redirects to host runners cannot reach, so take distribution from mirror.
   ISABELLE_VERSION: Isabelle2025-2
   ISABELLE_MIRRORS: >-
     https://mirror.clarkson.edu/isabelle/dist

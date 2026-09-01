@@ -1,13 +1,13 @@
-# Build the session. Set ISABELLE to the isabelle executable if it is not on PATH.
+# Build session. Set ISABELLE to isabelle executable if not on PATH.
 ISABELLE ?= isabelle
 
 default: build
 
-# Check the proofs, without building the document.
+# Check proofs, without building document.
 build:
 	$(ISABELLE) build -v -o document=false -D .
 
-# Check the proofs and build the document, which needs LaTeX.
+# Check proofs and build document, which needs LaTeX.
 document:
 	$(ISABELLE) build -v -D .
 
