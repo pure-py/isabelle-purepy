@@ -1,5 +1,7 @@
 # PurePy formalisation in Isabelle/HOL
 
+[![build](https://github.com/pure-py/isabelle-purepy/actions/workflows/build.yml/badge.svg)](https://github.com/pure-py/isabelle-purepy/actions/workflows/build.yml)
+
 This is an experiment of how a formalisation of PurePy could look like in Isabelle/HOL.
 
 This tries to find out:
