@@ -9,12 +9,13 @@ env:
   # Primary site redirects to host runners cannot reach, so take distribution from mirror.
   ISABELLE_VERSION: Isabelle2025-2
   ISABELLE_MIRRORS: >-
-    https://mirror.clarkson.edu/isabelle/dist
     https://proofcraft.systems/isabelle/dist
+    https://mirror.clarkson.edu/isabelle/dist
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -27,19 +28,25 @@ jobs:
 
       - name: Install Isabelle
         if: steps.cache-isabelle.outputs.cache-hit != 'true'
+        timeout-minutes: 25
         run: |
-          set -o pipefail
           mkdir -p ~/isabelle
           for mirror in $ISABELLE_MIRRORS; do
-            echo "Trying $mirror"
-            if curl -sSfL --retry 3 --connect-timeout 20 \
-                 "$mirror/${ISABELLE_VERSION}_linux.tar.gz" \
-                 | tar -xz -C ~/isabelle --strip-components=1; then
+            echo "Fetching from $mirror"
+            # Give up on mirror that stalls or serves under 200 KB/s for a minute.
+            if curl -fL --connect-timeout 20 --max-time 1200 \
+                 --speed-limit 200000 --speed-time 60 \
+                 -w 'downloaded %{size_download} bytes at %{speed_download} B/s\n' \
+                 -o /tmp/isabelle.tar.gz \
+                 "$mirror/${ISABELLE_VERSION}_linux.tar.gz"; then
+              tar -xzf /tmp/isabelle.tar.gz -C ~/isabelle --strip-components=1
+              rm /tmp/isabelle.tar.gz
               exit 0
             fi
+            echo "$mirror did not serve ${ISABELLE_VERSION}"
           done
-          echo "No mirror served ${ISABELLE_VERSION}" >&2
           exit 1
 
       - name: Build session
+        timeout-minutes: 15
         run: ~/isabelle/bin/isabelle build -v -o document=false -D .
