@@ -3,7 +3,7 @@ theory Semantics
 begin
 
 datatype val =
-      VLit literal
+      VLit l
     | VList "val list"
     | VTuple "val list"
     | VClosure "vname \<rightharpoonup> val" "vname list" expr    ("\<langle>_,_,_\<rangle>\<^sub>\<lambda>")
@@ -27,98 +27,97 @@ where
 
 definition binop_eval :: "bop \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val option" where
 "binop_eval op v1 v2 = (case (op, v1, v2) of
-    (Or,  VLit (Bool b1), VLit (Bool b2)) \<Rightarrow> Some (VLit (Bool (b1 \<or> b2)))
-  | (And, VLit (Bool b1), VLit (Bool b2)) \<Rightarrow> Some (VLit (Bool (b1 \<and> b2)))
-  | (Eq,  VLit (Number n1), VLit (Number n2)) \<Rightarrow> Some (VLit (Bool (n1 = n2)))
-  | (Eq,  VLit (Bool b1), VLit (Bool b2)) \<Rightarrow> Some (VLit (Bool (b1 = b2)))
-  | (Neq, VLit (Number n1), VLit (Number n2)) \<Rightarrow> Some (VLit (Bool (n1 \<noteq> n2)))
-  | (Neq, VLit (Bool b1), VLit (Bool b2)) \<Rightarrow> Some (VLit (Bool (b1 \<noteq> b2)))
-  | (Lt,  VLit (Number n1), VLit (Number n2)) \<Rightarrow> Some (VLit (Bool (n1 < n2)))
-  | (Leq, VLit (Number n1), VLit (Number n2)) \<Rightarrow> Some (VLit (Bool (n1 \<le> n2)))
-  | (Gt,  VLit (Number n1), VLit (Number n2)) \<Rightarrow> Some (VLit (Bool (n1 > n2)))
-  | (Geq, VLit (Number n1), VLit (Number n2)) \<Rightarrow> Some (VLit (Bool (n1 \<ge> n2)))
-  | (Add, VLit (Number n1), VLit (Number n2)) \<Rightarrow> Some (VLit (Number (n1 + n2)))
-  | (Sub, VLit (Number n1), VLit (Number n2)) \<Rightarrow> Some (VLit (Number (n1 - n2)))
-  | (Mul, VLit (Number n1), VLit (Number n2)) \<Rightarrow> Some (VLit (Number (n1 * n2)))
-  | (Div, VLit (Number n1), VLit (Number n2)) \<Rightarrow>
-      Some (VLit (Number (n1 div n2)))
+    (BOpOr,  VLit (LitBool b1), VLit (LitBool b2)) \<Rightarrow> Some (VLit (LitBool (b1 \<or> b2)))
+  | (BOpAnd, VLit (LitBool b1), VLit (LitBool b2)) \<Rightarrow> Some (VLit (LitBool (b1 \<and> b2)))
+  | (BOpEq,  VLit (LitNumber n1), VLit (LitNumber n2)) \<Rightarrow> Some (VLit (LitBool (n1 = n2)))
+  | (BOpEq,  VLit (LitBool b1), VLit (LitBool b2)) \<Rightarrow> Some (VLit (LitBool (b1 = b2)))
+  | (BOpNeq, VLit (LitNumber n1), VLit (LitNumber n2)) \<Rightarrow> Some (VLit (LitBool (n1 \<noteq> n2)))
+  | (BOpNeq, VLit (LitBool b1), VLit (LitBool b2)) \<Rightarrow> Some (VLit (LitBool (b1 \<noteq> b2)))
+  | (BOpLt,  VLit (LitNumber n1), VLit (LitNumber n2)) \<Rightarrow> Some (VLit (LitBool (n1 < n2)))
+  | (BOpLeq, VLit (LitNumber n1), VLit (LitNumber n2)) \<Rightarrow> Some (VLit (LitBool (n1 \<le> n2)))
+  | (BOpGt,  VLit (LitNumber n1), VLit (LitNumber n2)) \<Rightarrow> Some (VLit (LitBool (n1 > n2)))
+  | (BOpGeq, VLit (LitNumber n1), VLit (LitNumber n2)) \<Rightarrow> Some (VLit (LitBool (n1 \<ge> n2)))
+  | (BOpAdd, VLit (LitNumber n1), VLit (LitNumber n2)) \<Rightarrow> Some (VLit (LitNumber (n1 + n2)))
+  | (BOpSub, VLit (LitNumber n1), VLit (LitNumber n2)) \<Rightarrow> Some (VLit (LitNumber (n1 - n2)))
+  | (BOpMul, VLit (LitNumber n1), VLit (LitNumber n2)) \<Rightarrow> Some (VLit (LitNumber (n1 * n2)))
+  | (BOpDiv, VLit (LitNumber n1), VLit (LitNumber n2)) \<Rightarrow>
+      Some (VLit (LitNumber (n1 div n2)))
   | _ \<Rightarrow> None)"
 
 definition unop_eval :: "uop \<Rightarrow> val \<Rightarrow> val option" where
 "unop_eval op v = (case (op, v) of
-    (Not, VLit (Bool b)) => Some (VLit (Bool (\<not>b)))
-  | (Neg, VLit (Number n)) => Some (VLit (Number (-n)))
+    (UOpNot, VLit (LitBool b)) => Some (VLit (LitBool (\<not>b)))
+  | (UOpNeg, VLit (LitNumber n)) => Some (VLit (LitNumber (-n)))
   | _ => None)"
 
-type_synonym elif_block = "(expr \<times> block) list \<times> block option"
+type_synonym elif_block = "(expr \<times> stmt) list \<times> stmt option"
 
 inductive 
   eval_expr  :: "\<rho> \<Rightarrow> expr  \<Rightarrow> val \<Rightarrow> bool"    ("_ \<turnstile>\<^sub>e _ \<Rightarrow> _" [60,0,60] 60) and
-  eval_block :: "\<rho> \<Rightarrow> block \<Rightarrow> r   \<Rightarrow> bool"    ("_ \<turnstile>\<^sub>b _ \<Rightarrow> _" [60,0,60] 60) and
   eval_stmt  :: "\<rho> \<Rightarrow> stmt  \<Rightarrow> r   \<Rightarrow> bool"    ("_ \<turnstile>\<^sub>s _ \<Rightarrow> _" [60,0,60] 60) and
   eval_elif  :: "\<rho> \<Rightarrow> elif_block \<Rightarrow> r \<Rightarrow> bool" ("_ \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f _ \<Rightarrow> _" [60, 0, 60] 60)
 where
-EvalVar: "\<lbrakk> \<rho> x = Some v \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>e Var x \<Rightarrow> v" |
-EvalLit: "\<rho> \<turnstile>\<^sub>e Literal l \<Rightarrow> VLit l" |
+EvalVar: "\<lbrakk> \<rho> x = Some v \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>e ExprVar x \<Rightarrow> v" |
+EvalLit: "\<rho> \<turnstile>\<^sub>e ExprLiteral l \<Rightarrow> VLit l" |
 EvalBinOp: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e1 \<Rightarrow> v1 ; \<rho> \<turnstile>\<^sub>e e2 \<Rightarrow> v2 ; binop_eval op v1 v2 = Some v' \<rbrakk>
-  \<Longrightarrow> \<rho> \<turnstile>\<^sub>e BinOp op e1 e2 \<Rightarrow> v'" |
-EvalUnOp: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> v ; unop_eval op v = Some v' \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>e UnOp op e \<Rightarrow> v'" |
-EvalCondExprTrue: "\<lbrakk> \<rho> \<turnstile>\<^sub>e c \<Rightarrow> VLit (Bool True) ; \<rho> \<turnstile>\<^sub>e t \<Rightarrow> v \<rbrakk>
-  \<Longrightarrow> \<rho> \<turnstile>\<^sub>e CondExpr t c e \<Rightarrow> v" | 
-EvalCondExprFalse: "\<lbrakk> \<rho> \<turnstile>\<^sub>e c \<Rightarrow> VLit (Bool False) ; \<rho> \<turnstile>\<^sub>e e \<Rightarrow> v \<rbrakk>
-  \<Longrightarrow> \<rho> \<turnstile>\<^sub>e CondExpr t c e \<Rightarrow> v" |
+  \<Longrightarrow> \<rho> \<turnstile>\<^sub>e ExprBinOp op e1 e2 \<Rightarrow> v'" |
+EvalUnOp: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> v ; unop_eval op v = Some v' \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>e ExprUnOp op e \<Rightarrow> v'" |
+EvalCondExprTrue: "\<lbrakk> \<rho> \<turnstile>\<^sub>e c \<Rightarrow> VLit (LitBool True) ; \<rho> \<turnstile>\<^sub>e t \<Rightarrow> v \<rbrakk>
+  \<Longrightarrow> \<rho> \<turnstile>\<^sub>e ExprCond t c e \<Rightarrow> v" | 
+EvalCondExprFalse: "\<lbrakk> \<rho> \<turnstile>\<^sub>e c \<Rightarrow> VLit (LitBool False) ; \<rho> \<turnstile>\<^sub>e e \<Rightarrow> v \<rbrakk>
+  \<Longrightarrow> \<rho> \<turnstile>\<^sub>e ExprCond t c e \<Rightarrow> v" |
 EvalList: "\<lbrakk> list_all2 (\<lambda> e v . \<rho> \<turnstile>\<^sub>e e \<Rightarrow> v) es vals \<rbrakk>
-  \<Longrightarrow> \<rho> \<turnstile>\<^sub>e List es \<Rightarrow> VList vals" |
+  \<Longrightarrow> \<rho> \<turnstile>\<^sub>e ExprList es \<Rightarrow> VList vals" |
 EvalTuple: "\<lbrakk> list_all2 (\<lambda> e v . \<rho> \<turnstile>\<^sub>e e \<Rightarrow> v) es vals \<rbrakk>
-  \<Longrightarrow> \<rho> \<turnstile>\<^sub>e Tuple es \<Rightarrow> VTuple vals" |
+  \<Longrightarrow> \<rho> \<turnstile>\<^sub>e ExprTuple es \<Rightarrow> VTuple vals" |
 EvalCallLambda:
   "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> \<langle>\<rho>', xs, e'\<rangle>\<^sub>\<lambda>
   ; list_all2 (\<lambda> e v . \<rho> \<turnstile>\<^sub>e e \<Rightarrow> v) args u'
   ; \<rho>'(xs [\<mapsto>] u') \<turnstile>\<^sub>e e' \<Rightarrow> v
-  \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>e Call e args \<Rightarrow> v" |
+  \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>e ExprCall e args \<Rightarrow> v" |
 EvalCallDef:
   "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> \<langle>\<rho>', ds, j\<rangle>\<^sub>C
   ; vs = map (\<lambda>i. \<langle>\<rho>', ds, i\<rangle>\<^sub>C) [0..<length ds]
-  ; fs = map (\<lambda> d . (case d of (DefFunc f _ _) => f)) ds
-  ; xs = map (\<lambda> d . (case d of (DefFunc _ x _) \<Rightarrow> x)) ds
-  ; bs = map (\<lambda> d . (case d of (DefFunc _ _ b) \<Rightarrow> b)) ds
+  ; fs = map (\<lambda> d . (case d of (Def f _ _ _) => f)) ds
+  ; xs = map (\<lambda> d . (case d of (Def _ x _ _) \<Rightarrow> map fst x)) ds
+  ; bs = map (\<lambda> d . (case d of (Def _ _ _ b) \<Rightarrow> b)) ds
   ; list_all2 (\<lambda> e v . \<rho> \<turnstile>\<^sub>e e \<Rightarrow> v) args u'
-  ; (\<rho>'(fs [\<mapsto>] vs))((xs ! j) [\<mapsto>] u') \<turnstile>\<^sub>b (bs ! j) \<Rightarrow> r
+  ; (\<rho>'(fs [\<mapsto>] vs))((xs ! j) [\<mapsto>] u') \<turnstile>\<^sub>s (bs ! j) \<Rightarrow> r
   ; unwrap r = Some r'
-  \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>e Call e args \<Rightarrow> r'" |
-EvalLambda: "\<rho> \<turnstile>\<^sub>e Lambda args e \<Rightarrow> \<langle>\<rho>, args, e\<rangle>\<^sub>\<lambda>" |
+  \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>e ExprCall e args \<Rightarrow> r'" |
+EvalLambda: "\<rho> \<turnstile>\<^sub>e ExprLambda args e \<Rightarrow> \<langle>\<rho>, args, e\<rangle>\<^sub>\<lambda>" |
 
-EvalBlockAssigns:
-  "\<lbrakk> \<rho> \<turnstile>\<^sub>s s \<Rightarrow> (Assigns \<rho>') ; (\<rho> ++ \<rho>') \<turnstile>\<^sub>b b \<Rightarrow> r ; (Assigns \<rho>') \<bullet> r = Some r' \<rbrakk>
-  \<Longrightarrow> \<rho> \<turnstile>\<^sub>b (s # b) \<Rightarrow> r'" |
+(* EvalBlockAssigns:
+  "\<lbrakk> \<rho> \<turnstile>\<^sub>s s \<Rightarrow> (Assigns \<rho>') ; (\<rho> ++ \<rho>') \<turnstile>\<^sub>s b \<Rightarrow> r ; (Assigns \<rho>') \<bullet> r = Some r' \<rbrakk>
+  \<Longrightarrow> \<rho> \<turnstile>\<^sub>s (s # b) \<Rightarrow> r'" |
 EvalBlockReturns:
-  "\<lbrakk> \<rho> \<turnstile>\<^sub>s s \<Rightarrow> Returns v \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>b (s # b) \<Rightarrow> Returns v" |
+  "\<lbrakk> \<rho> \<turnstile>\<^sub>s s \<Rightarrow> Returns v \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>s (s # b) \<Rightarrow> Returns v" | *)
 
-EvalPass: "\<rho> \<turnstile>\<^sub>s Pass \<Rightarrow> Assigns \<epsilon>" |
-EvalAssign: "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> v \<Longrightarrow> \<rho> \<turnstile>\<^sub>s Assign x e \<Rightarrow> Assigns [x \<mapsto> v]" |
-EvalExpr: "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> v \<Longrightarrow> \<rho> \<turnstile>\<^sub>s Expr e \<Rightarrow> Assigns \<epsilon>" |
+EvalPass: "\<rho> \<turnstile>\<^sub>s StmtPass \<Rightarrow> Assigns \<epsilon>" |
+EvalAssign: "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> v \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtAssign x _ e \<Rightarrow> Assigns [x \<mapsto> v]" |
+EvalExpr: "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> v \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtExpr e \<Rightarrow> Assigns \<epsilon>" |
 EvalAssert: 
-  "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> v ; v \<noteq> VLit (Bool False) \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>s Assert e \<Rightarrow> Assigns \<epsilon>" |
+  "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> v ; v \<noteq> VLit (LitBool False) \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtAssert e \<Rightarrow> Assigns \<epsilon>" |
 EvalAssertMsg:
-  "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> v ; v \<noteq> VLit (Bool False) \<rbrakk>
-  \<Longrightarrow> \<rho> \<turnstile>\<^sub>s AssertMsg e e' \<Rightarrow> Assigns \<epsilon>" |
-EvalReturnNone: "\<rho> \<turnstile>\<^sub>s ReturnNone \<Rightarrow> Returns (VLit LitNone)" |
-EvalReturn: "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> v \<Longrightarrow> \<rho> \<turnstile>\<^sub>s Return e \<Rightarrow> Returns v" |
-EvalIfTrue: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> VLit (Bool True) ; \<rho> \<turnstile>\<^sub>b b \<Rightarrow> r \<rbrakk>
-  \<Longrightarrow> \<rho> \<turnstile>\<^sub>s If e b elifs else' \<Rightarrow> r" |
-EvalIfFalse: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> VLit (Bool False) ; \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f (elifs, else') \<Rightarrow> r \<rbrakk>
-  \<Longrightarrow> \<rho> \<turnstile>\<^sub>s If e b elifs else' \<Rightarrow> r" |
+  "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> v ; v \<noteq> VLit (LitBool False) \<rbrakk>
+  \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtAssertMsg e e' \<Rightarrow> Assigns \<epsilon>" |
+EvalReturnNone: "\<rho> \<turnstile>\<^sub>s StmtReturnNone \<Rightarrow> Returns (VLit LitNone)" |
+EvalReturn: "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> v \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtReturn e \<Rightarrow> Returns v" |
+EvalIfTrue: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> VLit (LitBool True) ; \<rho> \<turnstile>\<^sub>s b \<Rightarrow> r \<rbrakk>
+  \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtIf e b elifs else' \<Rightarrow> r" |
+EvalIfFalse: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> VLit (LitBool False) ; \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f (elifs, else') \<Rightarrow> r \<rbrakk>
+  \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtIf e b elifs else' \<Rightarrow> r" |
 EvalMutual: 
   "\<lbrakk> vs = map (\<lambda> i . \<langle>\<rho>, ds, i\<rangle>\<^sub>C) [0..<length ds]
-  ; fs = map (\<lambda> d . (case d of DefFunc f _ _ \<Rightarrow> f)) ds
-  \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>s MutualRegion ds \<Rightarrow> Assigns (\<epsilon>(fs [\<mapsto>] vs))" | 
+  ; fs = map (\<lambda> d . (case d of Def f _ _ _ \<Rightarrow> f)) ds
+  \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtMutualRegion ds \<Rightarrow> Assigns (\<epsilon>(fs [\<mapsto>] vs))" | 
 
-EvalElifEmpty: "\<rho> \<turnstile>\<^sub>b b \<Rightarrow> r \<Longrightarrow> \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f ([], Some b) \<Rightarrow> r" |
-EvalElifTrue: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> VLit (Bool True) ; \<rho> \<turnstile>\<^sub>b b \<Rightarrow> r \<rbrakk>
+EvalElifEmpty: "\<rho> \<turnstile>\<^sub>s b \<Rightarrow> r \<Longrightarrow> \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f ([], Some b) \<Rightarrow> r" |
+EvalElifTrue: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> VLit (Bool True) ; \<rho> \<turnstile>\<^sub>s b \<Rightarrow> r \<rbrakk>
   \<Longrightarrow> \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f ((e, b) # elifs', else') \<Rightarrow> r" |
 EvalElifFalse: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> VLit (Bool False) ; \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f (elifs', else') \<Rightarrow> r \<rbrakk>
   \<Longrightarrow> \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f ((e, b) # elifs', else') \<Rightarrow> r"
 
-lemmas eval_induct = eval_expr_eval_block_eval_stmt_eval_elif.inducts
+lemmas eval_induct = eval_expr_eval_stmt_eval_elif.inducts
 
 end

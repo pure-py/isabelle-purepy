@@ -3,17 +3,15 @@ theory Syntax
 begin
 
 type_alias vname = string
-type_alias fname = string
-type_alias cname = string
 
-(* qualified name *)
-type_synonym q = "vname \<times> vname list"
+(* qualified name, aka non-empty list of vars *)
+type_synonym qualified_name = "vname \<times> vname list"
 
 (* literals *)
 datatype l =
-    Number int
-  | String string
-  | Bool bool
+    LitNumber int
+  | LitString string
+  | LitBool bool
   | LitNone
 
 (* patterns *)
@@ -24,51 +22,64 @@ datatype p =
   | PatWildcard
   | PatList "p list"
   | PatTuple "p list"
-  | PatConstr q "p list" "(vname \<times> p) list"
-  | PatDict "(string \<times> p) list"
+  | PatConstr qualified_name "p list" "(vname \<times> p) list"
+  | PatDict "(vname \<times> p) list"
   | PatAs p vname
 
 (* operators *)
-datatype bop = Or | And | Eq | Neq | Lt | Leq | Gt | Geq | Add | Sub | Mul | Div
-datatype uop = Not | Neg
+datatype bop = 
+    BOpOr 
+  | BOpAnd
+  | BOpEq 
+  | BOpNeq 
+  | BOpLt 
+  | BOpLeq 
+  | BOpGt 
+  | BOpGeq 
+  | BOpAdd 
+  | BOpSub 
+  | BOpMul 
+  | BOpDiv
+
+datatype uop = UOpNot | UOpNeg
 
 (* expressions *)
-datatype e =
-    Var vname                                 (* x *)
-  | Literal l                                 (* 10 *)
-  | Call e "e list"                           (* f (1, 2, False) *)
-  | Constr q "e list" "(vname \<times> e) list"      (* C(1, 2, x = 10) *)
-  | Dict "(e \<times> e) list"                       (* {"a": 1, "b": 2} *)
-  | Attribute e vname                         (* c.x *)
-  | Subscript e e                             (* c["a"] *)
-  | BinOp bop e e                             (* x + y *)
-  | UnOp uop e                                (* not x *)
-  | CondExpr e e e                            (* 10 if True else 20 *)
-  | List "e list"                             (* [10, 20, 40] *)
-  | Tuple "e list"                            (* (10, 20, True) *)
-  | ListComp e "g list"                       (* [2*x for x in ...] *)
-  | DictComp "(e \<times> e)" "g list"               (* {x: x**2 for x in range(5)} *)
-  | Lambda "vname list" e                     (* lambda x: x * 2 *)
+datatype expr =
+    ExprVar vname                                                 (* x *)
+  | ExprLiteral l                                                 (* 10 *)
+  | ExprCall expr "expr list"                                     (* f (1, 2, False) *)
+  | ExprConstr qualified_name "expr list" "(vname \<times> expr) list"   (* C(1, 2, x = 10) *)
+  | ExprDict "(expr \<times> expr) list"                                 (* {"a": 1, "b": 2} *)
+  | ExprAttribute expr vname                                      (* c.x *)
+  | ExprSubscript expr expr                                       (* c["a"] *)
+  | ExprBinOp bop expr expr                                       (* x + y *)
+  | ExprUnOp uop expr                                             (* not x *)
+  | ExprCond expr expr expr                                       (* 10 if True else 20 *)
+  | ExprList "expr list"                                          (* [10, 20, 40] *)
+  | ExprTuple "expr list"                                         (* (10, 20, True) *)
+  | ExprListComp expr "guard list"                                (* [2*x for x in ...] *)
+  | ExprDictComp "(expr \<times> expr)" "guard list"                     (* {x: x**2 for x in range(5)} *)
+  | ExprLambda "vname list" expr                                  (* lambda x: x * 2 *)
   
 (* guards *)
-and g =
-    Guard e
-  | Generator vname e
+and guard =
+    Guard expr
+  | Generator vname expr
 
 (* types *)
 datatype \<tau> =
-    Any
-  | None
-  | Bool
-  | Int
-  | Float
-  | Str
-  | List \<tau>
-  | Tuple "\<tau> list"
-  | Dict \<tau>
-  | Callable "\<tau> list" \<tau>
-  | Class cname
-  | Union \<tau> \<tau>
+    TypeAny
+  | TypeNone
+  | TypeBool
+  | TypeInt
+  | TypeFloat
+  | TypeStr
+  | TypeList \<tau>
+  | TypeTuple "\<tau> list"
+  | TypeDict \<tau>
+  | TypeCallable "\<tau> list" \<tau>
+  | TypeClass vname
+  | TypeUnion \<tau> \<tau>
 
 (* type annotations *)
 type_synonym \<pi> = "\<tau> option"
@@ -78,25 +89,25 @@ type_synonym \<omega> = "\<tau> option"
 
 (* imports *)
 datatype \<iota> =
-    Import q
-  | FromImport q "vname list"
+    Import qualified_name
+  | FromImport qualified_name "vname list"
 
 (* statements *)
-datatype s =
-    Pass
-  | Seq s s
-  | Assign vname \<pi> e
-  | Expr e
-  | Assert e
-  | AssertMsg e e
-  | ReturnNone
-  | Return e
-  | If e s "(e \<times> s) list" "e option"
-  | Match e "(e \<times> s) list"
-  | MutualRegion "d list"
+datatype stmt =
+    StmtPass
+  | StmtSeq stmt stmt
+  | StmtAssign vname \<pi> expr
+  | StmtExpr expr
+  | StmtAssert expr
+  | StmtAssertMsg expr expr
+  | StmtReturnNone
+  | StmtReturn expr
+  | StmtIf expr stmt "(expr \<times> stmt) list" "stmt option"
+  | StmtMatch expr "(expr \<times> stmt) list"
+  | StmtMutualRegion "func list"
 
 (* function definitions *)
-and d = Def fname "(vname \<times> \<pi>) list" \<omega> s
+and func = Def vname "(vname \<times> \<pi>) list" \<omega> stmt
 
 (* field lists *)
 datatype \<Phi> =
@@ -105,10 +116,10 @@ datatype \<Phi> =
 
 (* top-level statements *)
 datatype t =
-    Stmt s
+    Stmt stmt
   | TopSeq t t
-  | Dataclass cname \<Phi>
-  | DataclassExtend cname cname \<Phi>
+  | Dataclass vname \<Phi>
+  | DataclassExtend vname vname \<Phi>
 
 (* module body *)
 datatype \<mu> = ModuleBody "\<iota> list" t
