@@ -113,9 +113,9 @@ EvalMutual:
   \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtMutualRegion ds \<Rightarrow> Assigns (\<epsilon>(fs [\<mapsto>] vs))" | 
 
 EvalElifEmpty: "\<rho> \<turnstile>\<^sub>s b \<Rightarrow> r \<Longrightarrow> \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f ([], Some b) \<Rightarrow> r" |
-EvalElifTrue: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> VLit (Bool True) ; \<rho> \<turnstile>\<^sub>s b \<Rightarrow> r \<rbrakk>
+EvalElifTrue: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> VLit (LitBool True) ; \<rho> \<turnstile>\<^sub>s b \<Rightarrow> r \<rbrakk>
   \<Longrightarrow> \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f ((e, b) # elifs', else') \<Rightarrow> r" |
-EvalElifFalse: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> VLit (Bool False) ; \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f (elifs', else') \<Rightarrow> r \<rbrakk>
+EvalElifFalse: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> VLit (LitBool False) ; \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f (elifs', else') \<Rightarrow> r \<rbrakk>
   \<Longrightarrow> \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f ((e, b) # elifs', else') \<Rightarrow> r"
 
 lemmas eval_induct = eval_expr_eval_stmt_eval_elif.inducts
