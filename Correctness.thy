@@ -13,7 +13,7 @@ inductive_cases LambdaE: "\<rho> \<turnstile>\<^sub>e ExprLambda args e \<Righta
 
 inductive_cases
   CallE[consumes 1, case_names CallLam CallDef]:
-    "\<rho> \<turnstile>\<^sub>e ExprCall e args \<Rightarrow> v" and
+    "\<rho> \<turnstile>\<^sub>e ExprCall e args [] \<Rightarrow> v" and
   IfE[consumes 1, case_names IfT IfF]:
     "\<rho> \<turnstile>\<^sub>s StmtIf e b elifs else' \<Rightarrow> r" and
   ElifConsE[consumes 1, case_names ElT ElF]:
@@ -130,7 +130,7 @@ next
   show ?case
   proof (intro allI impI)
     fix vres
-    assume "\<rho> \<turnstile>\<^sub>e ExprCall e args \<Rightarrow> vres"
+    assume "\<rho> \<turnstile>\<^sub>e ExprCall e args [] \<Rightarrow> vres"
     then consider
         (Lam) \<rho>2' xs2 e2' u2' where
           "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> \<langle>\<rho>2',xs2,e2'\<rangle>\<^sub>\<lambda>"
@@ -179,7 +179,7 @@ next
   show ?case
   proof (intro allI impI)
     fix vres
-    assume "\<rho> \<turnstile>\<^sub>e ExprCall e args \<Rightarrow> vres"
+    assume "\<rho> \<turnstile>\<^sub>e ExprCall e args [] \<Rightarrow> vres"
     then consider
         (Lam) \<rho>2' xs2 e2' u2' where
           "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> \<langle>\<rho>2',xs2,e2'\<rangle>\<^sub>\<lambda>"

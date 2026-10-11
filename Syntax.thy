@@ -36,6 +36,7 @@ datatype bop =
   | BOpLeq 
   | BOpGt 
   | BOpGeq 
+  | BOpBitOr
   | BOpAdd 
   | BOpSub 
   | BOpMul 
@@ -47,11 +48,10 @@ datatype uop = UOpNot | UOpNeg
 datatype expr =
     ExprVar vname                                                 (* x *)
   | ExprLiteral l                                                 (* 10 *)
-  | ExprCall expr "expr list"                                     (* f (1, 2, False) *)
-  | ExprConstr qualified_name "expr list" "(vname \<times> expr) list"   (* C(1, 2, x = 10) *)
+  | ExprCall expr "expr list" "(vname \<times> expr) list"              (* f(1, 2, x = 10) *)
   | ExprDict "(expr \<times> expr) list"                                 (* {"a": 1, "b": 2} *)
   | ExprAttribute expr vname                                      (* c.x *)
-  | ExprSubscript expr expr                                       (* c["a"] *)
+  | ExprSubscript expr "expr list"                                (* c["a"] *)
   | ExprBinOp bop expr expr                                       (* x + y *)
   | ExprUnOp uop expr                                             (* not x *)
   | ExprCond expr expr expr                                       (* 10 if True else 20 *)
