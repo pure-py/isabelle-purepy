@@ -9,7 +9,7 @@ build:
 
 # Check proofs and build document, which needs LaTeX.
 document:
-	$(ISABELLE) build -v -D .
+	$(ISABELLE) build -v -o document=pdf -D .
 
 clean:
 	rm -rf output
