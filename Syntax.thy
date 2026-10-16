@@ -1,5 +1,5 @@
 theory Syntax
-  imports Main
+  imports Complex_Main
 begin
 
 type_alias var = string
@@ -7,7 +7,8 @@ type_alias var = string
 type_synonym name = "var \<times> var list"
 
 datatype lit =
-    LitNumber int
+    LitInt int
+  | LitFloat real  (* reals, so nan is not modelled *)
   | LitString string
   | LitBool bool
   | LitNone

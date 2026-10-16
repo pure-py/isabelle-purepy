@@ -65,12 +65,17 @@ where
 
 fun eq :: "val \<Rightarrow> val \<Rightarrow> bool result" and eq_elems :: "val list \<Rightarrow> val list \<Rightarrow> bool result"
 where
-"eq (VLit (LitNumber n)) (VLit (LitNumber n')) = Val (n = n')" |
+"eq (VLit (LitInt n)) (VLit (LitInt n')) = Val (n = n')" |
+"eq (VLit (LitInt n)) (VLit (LitFloat x')) = Val (real_of_int n = x')" |
+"eq (VLit (LitFloat x)) (VLit (LitInt n')) = Val (x = real_of_int n')" |
+"eq (VLit (LitFloat x)) (VLit (LitFloat x')) = Val (x = x')" |
 "eq (VLit (LitString w)) (VLit (LitString w')) = Val (w = w')" |
 "eq (VLit (LitBool b)) (VLit (LitBool b')) = Val (b = b')" |
 "eq (VLit LitNone) (VLit LitNone) = Val True" |
-"eq (VLit (LitBool _)) (VLit (LitNumber _)) = Aborts Undef" |
-"eq (VLit (LitNumber _)) (VLit (LitBool _)) = Aborts Undef" |
+"eq (VLit (LitBool _)) (VLit (LitInt _)) = Aborts Undef" |
+"eq (VLit (LitBool _)) (VLit (LitFloat _)) = Aborts Undef" |
+"eq (VLit (LitInt _)) (VLit (LitBool _)) = Aborts Undef" |
+"eq (VLit (LitFloat _)) (VLit (LitBool _)) = Aborts Undef" |
 "eq (VList vs) (VList vs') = eq_elems vs vs'" |
 "eq (VTuple vs) (VTuple vs') = eq_elems vs vs'" |
 "eq Lam(_, _, _) Lam(_, _, _) = Aborts Undef" |
@@ -95,34 +100,72 @@ where
 "contains_elems [] v = Val False" |
 "contains_elems (v' # vs) v = (if eq v v' = Val False then contains_elems vs v else eq v v')"
 
+(* Numeric value as a real; None for a non-number *)
+fun as_real :: "val \<Rightarrow> real option"
+where
+"as_real (VLit (LitInt n)) = Some (real_of_int n)" |
+"as_real (VLit (LitFloat x)) = Some x" |
+"as_real _ = None"
+
+(* Apply f to two integers, g to two numbers otherwise *)
+fun arith :: "(int \<Rightarrow> int \<Rightarrow> int) \<Rightarrow> (real \<Rightarrow> real \<Rightarrow> real) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
+where
+"arith f g (VLit (LitInt n)) (VLit (LitInt n')) = Val (VLit (LitInt (f n n')))" |
+"arith f g v v' =
+  (case (as_real v, as_real v') of
+     (Some x, Some x') \<Rightarrow> Val (VLit (LitFloat (g x x')))
+   | _ \<Rightarrow> Aborts TypeError)"
+
+(* Compare two numbers as reals *)
+fun compare :: "(real \<Rightarrow> real \<Rightarrow> bool) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
+where
+"compare f v v' =
+  (case (as_real v, as_real v') of
+     (Some x, Some x') \<Rightarrow> Val (VLit (LitBool (f x x')))
+   | _ \<Rightarrow> Aborts TypeError)"
+
 fun binop_meaning :: "bop \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
 where
 "binop_meaning BOpEq v v' = mlet (eq v v') (\<lambda>b. Val (VLit (LitBool b)))" |
 "binop_meaning BOpNeq v v' = mlet (eq v v') (\<lambda>b. Val (VLit (LitBool (\<not> b))))" |
 "binop_meaning BOpIn v v' = mlet (contains v' v) (\<lambda>b. Val (VLit (LitBool b)))" |
 "binop_meaning BOpNotIn v v' = mlet (contains v' v) (\<lambda>b. Val (VLit (LitBool (\<not> b))))" |
-"binop_meaning BOpLt (VLit (LitNumber n)) (VLit (LitNumber n')) = Val (VLit (LitBool (n < n')))" |
-"binop_meaning BOpLeq (VLit (LitNumber n)) (VLit (LitNumber n')) = Val (VLit (LitBool (n \<le> n')))" |
-"binop_meaning BOpGt (VLit (LitNumber n)) (VLit (LitNumber n')) = Val (VLit (LitBool (n > n')))" |
-"binop_meaning BOpGeq (VLit (LitNumber n)) (VLit (LitNumber n')) = Val (VLit (LitBool (n \<ge> n')))" |
-"binop_meaning BOpAdd (VLit (LitNumber n)) (VLit (LitNumber n')) = Val (VLit (LitNumber (n + n')))" |
-"binop_meaning BOpSub (VLit (LitNumber n)) (VLit (LitNumber n')) = Val (VLit (LitNumber (n - n')))" |
-"binop_meaning BOpMul (VLit (LitNumber n)) (VLit (LitNumber n')) = Val (VLit (LitNumber (n * n')))" |
-"binop_meaning BOpDiv (VLit (LitNumber n)) (VLit (LitNumber n')) =
-  (if n' = 0 then Aborts ZeroDivisionError else Val (VLit (LitNumber (n div n'))))" |
-"binop_meaning BOpFloorDiv (VLit (LitNumber n)) (VLit (LitNumber n')) =
-  (if n' = 0 then Aborts ZeroDivisionError else Val (VLit (LitNumber (n div n'))))" |
-"binop_meaning BOpMod (VLit (LitNumber n)) (VLit (LitNumber n')) =
-  (if n' = 0 then Aborts ZeroDivisionError else Val (VLit (LitNumber (n mod n'))))" |
-"binop_meaning BOpPow (VLit (LitNumber n)) (VLit (LitNumber n')) =
-  (if n' < 0 then Aborts TypeError else Val (VLit (LitNumber (n ^ nat n'))))" |
+"binop_meaning BOpLt v v' = compare (<) v v'" |
+"binop_meaning BOpLeq v v' = compare (\<le>) v v'" |
+"binop_meaning BOpGt v v' = compare (>) v v'" |
+"binop_meaning BOpGeq v v' = compare (\<ge>) v v'" |
+"binop_meaning BOpAdd v v' = arith (+) (+) v v'" |
+"binop_meaning BOpSub v v' = arith (-) (-) v v'" |
+"binop_meaning BOpMul v v' = arith (*) (*) v v'" |
+"binop_meaning BOpDiv v v' =
+  (if as_real v' = Some 0 then Aborts ZeroDivisionError
+   else case (as_real v, as_real v') of
+     (Some x, Some x') \<Rightarrow> Val (VLit (LitFloat (x / x')))
+   | _ \<Rightarrow> Aborts TypeError)" |
+"binop_meaning BOpFloorDiv v v' =
+  (if as_real v' = Some 0 then Aborts ZeroDivisionError
+   else arith (div) (\<lambda>x x'. real_of_int \<lfloor>x / x'\<rfloor>) v v')" |
+"binop_meaning BOpMod v v' =
+  (if as_real v' = Some 0 then Aborts ZeroDivisionError
+   else arith (mod) (\<lambda>x x'. x - x' * real_of_int \<lfloor>x / x'\<rfloor>) v v')" |
+"binop_meaning BOpPow (VLit (LitInt n)) (VLit (LitInt n')) =
+  (if n' \<ge> 0 then Val (VLit (LitInt (n ^ nat n')))
+   else if n = 0 then Aborts ZeroDivisionError
+   else Val (VLit (LitFloat (inverse (real_of_int n ^ nat (- n'))))))" |
+"binop_meaning BOpPow v v' =
+  (case (as_real v, as_real v') of
+     (Some x, Some x') \<Rightarrow>
+       if x = 0 \<and> x' < 0 then Aborts ZeroDivisionError else Val (VLit (LitFloat (x powr x')))
+   | _ \<Rightarrow> Aborts TypeError)" |
 "binop_meaning _ _ _ = Aborts TypeError"
 
 fun unop_meaning :: "uop \<Rightarrow> val \<Rightarrow> val result"
 where
 "unop_meaning UOpNot (VLit (LitBool b)) = Val (VLit (LitBool (\<not> b)))" |
-"unop_meaning UOpPos (VLit (LitNumber n)) = Val (VLit (LitNumber n))" |
-"unop_meaning UOpNeg (VLit (LitNumber n)) = Val (VLit (LitNumber (- n)))" |
+"unop_meaning UOpPos (VLit (LitInt n)) = Val (VLit (LitInt n))" |
+"unop_meaning UOpPos (VLit (LitFloat x)) = Val (VLit (LitFloat x))" |
+"unop_meaning UOpNeg (VLit (LitInt n)) = Val (VLit (LitInt (- n)))" |
+"unop_meaning UOpNeg (VLit (LitFloat x)) = Val (VLit (LitFloat (- x)))" |
 "unop_meaning _ _ = Aborts TypeError"
 
 fun def_name :: "func \<Rightarrow> var"
