@@ -14,7 +14,7 @@ datatype cxt_entry =
 
 type_synonym cxt = "var \<rightharpoonup> cxt_entry"
 
-(* Context entry of a variable at \<tau>, or absent *)
+(* Context entry for a variable at \<tau>, or absent *)
 fun cxt_entry_at :: "cxt_entry option \<Rightarrow> ty \<Rightarrow> bool"
 where
 "cxt_entry_at None \<tau> = True" |
