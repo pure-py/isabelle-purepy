@@ -19,8 +19,8 @@ datatype \<kappa> =
   | ErrIndex
   | ErrKey
   | ErrZeroDiv
-  | ErrAssertNoMsg
-  | ErrAssert val
+  | ErrAssert
+  | ErrAssertMsg val
   | ErrAttr
   | ErrExit int
   | ErrUndef
@@ -232,11 +232,11 @@ EvalDefs:
   "vs = map (\<lambda>i. \<langle>\<rho>, ds, i\<rangle>\<^sub>C) [0..<length ds]
   \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtMutualRegion ds \<Rightarrow> Val (Assigns (\<epsilon>(map def_name ds [\<mapsto>] vs)))" |
 EvalAssert: "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val true \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtAssert e \<Rightarrow> Val (Assigns \<epsilon>)" |
-EvalAssertFalse: "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val false \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtAssert e \<Rightarrow> Aborts ErrAssertNoMsg" |
+EvalAssertFalse: "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val false \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtAssert e \<Rightarrow> Aborts ErrAssert" |
 EvalAssertFail: "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> Aborts \<kappa> \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtAssert e \<Rightarrow> Aborts \<kappa>" |
 EvalAssertMsg: "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val true \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtAssertMsg e e' \<Rightarrow> Val (Assigns \<epsilon>)" |
 EvalAssertMsgFalse: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val false ; \<rho> \<turnstile>\<^sub>e e' \<Rightarrow> r \<rbrakk>
-  \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtAssertMsg e e' \<Rightarrow> mlet r (\<lambda>w. Aborts (ErrAssert w))" |
+  \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtAssertMsg e e' \<Rightarrow> mlet r (\<lambda>w. Aborts (ErrAssertMsg w))" |
 EvalAssertMsgFail: "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> Aborts \<kappa> \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtAssertMsg e e' \<Rightarrow> Aborts \<kappa>" |
 EvalIfTrue: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val true ; \<rho> \<turnstile>\<^sub>s s \<Rightarrow> oc \<rbrakk>
   \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtIf e s elifs else' \<Rightarrow> oc" |
