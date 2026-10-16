@@ -4,9 +4,9 @@
 
 Mechanisation of the PurePy specification in Isabelle/HOL. The syntax follows the specification's grammar.
 The operational semantics covers a fragment: literals, variables, operators, conditionals, lists, tuples,
-lambdas and calls, and the statements for assignment, assertion, return, conditionals, sequencing and
-mutual definition regions. Evaluation produces a result, either a value or an abort
-with a termination kind, following the specification's treatment of runtime errors.
+lambdas and calls, and the statements for assignment, assertion, return, conditionals, sequencing and mutual
+definition regions. Evaluation produces a result, either a value or an abort with a termination kind,
+following the specification's treatment of runtime errors.
 
 ## Building
 
