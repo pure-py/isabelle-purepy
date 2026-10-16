@@ -28,7 +28,8 @@ jobs:
         run: |
           apt-get update -q
           apt-get install -y -q --no-install-recommends \
-            make texlive-latex-base texlive-latex-recommended texlive-fonts-recommended
+            make texlive-latex-base texlive-latex-recommended texlive-fonts-recommended \
+            texlive-plain-generic lmodern
 
       - uses: actions/checkout@v4
 
