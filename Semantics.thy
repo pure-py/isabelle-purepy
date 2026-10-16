@@ -43,8 +43,9 @@ where
 fun compose :: "outcome \<Rightarrow> outcome \<Rightarrow> outcome" (infixl "\<bullet>" 70)
 where
 "Val (Assigns \<rho>) \<bullet> Val (Assigns \<rho>') = Val (Assigns (\<rho> ++ \<rho>'))" |
-"Val (Assigns \<rho>) \<bullet> Val (Returns v) = Val (Returns v)" |
-"Val (Assigns \<rho>) \<bullet> Aborts \<kappa> = Aborts \<kappa>"
+"Val (Assigns \<rho>) \<bullet> oc = oc" |
+"Val (Returns v) \<bullet> oc = Val (Returns v)" |
+"Aborts \<kappa> \<bullet> oc = Aborts \<kappa>"
 
 fun call_result :: "outcome \<Rightarrow> r"
 where
