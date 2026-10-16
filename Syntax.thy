@@ -16,14 +16,14 @@ datatype lit =
 type_synonym 'u args = "'u list \<times> (var \<times> 'u) list"
 
 datatype pat =
-    PatLiteral lit                 (* 10 *)
-  | PatVar var                     (* x *)
-  | PatWildcard                    (* _ *)
-  | PatList "pat list"             (* [p, q] *)
-  | PatTuple "pat list"            (* (p, q) *)
-  | PatConstr name "pat args"      (* C(p, x=q) *)
-  | PatDict "(string \<times> pat) list"  (* {"a": p} *)
-  | PatAs pat var                  (* p as x *)
+    PatLiteral lit
+  | PatVar var
+  | PatWildcard
+  | PatList "pat list"
+  | PatTuple "pat list"
+  | PatConstr name "pat args"
+  | PatDict "(string \<times> pat) list"
+  | PatAs pat var
 
 datatype bop =
     BOpBitOr
@@ -46,25 +46,25 @@ datatype bop =
 datatype uop = UOpNot | UOpPos | UOpNeg
 
 datatype expr =
-    ExprVar var                              (* x *)
-  | ExprLiteral lit                          (* 10 *)
-  | ExprCall expr "expr args"                (* f(1, 2, x=10) *)
-  | ExprDict "(expr \<times> expr) list"            (* {"a": 1, "b": 2} *)
-  | ExprAttribute expr var                   (* c.x *)
-  | ExprSubscript expr expr                  (* c["a"] *)
-  | ExprBinOp bop expr expr                  (* x + y *)
-  | ExprUnOp uop expr                        (* not x *)
-  | ExprAnd expr expr                        (* x and y *)
-  | ExprOr expr expr                         (* x or y *)
-  | ExprCond expr expr expr                  (* 10 if b else 20 *)
-  | ExprList "expr list"                     (* [10, 20, 40] *)
-  | ExprTuple "expr list"                    (* (10, 20, True) *)
+    ExprVar var
+  | ExprLiteral lit
+  | ExprCall expr "expr args"
+  | ExprDict "(expr \<times> expr) list"
+  | ExprAttribute expr var
+  | ExprSubscript expr expr
+  | ExprBinOp bop expr expr
+  | ExprUnOp uop expr
+  | ExprAnd expr expr
+  | ExprOr expr expr
+  | ExprCond expr expr expr
+  | ExprList "expr list"
+  | ExprTuple "expr list"
   | ExprListComp expr "qualifier list"       (* [2 * x for x in xs] *)
   | ExprDictComp expr expr "qualifier list"  (* {x: x ** 2 for x in xs} *)
   | ExprLambda "var list" expr               (* lambda x: x * 2 *)
 and qualifier =
-    Guard expr                               (* if x > 0 *)
-  | Generator var expr                       (* for x in xs *)
+    Guard expr
+  | Generator var expr
 
 datatype prim_ty =
     TyObject
@@ -106,19 +106,19 @@ datatype import =
   | FromImport name "var list"
 
 datatype stmt =
-    StmtPass                                             (* pass *)
-  | StmtSeq stmt stmt                                    (* s; t *)
-  | StmtDeclare var ty_expr                              (* x: int *)
-  | StmtAssign var "ty_expr option" expr                 (* x: int = e *)
-  | StmtExpr expr                                        (* f(x) *)
-  | StmtAssert expr                                      (* assert e *)
-  | StmtAssertMsg expr expr                              (* assert e, "msg" *)
-  | StmtReturnNone                                       (* return *)
-  | StmtReturn expr                                      (* return e *)
-  | StmtIf expr stmt "(expr \<times> stmt) list" "stmt option"  (* if e: s else: t *)
-  | StmtMatch expr "(pat \<times> stmt) list"                   (* match e: case p: s *)
-  | StmtMutualRegion "func list"                         (* def f(): s *)
-and func = Def var "(var \<times> ty_expr) list" ty_expr stmt   (* def f(x: T) -> U: s *)
+    StmtPass
+  | StmtSeq stmt stmt
+  | StmtDeclare var ty_expr
+  | StmtAssign var "ty_expr option" expr
+  | StmtExpr expr
+  | StmtAssert expr
+  | StmtAssertMsg expr expr
+  | StmtReturnNone
+  | StmtReturn expr
+  | StmtIf expr stmt "(expr \<times> stmt) list" "stmt option"
+  | StmtMatch expr "(pat \<times> stmt) list"
+  | StmtMutualRegion "func list"
+and func = Def var "(var \<times> ty_expr) list" ty_expr stmt
 
 datatype fields =
     FieldList "(var \<times> ty_expr) list"
