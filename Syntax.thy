@@ -103,7 +103,7 @@ datatype stmt =
   | StmtReturnNone
   | StmtReturn expr
   | StmtIf expr stmt "(expr \<times> stmt) list" "stmt option"
-  | StmtMatch expr "(expr \<times> stmt) list"
+  | StmtMatch expr "(p \<times> stmt) list"
   | StmtMutualRegion "func list"
 
 (* function definitions *)

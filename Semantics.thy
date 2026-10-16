@@ -109,6 +109,24 @@ fun def_name :: "func \<Rightarrow> vname"
 where
 "def_name (Def f _ _ _) = f"
 
+fun binds_pat :: "p \<Rightarrow> vname set"
+where
+"binds_pat (PatVar x) = {x}" |
+"binds_pat (PatAs p x) = binds_pat p \<union> {x}" |
+"binds_pat (PatList ps) = \<Union> (set (map binds_pat ps))" |
+"binds_pat (PatTuple ps) = \<Union> (set (map binds_pat ps))" |
+"binds_pat (PatConstr q ps kps) = \<Union> (set (map binds_pat ps)) \<union> \<Union> (set (map (binds_pat \<circ> snd) kps))" |
+"binds_pat (PatDict kps) = \<Union> (set (map (binds_pat \<circ> snd) kps))" |
+"binds_pat _ = {}"
+
+fun binds :: "stmt \<Rightarrow> vname set"
+where
+"binds (StmtSeq s s') = binds s \<union> binds s'" |
+"binds (StmtIf _ s elifs else') =
+  binds s \<union> \<Union> (set (map (\<lambda>(_, s'). binds s') elifs)) \<union> (case else' of None \<Rightarrow> {} | Some s' \<Rightarrow> binds s')" |
+"binds (StmtMatch _ cases) = \<Union> (set (map (\<lambda>(p, s). binds_pat p \<union> binds s) cases))" |
+"binds _ = {}"
+
 fun assigns :: "stmt \<Rightarrow> vname set"
 where
 "assigns (StmtAssign x _ _) = {x}" |
@@ -116,7 +134,7 @@ where
 "assigns (StmtMutualRegion ds) = set (map def_name ds)" |
 "assigns (StmtIf _ s elifs else') =
   assigns s \<union> \<Union> (set (map (\<lambda>(_, s'). assigns s') elifs)) \<union> (case else' of None \<Rightarrow> {} | Some s' \<Rightarrow> assigns s')" |
-"assigns (StmtMatch _ cases) = \<Union> (set (map (\<lambda>(_, s). assigns s) cases))" |
+"assigns (StmtMatch _ cases) = \<Union> (set (map (\<lambda>(p, s). binds_pat p \<union> assigns s) cases))" |
 "assigns _ = {}"
 
 fun declares :: "stmt \<Rightarrow> vname list"
@@ -129,9 +147,12 @@ where
 "declares (StmtMatch _ cases) = concat (map (\<lambda>(_, s). declares s) cases)" |
 "declares _ = []"
 
-definition scope :: "vname set \<Rightarrow> stmt \<Rightarrow> \<rho>"
+definition scope :: "vname set \<Rightarrow> stmt \<Rightarrow> \<rho> option"
 where
-"scope Y s = (\<lambda>x. if x \<in> assigns s - Y then Some VUnbound else None)"
+"scope Y s =
+  (if distinct (declares s) \<and> Y \<inter> set (declares s) = {} \<and> Y \<inter> binds s = {} \<and> set (declares s) \<inter> binds s = {}
+   then Some (\<lambda>x. if x \<in> assigns s - Y then Some VUnbound else None)
+   else None)"
 
 abbreviation true :: val where "true \<equiv> VLit (LitBool True)"
 abbreviation false :: val where "false \<equiv> VLit (LitBool False)"
@@ -181,7 +202,8 @@ EvalCallDef:
   ; vs = map (\<lambda>i. \<langle>\<rho>', ds, i\<rangle>\<^sub>C) [0..<length ds]
   ; \<rho> \<turnstile>\<^sub>e\<^sub>s es \<Rightarrow> Val us
   ; length xps = length us
-  ; \<rho>'(map def_name ds [\<mapsto>] vs, map fst xps [\<mapsto>] us) ++ scope (set (map fst xps)) s \<turnstile>\<^sub>s s \<Rightarrow> oc
+  ; scope (set (map fst xps)) s = Some \<rho>s
+  ; \<rho>'(map def_name ds [\<mapsto>] vs, map fst xps [\<mapsto>] us) ++ \<rho>s \<turnstile>\<^sub>s s \<Rightarrow> oc
   \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>e ExprCall e es [] \<Rightarrow> call_result oc" |
 EvalCallDefArity:
   "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val \<langle>\<rho>', ds, j\<rangle>\<^sub>C
