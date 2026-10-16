@@ -34,7 +34,8 @@ definition merge_entry :: "cxt_entry option \<Rightarrow> cxt_entry option \<Rig
 where
 "merge_entry \<theta> \<theta>' =
   (if \<theta> = \<theta>' then Some \<theta>
-   else if \<exists>\<tau>. var_entry_at \<theta> \<tau> \<and> var_entry_at \<theta>' \<tau> then Some (Some (PU (THE \<tau>. var_entry_at \<theta> \<tau> \<and> var_entry_at \<theta>' \<tau>)))
+    else if \<exists>\<tau>. var_entry_at \<theta> \<tau> \<and> var_entry_at \<theta>' \<tau>
+    then Some (Some (PU (THE \<tau>. var_entry_at \<theta> \<tau> \<and> var_entry_at \<theta>' \<tau>)))
    else if \<exists>\<pi>. scheme_entry_at \<theta> \<pi> \<and> scheme_entry_at \<theta>' \<pi>
    then Some (Some (PUScheme (THE \<pi>. scheme_entry_at \<theta> \<pi> \<and> scheme_entry_at \<theta>' \<pi>)))
    else None)"
@@ -147,10 +148,12 @@ where
 "resolve_type \<Gamma> (TyExprList \<psi>) = (if predef \<Gamma> ''list'' then map_option TyList (resolve_type \<Gamma> \<psi>) else None)" |
 "resolve_type \<Gamma> (TyExprDict \<psi>) =
   (if predef \<Gamma> ''dict'' \<and> predef \<Gamma> ''str'' then map_option TyDict (resolve_type \<Gamma> \<psi>) else None)" |
-"resolve_type \<Gamma> (TyExprTuple \<psi>s) = (if predef \<Gamma> ''tuple'' then map_option TyTuple (those (map (resolve_type \<Gamma>) \<psi>s)) else None)" |
+"resolve_type \<Gamma> (TyExprTuple \<psi>s) =
+  (if predef \<Gamma> ''tuple'' then map_option TyTuple (those (map (resolve_type \<Gamma>) \<psi>s)) else None)" |
 "resolve_type \<Gamma> (TyExprCallable \<psi>s \<psi>) =
   (if predef \<Gamma> ''Callable''
-   then case (those (map (resolve_type \<Gamma>) \<psi>s), resolve_type \<Gamma> \<psi>) of (Some \<sigma>s, Some \<tau>) \<Rightarrow> Some (TyCallable \<sigma>s \<tau>) | _ \<Rightarrow> None
+    then case (those (map (resolve_type \<Gamma>) \<psi>s), resolve_type \<Gamma> \<psi>) of
+      (Some \<sigma>s, Some \<tau>) \<Rightarrow> Some (TyCallable \<sigma>s \<tau>) | _ \<Rightarrow> None
    else None)" |
 "resolve_type \<Gamma> (TyExprUnion \<psi> \<psi>') =
   (case (resolve_type \<Gamma> \<psi>, resolve_type \<Gamma> \<psi>') of (Some \<sigma>, Some \<tau>) \<Rightarrow> Some (TyUnion \<sigma> \<tau>) | _ \<Rightarrow> None)" |
@@ -310,7 +313,8 @@ where "bind_type_params \<Gamma> \<alpha>s \<equiv> \<Gamma> ++ map_of (map (\<l
 fun def_signature :: "cxt \<Rightarrow> func \<Rightarrow> scheme option"
 where
 "def_signature \<Gamma> (Def f \<alpha>s xps \<psi> s) =
-  (case (those (map (resolve_type (bind_type_params \<Gamma> \<alpha>s) \<circ> snd) xps), resolve_type (bind_type_params \<Gamma> \<alpha>s) \<psi>) of
+   (let \<Gamma>' = bind_type_params \<Gamma> \<alpha>s in
+    case (those (map (resolve_type \<Gamma>' \<circ> snd) xps), resolve_type \<Gamma>' \<psi>) of
      (Some \<sigma>s, Some \<tau>) \<Rightarrow> Some (TyScheme \<alpha>s (TyCallable \<sigma>s \<tau>))
    | _ \<Rightarrow> None)"
 
@@ -345,11 +349,13 @@ where
 "stmt_ty \<Gamma> \<zeta> (StmtAssertMsg e e') =
   (if \<not> check \<Gamma> e' str then None else if e = false_literal then Some Returns\<^sub>R
    else if check \<Gamma> e bool then Some (Assigns\<^sub>R Map.empty) else None)" |
-"stmt_ty \<Gamma> \<zeta> StmtReturnNone = (case \<zeta> of Some \<tau> \<Rightarrow> if \<tau> \<approx> prim TyNone then Some Returns\<^sub>R else None | None \<Rightarrow> None)" |
+"stmt_ty \<Gamma> \<zeta> StmtReturnNone =
+  (case \<zeta> of Some \<tau> \<Rightarrow> if \<tau> \<approx> prim TyNone then Some Returns\<^sub>R else None | None \<Rightarrow> None)" |
 "stmt_ty \<Gamma> \<zeta> (StmtReturn e) = (case \<zeta> of Some \<tau> \<Rightarrow> if check \<Gamma> e \<tau> then Some Returns\<^sub>R else None | None \<Rightarrow> None)" |
 "stmt_ty \<Gamma> \<zeta> (StmtIf e s elifs else') =
   (if check \<Gamma> e bool
-   then merges (stmt_ty \<Gamma> \<zeta> s # elifs_ty \<Gamma> \<zeta> elifs @ [case else' of Some s' \<Rightarrow> stmt_ty \<Gamma> \<zeta> s' | None \<Rightarrow> Some (Assigns\<^sub>R Map.empty)])
+    then merges (stmt_ty \<Gamma> \<zeta> s # elifs_ty \<Gamma> \<zeta> elifs
+                 @ [case else' of Some s' \<Rightarrow> stmt_ty \<Gamma> \<zeta> s' | None \<Rightarrow> Some (Assigns\<^sub>R Map.empty)])
    else None)" |
 "stmt_ty \<Gamma> \<zeta> (StmtSeq s s') =
   (case stmt_ty \<Gamma> \<zeta> s of
