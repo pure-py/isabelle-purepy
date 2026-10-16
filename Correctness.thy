@@ -118,10 +118,10 @@ next
   from EvalCallLambdaArity.prems EvalCallLambdaArity.hyps show ?case
     by (auto elim!: CallE dest: EvalCallLambdaArity.IH)
 next
-  case (EvalCallDef \<rho> e \<rho>' ds j f xps \<omega> s vs es us \<rho>s o)
+  case (EvalCallDef \<rho> e \<rho>' ds j f xps \<psi> s vs es us \<rho>s o)
   from EvalCallDef.prems show ?case
   proof (cases rule: CallE)
-    case (CallDef \<rho>'' ds' j' f' xps' \<omega>' s' us' \<rho>s' o')
+    case (CallDef \<rho>'' ds' j' f' xps' \<psi>' s' us' \<rho>s' o')
     from EvalCallDef.IH(1)[OF CallDef(2)] have "\<rho>'' = \<rho>'" "ds' = ds" "j' = j" by auto
     with EvalCallDef.hyps(2) CallDef(3) have "xps' = xps" "s' = s" by auto
     moreover from EvalCallDef.IH(2)[OF CallDef(4)] have "us' = us" by simp
@@ -130,17 +130,17 @@ next
       using EvalCallDef.IH(3) CallDef(7) \<open>\<rho>'' = \<rho>'\<close> \<open>ds' = ds\<close> EvalCallDef.hyps(3) by simp
     with CallDef(1) show ?thesis by simp
   next
-    case (CallDefArity \<rho>'' ds' j' f' xps' \<omega>' s' us')
+    case (CallDefArity \<rho>'' ds' j' f' xps' \<psi>' s' us')
     from EvalCallDef.IH(1)[OF CallDefArity(2)] have "ds' = ds" "j' = j" by auto
     with EvalCallDef.hyps(2) CallDefArity(3) have "xps' = xps" by auto
     moreover from EvalCallDef.IH(2)[OF CallDefArity(4)] have "us' = us" by simp
     ultimately show ?thesis using CallDefArity(5) EvalCallDef.hyps(5) by simp
   qed (use EvalCallDef.hyps in \<open>auto dest: EvalCallDef.IH\<close>)
 next
-  case (EvalCallDefArity \<rho> e \<rho>' ds j f xps \<omega> s es us)
+  case (EvalCallDefArity \<rho> e \<rho>' ds j f xps \<psi> s es us)
   from EvalCallDefArity.prems show ?case
   proof (cases rule: CallE)
-    case (CallDef \<rho>'' ds' j' f' xps' \<omega>' s' us' \<rho>s' o')
+    case (CallDef \<rho>'' ds' j' f' xps' \<psi>' s' us' \<rho>s' o')
     from EvalCallDefArity.IH(1)[OF CallDef(2)] have "ds' = ds" "j' = j" by auto
     with EvalCallDefArity.hyps(2) CallDef(3) have "xps' = xps" by auto
     moreover from EvalCallDefArity.IH(2)[OF CallDef(4)] have "us' = us" by simp

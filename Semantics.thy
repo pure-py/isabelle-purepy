@@ -6,17 +6,17 @@ begin
 no_notation (ASCII) comp (infixl \<open>o\<close> 55)
 
 datatype val =
-      VLit l
+      VLit lit
     | VList "val list"
     | VTuple "val list"
     | VLamClosure "var \<rightharpoonup> val" "var list" expr    ("Lam'(_, _, _')")
     | VDefClosure "var \<rightharpoonup> val" "func list" nat      ("Def'(_, _, _')")
     | VUnbound
 
-type_synonym \<rho> = "var \<rightharpoonup> val"
-abbreviation \<epsilon> :: \<rho> where "\<epsilon> \<equiv> Map.empty"
+type_synonym env = "var \<rightharpoonup> val"
+abbreviation \<epsilon> :: env where "\<epsilon> \<equiv> Map.empty"
 
-datatype \<kappa> =
+datatype termination_kind =
     TypeError
   | IndexError
   | KeyError
@@ -26,11 +26,9 @@ datatype \<kappa> =
   | SystemExit int
   | Undef
 
-datatype 'a result = Val 'a | Aborts \<kappa>
+datatype 'a result = Val 'a | Aborts termination_kind
 
-type_synonym r = "val result"
-
-datatype normal_outcome = Assigns \<rho> | Returns val
+datatype normal_outcome = Assigns env | Returns val
 
 type_synonym outcome = "normal_outcome result"
 
@@ -46,7 +44,7 @@ where
 "Val (Returns v) \<bullet> o = Val (Returns v)" |
 "Aborts \<kappa> \<bullet> o = Aborts \<kappa>"
 
-fun call_result :: "outcome \<Rightarrow> r"
+fun call_result :: "outcome \<Rightarrow> val result"
 where
 "call_result (Val (Returns v)) = Val v" |
 "call_result (Val (Assigns \<rho>)) = Val (VLit LitNone)" |
@@ -80,7 +78,7 @@ where
    else if eq v v' = Val True then eq_elems vs vs' else eq v v')" |
 "eq_elems _ _ = Val False"
 
-fun binop_meaning :: "bop \<Rightarrow> val \<Rightarrow> val \<Rightarrow> r"
+fun binop_meaning :: "bop \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
 where
 "binop_meaning BOpEq v v' = mlet (eq v v') (\<lambda>b. Val (VLit (LitBool b)))" |
 "binop_meaning BOpNeq v v' = mlet (eq v v') (\<lambda>b. Val (VLit (LitBool (\<not> b))))" |
@@ -95,7 +93,7 @@ where
   (if n' = 0 then Aborts ZeroDivisionError else Val (VLit (LitNumber (n div n'))))" |
 "binop_meaning _ _ _ = Aborts TypeError"
 
-fun unop_meaning :: "uop \<Rightarrow> val \<Rightarrow> r"
+fun unop_meaning :: "uop \<Rightarrow> val \<Rightarrow> val result"
 where
 "unop_meaning UOpNot (VLit (LitBool b)) = Val (VLit (LitBool (\<not> b)))" |
 "unop_meaning UOpNeg (VLit (LitNumber n)) = Val (VLit (LitNumber (- n)))" |
@@ -105,7 +103,7 @@ fun def_name :: "func \<Rightarrow> var"
 where
 "def_name (Def f _ _ _) = f"
 
-fun binds_pat :: "p \<Rightarrow> var set"
+fun binds_pat :: "pat \<Rightarrow> var set"
 where
 "binds_pat (PatVar x) = {x}" |
 "binds_pat (PatAs p x) = binds_pat p \<union> {x}" |
@@ -143,7 +141,7 @@ where
 "declares (StmtMatch _ cases) = concat (map (\<lambda>(_, s). declares s) cases)" |
 "declares _ = []"
 
-definition scope :: "var set \<Rightarrow> stmt \<Rightarrow> \<rho> option"
+definition scope :: "var set \<Rightarrow> stmt \<Rightarrow> env option"
 where
 "scope Y s =
   (if distinct (declares s) \<and> Y \<inter> set (declares s) = {} \<and> Y \<inter> binds s = {} \<and> set (declares s) \<inter> binds s = {}
@@ -156,10 +154,10 @@ abbreviation false :: val where "false \<equiv> VLit (LitBool False)"
 type_synonym elif_block = "(expr \<times> stmt) list \<times> stmt option"
 
 inductive
-  eval_expr  :: "\<rho> \<Rightarrow> expr \<Rightarrow> r \<Rightarrow> bool"                     ("_ \<turnstile>\<^sub>e _ \<Rightarrow> _" [60,0,60] 60) and
-  eval_exprs :: "\<rho> \<Rightarrow> expr list \<Rightarrow> val list result \<Rightarrow> bool"    ("_ \<turnstile>\<^sub>e\<^sub>s _ \<Rightarrow> _" [60,0,60] 60) and
-  eval_stmt  :: "\<rho> \<Rightarrow> stmt \<Rightarrow> outcome \<Rightarrow> bool"                     ("_ \<turnstile>\<^sub>s _ \<Rightarrow> _" [60,0,60] 60) and
-  eval_elif  :: "\<rho> \<Rightarrow> elif_block \<Rightarrow> outcome \<Rightarrow> bool"               ("_ \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f _ \<Rightarrow> _" [60,0,60] 60)
+  eval_expr  :: "env \<Rightarrow> expr \<Rightarrow> val result \<Rightarrow> bool"                     ("_ \<turnstile>\<^sub>e _ \<Rightarrow> _" [60,0,60] 60) and
+  eval_exprs :: "env \<Rightarrow> expr list \<Rightarrow> val list result \<Rightarrow> bool"    ("_ \<turnstile>\<^sub>e\<^sub>s _ \<Rightarrow> _" [60,0,60] 60) and
+  eval_stmt  :: "env \<Rightarrow> stmt \<Rightarrow> outcome \<Rightarrow> bool"                     ("_ \<turnstile>\<^sub>s _ \<Rightarrow> _" [60,0,60] 60) and
+  eval_elif  :: "env \<Rightarrow> elif_block \<Rightarrow> outcome \<Rightarrow> bool"               ("_ \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f _ \<Rightarrow> _" [60,0,60] 60)
 where
 EvalVar: "\<rho> x = Some v \<Longrightarrow> \<rho> \<turnstile>\<^sub>e ExprVar x \<Rightarrow> Val v" |
 EvalLiteral: "\<rho> \<turnstile>\<^sub>e ExprLiteral l \<Rightarrow> Val (VLit l)" |
@@ -194,7 +192,7 @@ EvalCallLambdaArity:
   \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>e ExprCall e es [] \<Rightarrow> Aborts TypeError" |
 EvalCallDef:
   "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val Def(\<rho>', ds, j)
-  ; ds ! j = Def f xps \<omega> s
+  ; ds ! j = Def f xps \<psi> s
   ; vs = map (\<lambda>i. Def(\<rho>', ds, i)) [0..<length ds]
   ; \<rho> \<turnstile>\<^sub>e\<^sub>s es \<Rightarrow> Val us
   ; length xps = length us
@@ -203,7 +201,7 @@ EvalCallDef:
   \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>e ExprCall e es [] \<Rightarrow> call_result o" |
 EvalCallDefArity:
   "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val Def(\<rho>', ds, j)
-  ; ds ! j = Def f xps \<omega> s
+  ; ds ! j = Def f xps \<psi> s
   ; \<rho> \<turnstile>\<^sub>e\<^sub>s es \<Rightarrow> Val us
   ; length xps \<noteq> length us
   \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>e ExprCall e es [] \<Rightarrow> Aborts TypeError" |
