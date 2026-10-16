@@ -118,7 +118,7 @@ datatype stmt =
   | StmtIf expr stmt "(expr \<times> stmt) list" "stmt option"
   | StmtMatch expr "(pat \<times> stmt) list"
   | StmtMutualRegion "func list"
-and func = Def var "(var \<times> ty_expr) list" ty_expr stmt
+and func = Def var "var list" "(var \<times> ty_expr) list" ty_expr stmt
 
 datatype fields =
     FieldList "(var \<times> ty_expr) list"

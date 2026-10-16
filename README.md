@@ -26,4 +26,5 @@ To browse the theories with the prover running, open the session directory in th
 | `Syntax.thy`      | Abstract syntax                                                |
 | `Semantics.thy`   | Values, results, auxiliary functions and evaluation judgements |
 | `Correctness.thy` | Inversion lemmas and determinism of evaluation                 |
+| `Typing.thy`      | Subtyping, contexts, static outcomes and typing                |
 | `Examples.thy`    | Example evaluations                                            |

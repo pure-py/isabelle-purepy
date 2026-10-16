@@ -170,7 +170,7 @@ where
 
 fun def_name :: "func \<Rightarrow> var"
 where
-"def_name (Def f _ _ _) = f"
+"def_name (Def f _ _ _ _) = f"
 
 fun binds_pat :: "pat \<Rightarrow> var set"
 where
@@ -212,11 +212,12 @@ where
 "declares (StmtMatch _ cases) = concat (map (\<lambda>(_, s). declares s) cases)" |
 "declares _ = []"
 
-definition scope :: "var set \<Rightarrow> stmt \<Rightarrow> env option"
+(* u marks a variable unbound: the value or the context entry *)
+definition scope :: "'a \<Rightarrow> var set \<Rightarrow> stmt \<Rightarrow> (var \<rightharpoonup> 'a) option"
 where
-"scope Y s =
+"scope u Y s =
   (if distinct (declares s) \<and> Y \<inter> set (declares s) = {} \<and> Y \<inter> binds s = {} \<and> set (declares s) \<inter> binds s = {}
-   then Some (\<lambda>x. if x \<in> assigns s - Y then Some VUnbound else None)
+   then Some (\<lambda>x. if x \<in> assigns s - Y then Some u else None)
    else None)"
 
 abbreviation true :: val where "true \<equiv> VLit (LitBool True)"
@@ -263,16 +264,16 @@ EvalCallLambdaArity:
   \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e (es, []) \<Rightarrow>\<^sub>e Aborts TypeError" |
 EvalCallDef:
   "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val Def(\<rho>', ds, j)
-  ; ds ! j = Def f xps \<psi> s
+  ; ds ! j = Def f \<alpha>s xps \<psi> s
   ; vs = map (\<lambda>i. Def(\<rho>', ds, i)) [0..<length ds]
   ; \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Val us
   ; length xps = length us
-  ; scope (set (map fst xps)) s = Some \<rho>s
+  ; scope VUnbound (set (map fst xps)) s = Some \<rho>s
   ; \<rho>'(map def_name ds [\<mapsto>] vs, map fst xps [\<mapsto>] us) ++ \<rho>s, s \<Rightarrow>\<^sub>s o
   \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e (es, []) \<Rightarrow>\<^sub>e call_result o" |
 EvalCallDefArity:
   "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val Def(\<rho>', ds, j)
-  ; ds ! j = Def f xps \<psi> s
+  ; ds ! j = Def f \<alpha>s xps \<psi> s
   ; \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Val us
   ; length xps \<noteq> length us
   \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e (es, []) \<Rightarrow>\<^sub>e Aborts TypeError" |
