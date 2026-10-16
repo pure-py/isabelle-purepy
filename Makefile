@@ -7,9 +7,10 @@ default: build
 build:
 	$(ISABELLE) build -v -o document=false -D .
 
-# Check proofs and build document, which needs LaTeX.
+# Check proofs and build document, which needs LaTeX. Clean build, since a session checked without
+# document counts as up to date.
 document:
-	$(ISABELLE) build -v -o document=pdf -D .
+	$(ISABELLE) build -v -c -o document=pdf -D .
 
 clean:
 	rm -rf output
