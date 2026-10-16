@@ -74,7 +74,7 @@ EvalCallLambda:
   "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> \<langle>\<rho>', xs, e'\<rangle>\<^sub>\<lambda>
   ; list_all2 (\<lambda> e v . \<rho> \<turnstile>\<^sub>e e \<Rightarrow> v) args u'
   ; \<rho>'(xs [\<mapsto>] u') \<turnstile>\<^sub>e e' \<Rightarrow> v
-  \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>e ExprCall e args \<Rightarrow> v" |
+  \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>e ExprCall e args [] \<Rightarrow> v" |
 EvalCallDef:
   "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> \<langle>\<rho>', ds, j\<rangle>\<^sub>C
   ; vs = map (\<lambda>i. \<langle>\<rho>', ds, i\<rangle>\<^sub>C) [0..<length ds]
@@ -84,7 +84,7 @@ EvalCallDef:
   ; list_all2 (\<lambda> e v . \<rho> \<turnstile>\<^sub>e e \<Rightarrow> v) args u'
   ; (\<rho>'(fs [\<mapsto>] vs))((xs ! j) [\<mapsto>] u') \<turnstile>\<^sub>s (bs ! j) \<Rightarrow> r
   ; unwrap r = Some r'
-  \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>e ExprCall e args \<Rightarrow> r'" |
+  \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>e ExprCall e args [] \<Rightarrow> r'" |
 EvalLambda: "\<rho> \<turnstile>\<^sub>e ExprLambda args e \<Rightarrow> \<langle>\<rho>, args, e\<rangle>\<^sub>\<lambda>" |
 
 (* EvalBlockAssigns:
