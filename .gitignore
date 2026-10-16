@@ -110,3 +110,5 @@ extracted/
 
 .cache/
 tmp/
+# Local Claude settings
+.claude/settings.local.json

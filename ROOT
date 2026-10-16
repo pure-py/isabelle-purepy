@@ -1,5 +1,5 @@
 session "isabelle-purepy" = HOL +
-  options [document_output = "output", timeout = 600]
+  options [document = pdf, document_output = "output", timeout = 600]
   theories
     Syntax
     Semantics
