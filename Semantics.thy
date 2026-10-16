@@ -6,14 +6,13 @@ datatype val =
       VLit l
     | VList "val list"
     | VTuple "val list"
-    | VLamClosure "vname \<rightharpoonup> val" "vname list" expr    ("\<langle>_,_,_\<rangle>\<^sub>\<lambda>")
-    | VDefClosure "vname \<rightharpoonup> val" "func list" nat      ("\<langle>_,_,_\<rangle>\<^sub>C")
+    | VLamClosure "vname \<rightharpoonup> val" "vname list" expr    ("Lam'(_, _, _')")
+    | VDefClosure "vname \<rightharpoonup> val" "func list" nat      ("Def'(_, _, _')")
     | VUnbound
 
 type_synonym \<rho> = "vname \<rightharpoonup> val"
 abbreviation \<epsilon> :: \<rho> where "\<epsilon> \<equiv> Map.empty"
 
-(* termination kinds *)
 datatype \<kappa> =
     ErrType
   | ErrIndex
@@ -25,7 +24,6 @@ datatype \<kappa> =
   | ErrExit int
   | ErrUndef
 
-(* results, carrying a value, a sequence of values or an outcome *)
 datatype 'a result = Val 'a | Aborts \<kappa>
 
 type_synonym r = "val result"
@@ -39,7 +37,6 @@ where
 "mlet (Val v) f = f v" |
 "mlet (Aborts \<kappa>) f = Aborts \<kappa>"
 
-(* composition of outcomes *)
 fun compose :: "outcome \<Rightarrow> outcome \<Rightarrow> outcome" (infixl "\<bullet>" 70)
 where
 "Val (Assigns \<rho>) \<bullet> Val (Assigns \<rho>') = Val (Assigns (\<rho> ++ \<rho>'))" |
@@ -55,11 +52,10 @@ where
 
 fun is_closure :: "val \<Rightarrow> bool"
 where
-"is_closure \<langle>_, _, _\<rangle>\<^sub>\<lambda> = True" |
-"is_closure \<langle>_, _, _\<rangle>\<^sub>C = True" |
+"is_closure Lam(_, _, _) = True" |
+"is_closure Def(_, _, _) = True" |
 "is_closure _ = False"
 
-(* structural equality *)
 fun eq :: "val \<Rightarrow> val \<Rightarrow> bool result" and eq_elems :: "val list \<Rightarrow> val list \<Rightarrow> bool result"
 where
 "eq (VLit (LitNumber n)) (VLit (LitNumber n')) = Val (n = n')" |
@@ -70,10 +66,10 @@ where
 "eq (VLit (LitNumber _)) (VLit (LitBool _)) = Aborts ErrUndef" |
 "eq (VList vs) (VList vs') = eq_elems vs vs'" |
 "eq (VTuple vs) (VTuple vs') = eq_elems vs vs'" |
-"eq \<langle>_, _, _\<rangle>\<^sub>\<lambda> \<langle>_, _, _\<rangle>\<^sub>\<lambda> = Aborts ErrUndef" |
-"eq \<langle>_, _, _\<rangle>\<^sub>\<lambda> \<langle>_, _, _\<rangle>\<^sub>C = Aborts ErrUndef" |
-"eq \<langle>_, _, _\<rangle>\<^sub>C \<langle>_, _, _\<rangle>\<^sub>\<lambda> = Aborts ErrUndef" |
-"eq \<langle>_, _, _\<rangle>\<^sub>C \<langle>_, _, _\<rangle>\<^sub>C = Aborts ErrUndef" |
+"eq Lam(_, _, _) Lam(_, _, _) = Aborts ErrUndef" |
+"eq Lam(_, _, _) Def(_, _, _) = Aborts ErrUndef" |
+"eq Def(_, _, _) Lam(_, _, _) = Aborts ErrUndef" |
+"eq Def(_, _, _) Def(_, _, _) = Aborts ErrUndef" |
 "eq _ _ = Val False" |
 
 "eq_elems [] [] = Val True" |
@@ -82,7 +78,6 @@ where
    else if eq v v' = Val True then eq_elems vs vs' else eq v v')" |
 "eq_elems _ _ = Val False"
 
-(* meaning of a strict binary operator *)
 fun binop_meaning :: "bop \<Rightarrow> val \<Rightarrow> val \<Rightarrow> r"
 where
 "binop_meaning BOpEq v v' = mlet (eq v v') (\<lambda>b. Val (VLit (LitBool b)))" |
@@ -98,7 +93,6 @@ where
   (if n' = 0 then Aborts ErrZeroDiv else Val (VLit (LitNumber (n div n'))))" |
 "binop_meaning _ _ _ = Aborts ErrType"
 
-(* meaning of a unary operator *)
 fun unop_meaning :: "uop \<Rightarrow> val \<Rightarrow> r"
 where
 "unop_meaning UOpNot (VLit (LitBool b)) = Val (VLit (LitBool (\<not> b)))" |
@@ -167,7 +161,7 @@ inductive
 where
 EvalVar: "\<rho> x = Some v \<Longrightarrow> \<rho> \<turnstile>\<^sub>e ExprVar x \<Rightarrow> Val v" |
 EvalLiteral: "\<rho> \<turnstile>\<^sub>e ExprLiteral l \<Rightarrow> Val (VLit l)" |
-EvalLambda: "\<rho> \<turnstile>\<^sub>e ExprLambda xs e \<Rightarrow> Val \<langle>\<rho>, xs, e\<rangle>\<^sub>\<lambda>" |
+EvalLambda: "\<rho> \<turnstile>\<^sub>e ExprLambda xs e \<Rightarrow> Val Lam(\<rho>, xs, e)" |
 EvalUnOp: "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> r \<Longrightarrow> \<rho> \<turnstile>\<^sub>e ExprUnOp op e \<Rightarrow> mlet r (unop_meaning op)" |
 EvalBinOp: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val v ; \<rho> \<turnstile>\<^sub>e e' \<Rightarrow> r \<rbrakk>
   \<Longrightarrow> \<rho> \<turnstile>\<^sub>e ExprBinOp op e e' \<Rightarrow> mlet r (binop_meaning op v)" |
@@ -186,27 +180,27 @@ EvalListFail: "\<rho> \<turnstile>\<^sub>e\<^sub>s es \<Rightarrow> Aborts \<kap
 EvalTuple: "\<rho> \<turnstile>\<^sub>e\<^sub>s es \<Rightarrow> Val vs \<Longrightarrow> \<rho> \<turnstile>\<^sub>e ExprTuple es \<Rightarrow> Val (VTuple vs)" |
 EvalTupleFail: "\<rho> \<turnstile>\<^sub>e\<^sub>s es \<Rightarrow> Aborts \<kappa> \<Longrightarrow> \<rho> \<turnstile>\<^sub>e ExprTuple es \<Rightarrow> Aborts \<kappa>" |
 EvalCallLambda:
-  "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val \<langle>\<rho>', xs, e'\<rangle>\<^sub>\<lambda>
+  "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val Lam(\<rho>', xs, e')
   ; \<rho> \<turnstile>\<^sub>e\<^sub>s es \<Rightarrow> Val us
   ; length xs = length us
   ; \<rho>'(xs [\<mapsto>] us) \<turnstile>\<^sub>e e' \<Rightarrow> r
   \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>e ExprCall e es [] \<Rightarrow> r" |
 EvalCallLambdaArity:
-  "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val \<langle>\<rho>', xs, e'\<rangle>\<^sub>\<lambda>
+  "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val Lam(\<rho>', xs, e')
   ; \<rho> \<turnstile>\<^sub>e\<^sub>s es \<Rightarrow> Val us
   ; length xs \<noteq> length us
   \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>e ExprCall e es [] \<Rightarrow> Aborts ErrType" |
 EvalCallDef:
-  "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val \<langle>\<rho>', ds, j\<rangle>\<^sub>C
+  "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val Def(\<rho>', ds, j)
   ; ds ! j = Def f xps \<omega> s
-  ; vs = map (\<lambda>i. \<langle>\<rho>', ds, i\<rangle>\<^sub>C) [0..<length ds]
+  ; vs = map (\<lambda>i. Def(\<rho>', ds, i)) [0..<length ds]
   ; \<rho> \<turnstile>\<^sub>e\<^sub>s es \<Rightarrow> Val us
   ; length xps = length us
   ; scope (set (map fst xps)) s = Some \<rho>s
   ; \<rho>'(map def_name ds [\<mapsto>] vs, map fst xps [\<mapsto>] us) ++ \<rho>s \<turnstile>\<^sub>s s \<Rightarrow> oc
   \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>e ExprCall e es [] \<Rightarrow> call_result oc" |
 EvalCallDefArity:
-  "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val \<langle>\<rho>', ds, j\<rangle>\<^sub>C
+  "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val Def(\<rho>', ds, j)
   ; ds ! j = Def f xps \<omega> s
   ; \<rho> \<turnstile>\<^sub>e\<^sub>s es \<Rightarrow> Val us
   ; length xps \<noteq> length us
@@ -229,7 +223,7 @@ EvalExprStmt: "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> r \<Longrightarrow> \
 EvalReturn: "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> r \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtReturn e \<Rightarrow> mlet r (\<lambda>v. Val (Returns v))" |
 EvalReturnNone: "\<rho> \<turnstile>\<^sub>s StmtReturnNone \<Rightarrow> Val (Returns (VLit LitNone))" |
 EvalDefs:
-  "vs = map (\<lambda>i. \<langle>\<rho>, ds, i\<rangle>\<^sub>C) [0..<length ds]
+  "vs = map (\<lambda>i. Def(\<rho>, ds, i)) [0..<length ds]
   \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtMutualRegion ds \<Rightarrow> Val (Assigns (\<epsilon>(map def_name ds [\<mapsto>] vs)))" |
 EvalAssert: "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val true \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtAssert e \<Rightarrow> Val (Assigns \<epsilon>)" |
 EvalAssertFalse: "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val false \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtAssert e \<Rightarrow> Aborts ErrAssert" |
