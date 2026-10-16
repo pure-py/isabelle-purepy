@@ -9,11 +9,11 @@ datatype val =
       VLit l
     | VList "val list"
     | VTuple "val list"
-    | VLamClosure "vname \<rightharpoonup> val" "vname list" expr    ("Lam'(_, _, _')")
-    | VDefClosure "vname \<rightharpoonup> val" "func list" nat      ("Def'(_, _, _')")
+    | VLamClosure "var \<rightharpoonup> val" "var list" expr    ("Lam'(_, _, _')")
+    | VDefClosure "var \<rightharpoonup> val" "func list" nat      ("Def'(_, _, _')")
     | VUnbound
 
-type_synonym \<rho> = "vname \<rightharpoonup> val"
+type_synonym \<rho> = "var \<rightharpoonup> val"
 abbreviation \<epsilon> :: \<rho> where "\<epsilon> \<equiv> Map.empty"
 
 datatype \<kappa> =
@@ -101,11 +101,11 @@ where
 "unop_meaning UOpNeg (VLit (LitNumber n)) = Val (VLit (LitNumber (- n)))" |
 "unop_meaning _ _ = Aborts TypeError"
 
-fun def_name :: "func \<Rightarrow> vname"
+fun def_name :: "func \<Rightarrow> var"
 where
 "def_name (Def f _ _ _) = f"
 
-fun binds_pat :: "p \<Rightarrow> vname set"
+fun binds_pat :: "p \<Rightarrow> var set"
 where
 "binds_pat (PatVar x) = {x}" |
 "binds_pat (PatAs p x) = binds_pat p \<union> {x}" |
@@ -115,7 +115,7 @@ where
 "binds_pat (PatDict kps) = \<Union> (set (map (binds_pat \<circ> snd) kps))" |
 "binds_pat _ = {}"
 
-fun binds :: "stmt \<Rightarrow> vname set"
+fun binds :: "stmt \<Rightarrow> var set"
 where
 "binds (StmtSeq s s') = binds s \<union> binds s'" |
 "binds (StmtIf _ s elifs else') =
@@ -123,7 +123,7 @@ where
 "binds (StmtMatch _ cases) = \<Union> (set (map (\<lambda>(p, s). binds_pat p \<union> binds s) cases))" |
 "binds _ = {}"
 
-fun assigns :: "stmt \<Rightarrow> vname set"
+fun assigns :: "stmt \<Rightarrow> var set"
 where
 "assigns (StmtAssign x _ _) = {x}" |
 "assigns (StmtSeq s s') = assigns s \<union> assigns s'" |
@@ -133,7 +133,7 @@ where
 "assigns (StmtMatch _ cases) = \<Union> (set (map (\<lambda>(p, s). binds_pat p \<union> assigns s) cases))" |
 "assigns _ = {}"
 
-fun declares :: "stmt \<Rightarrow> vname list"
+fun declares :: "stmt \<Rightarrow> var list"
 where
 "declares (StmtAssign x (Some _) _) = [x]" |
 "declares (StmtSeq s s') = declares s @ declares s'" |
@@ -143,7 +143,7 @@ where
 "declares (StmtMatch _ cases) = concat (map (\<lambda>(_, s). declares s) cases)" |
 "declares _ = []"
 
-definition scope :: "vname set \<Rightarrow> stmt \<Rightarrow> \<rho> option"
+definition scope :: "var set \<Rightarrow> stmt \<Rightarrow> \<rho> option"
 where
 "scope Y s =
   (if distinct (declares s) \<and> Y \<inter> set (declares s) = {} \<and> Y \<inter> binds s = {} \<and> set (declares s) \<inter> binds s = {}
