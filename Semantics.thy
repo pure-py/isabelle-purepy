@@ -11,7 +11,7 @@ datatype val =
     | VUnbound
 
 type_synonym \<rho> = "vname \<rightharpoonup> val"
-definition \<epsilon> :: \<rho> where "\<epsilon> = Map.empty"
+abbreviation \<epsilon> :: \<rho> where "\<epsilon> \<equiv> Map.empty"
 
 (* termination kinds *)
 datatype \<kappa> =

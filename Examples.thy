@@ -23,7 +23,7 @@ proof -
   have args: "\<epsilon> \<turnstile>\<^sub>e\<^sub>s [ExprLiteral (LitNumber 2)] \<Rightarrow> Val [VLit (LitNumber 2)]"
     using EvalExprsCons[OF EvalLiteral EvalExprsNil] by simp
   let ?\<rho> = "\<epsilon>([''x''] [\<mapsto>] [VLit (LitNumber 2)])"
-  have "?\<rho> \<turnstile>\<^sub>e ExprVar ''x'' \<Rightarrow> Val (VLit (LitNumber 2))" by (rule EvalVar) (simp add: \<epsilon>_def)
+  have "?\<rho> \<turnstile>\<^sub>e ExprVar ''x'' \<Rightarrow> Val (VLit (LitNumber 2))" by (rule EvalVar) simp
   then have "?\<rho> \<turnstile>\<^sub>e ExprBinOp BOpAdd (ExprVar ''x'') (ExprLiteral (LitNumber 1))
     \<Rightarrow> mlet (Val (VLit (LitNumber 1))) (binop_meaning BOpAdd (VLit (LitNumber 2)))"
     by (rule EvalBinOp[OF _ EvalLiteral])
