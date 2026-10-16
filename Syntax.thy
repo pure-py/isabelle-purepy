@@ -28,9 +28,7 @@ datatype p =
 
 (* operators *)
 datatype bop = 
-    BOpOr 
-  | BOpAnd
-  | BOpEq 
+    BOpEq 
   | BOpNeq 
   | BOpLt 
   | BOpLeq 
@@ -54,6 +52,8 @@ datatype expr =
   | ExprSubscript expr "expr list"                                (* c["a"] *)
   | ExprBinOp bop expr expr                                       (* x + y *)
   | ExprUnOp uop expr                                             (* not x *)
+  | ExprAnd expr expr                                             (* x and y *)
+  | ExprOr expr expr                                              (* x or y *)
   | ExprCond expr expr expr                                       (* 10 if True else 20 *)
   | ExprList "expr list"                                          (* [10, 20, 40] *)
   | ExprTuple "expr list"                                         (* (10, 20, True) *)
