@@ -16,14 +16,14 @@ datatype lit =
 type_synonym 'u args = "'u list \<times> (var \<times> 'u) list"
 
 datatype pat =
-    PatLiteral lit                 \<comment> \<open>\<^verbatim>\<open>10\<close>\<close>
-  | PatVar var                     \<comment> \<open>\<^verbatim>\<open>x\<close>\<close>
-  | PatWildcard                    \<comment> \<open>\<^verbatim>\<open>_\<close>\<close>
-  | PatList "pat list"             \<comment> \<open>\<^verbatim>\<open>[p, q]\<close>\<close>
-  | PatTuple "pat list"            \<comment> \<open>\<^verbatim>\<open>(p, q)\<close>\<close>
-  | PatConstr name "pat args"      \<comment> \<open>\<^verbatim>\<open>C(p, x=q)\<close>\<close>
-  | PatDict "(string \<times> pat) list"  \<comment> \<open>\<^verbatim>\<open>{"a": p}\<close>\<close>
-  | PatAs pat var                  \<comment> \<open>\<^verbatim>\<open>p as x\<close>\<close>
+    PatLiteral lit                 (* 10 *)
+  | PatVar var                     (* x *)
+  | PatWildcard                    (* _ *)
+  | PatList "pat list"             (* [p, q] *)
+  | PatTuple "pat list"            (* (p, q) *)
+  | PatConstr name "pat args"      (* C(p, x=q) *)
+  | PatDict "(string \<times> pat) list"  (* {"a": p} *)
+  | PatAs pat var                  (* p as x *)
 
 datatype bop =
     BOpBitOr
@@ -46,25 +46,25 @@ datatype bop =
 datatype uop = UOpNot | UOpPos | UOpNeg
 
 datatype expr =
-    ExprVar var                                  \<comment> \<open>\<^verbatim>\<open>x\<close>\<close>
-  | ExprLiteral lit                              \<comment> \<open>\<^verbatim>\<open>10\<close>\<close>
-  | ExprCall expr "expr args"                    \<comment> \<open>\<^verbatim>\<open>f(1, 2, x=10)\<close>\<close>
-  | ExprDict "(expr \<times> expr) list"                \<comment> \<open>\<^verbatim>\<open>{"a": 1, "b": 2}\<close>\<close>
-  | ExprAttribute expr var                       \<comment> \<open>\<^verbatim>\<open>c.x\<close>\<close>
-  | ExprSubscript expr expr                      \<comment> \<open>\<^verbatim>\<open>c["a"]\<close>\<close>
-  | ExprBinOp bop expr expr                      \<comment> \<open>\<^verbatim>\<open>x + y\<close>\<close>
-  | ExprUnOp uop expr                            \<comment> \<open>\<^verbatim>\<open>not x\<close>\<close>
-  | ExprAnd expr expr                            \<comment> \<open>\<^verbatim>\<open>x and y\<close>\<close>
-  | ExprOr expr expr                             \<comment> \<open>\<^verbatim>\<open>x or y\<close>\<close>
-  | ExprCond expr expr expr                      \<comment> \<open>\<^verbatim>\<open>10 if b else 20\<close>\<close>
-  | ExprList "expr list"                         \<comment> \<open>\<^verbatim>\<open>[10, 20, 40]\<close>\<close>
-  | ExprTuple "expr list"                        \<comment> \<open>\<^verbatim>\<open>(10, 20, True)\<close>\<close>
-  | ExprListComp expr "qualifier list"           \<comment> \<open>\<^verbatim>\<open>[2 * x for x in xs]\<close>\<close>
-  | ExprDictComp expr expr "qualifier list"      \<comment> \<open>\<^verbatim>\<open>{x: x ** 2 for x in xs}\<close>\<close>
-  | ExprLambda "var list" expr                   \<comment> \<open>\<^verbatim>\<open>lambda x: x * 2\<close>\<close>
+    ExprVar var                              (* x *)
+  | ExprLiteral lit                          (* 10 *)
+  | ExprCall expr "expr args"                (* f(1, 2, x=10) *)
+  | ExprDict "(expr \<times> expr) list"            (* {"a": 1, "b": 2} *)
+  | ExprAttribute expr var                   (* c.x *)
+  | ExprSubscript expr expr                  (* c["a"] *)
+  | ExprBinOp bop expr expr                  (* x + y *)
+  | ExprUnOp uop expr                        (* not x *)
+  | ExprAnd expr expr                        (* x and y *)
+  | ExprOr expr expr                         (* x or y *)
+  | ExprCond expr expr expr                  (* 10 if b else 20 *)
+  | ExprList "expr list"                     (* [10, 20, 40] *)
+  | ExprTuple "expr list"                    (* (10, 20, True) *)
+  | ExprListComp expr "qualifier list"       (* [2 * x for x in xs] *)
+  | ExprDictComp expr expr "qualifier list"  (* {x: x ** 2 for x in xs} *)
+  | ExprLambda "var list" expr               (* lambda x: x * 2 *)
 and qualifier =
-    Guard expr                                   \<comment> \<open>\<^verbatim>\<open>if x > 0\<close>\<close>
-  | Generator var expr                           \<comment> \<open>\<^verbatim>\<open>for x in xs\<close>\<close>
+    Guard expr                               (* if x > 0 *)
+  | Generator var expr                       (* for x in xs *)
 
 datatype prim_ty =
     TyObject
@@ -106,20 +106,19 @@ datatype import =
   | FromImport name "var list"
 
 datatype stmt =
-    StmtPass                                             \<comment> \<open>\<^verbatim>\<open>pass\<close>\<close>
-  | StmtSeq stmt stmt                                    \<comment> \<open>\<^verbatim>\<open>s; t\<close>\<close>
-  | StmtDeclare var ty_expr                              \<comment> \<open>\<^verbatim>\<open>x: int\<close>\<close>
-  | StmtAssign var "ty_expr option" expr                 \<comment> \<open>\<^verbatim>\<open>x: int = e\<close>\<close>
-  | StmtExpr expr                                        \<comment> \<open>\<^verbatim>\<open>f(x)\<close>\<close>
-  | StmtAssert expr                                      \<comment> \<open>\<^verbatim>\<open>assert e\<close>\<close>
-  | StmtAssertMsg expr expr                              \<comment> \<open>\<^verbatim>\<open>assert e, "msg"\<close>\<close>
-  | StmtReturnNone                                       \<comment> \<open>\<^verbatim>\<open>return\<close>\<close>
-  | StmtReturn expr                                      \<comment> \<open>\<^verbatim>\<open>return e\<close>\<close>
-  | StmtIf expr stmt "(expr \<times> stmt) list" "stmt option"  \<comment> \<open>\<^verbatim>\<open>if e: s else: t\<close>\<close>
-  | StmtMatch expr "(pat \<times> stmt) list"                   \<comment> \<open>\<^verbatim>\<open>match e: case p: s\<close>\<close>
-  | StmtMutualRegion "func list"                         \<comment> \<open>\<^verbatim>\<open>def f(): s\<close>\<close>
-and func = Def var "(var \<times> ty_expr) list" ty_expr stmt
-  \<comment> \<open>\<^verbatim>\<open>def f(x: T) -> U: s\<close>\<close>
+    StmtPass                                             (* pass *)
+  | StmtSeq stmt stmt                                    (* s; t *)
+  | StmtDeclare var ty_expr                              (* x: int *)
+  | StmtAssign var "ty_expr option" expr                 (* x: int = e *)
+  | StmtExpr expr                                        (* f(x) *)
+  | StmtAssert expr                                      (* assert e *)
+  | StmtAssertMsg expr expr                              (* assert e, "msg" *)
+  | StmtReturnNone                                       (* return *)
+  | StmtReturn expr                                      (* return e *)
+  | StmtIf expr stmt "(expr \<times> stmt) list" "stmt option"  (* if e: s else: t *)
+  | StmtMatch expr "(pat \<times> stmt) list"                   (* match e: case p: s *)
+  | StmtMutualRegion "func list"                         (* def f(): s *)
+and func = Def var "(var \<times> ty_expr) list" ty_expr stmt   (* def f(x: T) -> U: s *)
 
 datatype fields =
     FieldList "(var \<times> ty_expr) list"

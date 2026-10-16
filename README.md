@@ -10,8 +10,8 @@ following the specification's treatment of runtime errors.
 
 ## Building
 
-Install the [Isabelle](https://isabelle.in.tum.de/) release named in `.isabelle-version`, and LaTeX, which
-the session document needs. Then check the proofs and build the session document, `output/document.pdf`:
+Install the [Isabelle](https://isabelle.in.tum.de/) release named in `.isabelle-version`. Then check the
+proofs:
 
 ```bash
 make build
