@@ -14,36 +14,36 @@ datatype cxt_entry =
 
 type_synonym cxt = "var \<rightharpoonup> cxt_entry"
 
-(* Entry of a variable at \<tau> or absent *)
-fun var_entry_at :: "cxt_entry option \<Rightarrow> ty \<Rightarrow> bool"
+(* Context entry of a variable at \<tau>, or absent *)
+fun cxt_entry_at :: "cxt_entry option \<Rightarrow> ty \<Rightarrow> bool"
 where
-"var_entry_at None \<tau> = True" |
-"var_entry_at (Some (Ty \<tau>')) \<tau> = (\<tau>' = \<tau>)" |
-"var_entry_at (Some (DU \<tau>')) \<tau> = (\<tau>' = \<tau>)" |
-"var_entry_at (Some (PU \<tau>')) \<tau> = (\<tau>' = \<tau>)" |
-"var_entry_at _ _ = False"
+"cxt_entry_at None \<tau> = True" |
+"cxt_entry_at (Some (Ty \<tau>')) \<tau> = (\<tau>' = \<tau>)" |
+"cxt_entry_at (Some (DU \<tau>')) \<tau> = (\<tau>' = \<tau>)" |
+"cxt_entry_at (Some (PU \<tau>')) \<tau> = (\<tau>' = \<tau>)" |
+"cxt_entry_at _ _ = False"
 
-fun scheme_entry_at :: "cxt_entry option \<Rightarrow> scheme \<Rightarrow> bool"
+fun scheme_cxt_entry_at :: "cxt_entry option \<Rightarrow> scheme \<Rightarrow> bool"
 where
-"scheme_entry_at None \<pi> = True" |
-"scheme_entry_at (Some (Scheme \<pi>')) \<pi> = (\<pi>' = \<pi>)" |
-"scheme_entry_at (Some (PUScheme \<pi>')) \<pi> = (\<pi>' = \<pi>)" |
-"scheme_entry_at _ _ = False"
+"scheme_cxt_entry_at None \<pi> = True" |
+"scheme_cxt_entry_at (Some (Scheme \<pi>')) \<pi> = (\<pi>' = \<pi>)" |
+"scheme_cxt_entry_at (Some (PUScheme \<pi>')) \<pi> = (\<pi>' = \<pi>)" |
+"scheme_cxt_entry_at _ _ = False"
 
-definition merge_entry :: "cxt_entry option \<Rightarrow> cxt_entry option \<Rightarrow> cxt_entry option option"
+definition merge_cxt_entry :: "cxt_entry option \<Rightarrow> cxt_entry option \<Rightarrow> cxt_entry option option"
 where
-"merge_entry \<theta> \<theta>' =
+"merge_cxt_entry \<theta> \<theta>' =
   (if \<theta> = \<theta>' then Some \<theta>
-    else if \<exists>\<tau>. var_entry_at \<theta> \<tau> \<and> var_entry_at \<theta>' \<tau>
-    then Some (Some (PU (THE \<tau>. var_entry_at \<theta> \<tau> \<and> var_entry_at \<theta>' \<tau>)))
-   else if \<exists>\<pi>. scheme_entry_at \<theta> \<pi> \<and> scheme_entry_at \<theta>' \<pi>
-   then Some (Some (PUScheme (THE \<pi>. scheme_entry_at \<theta> \<pi> \<and> scheme_entry_at \<theta>' \<pi>)))
+    else if \<exists>\<tau>. cxt_entry_at \<theta> \<tau> \<and> cxt_entry_at \<theta>' \<tau>
+    then Some (Some (PU (THE \<tau>. cxt_entry_at \<theta> \<tau> \<and> cxt_entry_at \<theta>' \<tau>)))
+   else if \<exists>\<pi>. scheme_cxt_entry_at \<theta> \<pi> \<and> scheme_cxt_entry_at \<theta>' \<pi>
+   then Some (Some (PUScheme (THE \<pi>. scheme_cxt_entry_at \<theta> \<pi> \<and> scheme_cxt_entry_at \<theta>' \<pi>)))
    else None)"
 
 definition merge :: "cxt \<Rightarrow> cxt \<Rightarrow> cxt option" (infixl "\<oplus>" 65)
 where
 "\<Gamma> \<oplus> \<Gamma>' =
-  (if \<forall>x. merge_entry (\<Gamma> x) (\<Gamma>' x) \<noteq> None then Some (\<lambda>x. the (merge_entry (\<Gamma> x) (\<Gamma>' x))) else None)"
+  (if \<forall>x. merge_cxt_entry (\<Gamma> x) (\<Gamma>' x) \<noteq> None then Some (\<lambda>x. the (merge_cxt_entry (\<Gamma> x) (\<Gamma>' x))) else None)"
 
 datatype static_outcome = Assigns\<^sub>R cxt | Returns\<^sub>R
 
@@ -301,11 +301,11 @@ by (relation "measure (\<lambda>x. case x of
    | Inr (Inr (Inr (\<Gamma>, es, \<sigma>s, \<tau>))) \<Rightarrow> 3 * size_list size es + 2)")
    auto
 
-(* Entry binding a function name: its type scheme, or its type when there are no type parameters *)
-fun scheme_entry :: "scheme \<Rightarrow> cxt_entry"
+(* Context entry binding a function name: its type scheme, or its type when there are no type parameters *)
+fun scheme_cxt_entry :: "scheme \<Rightarrow> cxt_entry"
 where
-"scheme_entry (TyScheme [] \<tau>) = Ty \<tau>" |
-"scheme_entry \<pi> = Scheme \<pi>"
+"scheme_cxt_entry (TyScheme [] \<tau>) = Ty \<tau>" |
+"scheme_cxt_entry \<pi> = Scheme \<pi>"
 
 abbreviation bind_type_params :: "cxt \<Rightarrow> var list \<Rightarrow> cxt"
 where "bind_type_params \<Gamma> \<alpha>s \<equiv> \<Gamma> ++ map_of (map (\<lambda>\<alpha>. (\<alpha>, TypeVar)) \<alpha>s)"
@@ -364,7 +364,7 @@ where
 "stmt_ty \<Gamma> \<zeta> (StmtMutualRegion ds) =
   (case those (map (def_signature \<Gamma>) ds) of
      Some \<pi>s \<Rightarrow>
-       let \<Delta> = map_of (zip (map def_name ds) (map scheme_entry \<pi>s)) in
+       let \<Delta> = map_of (zip (map def_name ds) (map scheme_cxt_entry \<pi>s)) in
        if defs_ty (\<Gamma> ++ \<Delta>) ds \<pi>s then Some (Assigns\<^sub>R \<Delta>) else None
    | None \<Rightarrow> None)" |
 "stmt_ty \<Gamma> \<zeta> (StmtMatch e bs) = None" |
