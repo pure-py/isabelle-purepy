@@ -30,7 +30,6 @@ inductive_cases SeqE: "\<rho> \<turnstile>\<^sub>s StmtSeq s s' \<Rightarrow> oc
 inductive_cases ElifNilE: "\<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f ([], else') \<Rightarrow> oc"
 inductive_cases ElifConsE: "\<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f ((e, s) # elifs, else') \<Rightarrow> oc"
 
-
 lemma determinism:
   shows
       expr_det: "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> r1 \<Longrightarrow> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> r2 \<Longrightarrow> r1 = r2"
