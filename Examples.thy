@@ -16,7 +16,7 @@ definition ex_lambda :: expr
 where "ex_lambda =
     ExprCall
         (ExprLambda [''x''] (ExprBinOp BOpAdd (ExprVar ''x'') (ExprLiteral (LitNumber 1))))
-        [ ExprLiteral (LitNumber 2) ] []"
+        ([ExprLiteral (LitNumber 2)], [])"
 
 lemma ex_lambda_eval: "\<epsilon>, ex_lambda \<Rightarrow>\<^sub>e Val (VLit (LitNumber 3))"
 proof -

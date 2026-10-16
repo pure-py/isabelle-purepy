@@ -14,7 +14,7 @@ inductive_cases ListE: "\<rho>, ExprList es \<Rightarrow>\<^sub>e r"
 inductive_cases TupleE: "\<rho>, ExprTuple es \<Rightarrow>\<^sub>e r"
 inductive_cases
   CallE[consumes 1, case_names CallLambda CallLambdaArity CallDef CallDefArity CallNonFun CallFail CallFailArgs]:
-  "\<rho>, ExprCall e es [] \<Rightarrow>\<^sub>e r"
+  "\<rho>, ExprCall e (es, []) \<Rightarrow>\<^sub>e r"
 inductive_cases ExprsNilE: "\<rho>, [] \<Rightarrow>\<^sub>e\<^sub>s rs"
 inductive_cases ExprsConsE: "\<rho>, e # es \<Rightarrow>\<^sub>e\<^sub>s rs"
 inductive_cases PassE: "\<rho>, StmtPass \<Rightarrow>\<^sub>s o"

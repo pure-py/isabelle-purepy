@@ -85,10 +85,22 @@ where
    else if eq v v' = Val True then eq_elems vs vs' else eq v v')" |
 "eq_elems _ _ = Val False"
 
+fun contains :: "val \<Rightarrow> val \<Rightarrow> bool result" and contains_elems :: "val list \<Rightarrow> val \<Rightarrow> bool result"
+where
+"contains (VList vs) v = contains_elems vs v" |
+"contains (VTuple vs) v = contains_elems vs v" |
+"contains (VLit (LitString w')) (VLit (LitString w)) = Val (\<exists>w1 w2. w' = w1 @ w @ w2)" |
+"contains _ _ = Aborts TypeError" |
+
+"contains_elems [] v = Val False" |
+"contains_elems (v' # vs) v = (if eq v v' = Val False then contains_elems vs v else eq v v')"
+
 fun binop_meaning :: "bop \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
 where
 "binop_meaning BOpEq v v' = mlet (eq v v') (\<lambda>b. Val (VLit (LitBool b)))" |
 "binop_meaning BOpNeq v v' = mlet (eq v v') (\<lambda>b. Val (VLit (LitBool (\<not> b))))" |
+"binop_meaning BOpIn v v' = mlet (contains v' v) (\<lambda>b. Val (VLit (LitBool b)))" |
+"binop_meaning BOpNotIn v v' = mlet (contains v' v) (\<lambda>b. Val (VLit (LitBool (\<not> b))))" |
 "binop_meaning BOpLt (VLit (LitNumber n)) (VLit (LitNumber n')) = Val (VLit (LitBool (n < n')))" |
 "binop_meaning BOpLeq (VLit (LitNumber n)) (VLit (LitNumber n')) = Val (VLit (LitBool (n \<le> n')))" |
 "binop_meaning BOpGt (VLit (LitNumber n)) (VLit (LitNumber n')) = Val (VLit (LitBool (n > n')))" |
@@ -98,11 +110,18 @@ where
 "binop_meaning BOpMul (VLit (LitNumber n)) (VLit (LitNumber n')) = Val (VLit (LitNumber (n * n')))" |
 "binop_meaning BOpDiv (VLit (LitNumber n)) (VLit (LitNumber n')) =
   (if n' = 0 then Aborts ZeroDivisionError else Val (VLit (LitNumber (n div n'))))" |
+"binop_meaning BOpFloorDiv (VLit (LitNumber n)) (VLit (LitNumber n')) =
+  (if n' = 0 then Aborts ZeroDivisionError else Val (VLit (LitNumber (n div n'))))" |
+"binop_meaning BOpMod (VLit (LitNumber n)) (VLit (LitNumber n')) =
+  (if n' = 0 then Aborts ZeroDivisionError else Val (VLit (LitNumber (n mod n'))))" |
+"binop_meaning BOpPow (VLit (LitNumber n)) (VLit (LitNumber n')) =
+  (if n' < 0 then Aborts TypeError else Val (VLit (LitNumber (n ^ nat n'))))" |
 "binop_meaning _ _ _ = Aborts TypeError"
 
 fun unop_meaning :: "uop \<Rightarrow> val \<Rightarrow> val result"
 where
 "unop_meaning UOpNot (VLit (LitBool b)) = Val (VLit (LitBool (\<not> b)))" |
+"unop_meaning UOpPos (VLit (LitNumber n)) = Val (VLit (LitNumber n))" |
 "unop_meaning UOpNeg (VLit (LitNumber n)) = Val (VLit (LitNumber (- n)))" |
 "unop_meaning _ _ = Aborts TypeError"
 
@@ -116,7 +135,7 @@ where
 "binds_pat (PatAs p x) = binds_pat p \<union> {x}" |
 "binds_pat (PatList ps) = \<Union> (set (map binds_pat ps))" |
 "binds_pat (PatTuple ps) = \<Union> (set (map binds_pat ps))" |
-"binds_pat (PatConstr q ps kps) = \<Union> (set (map binds_pat ps)) \<union> \<Union> (set (map (binds_pat \<circ> snd) kps))" |
+"binds_pat (PatConstr q (ps, kps)) = \<Union> (set (map binds_pat ps)) \<union> \<Union> (set (map (binds_pat \<circ> snd) kps))" |
 "binds_pat (PatDict kps) = \<Union> (set (map (binds_pat \<circ> snd) kps))" |
 "binds_pat _ = {}"
 
@@ -130,6 +149,7 @@ where
 
 fun assigns :: "stmt \<Rightarrow> var set"
 where
+"assigns (StmtDeclare x _) = {x}" |
 "assigns (StmtAssign x _ _) = {x}" |
 "assigns (StmtSeq s s') = assigns s \<union> assigns s'" |
 "assigns (StmtMutualRegion ds) = set (map def_name ds)" |
@@ -140,6 +160,7 @@ where
 
 fun declares :: "stmt \<Rightarrow> var list"
 where
+"declares (StmtDeclare x _) = [x]" |
 "declares (StmtAssign x (Some _) _) = [x]" |
 "declares (StmtSeq s s') = declares s @ declares s'" |
 "declares (StmtMutualRegion ds) = map def_name ds" |
@@ -191,12 +212,12 @@ EvalCallLambda:
   ; \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Val us
   ; length xs = length us
   ; \<rho>'(xs [\<mapsto>] us), e' \<Rightarrow>\<^sub>e r
-  \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e es [] \<Rightarrow>\<^sub>e r" |
+  \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e (es, []) \<Rightarrow>\<^sub>e r" |
 EvalCallLambdaArity:
   "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val Lam(\<rho>', xs, e')
   ; \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Val us
   ; length xs \<noteq> length us
-  \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e es [] \<Rightarrow>\<^sub>e Aborts TypeError" |
+  \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e (es, []) \<Rightarrow>\<^sub>e Aborts TypeError" |
 EvalCallDef:
   "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val Def(\<rho>', ds, j)
   ; ds ! j = Def f xps \<psi> s
@@ -205,19 +226,19 @@ EvalCallDef:
   ; length xps = length us
   ; scope (set (map fst xps)) s = Some \<rho>s
   ; \<rho>'(map def_name ds [\<mapsto>] vs, map fst xps [\<mapsto>] us) ++ \<rho>s, s \<Rightarrow>\<^sub>s o
-  \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e es [] \<Rightarrow>\<^sub>e call_result o" |
+  \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e (es, []) \<Rightarrow>\<^sub>e call_result o" |
 EvalCallDefArity:
   "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val Def(\<rho>', ds, j)
   ; ds ! j = Def f xps \<psi> s
   ; \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Val us
   ; length xps \<noteq> length us
-  \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e es [] \<Rightarrow>\<^sub>e Aborts TypeError" |
+  \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e (es, []) \<Rightarrow>\<^sub>e Aborts TypeError" |
 EvalCallNonFun:
   "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Val us ; \<not> is_closure v \<rbrakk>
-  \<Longrightarrow> \<rho>, ExprCall e es [] \<Rightarrow>\<^sub>e Aborts TypeError" |
-EvalCallFail: "\<rho>, e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, ExprCall e es [] \<Rightarrow>\<^sub>e Aborts \<kappa>" |
+  \<Longrightarrow> \<rho>, ExprCall e (es, []) \<Rightarrow>\<^sub>e Aborts TypeError" |
+EvalCallFail: "\<rho>, e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, ExprCall e (es, []) \<Rightarrow>\<^sub>e Aborts \<kappa>" |
 EvalCallFailArgs:
-  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Aborts \<kappa> \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e es [] \<Rightarrow>\<^sub>e Aborts \<kappa>" |
+  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Aborts \<kappa> \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e (es, []) \<Rightarrow>\<^sub>e Aborts \<kappa>" |
 
 EvalExprsNil: "\<rho>, [] \<Rightarrow>\<^sub>e\<^sub>s Val []" |
 EvalExprsCons: "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s r \<rbrakk>
