@@ -132,8 +132,8 @@ definition scope :: "vname set \<Rightarrow> stmt \<Rightarrow> \<rho>"
 where
 "scope Y s = (\<lambda>x. if x \<in> assigns s - Y then Some VUnbound else None)"
 
-definition true :: val where "true = VLit (LitBool True)"
-definition false :: val where "false = VLit (LitBool False)"
+abbreviation true :: val where "true \<equiv> VLit (LitBool True)"
+abbreviation false :: val where "false \<equiv> VLit (LitBool False)"
 
 type_synonym elif_block = "(expr \<times> stmt) list \<times> stmt option"
 

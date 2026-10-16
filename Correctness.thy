@@ -61,11 +61,11 @@ next
 next
   case EvalAndFalse
   from EvalAndFalse.prems EvalAndFalse.hyps show ?case
-    by (auto elim!: AndE dest: EvalAndFalse.IH simp: true_def false_def)
+    by (auto elim!: AndE dest: EvalAndFalse.IH)
 next
   case EvalAndTrue
   from EvalAndTrue.prems EvalAndTrue.hyps show ?case
-    by (auto elim!: AndE dest: EvalAndTrue.IH simp: true_def false_def)
+    by (auto elim!: AndE dest: EvalAndTrue.IH)
 next
   case EvalAndFail
   from EvalAndFail.prems EvalAndFail.hyps show ?case
@@ -73,11 +73,11 @@ next
 next
   case EvalOrTrue
   from EvalOrTrue.prems EvalOrTrue.hyps show ?case
-    by (auto elim!: OrE dest: EvalOrTrue.IH simp: true_def false_def)
+    by (auto elim!: OrE dest: EvalOrTrue.IH)
 next
   case EvalOrFalse
   from EvalOrFalse.prems EvalOrFalse.hyps show ?case
-    by (auto elim!: OrE dest: EvalOrFalse.IH simp: true_def false_def)
+    by (auto elim!: OrE dest: EvalOrFalse.IH)
 next
   case EvalOrFail
   from EvalOrFail.prems EvalOrFail.hyps show ?case
@@ -85,11 +85,11 @@ next
 next
   case EvalCondTrue
   from EvalCondTrue.prems EvalCondTrue.hyps show ?case
-    by (auto elim!: CondE dest: EvalCondTrue.IH simp: true_def false_def)
+    by (auto elim!: CondE dest: EvalCondTrue.IH)
 next
   case EvalCondFalse
   from EvalCondFalse.prems EvalCondFalse.hyps show ?case
-    by (auto elim!: CondE dest: EvalCondFalse.IH simp: true_def false_def)
+    by (auto elim!: CondE dest: EvalCondFalse.IH)
 next
   case EvalCondFail
   from EvalCondFail.prems EvalCondFail.hyps show ?case
@@ -193,11 +193,11 @@ next
 next
   case EvalAssert
   from EvalAssert.prems EvalAssert.hyps show ?case
-    by (auto elim!: AssertE dest: EvalAssert.IH simp: true_def false_def)
+    by (auto elim!: AssertE dest: EvalAssert.IH)
 next
   case EvalAssertFalse
   from EvalAssertFalse.prems EvalAssertFalse.hyps show ?case
-    by (auto elim!: AssertE dest: EvalAssertFalse.IH simp: true_def false_def)
+    by (auto elim!: AssertE dest: EvalAssertFalse.IH)
 next
   case EvalAssertFail
   from EvalAssertFail.prems EvalAssertFail.hyps show ?case
@@ -205,11 +205,11 @@ next
 next
   case EvalAssertMsg
   from EvalAssertMsg.prems EvalAssertMsg.hyps show ?case
-    by (auto elim!: AssertMsgE dest: EvalAssertMsg.IH simp: true_def false_def)
+    by (auto elim!: AssertMsgE dest: EvalAssertMsg.IH)
 next
   case EvalAssertMsgFalse
   from EvalAssertMsgFalse.prems EvalAssertMsgFalse.hyps show ?case
-    by (auto elim!: AssertMsgE dest: EvalAssertMsgFalse.IH simp: true_def false_def)
+    by (auto elim!: AssertMsgE dest: EvalAssertMsgFalse.IH)
 next
   case EvalAssertMsgFail
   from EvalAssertMsgFail.prems EvalAssertMsgFail.hyps show ?case
@@ -217,11 +217,11 @@ next
 next
   case EvalIfTrue
   from EvalIfTrue.prems EvalIfTrue.hyps show ?case
-    by (auto elim!: IfE dest: EvalIfTrue.IH simp: true_def false_def)
+    by (auto elim!: IfE dest: EvalIfTrue.IH)
 next
   case EvalIfFalse
   from EvalIfFalse.prems EvalIfFalse.hyps show ?case
-    by (auto elim!: IfE dest: EvalIfFalse.IH simp: true_def false_def)
+    by (auto elim!: IfE dest: EvalIfFalse.IH)
 next
   case EvalIfFail
   from EvalIfFail.prems EvalIfFail.hyps show ?case
@@ -248,11 +248,11 @@ next
 next
   case EvalElifTrue
   from EvalElifTrue.prems EvalElifTrue.hyps show ?case
-    by (auto elim!: ElifConsE dest: EvalElifTrue.IH simp: true_def false_def)
+    by (auto elim!: ElifConsE dest: EvalElifTrue.IH)
 next
   case EvalElifFalse
   from EvalElifFalse.prems EvalElifFalse.hyps show ?case
-    by (auto elim!: ElifConsE dest: EvalElifFalse.IH simp: true_def false_def)
+    by (auto elim!: ElifConsE dest: EvalElifFalse.IH)
 next
   case EvalElifFail
   from EvalElifFail.prems EvalElifFail.hyps show ?case
