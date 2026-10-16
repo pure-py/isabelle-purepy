@@ -59,9 +59,9 @@ datatype expr =
   | ExprCond expr expr expr
   | ExprList "expr list"
   | ExprTuple "expr list"
-  | ExprListComp expr "qualifier list"       (* [2 * x for x in xs] *)
-  | ExprDictComp expr expr "qualifier list"  (* {x: x ** 2 for x in xs} *)
-  | ExprLambda "var list" expr               (* lambda x: x * 2 *)
+  | ExprListComp expr "qualifier list"
+  | ExprDictComp expr expr "qualifier list"
+  | ExprLambda "var list" expr
 and qualifier =
     Guard expr
   | Generator var expr
