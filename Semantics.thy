@@ -28,27 +28,34 @@ datatype termination_kind =
 
 datatype 'a result = Val 'a | Aborts termination_kind
 
-datatype normal_outcome = Assigns env | Returns val
+datatype outcome = Assigns env | Returns val | Aborts\<^sub>o termination_kind
 
-type_synonym outcome = "normal_outcome result"
+consts mlet :: "'a result \<Rightarrow> ('a \<Rightarrow> 'b) \<Rightarrow> 'b"
 
-fun mlet :: "'a result \<Rightarrow> ('a \<Rightarrow> 'b result) \<Rightarrow> 'b result"
+fun mlet_result :: "'a result \<Rightarrow> ('a \<Rightarrow> 'b result) \<Rightarrow> 'b result"
 where
-"mlet (Val v) f = f v" |
-"mlet (Aborts \<kappa>) f = Aborts \<kappa>"
+"mlet_result (Val v) f = f v" |
+"mlet_result (Aborts \<kappa>) f = Aborts \<kappa>"
+
+fun mlet_outcome :: "'a result \<Rightarrow> ('a \<Rightarrow> outcome) \<Rightarrow> outcome"
+where
+"mlet_outcome (Val v) f = f v" |
+"mlet_outcome (Aborts \<kappa>) f = Aborts\<^sub>o \<kappa>"
+
+adhoc_overloading mlet \<rightleftharpoons> mlet_result mlet_outcome
 
 fun compose :: "outcome \<Rightarrow> outcome \<Rightarrow> outcome" (infixl "\<bullet>" 70)
 where
-"Val (Assigns \<rho>) \<bullet> Val (Assigns \<rho>') = Val (Assigns (\<rho> ++ \<rho>'))" |
-"Val (Assigns \<rho>) \<bullet> o = o" |
-"Val (Returns v) \<bullet> o = Val (Returns v)" |
-"Aborts \<kappa> \<bullet> o = Aborts \<kappa>"
+"Assigns \<rho> \<bullet> Assigns \<rho>' = Assigns (\<rho> ++ \<rho>')" |
+"Assigns \<rho> \<bullet> o = o" |
+"Returns v \<bullet> o = Returns v" |
+"Aborts\<^sub>o \<kappa> \<bullet> o = Aborts\<^sub>o \<kappa>"
 
 fun call_result :: "outcome \<Rightarrow> val result"
 where
-"call_result (Val (Returns v)) = Val v" |
-"call_result (Val (Assigns \<rho>)) = Val (VLit LitNone)" |
-"call_result (Aborts \<kappa>) = Aborts \<kappa>"
+"call_result (Returns v) = Val v" |
+"call_result (Assigns \<rho>) = Val (VLit LitNone)" |
+"call_result (Aborts\<^sub>o \<kappa>) = Aborts \<kappa>"
 
 fun is_closure :: "val \<Rightarrow> bool"
 where
@@ -217,38 +224,38 @@ EvalExprsCons: "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<rho>, es \<R
   \<Longrightarrow> \<rho>, e # es \<Rightarrow>\<^sub>e\<^sub>s mlet r (\<lambda>vs. Val (v # vs))" |
 EvalExprsFail: "\<rho>, e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, e # es \<Rightarrow>\<^sub>e\<^sub>s Aborts \<kappa>" |
 
-EvalPass: "\<rho>, StmtPass \<Rightarrow>\<^sub>s Val (Assigns \<epsilon>)" |
-EvalAssign: "\<rho>, e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtAssign x \<pi> e \<Rightarrow>\<^sub>s mlet r (\<lambda>v. Val (Assigns [x \<mapsto> v]))" |
-EvalExprStmt: "\<rho>, e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtExpr e \<Rightarrow>\<^sub>s mlet r (\<lambda>v. Val (Assigns \<epsilon>))" |
-EvalReturn: "\<rho>, e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtReturn e \<Rightarrow>\<^sub>s mlet r (\<lambda>v. Val (Returns v))" |
-EvalReturnNone: "\<rho>, StmtReturnNone \<Rightarrow>\<^sub>s Val (Returns (VLit LitNone))" |
+EvalPass: "\<rho>, StmtPass \<Rightarrow>\<^sub>s Assigns \<epsilon>" |
+EvalAssign: "\<rho>, e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtAssign x \<pi> e \<Rightarrow>\<^sub>s mlet r (\<lambda>v. Assigns [x \<mapsto> v])" |
+EvalExprStmt: "\<rho>, e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtExpr e \<Rightarrow>\<^sub>s mlet r (\<lambda>v. Assigns \<epsilon>)" |
+EvalReturn: "\<rho>, e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtReturn e \<Rightarrow>\<^sub>s mlet r (\<lambda>v. Returns v)" |
+EvalReturnNone: "\<rho>, StmtReturnNone \<Rightarrow>\<^sub>s Returns (VLit LitNone)" |
 EvalDefs:
   "vs = map (\<lambda>i. Def(\<rho>, ds, i)) [0..<length ds]
-  \<Longrightarrow> \<rho>, StmtMutualRegion ds \<Rightarrow>\<^sub>s Val (Assigns (\<epsilon>(map def_name ds [\<mapsto>] vs)))" |
-EvalAssert: "\<rho>, e \<Rightarrow>\<^sub>e Val true \<Longrightarrow> \<rho>, StmtAssert e \<Rightarrow>\<^sub>s Val (Assigns \<epsilon>)" |
-EvalAssertFalse: "\<rho>, e \<Rightarrow>\<^sub>e Val false \<Longrightarrow> \<rho>, StmtAssert e \<Rightarrow>\<^sub>s Aborts (AssertionError None)" |
-EvalAssertFail: "\<rho>, e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtAssert e \<Rightarrow>\<^sub>s Aborts \<kappa>" |
-EvalAssertMsg: "\<rho>, e \<Rightarrow>\<^sub>e Val true \<Longrightarrow> \<rho>, StmtAssertMsg e e' \<Rightarrow>\<^sub>s Val (Assigns \<epsilon>)" |
+  \<Longrightarrow> \<rho>, StmtMutualRegion ds \<Rightarrow>\<^sub>s Assigns (\<epsilon>(map def_name ds [\<mapsto>] vs))" |
+EvalAssert: "\<rho>, e \<Rightarrow>\<^sub>e Val true \<Longrightarrow> \<rho>, StmtAssert e \<Rightarrow>\<^sub>s Assigns \<epsilon>" |
+EvalAssertFalse: "\<rho>, e \<Rightarrow>\<^sub>e Val false \<Longrightarrow> \<rho>, StmtAssert e \<Rightarrow>\<^sub>s Aborts\<^sub>o (AssertionError None)" |
+EvalAssertFail: "\<rho>, e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtAssert e \<Rightarrow>\<^sub>s Aborts\<^sub>o \<kappa>" |
+EvalAssertMsg: "\<rho>, e \<Rightarrow>\<^sub>e Val true \<Longrightarrow> \<rho>, StmtAssertMsg e e' \<Rightarrow>\<^sub>s Assigns \<epsilon>" |
 EvalAssertMsgFalse: "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val false ; \<rho>, e' \<Rightarrow>\<^sub>e r \<rbrakk>
-  \<Longrightarrow> \<rho>, StmtAssertMsg e e' \<Rightarrow>\<^sub>s mlet r (\<lambda>w. Aborts (AssertionError (Some w)))" |
-EvalAssertMsgFail: "\<rho>, e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtAssertMsg e e' \<Rightarrow>\<^sub>s Aborts \<kappa>" |
+  \<Longrightarrow> \<rho>, StmtAssertMsg e e' \<Rightarrow>\<^sub>s mlet r (\<lambda>w. Aborts\<^sub>o (AssertionError (Some w)))" |
+EvalAssertMsgFail: "\<rho>, e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtAssertMsg e e' \<Rightarrow>\<^sub>s Aborts\<^sub>o \<kappa>" |
 EvalIfTrue: "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val true ; \<rho>, s \<Rightarrow>\<^sub>s o \<rbrakk>
   \<Longrightarrow> \<rho>, StmtIf e s elifs else' \<Rightarrow>\<^sub>s o" |
 EvalIfFalse: "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val false ; \<rho>, (elifs, else') \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o \<rbrakk>
   \<Longrightarrow> \<rho>, StmtIf e s elifs else' \<Rightarrow>\<^sub>s o" |
-EvalIfFail: "\<rho>, e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtIf e s elifs else' \<Rightarrow>\<^sub>s Aborts \<kappa>" |
-EvalSeq: "\<lbrakk> \<rho>, s \<Rightarrow>\<^sub>s Val (Assigns \<rho>') ; \<rho> ++ \<rho>', s' \<Rightarrow>\<^sub>s o \<rbrakk>
-  \<Longrightarrow> \<rho>, StmtSeq s s' \<Rightarrow>\<^sub>s Val (Assigns \<rho>') \<bullet> o" |
-EvalSeqReturn: "\<rho>, s \<Rightarrow>\<^sub>s Val (Returns v) \<Longrightarrow> \<rho>, StmtSeq s s' \<Rightarrow>\<^sub>s Val (Returns v)" |
-EvalSeqFail: "\<rho>, s \<Rightarrow>\<^sub>s Aborts \<kappa> \<Longrightarrow> \<rho>, StmtSeq s s' \<Rightarrow>\<^sub>s Aborts \<kappa>" |
+EvalIfFail: "\<rho>, e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtIf e s elifs else' \<Rightarrow>\<^sub>s Aborts\<^sub>o \<kappa>" |
+EvalSeq: "\<lbrakk> \<rho>, s \<Rightarrow>\<^sub>s Assigns \<rho>' ; \<rho> ++ \<rho>', s' \<Rightarrow>\<^sub>s o \<rbrakk>
+  \<Longrightarrow> \<rho>, StmtSeq s s' \<Rightarrow>\<^sub>s Assigns \<rho>' \<bullet> o" |
+EvalSeqReturn: "\<rho>, s \<Rightarrow>\<^sub>s Returns v \<Longrightarrow> \<rho>, StmtSeq s s' \<Rightarrow>\<^sub>s Returns v" |
+EvalSeqFail: "\<rho>, s \<Rightarrow>\<^sub>s Aborts\<^sub>o \<kappa> \<Longrightarrow> \<rho>, StmtSeq s s' \<Rightarrow>\<^sub>s Aborts\<^sub>o \<kappa>" |
 
-EvalIfNone: "\<rho>, ([], None) \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f Val (Assigns \<epsilon>)" |
+EvalIfNone: "\<rho>, ([], None) \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f Assigns \<epsilon>" |
 EvalElse: "\<rho>, s \<Rightarrow>\<^sub>s o \<Longrightarrow> \<rho>, ([], Some s) \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o" |
 EvalElifTrue: "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val true ; \<rho>, s \<Rightarrow>\<^sub>s o \<rbrakk>
   \<Longrightarrow> \<rho>, ((e, s) # elifs, else') \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o" |
 EvalElifFalse: "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val false ; \<rho>, (elifs, else') \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o \<rbrakk>
   \<Longrightarrow> \<rho>, ((e, s) # elifs, else') \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o" |
-EvalElifFail: "\<rho>, e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, ((e, s) # elifs, else') \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f Aborts \<kappa>"
+EvalElifFail: "\<rho>, e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, ((e, s) # elifs, else') \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f Aborts\<^sub>o \<kappa>"
 
 lemmas eval_induct = eval_expr_eval_exprs_eval_stmt_eval_elif.inducts
 
