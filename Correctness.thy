@@ -17,26 +17,26 @@ inductive_cases
   "\<rho> \<turnstile>\<^sub>e ExprCall e es [] \<Rightarrow> r"
 inductive_cases ExprsNilE: "\<rho> \<turnstile>\<^sub>e\<^sub>s [] \<Rightarrow> rs"
 inductive_cases ExprsConsE: "\<rho> \<turnstile>\<^sub>e\<^sub>s e # es \<Rightarrow> rs"
-inductive_cases PassE: "\<rho> \<turnstile>\<^sub>s StmtPass \<Rightarrow> oc"
-inductive_cases AssignE: "\<rho> \<turnstile>\<^sub>s StmtAssign x \<pi> e \<Rightarrow> oc"
-inductive_cases ExprStmtE: "\<rho> \<turnstile>\<^sub>s StmtExpr e \<Rightarrow> oc"
-inductive_cases ReturnE: "\<rho> \<turnstile>\<^sub>s StmtReturn e \<Rightarrow> oc"
-inductive_cases ReturnNoneE: "\<rho> \<turnstile>\<^sub>s StmtReturnNone \<Rightarrow> oc"
-inductive_cases DefsE: "\<rho> \<turnstile>\<^sub>s StmtMutualRegion ds \<Rightarrow> oc"
-inductive_cases AssertE: "\<rho> \<turnstile>\<^sub>s StmtAssert e \<Rightarrow> oc"
-inductive_cases AssertMsgE: "\<rho> \<turnstile>\<^sub>s StmtAssertMsg e e' \<Rightarrow> oc"
-inductive_cases IfE: "\<rho> \<turnstile>\<^sub>s StmtIf e s elifs else' \<Rightarrow> oc"
-inductive_cases SeqE: "\<rho> \<turnstile>\<^sub>s StmtSeq s s' \<Rightarrow> oc"
-inductive_cases ElifNilE: "\<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f ([], else') \<Rightarrow> oc"
-inductive_cases ElifConsE: "\<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f ((e, s) # elifs, else') \<Rightarrow> oc"
+inductive_cases PassE: "\<rho> \<turnstile>\<^sub>s StmtPass \<Rightarrow> o"
+inductive_cases AssignE: "\<rho> \<turnstile>\<^sub>s StmtAssign x \<pi> e \<Rightarrow> o"
+inductive_cases ExprStmtE: "\<rho> \<turnstile>\<^sub>s StmtExpr e \<Rightarrow> o"
+inductive_cases ReturnE: "\<rho> \<turnstile>\<^sub>s StmtReturn e \<Rightarrow> o"
+inductive_cases ReturnNoneE: "\<rho> \<turnstile>\<^sub>s StmtReturnNone \<Rightarrow> o"
+inductive_cases DefsE: "\<rho> \<turnstile>\<^sub>s StmtMutualRegion ds \<Rightarrow> o"
+inductive_cases AssertE: "\<rho> \<turnstile>\<^sub>s StmtAssert e \<Rightarrow> o"
+inductive_cases AssertMsgE: "\<rho> \<turnstile>\<^sub>s StmtAssertMsg e e' \<Rightarrow> o"
+inductive_cases IfE: "\<rho> \<turnstile>\<^sub>s StmtIf e s elifs else' \<Rightarrow> o"
+inductive_cases SeqE: "\<rho> \<turnstile>\<^sub>s StmtSeq s s' \<Rightarrow> o"
+inductive_cases ElifNilE: "\<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f ([], else') \<Rightarrow> o"
+inductive_cases ElifConsE: "\<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f ((e, s) # elifs, else') \<Rightarrow> o"
 
 lemma determinism:
   shows
-      expr_det: "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> r1 \<Longrightarrow> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> r2 \<Longrightarrow> r1 = r2"
-  and exprs_det: "\<rho> \<turnstile>\<^sub>e\<^sub>s es \<Rightarrow> rs1 \<Longrightarrow> \<rho> \<turnstile>\<^sub>e\<^sub>s es \<Rightarrow> rs2 \<Longrightarrow> rs1 = rs2"
-  and stmt_det: "\<rho> \<turnstile>\<^sub>s s \<Rightarrow> oc1 \<Longrightarrow> \<rho> \<turnstile>\<^sub>s s \<Rightarrow> oc2 \<Longrightarrow> oc1 = oc2"
-  and elif_det: "\<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f eb \<Rightarrow> oc1' \<Longrightarrow> \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f eb \<Rightarrow> oc2' \<Longrightarrow> oc1' = oc2'"
-proof (induction arbitrary: r2 and rs2 and oc2 and oc2' rule: eval_induct)
+      expr_det: "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> r \<Longrightarrow> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> r' \<Longrightarrow> r = r'"
+  and exprs_det: "\<rho> \<turnstile>\<^sub>e\<^sub>s es \<Rightarrow> rs \<Longrightarrow> \<rho> \<turnstile>\<^sub>e\<^sub>s es \<Rightarrow> rs' \<Longrightarrow> rs = rs'"
+  and stmt_det: "\<rho> \<turnstile>\<^sub>s s \<Rightarrow> o \<Longrightarrow> \<rho> \<turnstile>\<^sub>s s \<Rightarrow> o' \<Longrightarrow> o = o'"
+  and elif_det: "\<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f eb \<Rightarrow> o' \<Longrightarrow> \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f eb \<Rightarrow> o'' \<Longrightarrow> o' = o''"
+proof (induction arbitrary: r' and rs' and o' and o'' rule: eval_induct)
   case EvalVar
   then show ?case by (auto elim!: VarE)
 next
@@ -118,15 +118,15 @@ next
   from EvalCallLambdaArity.prems EvalCallLambdaArity.hyps show ?case
     by (auto elim!: CallE dest: EvalCallLambdaArity.IH)
 next
-  case (EvalCallDef \<rho> e \<rho>' ds j f xps \<omega> s vs es us \<rho>s oc)
+  case (EvalCallDef \<rho> e \<rho>' ds j f xps \<omega> s vs es us \<rho>s o)
   from EvalCallDef.prems show ?case
   proof (cases rule: CallE)
-    case (CallDef \<rho>'' ds' j' f' xps' \<omega>' s' us' \<rho>s' oc')
+    case (CallDef \<rho>'' ds' j' f' xps' \<omega>' s' us' \<rho>s' o')
     from EvalCallDef.IH(1)[OF CallDef(2)] have "\<rho>'' = \<rho>'" "ds' = ds" "j' = j" by auto
     with EvalCallDef.hyps(2) CallDef(3) have "xps' = xps" "s' = s" by auto
     moreover from EvalCallDef.IH(2)[OF CallDef(4)] have "us' = us" by simp
     moreover from calculation EvalCallDef.hyps(6) CallDef(6) have "\<rho>s' = \<rho>s" by simp
-    ultimately have "oc' = oc"
+    ultimately have "o' = o"
       using EvalCallDef.IH(3) CallDef(7) \<open>\<rho>'' = \<rho>'\<close> \<open>ds' = ds\<close> EvalCallDef.hyps(3) by simp
     with CallDef(1) show ?thesis by simp
   next
@@ -140,7 +140,7 @@ next
   case (EvalCallDefArity \<rho> e \<rho>' ds j f xps \<omega> s es us)
   from EvalCallDefArity.prems show ?case
   proof (cases rule: CallE)
-    case (CallDef \<rho>'' ds' j' f' xps' \<omega>' s' us' \<rho>s' oc')
+    case (CallDef \<rho>'' ds' j' f' xps' \<omega>' s' us' \<rho>s' o')
     from EvalCallDefArity.IH(1)[OF CallDef(2)] have "ds' = ds" "j' = j" by auto
     with EvalCallDefArity.hyps(2) CallDef(3) have "xps' = xps" by auto
     moreover from EvalCallDefArity.IH(2)[OF CallDef(4)] have "us' = us" by simp

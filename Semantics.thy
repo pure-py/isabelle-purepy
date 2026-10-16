@@ -2,6 +2,9 @@ theory Semantics
     imports Syntax HOL.Map
 begin
 
+(* Free o for outcomes, as in the spec *)
+no_notation (ASCII) comp (infixl \<open>o\<close> 55)
+
 datatype val =
       VLit l
     | VList "val list"
@@ -40,9 +43,9 @@ where
 fun compose :: "outcome \<Rightarrow> outcome \<Rightarrow> outcome" (infixl "\<bullet>" 70)
 where
 "Val (Assigns \<rho>) \<bullet> Val (Assigns \<rho>') = Val (Assigns (\<rho> ++ \<rho>'))" |
-"Val (Assigns \<rho>) \<bullet> oc = oc" |
-"Val (Returns v) \<bullet> oc = Val (Returns v)" |
-"Aborts \<kappa> \<bullet> oc = Aborts \<kappa>"
+"Val (Assigns \<rho>) \<bullet> o = o" |
+"Val (Returns v) \<bullet> o = Val (Returns v)" |
+"Aborts \<kappa> \<bullet> o = Aborts \<kappa>"
 
 fun call_result :: "outcome \<Rightarrow> r"
 where
@@ -197,8 +200,8 @@ EvalCallDef:
   ; \<rho> \<turnstile>\<^sub>e\<^sub>s es \<Rightarrow> Val us
   ; length xps = length us
   ; scope (set (map fst xps)) s = Some \<rho>s
-  ; \<rho>'(map def_name ds [\<mapsto>] vs, map fst xps [\<mapsto>] us) ++ \<rho>s \<turnstile>\<^sub>s s \<Rightarrow> oc
-  \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>e ExprCall e es [] \<Rightarrow> call_result oc" |
+  ; \<rho>'(map def_name ds [\<mapsto>] vs, map fst xps [\<mapsto>] us) ++ \<rho>s \<turnstile>\<^sub>s s \<Rightarrow> o
+  \<rbrakk> \<Longrightarrow> \<rho> \<turnstile>\<^sub>e ExprCall e es [] \<Rightarrow> call_result o" |
 EvalCallDefArity:
   "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val Def(\<rho>', ds, j)
   ; ds ! j = Def f xps \<omega> s
@@ -232,22 +235,22 @@ EvalAssertMsg: "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val true \<Longright
 EvalAssertMsgFalse: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val false ; \<rho> \<turnstile>\<^sub>e e' \<Rightarrow> r \<rbrakk>
   \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtAssertMsg e e' \<Rightarrow> mlet r (\<lambda>w. Aborts (ErrAssertMsg w))" |
 EvalAssertMsgFail: "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> Aborts \<kappa> \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtAssertMsg e e' \<Rightarrow> Aborts \<kappa>" |
-EvalIfTrue: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val true ; \<rho> \<turnstile>\<^sub>s s \<Rightarrow> oc \<rbrakk>
-  \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtIf e s elifs else' \<Rightarrow> oc" |
-EvalIfFalse: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val false ; \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f (elifs, else') \<Rightarrow> oc \<rbrakk>
-  \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtIf e s elifs else' \<Rightarrow> oc" |
+EvalIfTrue: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val true ; \<rho> \<turnstile>\<^sub>s s \<Rightarrow> o \<rbrakk>
+  \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtIf e s elifs else' \<Rightarrow> o" |
+EvalIfFalse: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val false ; \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f (elifs, else') \<Rightarrow> o \<rbrakk>
+  \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtIf e s elifs else' \<Rightarrow> o" |
 EvalIfFail: "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> Aborts \<kappa> \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtIf e s elifs else' \<Rightarrow> Aborts \<kappa>" |
-EvalSeq: "\<lbrakk> \<rho> \<turnstile>\<^sub>s s \<Rightarrow> Val (Assigns \<rho>') ; \<rho> ++ \<rho>' \<turnstile>\<^sub>s s' \<Rightarrow> oc \<rbrakk>
-  \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtSeq s s' \<Rightarrow> Val (Assigns \<rho>') \<bullet> oc" |
+EvalSeq: "\<lbrakk> \<rho> \<turnstile>\<^sub>s s \<Rightarrow> Val (Assigns \<rho>') ; \<rho> ++ \<rho>' \<turnstile>\<^sub>s s' \<Rightarrow> o \<rbrakk>
+  \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtSeq s s' \<Rightarrow> Val (Assigns \<rho>') \<bullet> o" |
 EvalSeqReturn: "\<rho> \<turnstile>\<^sub>s s \<Rightarrow> Val (Returns v) \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtSeq s s' \<Rightarrow> Val (Returns v)" |
 EvalSeqFail: "\<rho> \<turnstile>\<^sub>s s \<Rightarrow> Aborts \<kappa> \<Longrightarrow> \<rho> \<turnstile>\<^sub>s StmtSeq s s' \<Rightarrow> Aborts \<kappa>" |
 
 EvalIfNone: "\<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f ([], None) \<Rightarrow> Val (Assigns \<epsilon>)" |
-EvalElse: "\<rho> \<turnstile>\<^sub>s s \<Rightarrow> oc \<Longrightarrow> \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f ([], Some s) \<Rightarrow> oc" |
-EvalElifTrue: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val true ; \<rho> \<turnstile>\<^sub>s s \<Rightarrow> oc \<rbrakk>
-  \<Longrightarrow> \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f ((e, s) # elifs, else') \<Rightarrow> oc" |
-EvalElifFalse: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val false ; \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f (elifs, else') \<Rightarrow> oc \<rbrakk>
-  \<Longrightarrow> \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f ((e, s) # elifs, else') \<Rightarrow> oc" |
+EvalElse: "\<rho> \<turnstile>\<^sub>s s \<Rightarrow> o \<Longrightarrow> \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f ([], Some s) \<Rightarrow> o" |
+EvalElifTrue: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val true ; \<rho> \<turnstile>\<^sub>s s \<Rightarrow> o \<rbrakk>
+  \<Longrightarrow> \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f ((e, s) # elifs, else') \<Rightarrow> o" |
+EvalElifFalse: "\<lbrakk> \<rho> \<turnstile>\<^sub>e e \<Rightarrow> Val false ; \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f (elifs, else') \<Rightarrow> o \<rbrakk>
+  \<Longrightarrow> \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f ((e, s) # elifs, else') \<Rightarrow> o" |
 EvalElifFail: "\<rho> \<turnstile>\<^sub>e e \<Rightarrow> Aborts \<kappa> \<Longrightarrow> \<rho> \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f ((e, s) # elifs, else') \<Rightarrow> Aborts \<kappa>"
 
 lemmas eval_induct = eval_expr_eval_exprs_eval_stmt_eval_elif.inducts
