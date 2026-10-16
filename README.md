@@ -10,22 +10,25 @@ specification's treatment of runtime errors.
 
 ## Building
 
-Install [Isabelle2025-2](https://isabelle.in.tum.de/). On macOS, either download
-`Isabelle2025-2_macos.tar.gz` and move `Isabelle2025-2.app` to `/Applications`, or run
+Install the [Isabelle](https://isabelle.in.tum.de/) release named in `.isabelle-version`, and LaTeX,
+which the session document needs; `make build` checks that the `isabelle` on `PATH` is that release. On
+macOS, either download the release's `_macos.tar.gz` and move its `.app` to `/Applications`, or run
 `brew install --cask isabelle`. Put the `isabelle` executable on `PATH`:
 
 ```bash
-export PATH="/Applications/Isabelle2025-2.app/bin:$PATH"
+export PATH="/Applications/$(cat .isabelle-version).app/bin:$PATH"
 ```
 
-Then check the proofs:
+Then check the proofs and build the session document, `output/document.pdf`:
 
 ```bash
 make build
 ```
 
-`make document` also builds the session document, which needs LaTeX. If `isabelle` is not on `PATH`,
-pass it explicitly: `make build ISABELLE=/Applications/Isabelle2025-2.app/bin/isabelle`.
+If `isabelle` is not on `PATH`, pass it explicitly: `make build ISABELLE=<path to isabelle>`.
+
+To browse the theories with the prover running, open the session directory in the bundled editor:
+`isabelle vscode .`
 
 GitHub Actions runs `make build` on every push (`.github/workflows/build.yml`).
 

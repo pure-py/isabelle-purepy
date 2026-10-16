@@ -6,16 +6,38 @@ on:
   workflow_dispatch:
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      isabelle: ${{ steps.read.outputs.isabelle }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        run: echo "isabelle=$(cat .isabelle-version)" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: version
     runs-on: ubuntu-latest
     timeout-minutes: 30
     container:
-      # Official image, with HOL prebuilt. Runs as root so that checkout can write workspace.
-      image: makarius/isabelle:Isabelle2025-2
+      # Official image, with HOL prebuilt. Runs as root so that checkout and apt can write.
+      image: makarius/isabelle:${{ needs.version.outputs.isabelle }}
       options: --user root
     steps:
+      - name: Install make and LaTeX
+        run: |
+          apt-get update -q
+          apt-get install -y -q --no-install-recommends \
+            make texlive-latex-base texlive-latex-recommended texlive-fonts-recommended
+
       - uses: actions/checkout@v4
 
       - name: Build session
         timeout-minutes: 20
-        run: /home/isabelle/Isabelle/bin/isabelle build -v -o document=false -D .
+        run: make build ISABELLE=/home/isabelle/Isabelle/bin/isabelle
+
+      - name: Upload document
+        uses: actions/upload-artifact@v4
+        with:
+          name: document
+          path: output/document.pdf
