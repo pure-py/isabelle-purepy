@@ -118,7 +118,8 @@ datatype stmt =
   | StmtIf expr stmt "(expr \<times> stmt) list" "stmt option"  \<comment> \<open>\<^verbatim>\<open>if e: s else: t\<close>\<close>
   | StmtMatch expr "(pat \<times> stmt) list"                   \<comment> \<open>\<^verbatim>\<open>match e: case p: s\<close>\<close>
   | StmtMutualRegion "func list"                         \<comment> \<open>\<^verbatim>\<open>def f(): s\<close>\<close>
-and func = Def var "(var \<times> ty_expr) list" ty_expr stmt   \<comment> \<open>\<^verbatim>\<open>def f(x: T) -> U: s\<close>\<close>
+and func = Def var "(var \<times> ty_expr) list" ty_expr stmt
+  \<comment> \<open>\<^verbatim>\<open>def f(x: T) -> U: s\<close>\<close>
 
 datatype fields =
     FieldList "(var \<times> ty_expr) list"
