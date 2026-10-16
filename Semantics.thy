@@ -9,8 +9,8 @@ datatype val =
       VLit lit
     | VList "val list"
     | VTuple "val list"
-    | VLamClosure "var \<rightharpoonup> val" "var list" expr    ("Lam'(_, _, _')")
-    | VDefClosure "var \<rightharpoonup> val" "func list" nat      ("Def'(_, _, _')")
+    | VLamClosure "var \<rightharpoonup> val" "var list" expr  ("Lam'(_, _, _')")
+    | VDefClosure "var \<rightharpoonup> val" "func list" nat  ("Def'(_, _, _')")
     | VUnbound
 
 type_synonym env = "var \<rightharpoonup> val"
@@ -154,10 +154,10 @@ abbreviation false :: val where "false \<equiv> VLit (LitBool False)"
 type_synonym elif_block = "(expr \<times> stmt) list \<times> stmt option"
 
 inductive
-  eval_expr  :: "env \<Rightarrow> expr \<Rightarrow> val result \<Rightarrow> bool"                     ("_ \<turnstile>\<^sub>e _ \<Rightarrow> _" [60,0,60] 60) and
-  eval_exprs :: "env \<Rightarrow> expr list \<Rightarrow> val list result \<Rightarrow> bool"    ("_ \<turnstile>\<^sub>e\<^sub>s _ \<Rightarrow> _" [60,0,60] 60) and
-  eval_stmt  :: "env \<Rightarrow> stmt \<Rightarrow> outcome \<Rightarrow> bool"                     ("_ \<turnstile>\<^sub>s _ \<Rightarrow> _" [60,0,60] 60) and
-  eval_elif  :: "env \<Rightarrow> elif_block \<Rightarrow> outcome \<Rightarrow> bool"               ("_ \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f _ \<Rightarrow> _" [60,0,60] 60)
+  eval_expr  :: "env \<Rightarrow> expr \<Rightarrow> val result \<Rightarrow> bool"            ("_ \<turnstile>\<^sub>e _ \<Rightarrow> _" [60,0,60] 60) and
+  eval_exprs :: "env \<Rightarrow> expr list \<Rightarrow> val list result \<Rightarrow> bool"  ("_ \<turnstile>\<^sub>e\<^sub>s _ \<Rightarrow> _" [60,0,60] 60) and
+  eval_stmt  :: "env \<Rightarrow> stmt \<Rightarrow> outcome \<Rightarrow> bool"               ("_ \<turnstile>\<^sub>s _ \<Rightarrow> _" [60,0,60] 60) and
+  eval_elif  :: "env \<Rightarrow> elif_block \<Rightarrow> outcome \<Rightarrow> bool"         ("_ \<turnstile>\<^sub>e\<^sub>l\<^sub>i\<^sub>f _ \<Rightarrow> _" [60,0,60] 60)
 where
 EvalVar: "\<rho> x = Some v \<Longrightarrow> \<rho> \<turnstile>\<^sub>e ExprVar x \<Rightarrow> Val v" |
 EvalLiteral: "\<rho> \<turnstile>\<^sub>e ExprLiteral l \<Rightarrow> Val (VLit l)" |
