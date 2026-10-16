@@ -1,96 +1,115 @@
 theory Syntax
-    imports Main
+  imports Complex_Main
 begin
 
 type_alias var = string
 
-(* qualified name, aka non-empty list of vars *)
-type_synonym qualified_name = "var \<times> var list"
+type_synonym name = "var \<times> var list"
 
-(* literals *)
 datatype lit =
-    LitNumber int
+    LitInt int
+  | LitFloat real  (* reals, so nan is not modelled *)
   | LitString string
   | LitBool bool
   | LitNone
 
-(* patterns *)
+type_synonym 'u args = "'u list \<times> (var \<times> 'u) list"
+
 datatype pat =
     PatLiteral lit
-  | PatNegLit int
   | PatVar var
   | PatWildcard
   | PatList "pat list"
   | PatTuple "pat list"
-  | PatConstr qualified_name "pat list" "(var \<times> pat) list"
-  | PatDict "(var \<times> pat) list"
+  | PatConstr name "pat args"
+  | PatDict "(string \<times> pat) list"
   | PatAs pat var
 
-(* operators *)
 datatype bop =
-    BOpEq
+    BOpBitOr
+  | BOpEq
   | BOpNeq
   | BOpLt
   | BOpLeq
   | BOpGt
   | BOpGeq
-  | BOpBitOr
   | BOpAdd
   | BOpSub
   | BOpMul
   | BOpDiv
+  | BOpFloorDiv
+  | BOpMod
+  | BOpPow
+  | BOpIn
+  | BOpNotIn
 
-datatype uop = UOpNot | UOpNeg
+datatype uop = UOpNot | UOpPos | UOpNeg
 
-(* expressions *)
 datatype expr =
-    ExprVar var                                    (* x *)
-  | ExprLiteral lit                                (* 10 *)
-  | ExprCall expr "expr list" "(var \<times> expr) list"  (* f(1, 2, x = 10) *)
-  | ExprDict "(expr \<times> expr) list"                  (* {"a": 1, "b": 2} *)
-  | ExprAttribute expr var                         (* c.x *)
-  | ExprSubscript expr "expr list"                 (* c["a"] *)
-  | ExprBinOp bop expr expr                        (* x + y *)
-  | ExprUnOp uop expr                              (* not x *)
-  | ExprAnd expr expr                              (* x and y *)
-  | ExprOr expr expr                               (* x or y *)
-  | ExprCond expr expr expr                        (* 10 if True else 20 *)
-  | ExprList "expr list"                           (* [10, 20, 40] *)
-  | ExprTuple "expr list"                          (* (10, 20, True) *)
-  | ExprListComp expr "guard list"                 (* [2*x for x in ...] *)
-  | ExprDictComp "(expr \<times> expr)" "guard list"      (* {x: x**2 for x in range(5)} *)
-  | ExprLambda "var list" expr                     (* lambda x: x * 2 *)
-
-(* guards *)
-and guard =
+    ExprVar var
+  | ExprLiteral lit
+  | ExprCall expr "expr args"
+  | ExprDict "(expr \<times> expr) list"
+  | ExprAttribute expr var
+  | ExprSubscript expr expr
+  | ExprBinOp bop expr expr
+  | ExprUnOp uop expr
+  | ExprAnd expr expr
+  | ExprOr expr expr
+  | ExprCond expr expr expr
+  | ExprList "expr list"
+  | ExprTuple "expr list"
+  | ExprListComp expr "qualifier list"
+  | ExprDictComp expr expr "qualifier list"
+  | ExprLambda "var list" expr
+and qualifier =
     Guard expr
   | Generator var expr
 
-(* types *)
+datatype prim_ty =
+    TyObject
+  | TyNever
+  | TyNone
+  | TyBool
+  | TyInt
+  | TyFloat
+  | TyStr
+  | TySized
+
+datatype ty_expr =
+    TyExprPrim prim_ty
+  | TyExprList ty_expr
+  | TyExprTuple "ty_expr list"
+  | TyExprDict ty_expr
+  | TyExprCallable "ty_expr list" ty_expr
+  | TyExprLiteral lit
+  | TyExprName name "ty_expr list"
+  | TyExprUnion ty_expr ty_expr
+
 datatype ty =
-    TypeAny
-  | TypeNone
-  | TypeBool
-  | TypeInt
-  | TypeFloat
-  | TypeStr
-  | TypeList ty
-  | TypeTuple "ty list"
-  | TypeDict ty
-  | TypeCallable "ty list" ty
-  | TypeClass var
-  | TypeUnion ty ty
+    TyPrim prim_ty
+  | TyList ty
+  | TyTuple "ty list"
+  | TyDict ty
+  | TyCallable "ty list" ty
+  | TyLiteral lit
+  | TyVar var
+  | TyClass name "ty list"
+  | TyUnion ty ty
 
-(* imports *)
+datatype scheme =
+    TyScheme "var list" ty
+  | FieldScheme "var list" "(var \<times> ty) list"
+
 datatype import =
-    Import qualified_name
-  | FromImport qualified_name "var list"
+    Import name
+  | FromImport name "var list"
 
-(* statements *)
 datatype stmt =
     StmtPass
   | StmtSeq stmt stmt
-  | StmtAssign var "ty option" expr
+  | StmtDeclare var ty_expr
+  | StmtAssign var "ty_expr option" expr
   | StmtExpr expr
   | StmtAssert expr
   | StmtAssertMsg expr expr
@@ -99,23 +118,22 @@ datatype stmt =
   | StmtIf expr stmt "(expr \<times> stmt) list" "stmt option"
   | StmtMatch expr "(pat \<times> stmt) list"
   | StmtMutualRegion "func list"
+and func = Def var "(var \<times> ty_expr) list" ty_expr stmt
 
-(* function definitions *)
-and func = Def var "(var \<times> ty) list" ty stmt
-
-(* field lists *)
 datatype fields =
-    FieldList "(string \<times> ty) list"
+    FieldList "(var \<times> ty_expr) list"
   | EmptyFieldList
 
-(* top-level statements *)
+datatype type_def =
+    Dataclass var "var list" fields
+  | DataclassExtend var "var list" name "ty_expr list" fields
+  | TypeAlias var "var list" ty_expr
+
 datatype top_stmt =
     Stmt stmt
   | TopSeq top_stmt top_stmt
-  | Dataclass var fields
-  | DataclassExtend var var fields
+  | TypeDefs "type_def list"
 
-(* module body *)
 datatype module_body = ModuleBody "import list" top_stmt
 
 end

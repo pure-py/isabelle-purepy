@@ -2,7 +2,11 @@ name: build
 
 on:
   push:
+    paths-ignore:
+      - README.md
   pull_request:
+    paths-ignore:
+      - README.md
   workflow_dispatch:
 
 jobs:
@@ -24,12 +28,10 @@ jobs:
       image: makarius/isabelle:${{ needs.version.outputs.isabelle }}
       options: --user root
     steps:
-      - name: Install make and LaTeX
+      - name: Install make
         run: |
           apt-get update -q
-          apt-get install -y -q --no-install-recommends \
-            make texlive-latex-base texlive-latex-recommended texlive-fonts-recommended \
-            texlive-plain-generic lmodern
+          apt-get install -y -q --no-install-recommends make
 
       - uses: actions/checkout@v4
 
