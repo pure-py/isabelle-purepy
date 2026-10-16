@@ -36,9 +36,3 @@ jobs:
       - name: Build session
         timeout-minutes: 20
         run: make build ISABELLE=/home/isabelle/Isabelle/bin/isabelle
-
-      - name: Upload document
-        uses: actions/upload-artifact@v4
-        with:
-          name: document
-          path: output/document.pdf
