@@ -67,14 +67,14 @@ and qualifier =
   | Generator var expr
 
 datatype prim_ty =
-    TyObject
-  | TyNever
-  | TyNone
-  | TyBool
-  | TyInt
-  | TyFloat
-  | TyStr
-  | TySized
+    object
+  | Never
+  | NoneType
+  | bool
+  | int
+  | float
+  | str
+  | Sized
 
 datatype ty_expr =
     TyExprPrim prim_ty
