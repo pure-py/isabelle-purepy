@@ -48,10 +48,10 @@ where
 "R \<oplus>\<^sub>R Returns\<^sub>R = Some R" |
 "Returns\<^sub>R \<oplus>\<^sub>R R = Some R"
 
-fun override_outcome :: "static_outcome \<Rightarrow> static_outcome \<Rightarrow> static_outcome" (infixl "++\<^sub>R" 100)
+fun override_outcome :: "static_outcome \<Rightarrow> static_outcome \<Rightarrow> static_outcome" (infixl "\<otimes>\<^sub>R" 100)
 where
-"Assigns\<^sub>R \<Delta> ++\<^sub>R Assigns\<^sub>R \<Delta>' = Assigns\<^sub>R (\<Delta> ++ \<Delta>')" |
-"_ ++\<^sub>R _ = Returns\<^sub>R"
+"Assigns\<^sub>R \<Delta> \<otimes>\<^sub>R Assigns\<^sub>R \<Delta>' = Assigns\<^sub>R (\<Delta> \<otimes> \<Delta>')" |
+"_ \<otimes>\<^sub>R _ = Returns\<^sub>R"
 
 abbreviation prim :: "prim_ty \<Rightarrow> ty" where "prim \<equiv> TyPrim"
 
@@ -209,7 +209,7 @@ where
 "number_literal _ = False"
 
 abbreviation bind_params :: "cxt \<Rightarrow> var list \<Rightarrow> ty list \<Rightarrow> cxt"
-where "bind_params \<Gamma> xs \<tau>s \<equiv> \<Gamma> ++ map_of (zip xs (map Ty \<tau>s))"
+where "bind_params \<Gamma> xs \<tau>s \<equiv> \<Gamma> \<otimes> map_of (zip xs (map Ty \<tau>s))"
 
 
 function (sequential)
@@ -303,7 +303,7 @@ where
 "scheme_cxt_entry \<pi> = Scheme \<pi>"
 
 abbreviation bind_type_params :: "cxt \<Rightarrow> var list \<Rightarrow> cxt"
-where "bind_type_params \<Gamma> \<alpha>s \<equiv> \<Gamma> ++ map_of (map (\<lambda>\<alpha>. (\<alpha>, TypeVar)) \<alpha>s)"
+where "bind_type_params \<Gamma> \<alpha>s \<equiv> \<Gamma> \<otimes> map_of (map (\<lambda>\<alpha>. (\<alpha>, TypeVar)) \<alpha>s)"
 
 fun def_signature :: "cxt \<Rightarrow> func \<Rightarrow> scheme option"
 where
@@ -354,13 +354,13 @@ where
    else None)" |
 "stmt_ty \<Gamma> \<zeta> (StmtSeq s s') =
   (case stmt_ty \<Gamma> \<zeta> s of
-     Some (Assigns\<^sub>R \<Delta>) \<Rightarrow> map_option (\<lambda>R. Assigns\<^sub>R \<Delta> ++\<^sub>R R) (stmt_ty (\<Gamma> ++ \<Delta>) \<zeta> s')
+     Some (Assigns\<^sub>R \<Delta>) \<Rightarrow> map_option (\<lambda>R. Assigns\<^sub>R \<Delta> \<otimes>\<^sub>R R) (stmt_ty (\<Gamma> \<otimes> \<Delta>) \<zeta> s')
    | _ \<Rightarrow> None)" |
 "stmt_ty \<Gamma> \<zeta> (StmtMutualRegion ds) =
   (case those (map (def_signature \<Gamma>) ds) of
      Some \<pi>s \<Rightarrow>
        let \<Delta> = map_of (zip (map def_name ds) (map scheme_cxt_entry \<pi>s)) in
-       if defs_ty (\<Gamma> ++ \<Delta>) ds \<pi>s then Some (Assigns\<^sub>R \<Delta>) else None
+       if defs_ty (\<Gamma> \<otimes> \<Delta>) ds \<pi>s then Some (Assigns\<^sub>R \<Delta>) else None
    | None \<Rightarrow> None)" |
 "stmt_ty \<Gamma> \<zeta> (StmtMatch e bs) = None" |
 
@@ -375,7 +375,7 @@ where
   (distinct (map fst xps) \<and> length xps = length \<sigma>s \<and>
    (case scope Unbound (set (map fst xps)) s of
       Some \<Delta> \<Rightarrow>
-        (case stmt_ty (bind_params (bind_type_params \<Gamma> \<alpha>s) (map fst xps) \<sigma>s ++ \<Delta>) (Some \<tau>) s of
+        (case stmt_ty (bind_params (bind_type_params \<Gamma> \<alpha>s) (map fst xps) \<sigma>s \<otimes> \<Delta>) (Some \<tau>) s of
            Some R \<Rightarrow> R = Returns\<^sub>R \<or> \<tau> \<approx> prim TyNone
          | None \<Rightarrow> False)
     | None \<Rightarrow> False))" |
