@@ -168,42 +168,88 @@ where
 abbreviation comparable :: "ty \<Rightarrow> ty \<Rightarrow> bool" where "comparable \<sigma> \<tau> \<equiv> \<sigma> <: \<tau> \<or> \<tau> <: \<sigma>"
 
 
-fun resolve_binop :: "bop \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> ty option"
+(* Overload of a binary operator at operand types: operand bounds and result type *)
+inductive overload :: "bop \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> (ty \<times> ty) \<times> ty \<Rightarrow> bool"
 where
-"resolve_binop op \<sigma> \<sigma>' =
-  (if op \<in> {BOpEq, BOpNeq} then (if equality_type \<sigma> \<and> equality_type \<sigma>' \<and> comparable \<sigma> \<sigma>' then Some (TyPrim bool) else None)
-   else if op \<in> {BOpIn, BOpNotIn} then
-     (case \<sigma>' of
-        TyList \<tau> \<Rightarrow> if comparable \<sigma> \<tau> then Some (TyPrim bool) else None
-      | TyTuple \<tau>s \<Rightarrow> if comparable \<sigma> (joins \<tau>s) then Some (TyPrim bool) else None
-      | TyDict _ \<Rightarrow> if \<sigma> <: TyPrim str then Some (TyPrim bool) else None
-      | _ \<Rightarrow> if \<sigma> <: TyPrim str \<and> \<sigma>' <: TyPrim str then Some (TyPrim bool) else None)
-   else if op \<in> {BOpLt, BOpLeq, BOpGt, BOpGeq} then
-     (if \<sigma> <: TyPrim float \<and> \<sigma>' <: TyPrim float \<or> \<sigma> <: TyPrim str \<and> \<sigma>' <: TyPrim str
-      then Some (TyPrim bool) else None)
-   else if op = BOpPow \<and> (\<exists>n. \<sigma>' = TyLiteral (LitInt n)) \<and> \<sigma> <: TyPrim int then
-     Some (if (\<exists>n \<ge> 0. \<sigma>' = TyLiteral (LitInt n)) then (TyPrim int) else TyPrim float)
-   else if op \<in> {BOpAdd, BOpSub, BOpMul, BOpFloorDiv, BOpMod} \<and> \<sigma> <: TyPrim int \<and> \<sigma>' <: TyPrim int
-   then Some (TyPrim int)
-   else if op \<in> {BOpAdd, BOpSub, BOpMul, BOpFloorDiv, BOpMod, BOpDiv, BOpPow}
-           \<and> \<sigma> <: TyPrim float \<and> \<sigma>' <: TyPrim float
-   then Some (TyPrim float)
-   else if op = BOpAdd \<and> \<sigma> <: TyPrim str \<and> \<sigma>' <: TyPrim str then Some (TyPrim str)
-   else case (op, \<sigma>, \<sigma>') of
-     (BOpAdd, TyList \<tau>, TyList \<tau>') \<Rightarrow> Some (TyList (\<tau> \<squnion> \<tau>'))
-   | (BOpAdd, TyTuple \<tau>s, TyTuple \<tau>s') \<Rightarrow> Some (TyTuple (\<tau>s @ \<tau>s'))
-   | (BOpMul, TyList \<tau>, _) \<Rightarrow> if \<sigma>' <: TyPrim int then Some (TyList \<tau>) else None
-   | (BOpMul, _, TyList \<tau>) \<Rightarrow> if \<sigma> <: TyPrim int then Some (TyList \<tau>) else None
-   | (BOpMul, _, _) \<Rightarrow>
-       if \<sigma> <: TyPrim str \<and> \<sigma>' <: TyPrim int \<or> \<sigma> <: TyPrim int \<and> \<sigma>' <: TyPrim str
-       then Some (TyPrim str) else None
-   | _ \<Rightarrow> None)"
+OverloadEq:
+  "\<lbrakk> op \<in> {BOpEq, BOpNeq} ; equality_type \<sigma>\<^sub>1 ; equality_type \<sigma>\<^sub>2 ; comparable \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<rbrakk>
+  \<Longrightarrow> overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 ((\<sigma>\<^sub>1, \<sigma>\<^sub>2), TyPrim bool)" |
+OverloadInList:
+  "\<lbrakk> op \<in> {BOpIn, BOpNotIn} ; comparable \<sigma>\<^sub>1 \<tau> \<rbrakk>
+  \<Longrightarrow> overload op \<sigma>\<^sub>1 (TyList \<tau>) ((\<sigma>\<^sub>1, TyList \<tau>), TyPrim bool)" |
+OverloadInTuple:
+  "\<lbrakk> op \<in> {BOpIn, BOpNotIn} ; comparable \<sigma>\<^sub>1 (joins \<tau>s) \<rbrakk>
+  \<Longrightarrow> overload op \<sigma>\<^sub>1 (TyTuple \<tau>s) ((\<sigma>\<^sub>1, TyTuple \<tau>s), TyPrim bool)" |
+OverloadInStr:
+  "\<lbrakk> op \<in> {BOpIn, BOpNotIn} ; \<sigma>\<^sub>1 <: TyPrim str ; \<sigma>\<^sub>2 <: TyPrim str \<rbrakk>
+  \<Longrightarrow> overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 ((TyPrim str, TyPrim str), TyPrim bool)" |
+OverloadInDict:
+  "\<lbrakk> op \<in> {BOpIn, BOpNotIn} ; \<sigma>\<^sub>1 <: TyPrim str \<rbrakk>
+  \<Longrightarrow> overload op \<sigma>\<^sub>1 (TyDict \<tau>) ((TyPrim str, TyDict \<tau>), TyPrim bool)" |
+OverloadOrderFloat:
+  "\<lbrakk> op \<in> {BOpLt, BOpLeq, BOpGt, BOpGeq} ; \<sigma>\<^sub>1 <: TyPrim float ; \<sigma>\<^sub>2 <: TyPrim float \<rbrakk>
+  \<Longrightarrow> overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 ((TyPrim float, TyPrim float), TyPrim bool)" |
+OverloadOrderStr:
+  "\<lbrakk> op \<in> {BOpLt, BOpLeq, BOpGt, BOpGeq} ; \<sigma>\<^sub>1 <: TyPrim str ; \<sigma>\<^sub>2 <: TyPrim str \<rbrakk>
+  \<Longrightarrow> overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 ((TyPrim str, TyPrim str), TyPrim bool)" |
+OverloadArithInt:
+  "\<lbrakk> op \<in> {BOpAdd, BOpSub, BOpMul, BOpFloorDiv, BOpMod} ; \<sigma>\<^sub>1 <: TyPrim int ; \<sigma>\<^sub>2 <: TyPrim int \<rbrakk>
+  \<Longrightarrow> overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 ((TyPrim int, TyPrim int), TyPrim int)" |
+OverloadArithFloat:
+  "\<lbrakk> op \<in> {BOpAdd, BOpSub, BOpMul, BOpFloorDiv, BOpMod, BOpDiv, BOpPow} ; \<sigma>\<^sub>1 <: TyPrim float
+   ; \<sigma>\<^sub>2 <: TyPrim float \<rbrakk>
+  \<Longrightarrow> overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 ((TyPrim float, TyPrim float), TyPrim float)" |
+OverloadAddStr:
+  "\<lbrakk> \<sigma>\<^sub>1 <: TyPrim str ; \<sigma>\<^sub>2 <: TyPrim str \<rbrakk>
+  \<Longrightarrow> overload BOpAdd \<sigma>\<^sub>1 \<sigma>\<^sub>2 ((TyPrim str, TyPrim str), TyPrim str)" |
+OverloadAddList: "overload BOpAdd (TyList \<sigma>) (TyList \<tau>) ((TyList \<sigma>, TyList \<tau>), TyList (\<sigma> \<squnion> \<tau>))" |
+OverloadAddTuple: "overload BOpAdd (TyTuple \<sigma>s) (TyTuple \<tau>s) ((TyTuple \<sigma>s, TyTuple \<tau>s), TyTuple (\<sigma>s @ \<tau>s))" |
+OverloadMulStrInt:
+  "\<lbrakk> \<sigma>\<^sub>1 <: TyPrim str ; \<sigma>\<^sub>2 <: TyPrim int \<rbrakk>
+  \<Longrightarrow> overload BOpMul \<sigma>\<^sub>1 \<sigma>\<^sub>2 ((TyPrim str, TyPrim int), TyPrim str)" |
+OverloadMulIntStr:
+  "\<lbrakk> \<sigma>\<^sub>1 <: TyPrim int ; \<sigma>\<^sub>2 <: TyPrim str \<rbrakk>
+  \<Longrightarrow> overload BOpMul \<sigma>\<^sub>1 \<sigma>\<^sub>2 ((TyPrim int, TyPrim str), TyPrim str)" |
+OverloadMulListInt:
+  "\<sigma>\<^sub>2 <: TyPrim int \<Longrightarrow> overload BOpMul (TyList \<tau>) \<sigma>\<^sub>2 ((TyList \<tau>, TyPrim int), TyList \<tau>)" |
+OverloadMulIntList:
+  "\<sigma>\<^sub>1 <: TyPrim int \<Longrightarrow> overload BOpMul \<sigma>\<^sub>1 (TyList \<tau>) ((TyPrim int, TyList \<tau>), TyList \<tau>)" |
+OverloadPowNat:
+  "\<lbrakk> \<sigma>\<^sub>1 <: TyPrim int ; n \<ge> 0 \<rbrakk>
+  \<Longrightarrow> overload BOpPow \<sigma>\<^sub>1 (TyLiteral (LitInt n)) ((TyPrim int, TyLiteral (LitInt n)), TyPrim int)" |
+OverloadPowNeg:
+  "\<lbrakk> \<sigma>\<^sub>1 <: TyPrim int ; n < 0 \<rbrakk>
+  \<Longrightarrow> overload BOpPow \<sigma>\<^sub>1 (TyLiteral (LitInt n)) ((TyPrim int, TyLiteral (LitInt n)), TyPrim float)" |
+OverloadBase:
+  "overload op (base_type \<sigma>\<^sub>1) (base_type \<sigma>\<^sub>2) ((\<tau>\<^sub>1, \<tau>\<^sub>2), \<tau>) \<Longrightarrow> overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 ((\<tau>\<^sub>1, \<tau>\<^sub>2), \<tau>)"
 
-fun resolve_unop :: "uop \<Rightarrow> ty \<Rightarrow> ty option"
+inductive unop_overload :: "uop \<Rightarrow> ty \<Rightarrow> ty \<times> ty \<Rightarrow> bool"
 where
-"resolve_unop UOpNot \<sigma> = (if \<sigma> <: TyPrim bool then Some (TyPrim bool) else None)" |
-"resolve_unop _ \<sigma> =
-  (if \<sigma> <: TyPrim int then Some (TyPrim int) else if \<sigma> <: TyPrim float then Some (TyPrim float) else None)"
+UnopOverloadNot: "\<sigma> <: TyPrim bool \<Longrightarrow> unop_overload UOpNot \<sigma> (TyPrim bool, TyPrim bool)" |
+UnopOverloadInt:
+  "\<lbrakk> op \<in> {UOpPos, UOpNeg} ; \<sigma> <: TyPrim int \<rbrakk> \<Longrightarrow> unop_overload op \<sigma> (TyPrim int, TyPrim int)" |
+UnopOverloadFloat:
+  "\<lbrakk> op \<in> {UOpPos, UOpNeg} ; \<sigma> <: TyPrim float \<rbrakk> \<Longrightarrow> unop_overload op \<sigma> (TyPrim float, TyPrim float)" |
+UnopOverloadBase: "unop_overload op (base_type \<sigma>) (\<tau>, \<tau>') \<Longrightarrow> unop_overload op \<sigma> (\<tau>, \<tau>')"
+
+(* Most specific overload: its bounds below those of every other applicable overload *)
+definition most_specific :: "bop \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> (ty \<times> ty) \<times> ty \<Rightarrow> bool"
+where
+"most_specific op \<sigma>\<^sub>1 \<sigma>\<^sub>2 b \<longleftrightarrow>
+  overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 b \<and> (\<forall>b'. overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 b' \<longrightarrow> fst (fst b) <: fst (fst b') \<and> snd (fst b) <: snd (fst b'))"
+
+definition unop_most_specific :: "uop \<Rightarrow> ty \<Rightarrow> ty \<times> ty \<Rightarrow> bool"
+where
+"unop_most_specific op \<sigma> b \<longleftrightarrow> unop_overload op \<sigma> b \<and> (\<forall>b'. unop_overload op \<sigma> b' \<longrightarrow> fst b <: fst b')"
+
+definition resolve_binop :: "bop \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> ty option"
+where
+"resolve_binop op \<sigma>\<^sub>1 \<sigma>\<^sub>2 =
+  (if \<exists>!b. most_specific op \<sigma>\<^sub>1 \<sigma>\<^sub>2 b then Some (snd (THE b. most_specific op \<sigma>\<^sub>1 \<sigma>\<^sub>2 b)) else None)"
+
+definition resolve_unop :: "uop \<Rightarrow> ty \<Rightarrow> ty option"
+where
+"resolve_unop op \<sigma> = (if \<exists>!b. unop_most_specific op \<sigma> b then Some (snd (THE b. unop_most_specific op \<sigma> b)) else None)"
 
 fun number_literal :: "expr \<Rightarrow> bool"
 where
