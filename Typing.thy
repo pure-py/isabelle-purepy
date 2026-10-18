@@ -14,22 +14,21 @@ datatype cxt_entry =
 
 type_synonym cxt = "var \<rightharpoonup> cxt_entry"
 
-(* Context entry merged with undefined: possibly unassigned at the same type or scheme; undefined for the
-   other forms, which merge only with themselves *)
-fun possibly_unassigned :: "cxt_entry \<Rightarrow> cxt_entry option"
+(* Possibly unassigned at the same type or scheme; the other forms merge only with themselves *)
+fun merge_undefined :: "cxt_entry \<Rightarrow> cxt_entry option"
 where
-"possibly_unassigned (Ty \<tau>) = Some (PU \<tau>)" |
-"possibly_unassigned (DU \<tau>) = Some (PU \<tau>)" |
-"possibly_unassigned (PU \<tau>) = Some (PU \<tau>)" |
-"possibly_unassigned (Scheme \<pi>) = Some (PUScheme \<pi>)" |
-"possibly_unassigned (PUScheme \<pi>) = Some (PUScheme \<pi>)" |
-"possibly_unassigned _ = None"
+"merge_undefined (Ty \<tau>) = Some (PU \<tau>)" |
+"merge_undefined (DU \<tau>) = Some (PU \<tau>)" |
+"merge_undefined (PU \<tau>) = Some (PU \<tau>)" |
+"merge_undefined (Scheme \<pi>) = Some (PUScheme \<pi>)" |
+"merge_undefined (PUScheme \<pi>) = Some (PUScheme \<pi>)" |
+"merge_undefined _ = None"
 
 definition merge_cxt_entry :: "cxt_entry option \<Rightarrow> cxt_entry option \<Rightarrow> cxt_entry option option"
 where
 "merge_cxt_entry \<theta> \<theta>' =
   (if \<theta> = \<theta>' then Some \<theta>
-   else case (map_option possibly_unassigned \<theta>, map_option possibly_unassigned \<theta>') of
+   else case (map_option merge_undefined \<theta>, map_option merge_undefined \<theta>') of
      (Some (Some \<theta>\<^sub>P\<^sub>U), Some (Some \<theta>\<^sub>P\<^sub>U')) \<Rightarrow> if \<theta>\<^sub>P\<^sub>U = \<theta>\<^sub>P\<^sub>U' then Some (Some \<theta>\<^sub>P\<^sub>U) else None
    | (Some (Some \<theta>\<^sub>P\<^sub>U), None) \<Rightarrow> Some (Some \<theta>\<^sub>P\<^sub>U)
    | (None, Some (Some \<theta>\<^sub>P\<^sub>U')) \<Rightarrow> Some (Some \<theta>\<^sub>P\<^sub>U')
