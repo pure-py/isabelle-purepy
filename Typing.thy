@@ -262,8 +262,7 @@ function (sequential)
   synths :: "cxt \<Rightarrow> expr list \<Rightarrow> ty option list" and
   check :: "cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> bool" and
   check' :: "cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> bool" and
-  checks :: "cxt \<Rightarrow> expr list \<Rightarrow> ty list \<Rightarrow> bool" and
-  checks_missing :: "cxt \<Rightarrow> expr list \<Rightarrow> ty option list \<Rightarrow> ty \<Rightarrow> bool"
+  checks :: "cxt \<Rightarrow> expr list \<Rightarrow> ty list \<Rightarrow> bool"
 where
 "synth \<Gamma> (ExprVar x) = (case \<Gamma> x of Some (Ty \<tau>) \<Rightarrow> Some \<tau> | _ \<Rightarrow> None)" |
 "synth \<Gamma> (ExprLiteral l) = (case l of LitFloat _ \<Rightarrow> Some (TyPrim float) | _ \<Rightarrow> Some (TyLiteral l))" |
@@ -297,7 +296,7 @@ where
    else None)" |
 "synth \<Gamma> (ExprList es) =
   (let \<sigma>s = synths \<Gamma> es; \<tau> = joins (map base_type (map the (filter (\<lambda>\<sigma>. \<sigma> \<noteq> None) \<sigma>s))) in
-   if es \<noteq> [] \<and> (\<exists>\<sigma> \<in> set \<sigma>s. \<sigma> \<noteq> None) \<and> checks_missing \<Gamma> es \<sigma>s \<tau>
+   if es \<noteq> [] \<and> (\<exists>\<sigma> \<in> set \<sigma>s. \<sigma> \<noteq> None) \<and> (\<forall>j < length es. \<sigma>s ! j = None \<longrightarrow> check \<Gamma> (es ! j) \<tau>)
    then Some (TyList \<tau>) else None)" |
 "synth \<Gamma> (ExprTuple es) = map_option TyTuple (those (synths \<Gamma> es))" |
 "synth \<Gamma> _ = None" |
@@ -326,11 +325,7 @@ where
 
 "checks \<Gamma> [] [] = True" |
 "checks \<Gamma> (e # es) (\<tau> # \<tau>s) = (check \<Gamma> e \<tau> \<and> checks \<Gamma> es \<tau>s)" |
-"checks \<Gamma> _ _ = False" |
-
-"checks_missing \<Gamma> (e # es) (None # \<sigma>s) \<tau> = (check \<Gamma> e \<tau> \<and> checks_missing \<Gamma> es \<sigma>s \<tau>)" |
-"checks_missing \<Gamma> (e # es) (Some _ # \<sigma>s) \<tau> = checks_missing \<Gamma> es \<sigma>s \<tau>" |
-"checks_missing \<Gamma> _ _ \<tau> = True"
+"checks \<Gamma> _ _ = False"
 by pat_completeness auto
 
 termination
@@ -339,9 +334,8 @@ by (relation "measure (\<lambda>x. case x of
    | Inl (Inr (Inl (\<Gamma>, es))) \<Rightarrow> 3 * size_list size es
    | Inl (Inr (Inr (\<Gamma>, e, \<tau>))) \<Rightarrow> 3 * size e + 2
    | Inr (Inl (\<Gamma>, e, \<tau>)) \<Rightarrow> 3 * size e + 1
-   | Inr (Inr (Inl (\<Gamma>, es, \<tau>s))) \<Rightarrow> 3 * size_list size es + 2
-   | Inr (Inr (Inr (\<Gamma>, es, \<sigma>s, \<tau>))) \<Rightarrow> 3 * size_list size es + 2)")
-   auto
+   | Inr (Inr (\<Gamma>, es, \<tau>s)) \<Rightarrow> 3 * size_list size es + 2)")
+   (auto dest!: nth_mem intro: size_list_estimation' simp: less_Suc_eq_le)
 
 (* Context entry binding a function name: its type scheme, or its type when there are no type parameters *)
 fun scheme_cxt_entry :: "scheme \<Rightarrow> cxt_entry"
