@@ -14,7 +14,8 @@ datatype cxt_entry =
 
 type_synonym cxt = "var \<rightharpoonup> cxt_entry"
 
-(* Possibly-unassigned form of a context entry; None for an entry with no such form *)
+(* Context entry merged with undefined: possibly unassigned at the same type or scheme; undefined for the
+   other forms, which merge only with themselves *)
 fun possibly_unassigned :: "cxt_entry \<Rightarrow> cxt_entry option"
 where
 "possibly_unassigned (Ty \<tau>) = Some (PU \<tau>)" |
