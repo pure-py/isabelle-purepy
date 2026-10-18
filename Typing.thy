@@ -337,7 +337,7 @@ by (relation "inv_image (less_than <*lex*> less_than) (\<lambda>x. case x of
    | Inr (Inr (Inr (\<Gamma>, es, \<tau>s))) \<Rightarrow> (size_list size es, 2))")
    (auto dest!: nth_mem intro: size_list_estimation' simp: less_Suc_eq_le)
 
-(* Context entry for a function name: its type scheme, or its type when there are no type parameters *)
+(* Context entry at a type scheme: the scheme, or its type when there are no type parameters *)
 fun scheme_cxt_entry :: "scheme \<Rightarrow> cxt_entry"
 where
 "scheme_cxt_entry (TyScheme [] \<tau>) = Ty \<tau>" |
