@@ -155,15 +155,15 @@ where
   (case (resolve_type \<Gamma> \<psi>, resolve_type \<Gamma> \<psi>') of (Some \<sigma>, Some \<tau>) \<Rightarrow> Some (TyUnion \<sigma> \<tau>) | _ \<Rightarrow> None)" |
 "resolve_type \<Gamma> _ = None"
 
-fun eq_type :: "ty \<Rightarrow> bool"
+fun equality_type :: "ty \<Rightarrow> bool"
 where
-"eq_type (TyPrim _) = True" |
-"eq_type (TyLiteral _) = True" |
-"eq_type (TyList \<tau>) = eq_type \<tau>" |
-"eq_type (TyDict \<tau>) = eq_type \<tau>" |
-"eq_type (TyTuple \<tau>s) = list_all eq_type \<tau>s" |
-"eq_type (TyUnion \<sigma> \<tau>) = (eq_type \<sigma> \<and> eq_type \<tau>)" |
-"eq_type _ = False"
+"equality_type (TyPrim _) = True" |
+"equality_type (TyLiteral _) = True" |
+"equality_type (TyList \<tau>) = equality_type \<tau>" |
+"equality_type (TyDict \<tau>) = equality_type \<tau>" |
+"equality_type (TyTuple \<tau>s) = list_all equality_type \<tau>s" |
+"equality_type (TyUnion \<sigma> \<tau>) = (equality_type \<sigma> \<and> equality_type \<tau>)" |
+"equality_type _ = False"
 
 abbreviation comparable :: "ty \<Rightarrow> ty \<Rightarrow> bool" where "comparable \<sigma> \<tau> \<equiv> \<sigma> <: \<tau> \<or> \<tau> <: \<sigma>"
 
@@ -171,7 +171,7 @@ abbreviation comparable :: "ty \<Rightarrow> ty \<Rightarrow> bool" where "compa
 fun resolve_binop :: "bop \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> ty option"
 where
 "resolve_binop op \<sigma> \<sigma>' =
-  (if op \<in> {BOpEq, BOpNeq} then (if eq_type \<sigma> \<and> eq_type \<sigma>' \<and> comparable \<sigma> \<sigma>' then Some (TyPrim bool) else None)
+  (if op \<in> {BOpEq, BOpNeq} then (if equality_type \<sigma> \<and> equality_type \<sigma>' \<and> comparable \<sigma> \<sigma>' then Some (TyPrim bool) else None)
    else if op \<in> {BOpIn, BOpNotIn} then
      (case \<sigma>' of
         TyList \<tau> \<Rightarrow> if comparable \<sigma> \<tau> then Some (TyPrim bool) else None
