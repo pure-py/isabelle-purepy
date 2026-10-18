@@ -261,7 +261,7 @@ function (sequential)
   synth :: "cxt \<Rightarrow> expr \<Rightarrow> ty option" and
   synths :: "cxt \<Rightarrow> expr list \<Rightarrow> ty option list" and
   check :: "cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> bool" and
-  check_intro :: "cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> bool" and
+  check' :: "cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> bool" and
   checks :: "cxt \<Rightarrow> expr list \<Rightarrow> ty list \<Rightarrow> bool" and
   checks_missing :: "cxt \<Rightarrow> expr list \<Rightarrow> ty option list \<Rightarrow> ty \<Rightarrow> bool"
 where
@@ -305,13 +305,13 @@ where
 "synths \<Gamma> [] = []" |
 "synths \<Gamma> (e # es) = synth \<Gamma> e # synths \<Gamma> es" |
 
-"check \<Gamma> e \<tau> = (check_intro \<Gamma> e \<tau> \<or> (case synth \<Gamma> e of Some \<sigma> \<Rightarrow> \<sigma> <: \<tau> | None \<Rightarrow> False))" |
+"check \<Gamma> e \<tau> = (check' \<Gamma> e \<tau> \<or> (case synth \<Gamma> e of Some \<sigma> \<Rightarrow> \<sigma> <: \<tau> | None \<Rightarrow> False))" |
 
-"check_intro \<Gamma> (ExprLambda xs e) \<tau> =
+"check' \<Gamma> (ExprLambda xs e) \<tau> =
   (case \<tau> of
      TyCallable \<tau>s \<tau>' \<Rightarrow> distinct xs \<and> length xs = length \<tau>s \<and> check (\<Gamma>(xs [\<mapsto>] map Ty \<tau>s)) e \<tau>'
    | _ \<Rightarrow> False)" |
-"check_intro \<Gamma> (ExprCall e (es, kws)) \<tau> =
+"check' \<Gamma> (ExprCall e (es, kws)) \<tau> =
   (case e of
      ExprLambda xs e' \<Rightarrow>
        kws = [] \<and>
@@ -319,10 +319,10 @@ where
           Some \<tau>s \<Rightarrow> distinct xs \<and> length xs = length es \<and> check (\<Gamma>(xs [\<mapsto>] map Ty \<tau>s)) e' \<tau>
         | None \<Rightarrow> False)
    | _ \<Rightarrow> False)" |
-"check_intro \<Gamma> (ExprList es) \<tau> = (case \<tau> of TyList \<tau>' \<Rightarrow> checks \<Gamma> es (replicate (length es) \<tau>') | _ \<Rightarrow> False)" |
-"check_intro \<Gamma> (ExprTuple es) \<tau> = (case \<tau> of TyTuple \<tau>s \<Rightarrow> checks \<Gamma> es \<tau>s | _ \<Rightarrow> False)" |
-"check_intro \<Gamma> (ExprCond e\<^sub>1 e e\<^sub>2) \<tau> = (check \<Gamma> e (TyPrim bool) \<and> check \<Gamma> e\<^sub>1 \<tau> \<and> check \<Gamma> e\<^sub>2 \<tau>)" |
-"check_intro \<Gamma> _ _ = False" |
+"check' \<Gamma> (ExprList es) \<tau> = (case \<tau> of TyList \<tau>' \<Rightarrow> checks \<Gamma> es (replicate (length es) \<tau>') | _ \<Rightarrow> False)" |
+"check' \<Gamma> (ExprTuple es) \<tau> = (case \<tau> of TyTuple \<tau>s \<Rightarrow> checks \<Gamma> es \<tau>s | _ \<Rightarrow> False)" |
+"check' \<Gamma> (ExprCond e\<^sub>1 e e\<^sub>2) \<tau> = (check \<Gamma> e (TyPrim bool) \<and> check \<Gamma> e\<^sub>1 \<tau> \<and> check \<Gamma> e\<^sub>2 \<tau>)" |
+"check' \<Gamma> _ _ = False" |
 
 "checks \<Gamma> [] [] = True" |
 "checks \<Gamma> (e # es) (\<tau> # \<tau>s) = (check \<Gamma> e \<tau> \<and> checks \<Gamma> es \<tau>s)" |
