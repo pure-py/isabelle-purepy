@@ -37,7 +37,8 @@ where
 definition merge :: "cxt \<Rightarrow> cxt \<Rightarrow> cxt option" (infixl "\<oplus>" 65)
 where
 "\<Gamma> \<oplus> \<Gamma>' =
-  (if \<forall>x. merge_cxt_entry (\<Gamma> x) (\<Gamma>' x) \<noteq> None then Some (\<lambda>x. the (merge_cxt_entry (\<Gamma> x) (\<Gamma>' x))) else None)"
+  (let m = \<lambda>x. merge_cxt_entry (\<Gamma> x) (\<Gamma>' x) in
+   if \<forall>x. \<exists>\<theta>. m x = Some \<theta> then Some (the \<circ> m) else None)"
 
 datatype static_outcome = Assigns\<^sub>R cxt | Returns\<^sub>R
 
