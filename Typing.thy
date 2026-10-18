@@ -256,9 +256,6 @@ where
 "numeric_literal (ExprLiteral (LitFloat _)) = True" |
 "numeric_literal _ = False"
 
-abbreviation bind_params :: "cxt \<Rightarrow> var list \<Rightarrow> ty list \<Rightarrow> cxt"
-where "bind_params \<Gamma> xs \<tau>s \<equiv> \<Gamma> \<otimes> map_of (zip xs (map Ty \<tau>s))"
-
 
 function (sequential)
   synth :: "cxt \<Rightarrow> expr \<Rightarrow> ty option" and
@@ -275,7 +272,7 @@ where
    else case e of
      ExprLambda xs e' \<Rightarrow>
        (case those (synths \<Gamma> es) of
-          Some \<tau>s \<Rightarrow> if distinct xs \<and> length xs = length es then synth (bind_params \<Gamma> xs \<tau>s) e' else None
+          Some \<tau>s \<Rightarrow> if distinct xs \<and> length xs = length es then synth (\<Gamma>(xs [\<mapsto>] map Ty \<tau>s)) e' else None
         | None \<Rightarrow> None)
    | _ \<Rightarrow>
        (case synth \<Gamma> e of
@@ -312,14 +309,14 @@ where
 
 "check_intro \<Gamma> (ExprLambda xs e) \<tau> =
   (case \<tau> of
-     TyCallable \<tau>s \<tau>' \<Rightarrow> distinct xs \<and> length xs = length \<tau>s \<and> check (bind_params \<Gamma> xs \<tau>s) e \<tau>'
+     TyCallable \<tau>s \<tau>' \<Rightarrow> distinct xs \<and> length xs = length \<tau>s \<and> check (\<Gamma>(xs [\<mapsto>] map Ty \<tau>s)) e \<tau>'
    | _ \<Rightarrow> False)" |
 "check_intro \<Gamma> (ExprCall e (es, kws)) \<tau> =
   (case e of
      ExprLambda xs e' \<Rightarrow>
        kws = [] \<and>
        (case those (synths \<Gamma> es) of
-          Some \<tau>s \<Rightarrow> distinct xs \<and> length xs = length es \<and> check (bind_params \<Gamma> xs \<tau>s) e' \<tau>
+          Some \<tau>s \<Rightarrow> distinct xs \<and> length xs = length es \<and> check (\<Gamma>(xs [\<mapsto>] map Ty \<tau>s)) e' \<tau>
         | None \<Rightarrow> False)
    | _ \<Rightarrow> False)" |
 "check_intro \<Gamma> (ExprList es) \<tau> = (case \<tau> of TyList \<tau>' \<Rightarrow> checks \<Gamma> es (replicate (length es) \<tau>') | _ \<Rightarrow> False)" |
@@ -352,13 +349,10 @@ where
 "scheme_cxt_entry (TyScheme [] \<tau>) = Ty \<tau>" |
 "scheme_cxt_entry \<pi> = Scheme \<pi>"
 
-abbreviation bind_type_params :: "cxt \<Rightarrow> var list \<Rightarrow> cxt"
-where "bind_type_params \<Gamma> \<alpha>s \<equiv> \<Gamma> \<otimes> map_of (map (\<lambda>\<alpha>. (\<alpha>, TypeVar)) \<alpha>s)"
-
 fun def_signature :: "cxt \<Rightarrow> func \<Rightarrow> scheme option"
 where
 "def_signature \<Gamma> (Def f \<alpha>s xps \<psi> s) =
-   (let \<Gamma>' = bind_type_params \<Gamma> \<alpha>s in
+   (let \<Gamma>' = \<Gamma>(\<alpha>s [\<mapsto>] replicate (length \<alpha>s) TypeVar) in
     case (those (map (resolve_type \<Gamma>' \<circ> snd) xps), resolve_type \<Gamma>' \<psi>) of
      (Some \<sigma>s, Some \<tau>) \<Rightarrow> Some (TyScheme \<alpha>s (TyCallable \<sigma>s \<tau>))
    | _ \<Rightarrow> None)"
@@ -428,7 +422,7 @@ where
   (distinct (map fst xps) \<and> length xps = length \<sigma>s \<and>
    (case scope Unbound (set (map fst xps)) s of
       Some \<Delta> \<Rightarrow>
-        (case stmt_ty (bind_params (bind_type_params \<Gamma> \<alpha>s) (map fst xps) \<sigma>s \<otimes> \<Delta>) (Some \<tau>) s of
+        (case stmt_ty (\<Gamma>(\<alpha>s [\<mapsto>] replicate (length \<alpha>s) TypeVar, map fst xps [\<mapsto>] map Ty \<sigma>s) \<otimes> \<Delta>) (Some \<tau>) s of
            Some R \<Rightarrow> R = Returns\<^sub>R \<or> \<tau> \<approx> TyPrim NoneType
          | None \<Rightarrow> False)
     | None \<Rightarrow> False))" |
