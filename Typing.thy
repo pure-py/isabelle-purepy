@@ -168,7 +168,6 @@ where
 abbreviation comparable :: "ty \<Rightarrow> ty \<Rightarrow> bool" where "comparable \<sigma> \<tau> \<equiv> \<sigma> <: \<tau> \<or> \<tau> <: \<sigma>"
 
 
-(* Overload of a binary operator at operand types: operand bounds and result type *)
 inductive overload :: "bop \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> (ty \<times> ty) \<times> ty \<Rightarrow> bool"
 where
 OverloadEq:
@@ -232,11 +231,11 @@ UnopOverloadFloat:
   "\<lbrakk> op \<in> {UOpPos, UOpNeg} ; \<sigma> <: TyPrim float \<rbrakk> \<Longrightarrow> unop_overload op \<sigma> (TyPrim float, TyPrim float)" |
 UnopOverloadBase: "unop_overload op (base_type \<sigma>) (\<tau>, \<tau>') \<Longrightarrow> unop_overload op \<sigma> (\<tau>, \<tau>')"
 
-(* Most specific overload: its bounds below those of every other applicable overload *)
 definition most_specific :: "bop \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> (ty \<times> ty) \<times> ty \<Rightarrow> bool"
 where
 "most_specific op \<sigma>\<^sub>1 \<sigma>\<^sub>2 b \<longleftrightarrow>
-  overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 b \<and> (\<forall>b'. overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 b' \<longrightarrow> fst (fst b) <: fst (fst b') \<and> snd (fst b) <: snd (fst b'))"
+  overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 b \<and>
+  (\<forall>b'. overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 b' \<longrightarrow> fst (fst b) <: fst (fst b') \<and> snd (fst b) <: snd (fst b'))"
 
 definition unop_most_specific :: "uop \<Rightarrow> ty \<Rightarrow> ty \<times> ty \<Rightarrow> bool"
 where
