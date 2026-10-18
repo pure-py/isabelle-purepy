@@ -111,22 +111,17 @@ datatype stmt =
   | StmtDeclare var ty_expr
   | StmtAssign var "ty_expr option" expr
   | StmtExpr expr
-  | StmtAssert expr
-  | StmtAssertMsg expr expr
-  | StmtReturnNone
-  | StmtReturn expr
+  | StmtAssert expr "expr option"
+  | StmtReturn "expr option"
   | StmtIf expr stmt "(expr \<times> stmt) list" "stmt option"
   | StmtMatch expr "(pat \<times> stmt) list"
   | StmtMutualRegion "func list"
 and func = Def var "var list" "(var \<times> ty_expr) list" ty_expr stmt
 
-datatype fields =
-    FieldList "(var \<times> ty_expr) list"
-  | EmptyFieldList
+type_synonym fields = "(var \<times> ty_expr) list"
 
 datatype type_def =
-    Dataclass var "var list" fields
-  | DataclassExtend var "var list" name "ty_expr list" fields
+    Dataclass var "var list" "(name \<times> ty_expr list) option" fields
   | TypeAlias var "var list" ty_expr
 
 datatype top_stmt =

@@ -344,15 +344,16 @@ where
 "stmt_ty \<Gamma> \<zeta> (StmtAssign x (Some \<psi>) e) =
   (case resolve_type \<Gamma> \<psi> of Some \<tau> \<Rightarrow> if check \<Gamma> e \<tau> then Some (Assigns\<^sub>R [x \<mapsto> Ty \<tau>]) else None | None \<Rightarrow> None)" |
 "stmt_ty \<Gamma> \<zeta> (StmtExpr e) = (if synth \<Gamma> e \<noteq> None \<or> call_none \<Gamma> e then Some (Assigns\<^sub>R Map.empty) else None)" |
-"stmt_ty \<Gamma> \<zeta> (StmtAssert e) =
+"stmt_ty \<Gamma> \<zeta> (StmtAssert e None) =
   (if e = false_literal then Some Returns\<^sub>R
    else if check \<Gamma> e (TyPrim bool) then Some (Assigns\<^sub>R Map.empty) else None)" |
-"stmt_ty \<Gamma> \<zeta> (StmtAssertMsg e e') =
+"stmt_ty \<Gamma> \<zeta> (StmtAssert e (Some e')) =
   (if \<not> check \<Gamma> e' (TyPrim str) then None else if e = false_literal then Some Returns\<^sub>R
    else if check \<Gamma> e (TyPrim bool) then Some (Assigns\<^sub>R Map.empty) else None)" |
-"stmt_ty \<Gamma> \<zeta> StmtReturnNone =
+"stmt_ty \<Gamma> \<zeta> (StmtReturn None) =
   (case \<zeta> of Some \<tau> \<Rightarrow> if \<tau> \<approx> TyPrim NoneType then Some Returns\<^sub>R else None | None \<Rightarrow> None)" |
-"stmt_ty \<Gamma> \<zeta> (StmtReturn e) = (case \<zeta> of Some \<tau> \<Rightarrow> if check \<Gamma> e \<tau> then Some Returns\<^sub>R else None | None \<Rightarrow> None)" |
+"stmt_ty \<Gamma> \<zeta> (StmtReturn (Some e)) =
+  (case \<zeta> of Some \<tau> \<Rightarrow> if check \<Gamma> e \<tau> then Some Returns\<^sub>R else None | None \<Rightarrow> None)" |
 "stmt_ty \<Gamma> \<zeta> (StmtIf e s elifs else') =
   (if check \<Gamma> e (TyPrim bool)
     then merges (stmt_ty \<Gamma> \<zeta> s # elifs_ty \<Gamma> \<zeta> elifs

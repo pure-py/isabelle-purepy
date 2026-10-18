@@ -21,10 +21,8 @@ inductive_cases PassE: "\<rho>, StmtPass \<Rightarrow>\<^sub>s o"
 inductive_cases AssignE: "\<rho>, StmtAssign x \<pi> e \<Rightarrow>\<^sub>s o"
 inductive_cases ExprStmtE: "\<rho>, StmtExpr e \<Rightarrow>\<^sub>s o"
 inductive_cases ReturnE: "\<rho>, StmtReturn e \<Rightarrow>\<^sub>s o"
-inductive_cases ReturnNoneE: "\<rho>, StmtReturnNone \<Rightarrow>\<^sub>s o"
 inductive_cases DefsE: "\<rho>, StmtMutualRegion ds \<Rightarrow>\<^sub>s o"
-inductive_cases AssertE: "\<rho>, StmtAssert e \<Rightarrow>\<^sub>s o"
-inductive_cases AssertMsgE: "\<rho>, StmtAssertMsg e e' \<Rightarrow>\<^sub>s o"
+inductive_cases AssertE: "\<rho>, StmtAssert e e' \<Rightarrow>\<^sub>s o"
 inductive_cases IfE: "\<rho>, StmtIf e s elifs else' \<Rightarrow>\<^sub>s o"
 inductive_cases SeqE: "\<rho>, StmtSeq s s' \<Rightarrow>\<^sub>s o"
 inductive_cases ElifNilE: "\<rho>, ([], else') \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o"
@@ -186,7 +184,7 @@ next
     by (auto elim!: ReturnE dest: EvalReturn.IH)
 next
   case EvalReturnNone
-  then show ?case by (auto elim!: ReturnNoneE)
+  then show ?case by (auto elim!: ReturnE)
 next
   case EvalDefs
   then show ?case by (auto elim!: DefsE)
@@ -205,15 +203,15 @@ next
 next
   case EvalAssertMsg
   from EvalAssertMsg.prems EvalAssertMsg.hyps show ?case
-    by (auto elim!: AssertMsgE dest: EvalAssertMsg.IH)
+    by (auto elim!: AssertE dest: EvalAssertMsg.IH)
 next
   case EvalAssertMsgFalse
   from EvalAssertMsgFalse.prems EvalAssertMsgFalse.hyps show ?case
-    by (auto elim!: AssertMsgE dest: EvalAssertMsgFalse.IH)
+    by (auto elim!: AssertE dest: EvalAssertMsgFalse.IH)
 next
   case EvalAssertMsgFail
   from EvalAssertMsgFail.prems EvalAssertMsgFail.hyps show ?case
-    by (auto elim!: AssertMsgE dest: EvalAssertMsgFail.IH)
+    by (auto elim!: AssertE dest: EvalAssertMsgFail.IH)
 next
   case EvalIfTrue
   from EvalIfTrue.prems EvalIfTrue.hyps show ?case
