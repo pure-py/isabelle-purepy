@@ -53,15 +53,13 @@ where
 "Assigns\<^sub>R \<Delta> \<otimes>\<^sub>R Assigns\<^sub>R \<Delta>' = Assigns\<^sub>R (\<Delta> \<otimes> \<Delta>')" |
 "_ \<otimes>\<^sub>R _ = Returns\<^sub>R"
 
-abbreviation prim :: "prim_ty \<Rightarrow> ty" where "prim \<equiv> TyPrim"
-
 fun base_type_lit :: "lit \<Rightarrow> ty"
 where
-"base_type_lit (LitInt _) = prim TyInt" |
-"base_type_lit (LitFloat _) = prim TyFloat" |
-"base_type_lit (LitString _) = prim TyStr" |
-"base_type_lit (LitBool _) = prim TyBool" |
-"base_type_lit LitNone = prim TyNone"
+"base_type_lit (LitInt _) = TyPrim TyInt" |
+"base_type_lit (LitFloat _) = TyPrim TyFloat" |
+"base_type_lit (LitString _) = TyPrim TyStr" |
+"base_type_lit (LitBool _) = TyPrim TyBool" |
+"base_type_lit LitNone = TyPrim TyNone"
 
 fun base_type :: "ty \<Rightarrow> ty"
 where
@@ -72,17 +70,17 @@ fun sized :: "ty \<Rightarrow> bool"
 where
 "sized (TyList _) = True" |
 "sized (TyDict _) = True" |
-"sized (prim TyStr) = True" |
+"sized (TyPrim TyStr) = True" |
 "sized (TyTuple _) = True" |
 "sized _ = False"
 
 inductive subty :: "ty \<Rightarrow> ty \<Rightarrow> bool" (infix "<:" 50)
 where
 SubtyRefl: "\<tau> <: \<tau>" |
-SubtyNever: "prim TyNever <: \<tau>" |
-SubtyObject: "\<tau> <: prim TyObject" |
-SubtyIntFloat: "prim TyInt <: prim TyFloat" |
-SubtySized: "sized \<tau> \<Longrightarrow> \<tau> <: prim TySized" |
+SubtyNever: "TyPrim TyNever <: \<tau>" |
+SubtyObject: "\<tau> <: TyPrim TyObject" |
+SubtyIntFloat: "TyPrim TyInt <: TyPrim TyFloat" |
+SubtySized: "sized \<tau> \<Longrightarrow> \<tau> <: TyPrim TySized" |
 SubtyList: "\<lbrakk> \<sigma> <: \<tau> ; \<tau> <: \<sigma> \<rbrakk> \<Longrightarrow> TyList \<sigma> <: TyList \<tau>" |
 SubtyDict: "\<lbrakk> \<sigma> <: \<tau> ; \<tau> <: \<sigma> \<rbrakk> \<Longrightarrow> TyDict \<sigma> <: TyDict \<tau>" |
 SubtyCallable: "\<lbrakk> list_all2 (\<lambda>\<tau> \<sigma>. \<tau> <: \<sigma>) \<tau>s \<sigma>s ; \<sigma> <: \<tau> \<rbrakk> \<Longrightarrow> TyCallable \<sigma>s \<sigma> <: TyCallable \<tau>s \<tau>" |
@@ -100,7 +98,7 @@ where
 
 definition joins :: "ty list \<Rightarrow> ty"
 where
-"joins \<tau>s = foldr (\<squnion>) \<tau>s (prim TyNever)"
+"joins \<tau>s = foldr (\<squnion>) \<tau>s (TyPrim TyNever)"
 
 fun meet :: "ty \<Rightarrow> ty \<Rightarrow> ty" (infixl "\<sqinter>" 70) and meets :: "ty list \<Rightarrow> ty list \<Rightarrow> ty list"
 where
@@ -113,11 +111,11 @@ where
 "TyCallable \<sigma>s \<sigma> \<sqinter> TyCallable \<tau>s \<tau> =
   (if TyCallable \<sigma>s \<sigma> <: TyCallable \<tau>s \<tau> then TyCallable \<sigma>s \<sigma>
    else if TyCallable \<tau>s \<tau> <: TyCallable \<sigma>s \<sigma> then TyCallable \<tau>s \<tau>
-   else if length \<sigma>s = length \<tau>s then TyCallable (map2 (\<squnion>) \<sigma>s \<tau>s) (\<sigma> \<sqinter> \<tau>) else prim TyNever)" |
+   else if length \<sigma>s = length \<tau>s then TyCallable (map2 (\<squnion>) \<sigma>s \<tau>s) (\<sigma> \<sqinter> \<tau>) else TyPrim TyNever)" |
 "TyTuple \<sigma>s \<sqinter> TyTuple \<tau>s =
   (if TyTuple \<sigma>s <: TyTuple \<tau>s then TyTuple \<sigma>s else if TyTuple \<tau>s <: TyTuple \<sigma>s then TyTuple \<tau>s
-   else if length \<sigma>s = length \<tau>s then TyTuple (meets \<sigma>s \<tau>s) else prim TyNever)" |
-"\<sigma> \<sqinter> \<tau> = (if \<sigma> <: \<tau> then \<sigma> else if \<tau> <: \<sigma> then \<tau> else prim TyNever)" |
+   else if length \<sigma>s = length \<tau>s then TyTuple (meets \<sigma>s \<tau>s) else TyPrim TyNever)" |
+"\<sigma> \<sqinter> \<tau> = (if \<sigma> <: \<tau> then \<sigma> else if \<tau> <: \<sigma> then \<tau> else TyPrim TyNever)" |
 
 "meets (\<sigma> # \<sigma>s) (\<tau> # \<tau>s) = (\<sigma> \<sqinter> \<tau>) # meets \<sigma>s \<tau>s" |
 "meets _ _ = []"
@@ -137,7 +135,7 @@ abbreviation predef :: "cxt \<Rightarrow> var \<Rightarrow> bool" where "predef 
 
 fun resolve_type :: "cxt \<Rightarrow> ty_expr \<Rightarrow> ty option"
 where
-"resolve_type \<Gamma> (TyExprPrim \<nu>) = (if predef \<Gamma> (prim_name \<nu>) then Some (prim \<nu>) else None)" |
+"resolve_type \<Gamma> (TyExprPrim \<nu>) = (if predef \<Gamma> (prim_name \<nu>) then Some (TyPrim \<nu>) else None)" |
 "resolve_type \<Gamma> (TyExprName (\<alpha>, []) []) = (if \<Gamma> \<alpha> = Some TypeVar then Some (TyVar \<alpha>) else None)" |
 "resolve_type \<Gamma> (TyExprLiteral l) = (if predef \<Gamma> ''Literal'' then Some (TyLiteral l) else None)" |
 "resolve_type \<Gamma> (TyExprList \<psi>) = (if predef \<Gamma> ''list'' then map_option TyList (resolve_type \<Gamma> \<psi>) else None)" |
@@ -156,7 +154,7 @@ where
 
 fun eq_type :: "ty \<Rightarrow> bool"
 where
-"eq_type (prim _) = True" |
+"eq_type (TyPrim _) = True" |
 "eq_type (TyLiteral _) = True" |
 "eq_type (TyList \<tau>) = eq_type \<tau>" |
 "eq_type (TyDict \<tau>) = eq_type \<tau>" |
@@ -166,10 +164,10 @@ where
 
 abbreviation comparable :: "ty \<Rightarrow> ty \<Rightarrow> bool" where "comparable \<sigma> \<tau> \<equiv> \<sigma> <: \<tau> \<or> \<tau> <: \<sigma>"
 
-abbreviation bool where "bool \<equiv> prim TyBool"
-abbreviation int where "int \<equiv> prim TyInt"
-abbreviation float where "float \<equiv> prim TyFloat"
-abbreviation str where "str \<equiv> prim TyStr"
+abbreviation bool where "bool \<equiv> TyPrim TyBool"
+abbreviation int where "int \<equiv> TyPrim TyInt"
+abbreviation float where "float \<equiv> TyPrim TyFloat"
+abbreviation str where "str \<equiv> TyPrim TyStr"
 
 fun resolve_binop :: "bop \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> ty option"
 where
@@ -231,7 +229,7 @@ where
         | None \<Rightarrow> None)
    | _ \<Rightarrow>
        (case synth \<Gamma> e of
-          Some (TyCallable \<sigma>s \<sigma>) \<Rightarrow> if \<sigma> \<noteq> prim TyNone \<and> checks \<Gamma> es \<sigma>s then Some \<sigma> else None
+          Some (TyCallable \<sigma>s \<sigma>) \<Rightarrow> if \<sigma> \<noteq> TyPrim TyNone \<and> checks \<Gamma> es \<sigma>s then Some \<sigma> else None
         | _ \<Rightarrow> None))" |
 "synth \<Gamma> (ExprBinOp op e e') =
   (case (synth \<Gamma> e, synth \<Gamma> e') of (Some \<sigma>, Some \<sigma>') \<Rightarrow> resolve_binop op \<sigma> \<sigma>' | _ \<Rightarrow> None)" |
@@ -317,7 +315,7 @@ where
 fun call_none :: "cxt \<Rightarrow> expr \<Rightarrow> bool"
 where
 "call_none \<Gamma> (ExprCall e (es, [])) =
-  (case synth \<Gamma> e of Some (TyCallable \<sigma>s (prim TyNone)) \<Rightarrow> checks \<Gamma> es \<sigma>s | _ \<Rightarrow> False)" |
+  (case synth \<Gamma> e of Some (TyCallable \<sigma>s (TyPrim TyNone)) \<Rightarrow> checks \<Gamma> es \<sigma>s | _ \<Rightarrow> False)" |
 "call_none \<Gamma> _ = False"
 
 abbreviation false_literal :: expr where "false_literal \<equiv> ExprLiteral (LitBool False)"
@@ -345,7 +343,7 @@ where
   (if \<not> check \<Gamma> e' str then None else if e = false_literal then Some Returns\<^sub>R
    else if check \<Gamma> e bool then Some (Assigns\<^sub>R Map.empty) else None)" |
 "stmt_ty \<Gamma> \<zeta> StmtReturnNone =
-  (case \<zeta> of Some \<tau> \<Rightarrow> if \<tau> \<approx> prim TyNone then Some Returns\<^sub>R else None | None \<Rightarrow> None)" |
+  (case \<zeta> of Some \<tau> \<Rightarrow> if \<tau> \<approx> TyPrim TyNone then Some Returns\<^sub>R else None | None \<Rightarrow> None)" |
 "stmt_ty \<Gamma> \<zeta> (StmtReturn e) = (case \<zeta> of Some \<tau> \<Rightarrow> if check \<Gamma> e \<tau> then Some Returns\<^sub>R else None | None \<Rightarrow> None)" |
 "stmt_ty \<Gamma> \<zeta> (StmtIf e s elifs else') =
   (if check \<Gamma> e bool
@@ -376,7 +374,7 @@ where
    (case scope Unbound (set (map fst xps)) s of
       Some \<Delta> \<Rightarrow>
         (case stmt_ty (bind_params (bind_type_params \<Gamma> \<alpha>s) (map fst xps) \<sigma>s \<otimes> \<Delta>) (Some \<tau>) s of
-           Some R \<Rightarrow> R = Returns\<^sub>R \<or> \<tau> \<approx> prim TyNone
+           Some R \<Rightarrow> R = Returns\<^sub>R \<or> \<tau> \<approx> TyPrim TyNone
          | None \<Rightarrow> False)
     | None \<Rightarrow> False))" |
 "def_body \<Gamma> _ _ = False"
