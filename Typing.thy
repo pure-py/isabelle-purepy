@@ -167,7 +167,6 @@ where
 
 abbreviation comparable :: "ty \<Rightarrow> ty \<Rightarrow> bool" where "comparable \<sigma> \<tau> \<equiv> \<sigma> <: \<tau> \<or> \<tau> <: \<sigma>"
 
-
 inductive binop_overload :: "bop \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> (ty \<times> ty) \<times> ty \<Rightarrow> bool"
 where
 OverloadEq:
@@ -202,7 +201,8 @@ OverloadAddStr:
   "\<lbrakk> \<sigma>\<^sub>1 <: TyPrim str ; \<sigma>\<^sub>2 <: TyPrim str \<rbrakk>
   \<Longrightarrow> binop_overload BOpAdd \<sigma>\<^sub>1 \<sigma>\<^sub>2 ((TyPrim str, TyPrim str), TyPrim str)" |
 OverloadAddList: "binop_overload BOpAdd (TyList \<sigma>) (TyList \<tau>) ((TyList \<sigma>, TyList \<tau>), TyList (\<sigma> \<squnion> \<tau>))" |
-OverloadAddTuple: "binop_overload BOpAdd (TyTuple \<sigma>s) (TyTuple \<tau>s) ((TyTuple \<sigma>s, TyTuple \<tau>s), TyTuple (\<sigma>s @ \<tau>s))" |
+OverloadAddTuple:
+  "binop_overload BOpAdd (TyTuple \<sigma>s) (TyTuple \<tau>s) ((TyTuple \<sigma>s, TyTuple \<tau>s), TyTuple (\<sigma>s @ \<tau>s))" |
 OverloadMulStrInt:
   "\<lbrakk> \<sigma>\<^sub>1 <: TyPrim str ; \<sigma>\<^sub>2 <: TyPrim int \<rbrakk>
   \<Longrightarrow> binop_overload BOpMul \<sigma>\<^sub>1 \<sigma>\<^sub>2 ((TyPrim str, TyPrim int), TyPrim str)" |
@@ -248,14 +248,14 @@ where
 
 definition resolve_unop :: "uop \<Rightarrow> ty \<Rightarrow> ty option"
 where
-"resolve_unop op \<sigma> = (if \<exists>!b. unop_most_specific op \<sigma> b then Some (snd (THE b. unop_most_specific op \<sigma> b)) else None)"
+"resolve_unop op \<sigma> =
+  (if \<exists>!b. unop_most_specific op \<sigma> b then Some (snd (THE b. unop_most_specific op \<sigma> b)) else None)"
 
 fun numeric_literal :: "expr \<Rightarrow> bool"
 where
 "numeric_literal (ExprLiteral (LitInt _)) = True" |
 "numeric_literal (ExprLiteral (LitFloat _)) = True" |
 "numeric_literal _ = False"
-
 
 function (sequential)
   synth :: "cxt \<Rightarrow> expr \<Rightarrow> ty option" and
