@@ -179,11 +179,14 @@ where
       | TyDict _ \<Rightarrow> if \<sigma> <: TyPrim str then Some (TyPrim bool) else None
       | _ \<Rightarrow> if \<sigma> <: TyPrim str \<and> \<sigma>' <: TyPrim str then Some (TyPrim bool) else None)
    else if op \<in> {BOpLt, BOpLeq, BOpGt, BOpGeq} then
-     (if \<sigma> <: TyPrim float \<and> \<sigma>' <: TyPrim float \<or> \<sigma> <: TyPrim str \<and> \<sigma>' <: TyPrim str then Some (TyPrim bool) else None)
+     (if \<sigma> <: TyPrim float \<and> \<sigma>' <: TyPrim float \<or> \<sigma> <: TyPrim str \<and> \<sigma>' <: TyPrim str
+      then Some (TyPrim bool) else None)
    else if op = BOpPow \<and> (\<exists>n. \<sigma>' = TyLiteral (LitInt n)) \<and> \<sigma> <: TyPrim int then
      Some (if (\<exists>n \<ge> 0. \<sigma>' = TyLiteral (LitInt n)) then (TyPrim int) else TyPrim float)
-   else if op \<in> {BOpAdd, BOpSub, BOpMul, BOpFloorDiv, BOpMod} \<and> \<sigma> <: TyPrim int \<and> \<sigma>' <: TyPrim int then Some (TyPrim int)
-   else if op \<in> {BOpAdd, BOpSub, BOpMul, BOpFloorDiv, BOpMod, BOpDiv, BOpPow} \<and> \<sigma> <: TyPrim float \<and> \<sigma>' <: TyPrim float
+   else if op \<in> {BOpAdd, BOpSub, BOpMul, BOpFloorDiv, BOpMod} \<and> \<sigma> <: TyPrim int \<and> \<sigma>' <: TyPrim int
+   then Some (TyPrim int)
+   else if op \<in> {BOpAdd, BOpSub, BOpMul, BOpFloorDiv, BOpMod, BOpDiv, BOpPow}
+           \<and> \<sigma> <: TyPrim float \<and> \<sigma>' <: TyPrim float
    then Some (TyPrim float)
    else if op = BOpAdd \<and> \<sigma> <: TyPrim str \<and> \<sigma>' <: TyPrim str then Some (TyPrim str)
    else case (op, \<sigma>, \<sigma>') of
@@ -191,13 +194,16 @@ where
    | (BOpAdd, TyTuple \<tau>s, TyTuple \<tau>s') \<Rightarrow> Some (TyTuple (\<tau>s @ \<tau>s'))
    | (BOpMul, TyList \<tau>, _) \<Rightarrow> if \<sigma>' <: TyPrim int then Some (TyList \<tau>) else None
    | (BOpMul, _, TyList \<tau>) \<Rightarrow> if \<sigma> <: TyPrim int then Some (TyList \<tau>) else None
-   | (BOpMul, _, _) \<Rightarrow> if \<sigma> <: TyPrim str \<and> \<sigma>' <: TyPrim int \<or> \<sigma> <: TyPrim int \<and> \<sigma>' <: TyPrim str then Some (TyPrim str) else None
+   | (BOpMul, _, _) \<Rightarrow>
+       if \<sigma> <: TyPrim str \<and> \<sigma>' <: TyPrim int \<or> \<sigma> <: TyPrim int \<and> \<sigma>' <: TyPrim str
+       then Some (TyPrim str) else None
    | _ \<Rightarrow> None)"
 
 fun resolve_unop :: "uop \<Rightarrow> ty \<Rightarrow> ty option"
 where
 "resolve_unop UOpNot \<sigma> = (if \<sigma> <: TyPrim bool then Some (TyPrim bool) else None)" |
-"resolve_unop _ \<sigma> = (if \<sigma> <: TyPrim int then Some (TyPrim int) else if \<sigma> <: TyPrim float then Some (TyPrim float) else None)"
+"resolve_unop _ \<sigma> =
+  (if \<sigma> <: TyPrim int then Some (TyPrim int) else if \<sigma> <: TyPrim float then Some (TyPrim float) else None)"
 
 fun number_literal :: "expr \<Rightarrow> bool"
 where
@@ -235,8 +241,10 @@ where
 "synth \<Gamma> (ExprUnOp op e) =
   (if op = UOpNeg \<and> number_literal e then None
    else case synth \<Gamma> e of Some \<sigma> \<Rightarrow> resolve_unop op \<sigma> | None \<Rightarrow> None)" |
-"synth \<Gamma> (ExprAnd e e') = (if check \<Gamma> e (TyPrim bool) \<and> check \<Gamma> e' (TyPrim bool) then Some (TyPrim bool) else None)" |
-"synth \<Gamma> (ExprOr e e') = (if check \<Gamma> e (TyPrim bool) \<and> check \<Gamma> e' (TyPrim bool) then Some (TyPrim bool) else None)" |
+"synth \<Gamma> (ExprAnd e e') =
+  (if check \<Gamma> e (TyPrim bool) \<and> check \<Gamma> e' (TyPrim bool) then Some (TyPrim bool) else None)" |
+"synth \<Gamma> (ExprOr e e') =
+  (if check \<Gamma> e (TyPrim bool) \<and> check \<Gamma> e' (TyPrim bool) then Some (TyPrim bool) else None)" |
 "synth \<Gamma> (ExprCond e\<^sub>1 e e\<^sub>2) =
   (if check \<Gamma> e (TyPrim bool) then
      case (synth \<Gamma> e\<^sub>1, synth \<Gamma> e\<^sub>2) of
@@ -337,7 +345,8 @@ where
   (case resolve_type \<Gamma> \<psi> of Some \<tau> \<Rightarrow> if check \<Gamma> e \<tau> then Some (Assigns\<^sub>R [x \<mapsto> Ty \<tau>]) else None | None \<Rightarrow> None)" |
 "stmt_ty \<Gamma> \<zeta> (StmtExpr e) = (if synth \<Gamma> e \<noteq> None \<or> call_none \<Gamma> e then Some (Assigns\<^sub>R Map.empty) else None)" |
 "stmt_ty \<Gamma> \<zeta> (StmtAssert e) =
-  (if e = false_literal then Some Returns\<^sub>R else if check \<Gamma> e (TyPrim bool) then Some (Assigns\<^sub>R Map.empty) else None)" |
+  (if e = false_literal then Some Returns\<^sub>R
+   else if check \<Gamma> e (TyPrim bool) then Some (Assigns\<^sub>R Map.empty) else None)" |
 "stmt_ty \<Gamma> \<zeta> (StmtAssertMsg e e') =
   (if \<not> check \<Gamma> e' (TyPrim str) then None else if e = false_literal then Some Returns\<^sub>R
    else if check \<Gamma> e (TyPrim bool) then Some (Assigns\<^sub>R Map.empty) else None)" |
@@ -362,7 +371,8 @@ where
 "stmt_ty \<Gamma> \<zeta> (StmtMatch e bs) = None" |
 
 "elifs_ty \<Gamma> \<zeta> [] = []" |
-"elifs_ty \<Gamma> \<zeta> ((e, s) # elifs) = (if check \<Gamma> e (TyPrim bool) then stmt_ty \<Gamma> \<zeta> s else None) # elifs_ty \<Gamma> \<zeta> elifs" |
+"elifs_ty \<Gamma> \<zeta> ((e, s) # elifs) =
+  (if check \<Gamma> e (TyPrim bool) then stmt_ty \<Gamma> \<zeta> s else None) # elifs_ty \<Gamma> \<zeta> elifs" |
 
 "defs_ty \<Gamma> [] [] = True" |
 "defs_ty \<Gamma> (d # ds) (\<pi> # \<pi>s) = (def_body \<Gamma> d \<pi> \<and> defs_ty \<Gamma> ds \<pi>s)" |
