@@ -329,12 +329,12 @@ where
 by pat_completeness auto
 
 termination
-by (relation "measure (\<lambda>x. case x of
-     Inl (Inl (\<Gamma>, e)) \<Rightarrow> 3 * size e
-   | Inl (Inr (\<Gamma>, es)) \<Rightarrow> 3 * size_list size es
-   | Inr (Inl (\<Gamma>, e, \<tau>)) \<Rightarrow> 3 * size e + 2
-   | Inr (Inr (Inl (\<Gamma>, e, \<tau>))) \<Rightarrow> 3 * size e + 1
-   | Inr (Inr (Inr (\<Gamma>, es, \<tau>s))) \<Rightarrow> 3 * size_list size es + 2)")
+by (relation "inv_image (less_than <*lex*> less_than) (\<lambda>x. case x of
+     Inl (Inl (\<Gamma>, e)) \<Rightarrow> (size e, 0)
+   | Inl (Inr (\<Gamma>, es)) \<Rightarrow> (size_list size es, 0)
+   | Inr (Inl (\<Gamma>, e, \<tau>)) \<Rightarrow> (size e, 2)
+   | Inr (Inr (Inl (\<Gamma>, e, \<tau>))) \<Rightarrow> (size e, 1)
+   | Inr (Inr (Inr (\<Gamma>, es, \<tau>s))) \<Rightarrow> (size_list size es, 2))")
    (auto dest!: nth_mem intro: size_list_estimation' simp: less_Suc_eq_le)
 
 (* Context entry binding a function name: its type scheme, or its type when there are no type parameters *)
