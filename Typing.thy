@@ -14,31 +14,25 @@ datatype cxt_entry =
 
 type_synonym cxt = "var \<rightharpoonup> cxt_entry"
 
-(* Context entry for a variable at \<tau>, or absent *)
-fun cxt_entry_at :: "cxt_entry option \<Rightarrow> ty \<Rightarrow> bool"
+(* Possibly-unassigned form of a context entry; None for an entry with no such form *)
+fun possibly_unassigned :: "cxt_entry \<Rightarrow> cxt_entry option"
 where
-"cxt_entry_at None \<tau> = True" |
-"cxt_entry_at (Some (Ty \<tau>')) \<tau> = (\<tau>' = \<tau>)" |
-"cxt_entry_at (Some (DU \<tau>')) \<tau> = (\<tau>' = \<tau>)" |
-"cxt_entry_at (Some (PU \<tau>')) \<tau> = (\<tau>' = \<tau>)" |
-"cxt_entry_at _ _ = False"
-
-fun scheme_cxt_entry_at :: "cxt_entry option \<Rightarrow> scheme \<Rightarrow> bool"
-where
-"scheme_cxt_entry_at None \<pi> = True" |
-"scheme_cxt_entry_at (Some (Scheme \<pi>')) \<pi> = (\<pi>' = \<pi>)" |
-"scheme_cxt_entry_at (Some (PUScheme \<pi>')) \<pi> = (\<pi>' = \<pi>)" |
-"scheme_cxt_entry_at _ _ = False"
+"possibly_unassigned (Ty \<tau>) = Some (PU \<tau>)" |
+"possibly_unassigned (DU \<tau>) = Some (PU \<tau>)" |
+"possibly_unassigned (PU \<tau>) = Some (PU \<tau>)" |
+"possibly_unassigned (Scheme \<pi>) = Some (PUScheme \<pi>)" |
+"possibly_unassigned (PUScheme \<pi>) = Some (PUScheme \<pi>)" |
+"possibly_unassigned _ = None"
 
 definition merge_cxt_entry :: "cxt_entry option \<Rightarrow> cxt_entry option \<Rightarrow> cxt_entry option option"
 where
 "merge_cxt_entry \<theta> \<theta>' =
   (if \<theta> = \<theta>' then Some \<theta>
-    else if \<exists>\<tau>. cxt_entry_at \<theta> \<tau> \<and> cxt_entry_at \<theta>' \<tau>
-    then Some (Some (PU (THE \<tau>. cxt_entry_at \<theta> \<tau> \<and> cxt_entry_at \<theta>' \<tau>)))
-   else if \<exists>\<pi>. scheme_cxt_entry_at \<theta> \<pi> \<and> scheme_cxt_entry_at \<theta>' \<pi>
-   then Some (Some (PUScheme (THE \<pi>. scheme_cxt_entry_at \<theta> \<pi> \<and> scheme_cxt_entry_at \<theta>' \<pi>)))
-   else None)"
+   else case (map_option possibly_unassigned \<theta>, map_option possibly_unassigned \<theta>') of
+     (Some (Some \<theta>\<^sub>P\<^sub>U), Some (Some \<theta>\<^sub>P\<^sub>U')) \<Rightarrow> if \<theta>\<^sub>P\<^sub>U = \<theta>\<^sub>P\<^sub>U' then Some (Some \<theta>\<^sub>P\<^sub>U) else None
+   | (Some (Some \<theta>\<^sub>P\<^sub>U), None) \<Rightarrow> Some (Some \<theta>\<^sub>P\<^sub>U)
+   | (None, Some (Some \<theta>\<^sub>P\<^sub>U')) \<Rightarrow> Some (Some \<theta>\<^sub>P\<^sub>U')
+   | _ \<Rightarrow> None)"
 
 definition merge :: "cxt \<Rightarrow> cxt \<Rightarrow> cxt option" (infixl "\<oplus>" 65)
 where
