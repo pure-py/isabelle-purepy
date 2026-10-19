@@ -14,5 +14,6 @@ check-version:
 build: check-version
 	$(ISABELLE) build -v -e -D .
 	$(PYTHON) -m py_compile $$(find python/python_out -name '*.py')
+	$(PYTHON) python/smoke_test.py
 
 .PHONY: default check-version build

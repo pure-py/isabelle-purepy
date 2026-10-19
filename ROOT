@@ -7,6 +7,7 @@ session "isabelle-purepy" = HOL +
     Semantics
     Correctness
     Typing
+    Executable
     Examples
 
 session "isabelle-purepy-python" in "python" = "isabelle-purepy" +
