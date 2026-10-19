@@ -105,6 +105,8 @@ datatype import =
     Import name
   | FromImport name "var list"
 
+(* Spec forms differing only by an omitted component are one constructor with an option; a field list
+   is a list, since its empty form is pass *)
 datatype stmt =
     StmtPass
   | StmtSeq stmt stmt
