@@ -34,5 +34,4 @@ proof -
     unfolding ex_lambda_def by (rule EvalCallLambda[OF EvalLambda args _ body]) simp
 qed
 
-
 end

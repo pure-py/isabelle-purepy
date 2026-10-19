@@ -21,10 +21,8 @@ inductive_cases PassE: "\<rho>, StmtPass \<Rightarrow>\<^sub>s o"
 inductive_cases AssignE: "\<rho>, StmtAssign x \<pi> e \<Rightarrow>\<^sub>s o"
 inductive_cases ExprStmtE: "\<rho>, StmtExpr e \<Rightarrow>\<^sub>s o"
 inductive_cases ReturnE: "\<rho>, StmtReturn e \<Rightarrow>\<^sub>s o"
-inductive_cases ReturnNoneE: "\<rho>, StmtReturnNone \<Rightarrow>\<^sub>s o"
 inductive_cases DefsE: "\<rho>, StmtMutualRegion ds \<Rightarrow>\<^sub>s o"
-inductive_cases AssertE: "\<rho>, StmtAssert e \<Rightarrow>\<^sub>s o"
-inductive_cases AssertMsgE: "\<rho>, StmtAssertMsg e e' \<Rightarrow>\<^sub>s o"
+inductive_cases AssertE: "\<rho>, StmtAssert e e' \<Rightarrow>\<^sub>s o"
 inductive_cases IfE: "\<rho>, StmtIf e s elifs else' \<Rightarrow>\<^sub>s o"
 inductive_cases SeqE: "\<rho>, StmtSeq s s' \<Rightarrow>\<^sub>s o"
 inductive_cases ElifNilE: "\<rho>, ([], else') \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o"
@@ -118,10 +116,10 @@ next
   from EvalCallLambdaArity.prems EvalCallLambdaArity.hyps show ?case
     by (auto elim!: CallE dest: EvalCallLambdaArity.IH)
 next
-  case (EvalCallDef \<rho> e \<rho>' ds j f xps \<psi> s vs es us \<rho>s o)
+  case (EvalCallDef \<rho> e \<rho>' ds j f \<alpha>s xps \<psi> s vs es us \<rho>s o)
   from EvalCallDef.prems show ?case
   proof (cases rule: CallE)
-    case (CallDef \<rho>'' ds' j' f' xps' \<psi>' s' us' \<rho>s' o')
+    case (CallDef \<rho>'' ds' j' f' \<alpha>s' xps' \<psi>' s' us' \<rho>s' o')
     from EvalCallDef.IH(1)[OF CallDef(2)] have "\<rho>'' = \<rho>'" "ds' = ds" "j' = j" by auto
     with EvalCallDef.hyps(2) CallDef(3) have "xps' = xps" "s' = s" by auto
     moreover from EvalCallDef.IH(2)[OF CallDef(4)] have "us' = us" by simp
@@ -130,17 +128,17 @@ next
       using EvalCallDef.IH(3) CallDef(7) \<open>\<rho>'' = \<rho>'\<close> \<open>ds' = ds\<close> EvalCallDef.hyps(3) by simp
     with CallDef(1) show ?thesis by simp
   next
-    case (CallDefArity \<rho>'' ds' j' f' xps' \<psi>' s' us')
+    case (CallDefArity \<rho>'' ds' j' f' \<alpha>s' xps' \<psi>' s' us')
     from EvalCallDef.IH(1)[OF CallDefArity(2)] have "ds' = ds" "j' = j" by auto
     with EvalCallDef.hyps(2) CallDefArity(3) have "xps' = xps" by auto
     moreover from EvalCallDef.IH(2)[OF CallDefArity(4)] have "us' = us" by simp
     ultimately show ?thesis using CallDefArity(5) EvalCallDef.hyps(5) by simp
   qed (use EvalCallDef.hyps in \<open>auto dest: EvalCallDef.IH\<close>)
 next
-  case (EvalCallDefArity \<rho> e \<rho>' ds j f xps \<psi> s es us)
+  case (EvalCallDefArity \<rho> e \<rho>' ds j f \<alpha>s xps \<psi> s es us)
   from EvalCallDefArity.prems show ?case
   proof (cases rule: CallE)
-    case (CallDef \<rho>'' ds' j' f' xps' \<psi>' s' us' \<rho>s' o')
+    case (CallDef \<rho>'' ds' j' f' \<alpha>s' xps' \<psi>' s' us' \<rho>s' o')
     from EvalCallDefArity.IH(1)[OF CallDef(2)] have "ds' = ds" "j' = j" by auto
     with EvalCallDefArity.hyps(2) CallDef(3) have "xps' = xps" by auto
     moreover from EvalCallDefArity.IH(2)[OF CallDef(4)] have "us' = us" by simp
@@ -186,7 +184,7 @@ next
     by (auto elim!: ReturnE dest: EvalReturn.IH)
 next
   case EvalReturnNone
-  then show ?case by (auto elim!: ReturnNoneE)
+  then show ?case by (auto elim!: ReturnE)
 next
   case EvalDefs
   then show ?case by (auto elim!: DefsE)
@@ -205,15 +203,15 @@ next
 next
   case EvalAssertMsg
   from EvalAssertMsg.prems EvalAssertMsg.hyps show ?case
-    by (auto elim!: AssertMsgE dest: EvalAssertMsg.IH)
+    by (auto elim!: AssertE dest: EvalAssertMsg.IH)
 next
   case EvalAssertMsgFalse
   from EvalAssertMsgFalse.prems EvalAssertMsgFalse.hyps show ?case
-    by (auto elim!: AssertMsgE dest: EvalAssertMsgFalse.IH)
+    by (auto elim!: AssertE dest: EvalAssertMsgFalse.IH)
 next
   case EvalAssertMsgFail
   from EvalAssertMsgFail.prems EvalAssertMsgFail.hyps show ?case
-    by (auto elim!: AssertMsgE dest: EvalAssertMsgFail.IH)
+    by (auto elim!: AssertE dest: EvalAssertMsgFail.IH)
 next
   case EvalIfTrue
   from EvalIfTrue.prems EvalIfTrue.hyps show ?case

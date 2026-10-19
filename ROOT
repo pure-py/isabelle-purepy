@@ -4,4 +4,5 @@ session "isabelle-purepy" = HOL +
     Syntax
     Semantics
     Correctness
+    Typing
     Examples
