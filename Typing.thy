@@ -12,7 +12,7 @@ datatype cxt_entry =
   | PUScheme scheme
   | PredefName
 
-type_synonym cxt = "var \<rightharpoonup> cxt_entry"
+type_synonym cxt = "(var, cxt_entry) fmap"
 
 (* Possibly unassigned at the same type or scheme; the other forms merge only with themselves *)
 fun merge_undefined :: "cxt_entry \<Rightarrow> cxt_entry option"
@@ -37,8 +37,8 @@ where
 definition merge :: "cxt \<Rightarrow> cxt \<Rightarrow> cxt option" (infixl "\<oplus>" 65)
 where
 "\<Gamma> \<oplus> \<Gamma>' =
-  (let m = \<lambda>x. merge_cxt_entry (\<Gamma> x) (\<Gamma>' x) in
-   if \<forall>x. \<exists>\<theta>. m x = Some \<theta> then Some (the \<circ> m) else None)"
+  (let m = fmmap_keys (\<lambda>x _. merge_cxt_entry (fmlookup \<Gamma> x) (fmlookup \<Gamma>' x)) (\<Gamma> \<otimes> \<Gamma>') in
+   if fmpred (\<lambda>_ \<theta>. \<theta> \<noteq> None) m then Some (fmmap (the \<circ> the) m) else None)"
 
 datatype static_outcome = Assigns\<^sub>R cxt | Returns\<^sub>R
 
@@ -134,12 +134,12 @@ where
 "prim_name str = ''str''" |
 "prim_name Sized = ''Sized''"
 
-abbreviation predef :: "cxt \<Rightarrow> var \<Rightarrow> bool" where "predef \<Gamma> x \<equiv> \<Gamma> x = Some PredefName"
+abbreviation predef :: "cxt \<Rightarrow> var \<Rightarrow> bool" where "predef \<Gamma> x \<equiv> fmlookup \<Gamma> x = Some PredefName"
 
 fun resolve_type :: "cxt \<Rightarrow> ty_expr \<Rightarrow> ty option"
 where
 "resolve_type \<Gamma> (TyExprPrim \<nu>) = (if predef \<Gamma> (prim_name \<nu>) then Some (TyPrim \<nu>) else None)" |
-"resolve_type \<Gamma> (TyExprName (\<alpha>, []) []) = (if \<Gamma> \<alpha> = Some TypeVar then Some (TyVar \<alpha>) else None)" |
+"resolve_type \<Gamma> (TyExprName (\<alpha>, []) []) = (if fmlookup \<Gamma> \<alpha> = Some TypeVar then Some (TyVar \<alpha>) else None)" |
 "resolve_type \<Gamma> (TyExprLiteral l) = (if predef \<Gamma> ''Literal'' then Some (TyLiteral l) else None)" |
 "resolve_type \<Gamma> (TyExprList \<psi>) = (if predef \<Gamma> ''list'' then map_option TyList (resolve_type \<Gamma> \<psi>) else None)" |
 "resolve_type \<Gamma> (TyExprDict \<psi>) =
@@ -264,14 +264,16 @@ function (sequential)
   check' :: "cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> bool" and
   checks :: "cxt \<Rightarrow> expr list \<Rightarrow> ty list \<Rightarrow> bool"
 where
-"synth \<Gamma> (ExprVar x) = (case \<Gamma> x of Some (Ty \<tau>) \<Rightarrow> Some \<tau> | _ \<Rightarrow> None)" |
+"synth \<Gamma> (ExprVar x) = (case fmlookup \<Gamma> x of Some (Ty \<tau>) \<Rightarrow> Some \<tau> | _ \<Rightarrow> None)" |
 "synth \<Gamma> (ExprLiteral l) = (case l of LitFloat _ \<Rightarrow> Some (TyPrim float) | _ \<Rightarrow> Some (TyLiteral l))" |
 "synth \<Gamma> (ExprCall e (es, kws)) =
   (if kws \<noteq> [] then None
    else case e of
      ExprLambda xs e' \<Rightarrow>
        (case those (synths \<Gamma> es) of
-          Some \<tau>s \<Rightarrow> if distinct xs \<and> length xs = length es then synth (\<Gamma>(xs [\<mapsto>] map Ty \<tau>s)) e' else None
+          Some \<tau>s \<Rightarrow>
+            if distinct xs \<and> length xs = length es then synth (\<Gamma> \<otimes> fmap_of_list (zip xs (map Ty \<tau>s))) e'
+            else None
         | None \<Rightarrow> None)
    | _ \<Rightarrow>
        (case synth \<Gamma> e of
@@ -308,14 +310,14 @@ where
 
 "check' \<Gamma> (ExprLambda xs e) \<tau> =
   (case \<tau> of
-     TyCallable \<tau>s \<tau>' \<Rightarrow> distinct xs \<and> length xs = length \<tau>s \<and> check (\<Gamma>(xs [\<mapsto>] map Ty \<tau>s)) e \<tau>'
+     TyCallable \<tau>s \<tau>' \<Rightarrow> distinct xs \<and> length xs = length \<tau>s \<and> check (\<Gamma> \<otimes> fmap_of_list (zip xs (map Ty \<tau>s))) e \<tau>'
    | _ \<Rightarrow> False)" |
 "check' \<Gamma> (ExprCall e (es, kws)) \<tau> =
   (case e of
      ExprLambda xs e' \<Rightarrow>
        kws = [] \<and>
        (case those (synths \<Gamma> es) of
-          Some \<tau>s \<Rightarrow> distinct xs \<and> length xs = length es \<and> check (\<Gamma>(xs [\<mapsto>] map Ty \<tau>s)) e' \<tau>
+          Some \<tau>s \<Rightarrow> distinct xs \<and> length xs = length es \<and> check (\<Gamma> \<otimes> fmap_of_list (zip xs (map Ty \<tau>s))) e' \<tau>
         | None \<Rightarrow> False)
    | _ \<Rightarrow> False)" |
 "check' \<Gamma> (ExprList es) \<tau> = (case \<tau> of TyList \<tau>' \<Rightarrow> checks \<Gamma> es (replicate (length es) \<tau>') | _ \<Rightarrow> False)" |
@@ -346,7 +348,7 @@ where
 fun def_signature :: "cxt \<Rightarrow> func \<Rightarrow> scheme option"
 where
 "def_signature \<Gamma> (Def f \<alpha>s xps \<psi> s) =
-   (let \<Gamma>' = \<Gamma>(\<alpha>s [\<mapsto>] replicate (length \<alpha>s) TypeVar) in
+   (let \<Gamma>' = \<Gamma> \<otimes> fmconst (set \<alpha>s) TypeVar in
     case (those (map (resolve_type \<Gamma>' \<circ> snd) xps), resolve_type \<Gamma>' \<psi>) of
      (Some \<sigma>s, Some \<tau>) \<Rightarrow> Some (TyScheme \<alpha>s (TyCallable \<sigma>s \<tau>))
    | _ \<Rightarrow> None)"
@@ -363,24 +365,28 @@ and elifs_ty :: "cxt \<Rightarrow> ty option \<Rightarrow> (expr \<times> stmt) 
 and defs_ty :: "cxt \<Rightarrow> func list \<Rightarrow> scheme list \<Rightarrow> bool"
 and def_body :: "cxt \<Rightarrow> func \<Rightarrow> scheme \<Rightarrow> bool"
 where
-"stmt_ty \<Gamma> \<zeta> StmtPass = Some (Assigns\<^sub>R Map.empty)" |
-"stmt_ty \<Gamma> \<zeta> (StmtDeclare x \<psi>) = map_option (\<lambda>\<tau>. Assigns\<^sub>R [x \<mapsto> DU \<tau>]) (resolve_type \<Gamma> \<psi>)" |
+"stmt_ty \<Gamma> \<zeta> StmtPass = Some (Assigns\<^sub>R fmempty)" |
+"stmt_ty \<Gamma> \<zeta> (StmtDeclare x \<psi>) = map_option (\<lambda>\<tau>. Assigns\<^sub>R (fmupd x (DU \<tau>) fmempty)) (resolve_type \<Gamma> \<psi>)" |
 "stmt_ty \<Gamma> \<zeta> (StmtAssign x None e) =
-  (case \<Gamma> x of Some (DU \<tau>) \<Rightarrow> if check \<Gamma> e \<tau> then Some (Assigns\<^sub>R [x \<mapsto> Ty \<tau>]) else None | _ \<Rightarrow> None)" |
+  (case fmlookup \<Gamma> x of
+     Some (DU \<tau>) \<Rightarrow> if check \<Gamma> e \<tau> then Some (Assigns\<^sub>R (fmupd x (Ty \<tau>) fmempty)) else None
+   | _ \<Rightarrow> None)" |
 "stmt_ty \<Gamma> \<zeta> (StmtAssign x (Some \<psi>) e) =
-  (case resolve_type \<Gamma> \<psi> of Some \<tau> \<Rightarrow> if check \<Gamma> e \<tau> then Some (Assigns\<^sub>R [x \<mapsto> Ty \<tau>]) else None | None \<Rightarrow> None)" |
+  (case resolve_type \<Gamma> \<psi> of
+     Some \<tau> \<Rightarrow> if check \<Gamma> e \<tau> then Some (Assigns\<^sub>R (fmupd x (Ty \<tau>) fmempty)) else None
+   | None \<Rightarrow> None)" |
 "stmt_ty \<Gamma> \<zeta> (StmtExpr e) =
   (if synth \<Gamma> e \<noteq> None \<or>
       (case e of ExprCall e' (es, []) \<Rightarrow>
          (case synth \<Gamma> e' of Some (TyCallable \<sigma>s (TyPrim NoneType)) \<Rightarrow> checks \<Gamma> es \<sigma>s | _ \<Rightarrow> False)
        | _ \<Rightarrow> False)
-   then Some (Assigns\<^sub>R Map.empty) else None)" |
+   then Some (Assigns\<^sub>R fmempty) else None)" |
 "stmt_ty \<Gamma> \<zeta> (StmtAssert e None) =
   (if e = false_lit then Some Returns\<^sub>R
-   else if check \<Gamma> e (TyPrim bool) then Some (Assigns\<^sub>R Map.empty) else None)" |
+   else if check \<Gamma> e (TyPrim bool) then Some (Assigns\<^sub>R fmempty) else None)" |
 "stmt_ty \<Gamma> \<zeta> (StmtAssert e (Some e')) =
   (if \<not> check \<Gamma> e' (TyPrim str) then None else if e = false_lit then Some Returns\<^sub>R
-   else if check \<Gamma> e (TyPrim bool) then Some (Assigns\<^sub>R Map.empty) else None)" |
+   else if check \<Gamma> e (TyPrim bool) then Some (Assigns\<^sub>R fmempty) else None)" |
 "stmt_ty \<Gamma> \<zeta> (StmtReturn None) =
   (case \<zeta> of Some \<tau> \<Rightarrow> if \<tau> \<approx> TyPrim NoneType then Some Returns\<^sub>R else None | None \<Rightarrow> None)" |
 "stmt_ty \<Gamma> \<zeta> (StmtReturn (Some e)) =
@@ -388,7 +394,7 @@ where
 "stmt_ty \<Gamma> \<zeta> (StmtIf e s elifs else') =
   (if check \<Gamma> e (TyPrim bool)
     then merges (stmt_ty \<Gamma> \<zeta> s # elifs_ty \<Gamma> \<zeta> elifs
-                 @ [case else' of Some s' \<Rightarrow> stmt_ty \<Gamma> \<zeta> s' | None \<Rightarrow> Some (Assigns\<^sub>R Map.empty)])
+                 @ [case else' of Some s' \<Rightarrow> stmt_ty \<Gamma> \<zeta> s' | None \<Rightarrow> Some (Assigns\<^sub>R fmempty)])
    else None)" |
 "stmt_ty \<Gamma> \<zeta> (StmtSeq s s') =
   (case stmt_ty \<Gamma> \<zeta> s of
@@ -397,7 +403,7 @@ where
 "stmt_ty \<Gamma> \<zeta> (StmtMutualRegion ds) =
   (case those (map (def_signature \<Gamma>) ds) of
      Some \<pi>s \<Rightarrow>
-       let \<Delta> = map_of (zip (map def_name ds) (map scheme_cxt_entry \<pi>s)) in
+       let \<Delta> = fmap_of_list (zip (map def_name ds) (map scheme_cxt_entry \<pi>s)) in
        if defs_ty (\<Gamma> \<otimes> \<Delta>) ds \<pi>s then Some (Assigns\<^sub>R \<Delta>) else None
    | None \<Rightarrow> None)" |
 "stmt_ty \<Gamma> \<zeta> (StmtMatch e bs) = None" |
@@ -415,7 +421,7 @@ where
    distinct xs \<and> length xs = length \<sigma>s \<and>
    (case scope Unbound (set xs) s of
       Some \<Delta> \<Rightarrow>
-        (case stmt_ty (\<Gamma>(\<alpha>s [\<mapsto>] replicate (length \<alpha>s) TypeVar, xs [\<mapsto>] map Ty \<sigma>s) \<otimes> \<Delta>) (Some \<tau>) s of
+        (case stmt_ty (\<Gamma> \<otimes> fmconst (set \<alpha>s) TypeVar \<otimes> fmap_of_list (zip xs (map Ty \<sigma>s)) \<otimes> \<Delta>) (Some \<tau>) s of
            Some R \<Rightarrow> R = Returns\<^sub>R \<or> \<tau> \<approx> TyPrim NoneType
          | None \<Rightarrow> False)
     | None \<Rightarrow> False))" |
