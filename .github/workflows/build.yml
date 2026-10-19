@@ -28,12 +28,17 @@ jobs:
       image: makarius/isabelle:${{ needs.version.outputs.isabelle }}
       options: --user root
     steps:
-      - name: Install make
+      - name: Install make, git and Python
         run: |
           apt-get update -q
-          apt-get install -y -q --no-install-recommends make
+          apt-get install -y -q --no-install-recommends make git python3
 
       - uses: actions/checkout@v4
+
+      - name: Register the Python code generator as a component
+        run: |
+          git clone --depth 1 https://github.com/pure-py/isabelle-python-codegen.git /opt/isabelle-python-codegen
+          /home/isabelle/Isabelle/bin/isabelle components -u /opt/isabelle-python-codegen
 
       - name: Build session
         timeout-minutes: 20
