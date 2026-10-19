@@ -5,7 +5,8 @@ session "isabelle-purepy" = HOL +
   theories
     Syntax
     Semantics
-    Correctness
+    Determinism
+    Eval
     Typing
     Examples
 
