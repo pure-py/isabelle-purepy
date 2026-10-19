@@ -351,12 +351,11 @@ where
      (Some \<sigma>s, Some \<tau>) \<Rightarrow> Some (TyScheme \<alpha>s (TyCallable \<sigma>s \<tau>))
    | _ \<Rightarrow> None)"
 
-(* Call of a callable with result None, which is a statement *)
-fun call_none :: "cxt \<Rightarrow> expr \<Rightarrow> bool"
+fun call_stmt :: "cxt \<Rightarrow> expr \<Rightarrow> bool"
 where
-"call_none \<Gamma> (ExprCall e (es, [])) =
+"call_stmt \<Gamma> (ExprCall e (es, [])) =
   (case synth \<Gamma> e of Some (TyCallable \<sigma>s (TyPrim NoneType)) \<Rightarrow> checks \<Gamma> es \<sigma>s | _ \<Rightarrow> False)" |
-"call_none \<Gamma> _ = False"
+"call_stmt \<Gamma> _ = False"
 
 abbreviation false_literal :: expr where "false_literal \<equiv> ExprLiteral (LitBool False)"
 
@@ -376,7 +375,7 @@ where
   (case \<Gamma> x of Some (DU \<tau>) \<Rightarrow> if check \<Gamma> e \<tau> then Some (Assigns\<^sub>R [x \<mapsto> Ty \<tau>]) else None | _ \<Rightarrow> None)" |
 "stmt_ty \<Gamma> \<zeta> (StmtAssign x (Some \<psi>) e) =
   (case resolve_type \<Gamma> \<psi> of Some \<tau> \<Rightarrow> if check \<Gamma> e \<tau> then Some (Assigns\<^sub>R [x \<mapsto> Ty \<tau>]) else None | None \<Rightarrow> None)" |
-"stmt_ty \<Gamma> \<zeta> (StmtExpr e) = (if synth \<Gamma> e \<noteq> None \<or> call_none \<Gamma> e then Some (Assigns\<^sub>R Map.empty) else None)" |
+"stmt_ty \<Gamma> \<zeta> (StmtExpr e) = (if synth \<Gamma> e \<noteq> None \<or> call_stmt \<Gamma> e then Some (Assigns\<^sub>R Map.empty) else None)" |
 "stmt_ty \<Gamma> \<zeta> (StmtAssert e None) =
   (if e = false_literal then Some Returns\<^sub>R
    else if check \<Gamma> e (TyPrim bool) then Some (Assigns\<^sub>R Map.empty) else None)" |
