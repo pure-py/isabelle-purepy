@@ -413,10 +413,11 @@ where
 "defs_ty \<Gamma> _ _ = False" |
 
 "def_body \<Gamma> (Def f \<alpha>s xps \<psi> s) (TyScheme \<alpha>s' (TyCallable \<sigma>s \<tau>)) =
-  (distinct (map fst xps) \<and> length xps = length \<sigma>s \<and>
-   (case scope Unbound (set (map fst xps)) s of
+  (let xs = map fst xps in
+   distinct xs \<and> length xs = length \<sigma>s \<and>
+   (case scope Unbound (set xs) s of
       Some \<Delta> \<Rightarrow>
-        (case stmt_ty (\<Gamma>(\<alpha>s [\<mapsto>] replicate (length \<alpha>s) TypeVar, map fst xps [\<mapsto>] map Ty \<sigma>s) \<otimes> \<Delta>) (Some \<tau>) s of
+        (case stmt_ty (\<Gamma>(\<alpha>s [\<mapsto>] replicate (length \<alpha>s) TypeVar, xs [\<mapsto>] map Ty \<sigma>s) \<otimes> \<Delta>) (Some \<tau>) s of
            Some R \<Rightarrow> R = Returns\<^sub>R \<or> \<tau> \<approx> TyPrim NoneType
          | None \<Rightarrow> False)
     | None \<Rightarrow> False))" |
