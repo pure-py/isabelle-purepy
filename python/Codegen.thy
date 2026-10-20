@@ -2,9 +2,8 @@ theory Codegen
   imports "isabelle-purepy.Typing" "Python.Python_Setup"
 begin
 
-(* Overload rules as finite tables, so that overload resolution can be executed; prove equal to rules *)
-
-(* Overloads for operand types \<sigma>\<^sub>1 and \<sigma>\<^sub>2 by rules other than base-type rule *)
+(* Search by overload rules would not terminate, since for non-literal types base-type rule has its
+   conclusion as premise *)
 definition binop_table :: "bop \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> ((ty \<times> ty) \<times> ty) list"
 where
 "binop_table op \<sigma>\<^sub>1 \<sigma>\<^sub>2 =
@@ -40,22 +39,24 @@ lemma binop_table_overload:
   "((\<tau>\<^sub>1, \<tau>\<^sub>2), \<tau>) \<in> set (binop_table op \<sigma>\<^sub>1 \<sigma>\<^sub>2) \<Longrightarrow> binop_overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 ((\<tau>\<^sub>1, \<tau>\<^sub>2), \<tau>)"
   by (auto simp: binop_table_def split: ty.splits lit.splits if_splits intro: binop_overload.intros)
 
-lemma binop_overload_table:
-  "binop_overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 ((\<tau>\<^sub>1, \<tau>\<^sub>2), \<tau>) \<Longrightarrow>
-   ((\<tau>\<^sub>1, \<tau>\<^sub>2), \<tau>) \<in> set (binop_table op \<sigma>\<^sub>1 \<sigma>\<^sub>2 @ binop_table op (base_type \<sigma>\<^sub>1) (base_type \<sigma>\<^sub>2))"
+(* One step at base types suffices, since base type is idempotent *)
+definition binop_overloads :: "bop \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> ((ty \<times> ty) \<times> ty) list"
+where
+"binop_overloads op \<sigma>\<^sub>1 \<sigma>\<^sub>2 = binop_table op \<sigma>\<^sub>1 \<sigma>\<^sub>2 @ binop_table op (base_type \<sigma>\<^sub>1) (base_type \<sigma>\<^sub>2)"
+
+lemma binop_overload_overloads:
+  "binop_overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 ((\<tau>\<^sub>1, \<tau>\<^sub>2), \<tau>) \<Longrightarrow> ((\<tau>\<^sub>1, \<tau>\<^sub>2), \<tau>) \<in> set (binop_overloads op \<sigma>\<^sub>1 \<sigma>\<^sub>2)"
 proof (induction rule: binop_overload.induct)
   case OverloadBase
-  then show ?case by simp
-qed (auto simp: binop_table_def)
+  then show ?case by (simp add: binop_overloads_def)
+qed (auto simp: binop_overloads_def binop_table_def)
 
 lemma binop_overload_iff:
-  "binop_overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 ((\<tau>\<^sub>1, \<tau>\<^sub>2), \<tau>) \<longleftrightarrow>
-   ((\<tau>\<^sub>1, \<tau>\<^sub>2), \<tau>) \<in> set (binop_table op \<sigma>\<^sub>1 \<sigma>\<^sub>2 @ binop_table op (base_type \<sigma>\<^sub>1) (base_type \<sigma>\<^sub>2))"
-  using binop_overload_table[of op \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<tau>\<^sub>1 \<tau>\<^sub>2 \<tau>] binop_table_overload[of \<tau>\<^sub>1 \<tau>\<^sub>2 \<tau> op \<sigma>\<^sub>1 \<sigma>\<^sub>2]
+  "binop_overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 ((\<tau>\<^sub>1, \<tau>\<^sub>2), \<tau>) \<longleftrightarrow> ((\<tau>\<^sub>1, \<tau>\<^sub>2), \<tau>) \<in> set (binop_overloads op \<sigma>\<^sub>1 \<sigma>\<^sub>2)"
+  using binop_overload_overloads[of op \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<tau>\<^sub>1 \<tau>\<^sub>2 \<tau>] binop_table_overload[of \<tau>\<^sub>1 \<tau>\<^sub>2 \<tau> op \<sigma>\<^sub>1 \<sigma>\<^sub>2]
     binop_table_overload[of \<tau>\<^sub>1 \<tau>\<^sub>2 \<tau> op "base_type \<sigma>\<^sub>1" "base_type \<sigma>\<^sub>2"] OverloadBase[of op \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<tau>\<^sub>1 \<tau>\<^sub>2 \<tau>]
-  by auto
+  by (auto simp: binop_overloads_def)
 
-(* Overloads for operand type \<sigma> by rules other than base-type rule *)
 definition unop_table :: "uop \<Rightarrow> ty \<Rightarrow> (ty \<times> ty) list"
 where
 "unop_table op \<sigma> =
@@ -66,18 +67,20 @@ where
 lemma unop_table_overload: "(\<tau>, \<tau>') \<in> set (unop_table op \<sigma>) \<Longrightarrow> unop_overload op \<sigma> (\<tau>, \<tau>')"
   by (auto simp: unop_table_def split: if_splits intro: unop_overload.intros)
 
-lemma unop_overload_table:
-  "unop_overload op \<sigma> (\<tau>, \<tau>') \<Longrightarrow> (\<tau>, \<tau>') \<in> set (unop_table op \<sigma> @ unop_table op (base_type \<sigma>))"
+definition unop_overloads :: "uop \<Rightarrow> ty \<Rightarrow> (ty \<times> ty) list"
+where
+"unop_overloads op \<sigma> = unop_table op \<sigma> @ unop_table op (base_type \<sigma>)"
+
+lemma unop_overload_overloads: "unop_overload op \<sigma> (\<tau>, \<tau>') \<Longrightarrow> (\<tau>, \<tau>') \<in> set (unop_overloads op \<sigma>)"
 proof (induction rule: unop_overload.induct)
   case UnopOverloadBase
-  then show ?case by simp
-qed (auto simp: unop_table_def)
+  then show ?case by (simp add: unop_overloads_def)
+qed (auto simp: unop_overloads_def unop_table_def)
 
-lemma unop_overload_iff:
-  "unop_overload op \<sigma> (\<tau>, \<tau>') \<longleftrightarrow> (\<tau>, \<tau>') \<in> set (unop_table op \<sigma> @ unop_table op (base_type \<sigma>))"
-  using unop_overload_table[of op \<sigma> \<tau> \<tau>'] unop_table_overload[of \<tau> \<tau>' op \<sigma>]
+lemma unop_overload_iff: "unop_overload op \<sigma> (\<tau>, \<tau>') \<longleftrightarrow> (\<tau>, \<tau>') \<in> set (unop_overloads op \<sigma>)"
+  using unop_overload_overloads[of op \<sigma> \<tau> \<tau>'] unop_table_overload[of \<tau> \<tau>' op \<sigma>]
     unop_table_overload[of \<tau> \<tau>' op "base_type \<sigma>"] UnopOverloadBase[of op \<sigma> \<tau> \<tau>']
-  by auto
+  by (auto simp: unop_overloads_def)
 
 lemma unique_remdups_filter:
   assumes "\<And>x. P x \<Longrightarrow> x \<in> set xs"
@@ -104,12 +107,12 @@ qed
 
 lemma resolve_binop_code [code]:
   "resolve_binop op \<sigma>\<^sub>1 \<sigma>\<^sub>2 =
-    (let bs = binop_table op \<sigma>\<^sub>1 \<sigma>\<^sub>2 @ binop_table op (base_type \<sigma>\<^sub>1) (base_type \<sigma>\<^sub>2) in
+    (let bs = binop_overloads op \<sigma>\<^sub>1 \<sigma>\<^sub>2 in
      case remdups (filter (\<lambda>((\<tau>\<^sub>1, \<tau>\<^sub>2), _). \<forall>((\<tau>\<^sub>1', \<tau>\<^sub>2'), _) \<in> set bs. \<tau>\<^sub>1 <: \<tau>\<^sub>1' \<and> \<tau>\<^sub>2 <: \<tau>\<^sub>2') bs) of
        [(_, \<tau>)] \<Rightarrow> Some \<tau>
      | _ \<Rightarrow> None)"
 proof -
-  let ?bs = "binop_table op \<sigma>\<^sub>1 \<sigma>\<^sub>2 @ binop_table op (base_type \<sigma>\<^sub>1) (base_type \<sigma>\<^sub>2)"
+  let ?bs = "binop_overloads op \<sigma>\<^sub>1 \<sigma>\<^sub>2"
   have overload: "binop_overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 x \<longleftrightarrow> x \<in> set ?bs" for x
     by (metis binop_overload_iff surj_pair)
   have "resolve_binop op \<sigma>\<^sub>1 \<sigma>\<^sub>2 =
@@ -124,10 +127,10 @@ qed
 
 lemma resolve_unop_code [code]:
   "resolve_unop op \<sigma> =
-    (let bs = unop_table op \<sigma> @ unop_table op (base_type \<sigma>) in
+    (let bs = unop_overloads op \<sigma> in
      case remdups (filter (\<lambda>(\<tau>, _). \<forall>(\<tau>', _) \<in> set bs. \<tau> <: \<tau>') bs) of [(_, \<tau>')] \<Rightarrow> Some \<tau>' | _ \<Rightarrow> None)"
 proof -
-  let ?bs = "unop_table op \<sigma> @ unop_table op (base_type \<sigma>)"
+  let ?bs = "unop_overloads op \<sigma>"
   have overload: "unop_overload op \<sigma> x \<longleftrightarrow> x \<in> set ?bs" for x
     by (metis unop_overload_iff surj_pair)
   have "resolve_unop op \<sigma> =
