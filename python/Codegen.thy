@@ -10,8 +10,9 @@ code_pred unop_overload .
    finite set of overloads to choose from *)
 lemma resolve_binop_code [code]:
   "resolve_binop op \<sigma>\<^sub>1 \<sigma>\<^sub>2 =
-    (let bs = set_of_pred (binop_overload_i_i_i_PPooo op \<sigma>\<^sub>1 \<sigma>\<^sub>2) in
-     map_option snd (the_unique (Set.filter (\<lambda>((\<tau>\<^sub>1, \<tau>\<^sub>2), _). \<forall>((\<tau>\<^sub>1', \<tau>\<^sub>2'), _) \<in> bs. \<tau>\<^sub>1 <: \<tau>\<^sub>1' \<and> \<tau>\<^sub>2 <: \<tau>\<^sub>2') bs)))"
+    (let bs = set_of_pred (binop_overload_i_i_i_PPooo op \<sigma>\<^sub>1 \<sigma>\<^sub>2);
+         ms = Set.filter (\<lambda>((\<tau>\<^sub>1, \<tau>\<^sub>2), _). \<forall>((\<tau>\<^sub>1', \<tau>\<^sub>2'), _) \<in> bs. \<tau>\<^sub>1 <: \<tau>\<^sub>1' \<and> \<tau>\<^sub>2 <: \<tau>\<^sub>2') bs in
+     if is_singleton ms then Some (snd (the_elem ms)) else None)"
 proof -
   have S: "set_of_pred (binop_overload_i_i_i_PPooo op \<sigma>\<^sub>1 \<sigma>\<^sub>2) = {x. binop_overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 x}"
     by (auto simp: binop_overload_i_i_i_PPooo_def)
@@ -19,13 +20,13 @@ proof -
       {x. binop_overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 x} = {x. binop_most_specific op \<sigma>\<^sub>1 \<sigma>\<^sub>2 x}"
     by (auto simp: binop_most_specific_def split_def)
   show ?thesis
-    unfolding Let_def S MS resolve_binop_def the_unique_def by simp
+    unfolding Let_def S MS resolve_binop_def by (simp add: is_singleton_unique the_elem_unique)
 qed
 
 lemma resolve_unop_code [code]:
   "resolve_unop op \<sigma> =
-    (let bs = set_of_pred (unop_overload_i_i_Poo op \<sigma>) in
-     map_option snd (the_unique (Set.filter (\<lambda>(\<tau>, _). \<forall>(\<tau>', _) \<in> bs. \<tau> <: \<tau>') bs)))"
+    (let bs = set_of_pred (unop_overload_i_i_Poo op \<sigma>); ms = Set.filter (\<lambda>(\<tau>, _). \<forall>(\<tau>', _) \<in> bs. \<tau> <: \<tau>') bs in
+     if is_singleton ms then Some (snd (the_elem ms)) else None)"
 proof -
   have S: "set_of_pred (unop_overload_i_i_Poo op \<sigma>) = {x. unop_overload op \<sigma> x}"
     by (auto simp: unop_overload_i_i_Poo_def)
@@ -33,7 +34,7 @@ proof -
       {x. unop_most_specific op \<sigma> x}"
     by (auto simp: unop_most_specific_def split_def)
   show ?thesis
-    unfolding Let_def S MS resolve_unop_def the_unique_def by simp
+    unfolding Let_def S MS resolve_unop_def by (simp add: is_singleton_unique the_elem_unique)
 qed
 
 export_code stmt_ty
