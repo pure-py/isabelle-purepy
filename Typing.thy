@@ -14,45 +14,6 @@ datatype cxt_entry =
 
 type_synonym cxt = "(var, cxt_entry) fmap"
 
-(* Possibly unassigned at the same type or scheme; the other forms merge only with themselves *)
-fun merge_undefined :: "cxt_entry \<Rightarrow> cxt_entry option"
-where
-"merge_undefined (Ty \<tau>) = Some (PU \<tau>)" |
-"merge_undefined (DU \<tau>) = Some (PU \<tau>)" |
-"merge_undefined (PU \<tau>) = Some (PU \<tau>)" |
-"merge_undefined (Scheme \<pi>) = Some (PUScheme \<pi>)" |
-"merge_undefined (PUScheme \<pi>) = Some (PUScheme \<pi>)" |
-"merge_undefined _ = None"
-
-definition merge_cxt_entry :: "cxt_entry option \<Rightarrow> cxt_entry option \<Rightarrow> cxt_entry option option"
-where
-"merge_cxt_entry \<theta> \<theta>' =
-  (if \<theta> = \<theta>' then Some \<theta>
-   else case (map_option merge_undefined \<theta>, map_option merge_undefined \<theta>') of
-     (Some (Some \<theta>\<^sub>P\<^sub>U), Some (Some \<theta>\<^sub>P\<^sub>U')) \<Rightarrow> if \<theta>\<^sub>P\<^sub>U = \<theta>\<^sub>P\<^sub>U' then Some (Some \<theta>\<^sub>P\<^sub>U) else None
-   | (Some (Some \<theta>\<^sub>P\<^sub>U), None) \<Rightarrow> Some (Some \<theta>\<^sub>P\<^sub>U)
-   | (None, Some (Some \<theta>\<^sub>P\<^sub>U')) \<Rightarrow> Some (Some \<theta>\<^sub>P\<^sub>U')
-   | _ \<Rightarrow> None)"
-
-definition merge :: "cxt \<Rightarrow> cxt \<Rightarrow> cxt option" (infixl "\<oplus>" 65)
-where
-"\<Gamma> \<oplus> \<Gamma>' =
-  (let m = fmmap_keys (\<lambda>x _. merge_cxt_entry (fmlookup \<Gamma> x) (fmlookup \<Gamma>' x)) (\<Gamma> \<otimes> \<Gamma>') in
-   if fmpred (\<lambda>_ \<theta>. \<theta> \<noteq> None) m then Some (fmmap (the \<circ> the) m) else None)"
-
-datatype static_outcome = Assigns\<^sub>R cxt | Returns\<^sub>R
-
-fun merge_outcome :: "static_outcome \<Rightarrow> static_outcome \<Rightarrow> static_outcome option" (infixl "\<oplus>\<^sub>R" 65)
-where
-"Assigns\<^sub>R \<Delta> \<oplus>\<^sub>R Assigns\<^sub>R \<Delta>' = map_option Assigns\<^sub>R (\<Delta> \<oplus> \<Delta>')" |
-"R \<oplus>\<^sub>R Returns\<^sub>R = Some R" |
-"Returns\<^sub>R \<oplus>\<^sub>R R = Some R"
-
-fun override_outcome :: "static_outcome \<Rightarrow> static_outcome \<Rightarrow> static_outcome" (infixl "\<otimes>\<^sub>R" 100)
-where
-"Assigns\<^sub>R \<Delta> \<otimes>\<^sub>R Assigns\<^sub>R \<Delta>' = Assigns\<^sub>R (\<Delta> \<otimes> \<Delta>')" |
-"_ \<otimes>\<^sub>R _ = Returns\<^sub>R"
-
 fun base_type_lit :: "lit \<Rightarrow> ty"
 where
 "base_type_lit (LitInt _) = TyPrim int" |
@@ -127,6 +88,53 @@ where
 
 "meets (\<sigma> # \<sigma>s) (\<tau> # \<tau>s) = (\<sigma> \<sqinter> \<tau>) # meets \<sigma>s \<tau>s" |
 "meets _ _ = []"
+
+(* Type at which a variable is bound or declared *)
+fun var_ty :: "cxt_entry \<Rightarrow> ty option"
+where
+"var_ty (Ty \<tau>) = Some \<tau>" |
+"var_ty (DU \<tau>) = Some \<tau>" |
+"var_ty (PU \<tau>) = Some \<tau>" |
+"var_ty _ = None"
+
+(* Possibly unassigned at the same type or scheme, the other forms being undefined *)
+fun merge_undefined :: "cxt_entry \<Rightarrow> cxt_entry"
+where
+"merge_undefined (Ty \<tau>) = PU \<tau>" |
+"merge_undefined (DU \<tau>) = PU \<tau>" |
+"merge_undefined (PU \<tau>) = PU \<tau>" |
+"merge_undefined (Scheme \<pi>) = PUScheme \<pi>" |
+"merge_undefined (PUScheme \<pi>) = PUScheme \<pi>" |
+"merge_undefined _ = undefined"
+
+fun merge_cxt_entry :: "cxt_entry option \<Rightarrow> cxt_entry option \<Rightarrow> cxt_entry"
+where
+"merge_cxt_entry (Some (Ty \<sigma>)) (Some (Ty \<tau>)) = Ty (\<sigma> \<squnion> \<tau>)" |
+"merge_cxt_entry (Some (Scheme \<pi>)) (Some (PUScheme \<pi>')) = (if \<pi> = \<pi>' then PUScheme \<pi> else undefined)" |
+"merge_cxt_entry (Some (PUScheme \<pi>)) (Some (Scheme \<pi>')) = (if \<pi> = \<pi>' then PUScheme \<pi> else undefined)" |
+"merge_cxt_entry (Some \<theta>) (Some \<theta>') =
+  (if \<theta> = \<theta>' then \<theta>
+   else case (var_ty \<theta>, var_ty \<theta>') of (Some \<sigma>, Some \<tau>) \<Rightarrow> PU (\<sigma> \<squnion> \<tau>) | _ \<Rightarrow> undefined)" |
+"merge_cxt_entry (Some \<theta>) None = merge_undefined \<theta>" |
+"merge_cxt_entry None (Some \<theta>) = merge_undefined \<theta>" |
+"merge_cxt_entry None None = undefined"
+
+definition merge :: "cxt \<Rightarrow> cxt \<Rightarrow> cxt" (infixl "\<oplus>" 65)
+where
+"\<Gamma> \<oplus> \<Gamma>' = fmmap_keys (\<lambda>x _. merge_cxt_entry (fmlookup \<Gamma> x) (fmlookup \<Gamma>' x)) (\<Gamma> \<otimes> \<Gamma>')"
+
+datatype static_outcome = Assigns\<^sub>R cxt | Returns\<^sub>R
+
+fun merge_outcome :: "static_outcome \<Rightarrow> static_outcome \<Rightarrow> static_outcome" (infixl "\<oplus>\<^sub>R" 65)
+where
+"Assigns\<^sub>R \<Delta> \<oplus>\<^sub>R Assigns\<^sub>R \<Delta>' = Assigns\<^sub>R (\<Delta> \<oplus> \<Delta>')" |
+"R \<oplus>\<^sub>R Returns\<^sub>R = R" |
+"Returns\<^sub>R \<oplus>\<^sub>R R = R"
+
+fun override_outcome :: "static_outcome \<Rightarrow> static_outcome \<Rightarrow> static_outcome" (infixl "\<otimes>\<^sub>R" 100)
+where
+"Assigns\<^sub>R \<Delta> \<otimes>\<^sub>R Assigns\<^sub>R \<Delta>' = Assigns\<^sub>R (\<Delta> \<otimes> \<Delta>')" |
+"_ \<otimes>\<^sub>R _ = Returns\<^sub>R"
 
 fun prim_name :: "prim_ty \<Rightarrow> var"
 where
@@ -365,7 +373,7 @@ abbreviation false_lit :: expr where "false_lit \<equiv> ExprLiteral (LitBool Fa
 fun merges :: "static_outcome option list \<Rightarrow> static_outcome option"
 where
 "merges [] = Some Returns\<^sub>R" |
-"merges (R # Rs) = (case (R, merges Rs) of (Some R, Some R') \<Rightarrow> R \<oplus>\<^sub>R R' | _ \<Rightarrow> None)"
+"merges (R # Rs) = (case (R, merges Rs) of (Some R, Some R') \<Rightarrow> Some (R \<oplus>\<^sub>R R') | _ \<Rightarrow> None)"
 
 fun stmt_ty :: "cxt \<Rightarrow> ty option \<Rightarrow> stmt \<Rightarrow> static_outcome option"
 and elifs_ty :: "cxt \<Rightarrow> ty option \<Rightarrow> (expr \<times> stmt) list \<Rightarrow> static_outcome option list"
