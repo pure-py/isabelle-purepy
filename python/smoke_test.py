@@ -42,35 +42,38 @@ def int_val(n):
     return Semantics.VLit(Syntax.LitInt(n))
 
 
+def ret(e):
+    return Syntax.StmtReturn(Option.Some(e))
+
+
 empty = Finite_Map.fmempty
 
 
 def test_binop():
-    e = Syntax.ExprBinOp(Syntax.BOpAdd(), lit(10), lit(20))
-    assert Executable.expr_result(empty, e) == Semantics.Val(int_val(30))
+    s = ret(Syntax.ExprBinOp(Syntax.BOpAdd(), lit(10), lit(20)))
+    assert Executable.stmt_outcome(empty, s) == Semantics.Returns(int_val(30))
 
 
 def test_lambda():
     body = Syntax.ExprBinOp(Syntax.BOpAdd(), var("x"), lit(1))
-    e = Syntax.ExprCall(Syntax.ExprLambda([chars("x")], body), ([lit(2)], []))
-    assert Executable.expr_result(empty, e) == Semantics.Val(int_val(3))
+    s = ret(Syntax.ExprCall(Syntax.ExprLambda([chars("x")], body), ([lit(2)], [])))
+    assert Executable.stmt_outcome(empty, s) == Semantics.Returns(int_val(3))
 
 
 def test_zero_division():
-    e = Syntax.ExprBinOp(Syntax.BOpFloorDiv(), lit(1), lit(0))
-    assert Executable.expr_result(empty, e) == Semantics.Aborts(Semantics.ZeroDivisionError())
+    s = ret(Syntax.ExprBinOp(Syntax.BOpFloorDiv(), lit(1), lit(0)))
+    assert Executable.stmt_outcome(empty, s) == Semantics.Aborts_o(Semantics.ZeroDivisionError())
 
 
 def test_recursive_def():
     n = var("n")
     int_ty = Syntax.TyExprPrim(Syntax.int())
     body = Syntax.StmtSeq(
-        Syntax.StmtIf(Syntax.ExprBinOp(Syntax.BOpEq(), n, lit(0)), Syntax.StmtReturn(Option.Some(lit(1))), [],
+        Syntax.StmtIf(Syntax.ExprBinOp(Syntax.BOpEq(), n, lit(0)), ret(lit(1)), [],
                       Option.Nonea()),
-        Syntax.StmtReturn(Option.Some(
-            Syntax.ExprBinOp(Syntax.BOpMul(), n, call("fact", [Syntax.ExprBinOp(Syntax.BOpSub(), n, lit(1))])))))
+        ret(Syntax.ExprBinOp(Syntax.BOpMul(), n, call("fact", [Syntax.ExprBinOp(Syntax.BOpSub(), n, lit(1))]))))
     fact = Syntax.Def(chars("fact"), [], [(chars("n"), int_ty)], int_ty, body)
-    s = Syntax.StmtSeq(Syntax.StmtMutualRegion([fact]), Syntax.StmtReturn(Option.Some(call("fact", [lit(2)]))))
+    s = Syntax.StmtSeq(Syntax.StmtMutualRegion([fact]), ret(call("fact", [lit(2)])))
     assert Executable.stmt_outcome(empty, s) == Semantics.Returns(int_val(2))
 
 
@@ -107,9 +110,9 @@ def test_assign_ill_typed():
 def test_binop_typed():
     float_ty = Syntax.TyPrim(Syntax.float())
     cxt = Finite_Map.fmap_of_list([(chars("y"), Typing.Ty(float_ty))])
-    int_sum = Syntax.ExprBinOp(Syntax.BOpAdd(), lit(1), lit(2))
-    assert Typing.synth(cxt, int_sum) == Option.Some(Syntax.TyPrim(Syntax.int()))
-    assert Typing.synth(cxt, Syntax.ExprBinOp(Syntax.BOpAdd(), lit(1), var("y"))) == Option.Some(float_ty)
+    s = ret(Syntax.ExprBinOp(Syntax.BOpAdd(), lit(1), var("y")))
+    assert Typing.stmt_ty(cxt, Option.Some(float_ty), s) == Option.Some(Typing.Returns_R())
+    assert Typing.stmt_ty(cxt, Option.Some(Syntax.TyPrim(Syntax.int())), s) == Option.Nonea()
 
 
 if __name__ == "__main__":

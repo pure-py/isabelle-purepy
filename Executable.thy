@@ -158,14 +158,6 @@ qed
 code_pred subty .
 code_pred eval_expr .
 
-(* Result of e under \<rho>; unspecified if evaluation diverges or is stuck *)
-definition expr_result :: "env \<Rightarrow> expr \<Rightarrow> val result"
-where
-"expr_result \<rho> e = (THE r. \<rho>, e \<Rightarrow>\<^sub>e r)"
-
-lemma expr_result_code [code]: "expr_result \<rho> e = Predicate.the (eval_expr_i_i_o \<rho> e)"
-  by (simp add: expr_result_def Predicate.the_def eval_expr_i_i_o_def)
-
 (* Outcome of s under \<rho>; unspecified if execution diverges or is stuck *)
 definition stmt_outcome :: "env \<Rightarrow> stmt \<Rightarrow> outcome"
 where
