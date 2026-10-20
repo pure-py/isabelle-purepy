@@ -22,8 +22,12 @@ The build also generates Python from the executable definitions, under `python/p
 generated type checker on small programs. This test will be deleted once the PurePy conformance suite is
 run on the generated code.
 
-To browse the theories with the prover running, open the session directory in the bundled editor:
-`isabelle vscode .`
+To browse the theories with the prover running, open the session directory in the bundled editor, after a
+build has fetched the generator:
+
+```bash
+isabelle vscode -d . -d python/isabelle-python-codegen .
+```
 
 ## Theories
 
