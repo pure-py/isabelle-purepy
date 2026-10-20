@@ -6,8 +6,8 @@ Mechanisation of the PurePy specification in Isabelle/HOL.
 
 ## Building
 
-Install the [Isabelle](https://isabelle.in.tum.de/) release named in `.isabelle-version`. Then check the
-proofs:
+Install the [Isabelle](https://isabelle.in.tum.de/) release named in `.isabelle-version` and
+[uv](https://docs.astral.sh/uv/). Then check the proofs:
 
 ```bash
 make build
@@ -19,8 +19,8 @@ The target checks that `isabelle` is that release; if it is not on `PATH`, pass 
 The build also generates Python from the executable definitions, under `python/python_out`, with the
 [Python code generator](https://github.com/pure-py/isabelle-python-codegen) at the commit named in
 `.python-codegen-version`, which the build fetches into `python/isabelle-python-codegen`. It then runs the
-generated type checker on small programs, with Python provided by [uv](https://docs.astral.sh/uv/). This
-test will be deleted once the PurePy conformance suite is run on the generated code.
+generated type checker on small programs. This test will be deleted once the PurePy conformance suite is
+run on the generated code.
 
 To browse the theories with the prover running, open the session directory in the bundled editor:
 `isabelle vscode .`
