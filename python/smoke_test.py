@@ -1,5 +1,4 @@
-"""Temporary test of the generated type checker on small programs; delete once the PurePy conformance
-suite is run on the generated code."""
+"""Test of the generated type checker on small programs; TODO: replace with full conformance test"""
 
 import Finite_Map
 import List
