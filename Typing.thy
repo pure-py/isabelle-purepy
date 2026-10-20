@@ -66,6 +66,12 @@ where
 "base_type (TyLiteral l) = base_type_lit l" |
 "base_type \<tau> = \<tau>"
 
+lemma base_type_idem [simp]: "base_type (base_type \<sigma>) = base_type \<sigma>"
+proof (cases \<sigma>)
+  case (TyLiteral l)
+  then show ?thesis by (cases l) simp_all
+qed simp_all
+
 fun sized :: "ty \<Rightarrow> bool"
 where
 "sized (TyList _) = True" |

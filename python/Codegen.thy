@@ -2,12 +2,6 @@ theory Codegen
   imports "isabelle-purepy.Typing" "Python.Python_Setup"
 begin
 
-lemma base_type_idem [simp]: "base_type (base_type \<sigma>) = base_type \<sigma>"
-proof (cases \<sigma>)
-  case (TyLiteral l)
-  then show ?thesis by (cases l) simp_all
-qed simp_all
-
 (* Overloads for operand types \<sigma>\<^sub>1 and \<sigma>\<^sub>2 by rules other than base-type rule *)
 definition binop_table :: "bop \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> ((ty \<times> ty) \<times> ty) list"
 where
