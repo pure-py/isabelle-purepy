@@ -5,6 +5,7 @@ PYTHON ?= uv run --no-project python
 ISABELLE_VERSION := $(shell cat .isabelle-version)
 CODEGEN := python/isabelle-python-codegen
 CODEGEN_VERSION := $(shell cat .python-codegen-version)
+CODE := python/python_out/isabelle-purepy-python.Codegen/code
 
 default: build
 
@@ -22,7 +23,7 @@ codegen:
 
 build: check-version codegen
 	$(ISABELLE) build -v -e -d $(CODEGEN) -D .
-	$(PYTHON) -m py_compile $$(find python/python_out -name '*.py')
-	$(PYTHON) python/smoke_test.py
+	$(PYTHON) -m py_compile $$(find $(CODE) -name '*.py')
+	PYTHONPATH=$(CODE) $(PYTHON) python/smoke_test.py
 
 .PHONY: default check-version codegen build

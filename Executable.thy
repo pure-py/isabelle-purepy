@@ -1,18 +1,6 @@
 theory Executable
-  imports Correctness Typing "HOL-Library.Sublist"
+  imports Typing
 begin
-
-(* Free o for outcomes; sublist import restores composition notation *)
-no_notation (ASCII) comp (infixl \<open>o\<close> 55)
-
-lemma contains_code [code]:
-  "contains v' v =
-    (case (v', v) of
-       (VList vs, _) \<Rightarrow> contains_elems vs v
-     | (VTuple vs, _) \<Rightarrow> contains_elems vs v
-     | (VLit (LitString w'), VLit (LitString w)) \<Rightarrow> Val (sublist w w')
-     | _ \<Rightarrow> Aborts TypeError)"
-  by (cases v' rule: val.exhaust; cases v rule: val.exhaust) (auto simp: sublist_def split: lit.splits)
 
 lemma base_type_idem [simp]: "base_type (base_type \<sigma>) = base_type \<sigma>"
 proof (cases \<sigma>)
@@ -156,16 +144,5 @@ proof -
 qed
 
 code_pred subty .
-code_pred eval_expr .
-
-definition stmt_outcome :: "env \<Rightarrow> stmt \<Rightarrow> outcome"
-where
-"stmt_outcome \<rho> s = (THE o. \<rho>, s \<Rightarrow>\<^sub>s o)"
-
-lemma stmt_outcome_eval: "\<rho>, s \<Rightarrow>\<^sub>s o \<Longrightarrow> stmt_outcome \<rho> s = o"
-  unfolding stmt_outcome_def by (auto intro: the_equality dest: stmt_det)
-
-lemma stmt_outcome_code [code]: "stmt_outcome \<rho> s = Predicate.the (eval_stmt_i_i_o \<rho> s)"
-  by (simp add: stmt_outcome_def Predicate.the_def eval_stmt_i_i_o_def)
 
 end

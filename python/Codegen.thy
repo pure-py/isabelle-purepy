@@ -7,7 +7,7 @@ begin
    once the generator translates aborts into expressions. *)
 code_printing constant Code.abort \<rightharpoonup> (Python) "(x for x in ()).throw(RuntimeError'(_'))"
 
-export_code stmt_ty stmt_outcome
+export_code stmt_ty
   in Python file_prefix "."
 
 end
