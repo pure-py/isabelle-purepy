@@ -20,7 +20,8 @@ The build also generates Python from the executable definitions, under `python/p
 [Python code generator](https://github.com/pure-py/isabelle-python-codegen) at the commit named in
 `.python-codegen-version`, which the build fetches into `python/isabelle-python-codegen`. It then runs the
 generated interpreter and type checker on small programs, with Python provided by
-[uv](https://docs.astral.sh/uv/).
+[uv](https://docs.astral.sh/uv/). This test will be deleted once the PurePy conformance suite is run on
+the generated code.
 
 To browse the theories with the prover running, open the session directory in the bundled editor:
 `isabelle vscode .`
@@ -36,4 +37,4 @@ To browse the theories with the prover running, open the session directory in th
 | `Executable.thy`       | Code equations and executable evaluation                       |
 | `Examples.thy`         | Example evaluations                                            |
 | `python/Codegen.thy`   | Python generation                                              |
-| `python/smoke_test.py` | Tests of the generated interpreter and type checker            |
+| `python/smoke_test.py` | Temporary test of the generated interpreter and type checker   |

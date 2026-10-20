@@ -1,4 +1,5 @@
-"""Run the generated interpreter and type checker on small programs."""
+"""Temporary test of the generated interpreter and type checker on small programs; delete once the
+PurePy conformance suite is run on the generated code."""
 
 import sys
 from pathlib import Path
