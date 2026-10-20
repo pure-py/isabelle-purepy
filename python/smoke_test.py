@@ -104,11 +104,12 @@ def test_assign_ill_typed():
     assert Typing.stmt_ty(predef, Option.Nonea(), s) == Option.Nonea()
 
 
-def test_resolve_binop():
-    int_lit = Syntax.TyLiteral(Syntax.LitInt(1))
+def test_binop_typed():
     float_ty = Syntax.TyPrim(Syntax.float())
-    assert Typing.resolve_binop(Syntax.BOpAdd(), int_lit, int_lit) == Option.Some(Syntax.TyPrim(Syntax.int()))
-    assert Typing.resolve_binop(Syntax.BOpAdd(), int_lit, float_ty) == Option.Some(float_ty)
+    cxt = Finite_Map.fmap_of_list([(chars("y"), Typing.Ty(float_ty))])
+    int_sum = Syntax.ExprBinOp(Syntax.BOpAdd(), lit(1), lit(2))
+    assert Typing.synth(cxt, int_sum) == Option.Some(Syntax.TyPrim(Syntax.int()))
+    assert Typing.synth(cxt, Syntax.ExprBinOp(Syntax.BOpAdd(), lit(1), var("y"))) == Option.Some(float_ty)
 
 
 if __name__ == "__main__":
