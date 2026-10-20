@@ -1,4 +1,4 @@
-"""Test of the generated type checker on small programs; TODO: replace with full conformance test"""
+"""Test of generated type checker on small programs; TODO: replace with full conformance test"""
 
 import Finite_Map
 import List
