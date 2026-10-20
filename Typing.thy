@@ -66,11 +66,10 @@ where
 "base_type (TyLiteral l) = base_type_lit l" |
 "base_type \<tau> = \<tau>"
 
-lemma base_type_idem [simp]: "base_type (base_type \<sigma>) = base_type \<sigma>"
-proof (cases \<sigma>)
-  case (TyLiteral l)
-  then show ?thesis by (cases l) simp_all
-qed simp_all
+fun literal_type :: "ty \<Rightarrow> bool"
+where
+"literal_type (TyLiteral _) = True" |
+"literal_type _ = False"
 
 fun sized :: "ty \<Rightarrow> bool"
 where
@@ -226,7 +225,8 @@ OverloadPowNeg:
   "\<lbrakk> \<sigma>\<^sub>1 <: TyPrim int ; n < 0 \<rbrakk>
   \<Longrightarrow> binop_overload BOpPow \<sigma>\<^sub>1 (TyLiteral (LitInt n)) ((TyPrim int, TyLiteral (LitInt n)), TyPrim float)" |
 OverloadBase:
-  "binop_overload op (base_type \<sigma>\<^sub>1) (base_type \<sigma>\<^sub>2) ((\<tau>\<^sub>1, \<tau>\<^sub>2), \<tau>) \<Longrightarrow> binop_overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 ((\<tau>\<^sub>1, \<tau>\<^sub>2), \<tau>)"
+  "\<lbrakk> literal_type \<sigma>\<^sub>1 \<or> literal_type \<sigma>\<^sub>2 ; binop_overload op (base_type \<sigma>\<^sub>1) (base_type \<sigma>\<^sub>2) ((\<tau>\<^sub>1, \<tau>\<^sub>2), \<tau>) \<rbrakk>
+  \<Longrightarrow> binop_overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 ((\<tau>\<^sub>1, \<tau>\<^sub>2), \<tau>)"
 
 inductive unop_overload :: "uop \<Rightarrow> ty \<Rightarrow> ty \<times> ty \<Rightarrow> bool"
 where
@@ -235,7 +235,8 @@ UnopOverloadInt:
   "\<lbrakk> op \<in> {UOpPos, UOpNeg} ; \<sigma> <: TyPrim int \<rbrakk> \<Longrightarrow> unop_overload op \<sigma> (TyPrim int, TyPrim int)" |
 UnopOverloadFloat:
   "\<lbrakk> op \<in> {UOpPos, UOpNeg} ; \<sigma> <: TyPrim float \<rbrakk> \<Longrightarrow> unop_overload op \<sigma> (TyPrim float, TyPrim float)" |
-UnopOverloadBase: "unop_overload op (base_type \<sigma>) (\<tau>, \<tau>') \<Longrightarrow> unop_overload op \<sigma> (\<tau>, \<tau>')"
+UnopOverloadBase:
+  "\<lbrakk> literal_type \<sigma> ; unop_overload op (base_type \<sigma>) (\<tau>, \<tau>') \<rbrakk> \<Longrightarrow> unop_overload op \<sigma> (\<tau>, \<tau>')"
 
 definition binop_most_specific :: "bop \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> (ty \<times> ty) \<times> ty \<Rightarrow> bool"
 where

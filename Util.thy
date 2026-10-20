@@ -25,4 +25,11 @@ proof -
   qed
 qed
 
+definition the_unique :: "'a set \<Rightarrow> 'a option"
+where
+"the_unique A = (if \<exists>!x. x \<in> A then Some (THE x. x \<in> A) else None)"
+
+lemma the_unique_code [code]: "the_unique (set xs) = (case remdups xs of [x] \<Rightarrow> Some x | _ \<Rightarrow> None)"
+  using unique_remdups_filter[of "\<lambda>x. x \<in> set xs" xs "\<lambda>x. x"] by (simp add: the_unique_def)
+
 end

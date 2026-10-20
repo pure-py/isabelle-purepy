@@ -2,123 +2,39 @@ theory Codegen
   imports "isabelle-purepy.Typing" "isabelle-purepy.Util" "Python.Python_Setup"
 begin
 
-(* Search by overload rules would not terminate, since for non-literal types base-type rule has its
-   conclusion as premise *)
-definition binop_table :: "bop \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> ((ty \<times> ty) \<times> ty) list"
-where
-"binop_table op \<sigma>\<^sub>1 \<sigma>\<^sub>2 =
-  [((\<sigma>\<^sub>1, \<sigma>\<^sub>2), TyPrim bool).
-     op \<in> {BOpEq, BOpNeq}, equality_type \<sigma>\<^sub>1, equality_type \<sigma>\<^sub>2, comparable \<sigma>\<^sub>1 \<sigma>\<^sub>2] @
-  [((\<sigma>\<^sub>1, TyList \<tau>), TyPrim bool). TyList \<tau> \<leftarrow> [\<sigma>\<^sub>2], op \<in> {BOpIn, BOpNotIn}, comparable \<sigma>\<^sub>1 \<tau>] @
-  [((\<sigma>\<^sub>1, TyTuple \<tau>s), TyPrim bool).
-     TyTuple \<tau>s \<leftarrow> [\<sigma>\<^sub>2], op \<in> {BOpIn, BOpNotIn}, comparable \<sigma>\<^sub>1 (joins \<tau>s)] @
-  [((TyPrim str, TyPrim str), TyPrim bool).
-     op \<in> {BOpIn, BOpNotIn}, \<sigma>\<^sub>1 <: TyPrim str, \<sigma>\<^sub>2 <: TyPrim str] @
-  [((TyPrim str, TyDict \<tau>), TyPrim bool). TyDict \<tau> \<leftarrow> [\<sigma>\<^sub>2], op \<in> {BOpIn, BOpNotIn}, \<sigma>\<^sub>1 <: TyPrim str] @
-  [((TyPrim float, TyPrim float), TyPrim bool).
-     op \<in> {BOpLt, BOpLeq, BOpGt, BOpGeq}, \<sigma>\<^sub>1 <: TyPrim float, \<sigma>\<^sub>2 <: TyPrim float] @
-  [((TyPrim str, TyPrim str), TyPrim bool).
-     op \<in> {BOpLt, BOpLeq, BOpGt, BOpGeq}, \<sigma>\<^sub>1 <: TyPrim str, \<sigma>\<^sub>2 <: TyPrim str] @
-  [((TyPrim int, TyPrim int), TyPrim int).
-     op \<in> {BOpAdd, BOpSub, BOpMul, BOpFloorDiv, BOpMod}, \<sigma>\<^sub>1 <: TyPrim int, \<sigma>\<^sub>2 <: TyPrim int] @
-  [((TyPrim float, TyPrim float), TyPrim float).
-     op \<in> {BOpAdd, BOpSub, BOpMul, BOpFloorDiv, BOpMod, BOpDiv, BOpPow}, \<sigma>\<^sub>1 <: TyPrim float, \<sigma>\<^sub>2 <: TyPrim float] @
-  [((TyPrim str, TyPrim str), TyPrim str). op = BOpAdd, \<sigma>\<^sub>1 <: TyPrim str, \<sigma>\<^sub>2 <: TyPrim str] @
-  [((TyList \<sigma>, TyList \<tau>), TyList (\<sigma> \<squnion> \<tau>)). (TyList \<sigma>, TyList \<tau>) \<leftarrow> [(\<sigma>\<^sub>1, \<sigma>\<^sub>2)], op = BOpAdd] @
-  [((TyTuple \<sigma>s, TyTuple \<tau>s), TyTuple (\<sigma>s @ \<tau>s)). (TyTuple \<sigma>s, TyTuple \<tau>s) \<leftarrow> [(\<sigma>\<^sub>1, \<sigma>\<^sub>2)], op = BOpAdd] @
-  [((TyPrim str, TyPrim int), TyPrim str). op = BOpMul, \<sigma>\<^sub>1 <: TyPrim str, \<sigma>\<^sub>2 <: TyPrim int] @
-  [((TyPrim int, TyPrim str), TyPrim str). op = BOpMul, \<sigma>\<^sub>1 <: TyPrim int, \<sigma>\<^sub>2 <: TyPrim str] @
-  [((TyList \<tau>, TyPrim int), TyList \<tau>). TyList \<tau> \<leftarrow> [\<sigma>\<^sub>1], op = BOpMul, \<sigma>\<^sub>2 <: TyPrim int] @
-  [((TyPrim int, TyList \<tau>), TyList \<tau>). TyList \<tau> \<leftarrow> [\<sigma>\<^sub>2], op = BOpMul, \<sigma>\<^sub>1 <: TyPrim int] @
-  [((TyPrim int, TyLiteral (LitInt n)), TyPrim int).
-     TyLiteral (LitInt n) \<leftarrow> [\<sigma>\<^sub>2], op = BOpPow, \<sigma>\<^sub>1 <: TyPrim int, n \<ge> 0] @
-  [((TyPrim int, TyLiteral (LitInt n)), TyPrim float).
-     TyLiteral (LitInt n) \<leftarrow> [\<sigma>\<^sub>2], op = BOpPow, \<sigma>\<^sub>1 <: TyPrim int, n < 0]"
+code_pred subty .
+code_pred binop_overload .
+code_pred unop_overload .
 
-lemma binop_table_overload:
-  "((\<tau>\<^sub>1, \<tau>\<^sub>2), \<tau>) \<in> set (binop_table op \<sigma>\<^sub>1 \<sigma>\<^sub>2) \<Longrightarrow> binop_overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 ((\<tau>\<^sub>1, \<tau>\<^sub>2), \<tau>)"
-  by (auto simp: binop_table_def split: ty.splits lit.splits if_splits intro: binop_overload.intros)
-
-(* One step at base types suffices, since base type is idempotent *)
-definition binop_overloads :: "bop \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> ((ty \<times> ty) \<times> ty) list"
-where
-"binop_overloads op \<sigma>\<^sub>1 \<sigma>\<^sub>2 = binop_table op \<sigma>\<^sub>1 \<sigma>\<^sub>2 @ binop_table op (base_type \<sigma>\<^sub>1) (base_type \<sigma>\<^sub>2)"
-
-lemma binop_overload_overloads:
-  "binop_overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 ((\<tau>\<^sub>1, \<tau>\<^sub>2), \<tau>) \<Longrightarrow> ((\<tau>\<^sub>1, \<tau>\<^sub>2), \<tau>) \<in> set (binop_overloads op \<sigma>\<^sub>1 \<sigma>\<^sub>2)"
-proof (induction rule: binop_overload.induct)
-  case OverloadBase
-  then show ?case by (simp add: binop_overloads_def)
-qed (auto simp: binop_overloads_def binop_table_def)
-
-lemma binop_overload_iff:
-  "binop_overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 ((\<tau>\<^sub>1, \<tau>\<^sub>2), \<tau>) \<longleftrightarrow> ((\<tau>\<^sub>1, \<tau>\<^sub>2), \<tau>) \<in> set (binop_overloads op \<sigma>\<^sub>1 \<sigma>\<^sub>2)"
-  using binop_overload_overloads[of op \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<tau>\<^sub>1 \<tau>\<^sub>2 \<tau>] binop_table_overload[of \<tau>\<^sub>1 \<tau>\<^sub>2 \<tau> op \<sigma>\<^sub>1 \<sigma>\<^sub>2]
-    binop_table_overload[of \<tau>\<^sub>1 \<tau>\<^sub>2 \<tau> op "base_type \<sigma>\<^sub>1" "base_type \<sigma>\<^sub>2"] OverloadBase[of op \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<tau>\<^sub>1 \<tau>\<^sub>2 \<tau>]
-  by (auto simp: binop_overloads_def)
-
-definition unop_table :: "uop \<Rightarrow> ty \<Rightarrow> (ty \<times> ty) list"
-where
-"unop_table op \<sigma> =
-  [(TyPrim bool, TyPrim bool). op = UOpNot, \<sigma> <: TyPrim bool] @
-  [(TyPrim int, TyPrim int). op \<in> {UOpPos, UOpNeg}, \<sigma> <: TyPrim int] @
-  [(TyPrim float, TyPrim float). op \<in> {UOpPos, UOpNeg}, \<sigma> <: TyPrim float]"
-
-lemma unop_table_overload: "(\<tau>, \<tau>') \<in> set (unop_table op \<sigma>) \<Longrightarrow> unop_overload op \<sigma> (\<tau>, \<tau>')"
-  by (auto simp: unop_table_def split: if_splits intro: unop_overload.intros)
-
-definition unop_overloads :: "uop \<Rightarrow> ty \<Rightarrow> (ty \<times> ty) list"
-where
-"unop_overloads op \<sigma> = unop_table op \<sigma> @ unop_table op (base_type \<sigma>)"
-
-lemma unop_overload_overloads: "unop_overload op \<sigma> (\<tau>, \<tau>') \<Longrightarrow> (\<tau>, \<tau>') \<in> set (unop_overloads op \<sigma>)"
-proof (induction rule: unop_overload.induct)
-  case UnopOverloadBase
-  then show ?case by (simp add: unop_overloads_def)
-qed (auto simp: unop_overloads_def unop_table_def)
-
-lemma unop_overload_iff: "unop_overload op \<sigma> (\<tau>, \<tau>') \<longleftrightarrow> (\<tau>, \<tau>') \<in> set (unop_overloads op \<sigma>)"
-  using unop_overload_overloads[of op \<sigma> \<tau> \<tau>'] unop_table_overload[of \<tau> \<tau>' op \<sigma>]
-    unop_table_overload[of \<tau> \<tau>' op "base_type \<sigma>"] UnopOverloadBase[of op \<sigma> \<tau> \<tau>']
-  by (auto simp: unop_overloads_def)
-
+(* Overload resolution is a definite description, which cannot be executed; compiled overload rules give
+   finite set of overloads to choose from *)
 lemma resolve_binop_code [code]:
   "resolve_binop op \<sigma>\<^sub>1 \<sigma>\<^sub>2 =
-    (let bs = binop_overloads op \<sigma>\<^sub>1 \<sigma>\<^sub>2 in
-     case remdups (filter (\<lambda>((\<tau>\<^sub>1, \<tau>\<^sub>2), _). \<forall>((\<tau>\<^sub>1', \<tau>\<^sub>2'), _) \<in> set bs. \<tau>\<^sub>1 <: \<tau>\<^sub>1' \<and> \<tau>\<^sub>2 <: \<tau>\<^sub>2') bs) of
-       [(_, \<tau>)] \<Rightarrow> Some \<tau>
-     | _ \<Rightarrow> None)"
+    (let bs = set_of_pred (binop_overload_i_i_i_PPooo op \<sigma>\<^sub>1 \<sigma>\<^sub>2) in
+     map_option snd (the_unique (Set.filter (\<lambda>((\<tau>\<^sub>1, \<tau>\<^sub>2), _). \<forall>((\<tau>\<^sub>1', \<tau>\<^sub>2'), _) \<in> bs. \<tau>\<^sub>1 <: \<tau>\<^sub>1' \<and> \<tau>\<^sub>2 <: \<tau>\<^sub>2') bs)))"
 proof -
-  let ?bs = "binop_overloads op \<sigma>\<^sub>1 \<sigma>\<^sub>2"
-  have overload: "binop_overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 x \<longleftrightarrow> x \<in> set ?bs" for x
-    by (metis binop_overload_iff surj_pair)
-  have "resolve_binop op \<sigma>\<^sub>1 \<sigma>\<^sub>2 =
-        (case remdups (filter (binop_most_specific op \<sigma>\<^sub>1 \<sigma>\<^sub>2) ?bs) of [x] \<Rightarrow> Some (snd x) | _ \<Rightarrow> None)"
-    unfolding resolve_binop_def
-    by (rule unique_remdups_filter) (simp add: binop_most_specific_def overload)
-  moreover have "filter (binop_most_specific op \<sigma>\<^sub>1 \<sigma>\<^sub>2) ?bs =
-        filter (\<lambda>((\<tau>\<^sub>1, \<tau>\<^sub>2), _). \<forall>((\<tau>\<^sub>1', \<tau>\<^sub>2'), _) \<in> set ?bs. \<tau>\<^sub>1 <: \<tau>\<^sub>1' \<and> \<tau>\<^sub>2 <: \<tau>\<^sub>2') ?bs"
-    by (rule filter_cong) (simp_all add: binop_most_specific_def overload Ball_def split_def)
-  ultimately show ?thesis by (simp add: Let_def split: list.splits)
+  have S: "set_of_pred (binop_overload_i_i_i_PPooo op \<sigma>\<^sub>1 \<sigma>\<^sub>2) = {x. binop_overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 x}"
+    by (auto simp: binop_overload_i_i_i_PPooo_def)
+  have MS: "Set.filter (\<lambda>((\<tau>\<^sub>1, \<tau>\<^sub>2), _). \<forall>((\<tau>\<^sub>1', \<tau>\<^sub>2'), _) \<in> {x. binop_overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 x}. \<tau>\<^sub>1 <: \<tau>\<^sub>1' \<and> \<tau>\<^sub>2 <: \<tau>\<^sub>2')
+      {x. binop_overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 x} = {x. binop_most_specific op \<sigma>\<^sub>1 \<sigma>\<^sub>2 x}"
+    by (auto simp: binop_most_specific_def split_def)
+  show ?thesis
+    unfolding Let_def S MS resolve_binop_def the_unique_def by simp
 qed
 
 lemma resolve_unop_code [code]:
   "resolve_unop op \<sigma> =
-    (let bs = unop_overloads op \<sigma> in
-     case remdups (filter (\<lambda>(\<tau>, _). \<forall>(\<tau>', _) \<in> set bs. \<tau> <: \<tau>') bs) of [(_, \<tau>')] \<Rightarrow> Some \<tau>' | _ \<Rightarrow> None)"
+    (let bs = set_of_pred (unop_overload_i_i_Poo op \<sigma>) in
+     map_option snd (the_unique (Set.filter (\<lambda>(\<tau>, _). \<forall>(\<tau>', _) \<in> bs. \<tau> <: \<tau>') bs)))"
 proof -
-  let ?bs = "unop_overloads op \<sigma>"
-  have overload: "unop_overload op \<sigma> x \<longleftrightarrow> x \<in> set ?bs" for x
-    by (metis unop_overload_iff surj_pair)
-  have "resolve_unop op \<sigma> =
-        (case remdups (filter (unop_most_specific op \<sigma>) ?bs) of [x] \<Rightarrow> Some (snd x) | _ \<Rightarrow> None)"
-    unfolding resolve_unop_def by (rule unique_remdups_filter) (simp add: unop_most_specific_def overload)
-  moreover have "filter (unop_most_specific op \<sigma>) ?bs = filter (\<lambda>(\<tau>, _). \<forall>(\<tau>', _) \<in> set ?bs. \<tau> <: \<tau>') ?bs"
-    by (rule filter_cong) (simp_all add: unop_most_specific_def overload Ball_def split_def)
-  ultimately show ?thesis by (simp add: Let_def split: list.splits)
+  have S: "set_of_pred (unop_overload_i_i_Poo op \<sigma>) = {x. unop_overload op \<sigma> x}"
+    by (auto simp: unop_overload_i_i_Poo_def)
+  have MS: "Set.filter (\<lambda>(\<tau>, _). \<forall>(\<tau>', _) \<in> {x. unop_overload op \<sigma> x}. \<tau> <: \<tau>') {x. unop_overload op \<sigma> x} =
+      {x. unop_most_specific op \<sigma> x}"
+    by (auto simp: unop_most_specific_def split_def)
+  show ?thesis
+    unfolding Let_def S MS resolve_unop_def the_unique_def by simp
 qed
-
-code_pred subty .
 
 export_code stmt_ty
   in Python file_prefix "."
