@@ -1,5 +1,5 @@
 theory Codegen
-  imports "isabelle-purepy.Typing" "Python.Python_Setup"
+  imports "isabelle-purepy.Typing" "isabelle-purepy.Util" "Python.Python_Setup"
 begin
 
 (* Search by overload rules would not terminate, since for non-literal types base-type rule has its
@@ -81,29 +81,6 @@ lemma unop_overload_iff: "unop_overload op \<sigma> (\<tau>, \<tau>') \<longleft
   using unop_overload_overloads[of op \<sigma> \<tau> \<tau>'] unop_table_overload[of \<tau> \<tau>' op \<sigma>]
     unop_table_overload[of \<tau> \<tau>' op "base_type \<sigma>"] UnopOverloadBase[of op \<sigma> \<tau> \<tau>']
   by (auto simp: unop_overloads_def)
-
-lemma unique_remdups_filter:
-  assumes "\<And>x. P x \<Longrightarrow> x \<in> set xs"
-  shows "(if \<exists>!x. P x then Some (f (THE x. P x)) else None) =
-         (case remdups (filter P xs) of [x] \<Rightarrow> Some (f x) | _ \<Rightarrow> None)"
-proof -
-  have P: "set (remdups (filter P xs)) = {x. P x}"
-    using assms by auto
-  show ?thesis
-  proof (cases "remdups (filter P xs)" rule: remdups_adj.cases)
-    case 1
-    with P show ?thesis by auto
-  next
-    case (2 x)
-    with P have "P = (\<lambda>y. y = x)" by (auto simp: fun_eq_iff)
-    with 2 show ?thesis by simp
-  next
-    case (3 x y ys)
-    with P have "P x" "P y" "x \<noteq> y"
-      using distinct_remdups[of "filter P xs"] by (auto simp del: distinct_remdups)
-    with 3 show ?thesis by auto
-  qed
-qed
 
 lemma resolve_binop_code [code]:
   "resolve_binop op \<sigma>\<^sub>1 \<sigma>\<^sub>2 =

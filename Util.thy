@@ -2,26 +2,27 @@ theory Util
     imports Main
 begin
 
-class partial_monoid =
-  fixes one :: "'a" ( "\<one>" )
-    and mult :: "'a \<Rightarrow> 'a \<Rightarrow> 'a option" (infixl "\<bullet>" 70)
-  assumes left_unit:
-    "\<one> \<bullet> x = Some x"
-  assumes right_unit:
-    "x \<bullet> \<one> = Some x"
-  assumes assoc:
-    "(case x \<bullet> y of
-       None \<Rightarrow> None
-     | Some xy \<Rightarrow>
-         (case xy \<bullet> z of
-            None \<Rightarrow> None
-          | Some xyz \<Rightarrow> Some xyz))
-     =
-     (case y \<bullet> z of
-        None \<Rightarrow> None
-      | Some yz \<Rightarrow>
-          (case x \<bullet> yz of
-             None \<Rightarrow> None
-           | Some xyz \<Rightarrow> Some xyz))"
+lemma unique_remdups_filter:
+  assumes "\<And>x. P x \<Longrightarrow> x \<in> set xs"
+  shows "(if \<exists>!x. P x then Some (f (THE x. P x)) else None) =
+         (case remdups (filter P xs) of [x] \<Rightarrow> Some (f x) | _ \<Rightarrow> None)"
+proof -
+  have P: "set (remdups (filter P xs)) = {x. P x}"
+    using assms by auto
+  show ?thesis
+  proof (cases "remdups (filter P xs)" rule: remdups_adj.cases)
+    case 1
+    with P show ?thesis by auto
+  next
+    case (2 x)
+    with P have "P = (\<lambda>y. y = x)" by (auto simp: fun_eq_iff)
+    with 2 show ?thesis by simp
+  next
+    case (3 x y ys)
+    with P have "P x" "P y" "x \<noteq> y"
+      using distinct_remdups[of "filter P xs"] by (auto simp del: distinct_remdups)
+    with 3 show ?thesis by auto
+  qed
+qed
 
 end
