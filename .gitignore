@@ -78,7 +78,6 @@ _opam/
 generated/
 extracted/
 
-# Python code generator, fetched by build
 python/isabelle-python-codegen/
 
 ###############################################################################
