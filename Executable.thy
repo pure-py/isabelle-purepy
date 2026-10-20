@@ -1,5 +1,5 @@
 theory Executable
-  imports Typing "HOL-Library.Sublist"
+  imports Correctness Typing "HOL-Library.Sublist"
 begin
 
 (* Free o for outcomes; sublist import restores composition notation *)
@@ -158,10 +158,12 @@ qed
 code_pred subty .
 code_pred eval_expr .
 
-(* Outcome of s under \<rho>; unspecified if execution diverges or is stuck *)
 definition stmt_outcome :: "env \<Rightarrow> stmt \<Rightarrow> outcome"
 where
 "stmt_outcome \<rho> s = (THE o. \<rho>, s \<Rightarrow>\<^sub>s o)"
+
+lemma stmt_outcome_eval: "\<rho>, s \<Rightarrow>\<^sub>s o \<Longrightarrow> stmt_outcome \<rho> s = o"
+  unfolding stmt_outcome_def by (auto intro: the_equality dest: stmt_det)
 
 lemma stmt_outcome_code [code]: "stmt_outcome \<rho> s = Predicate.the (eval_stmt_i_i_o \<rho> s)"
   by (simp add: stmt_outcome_def Predicate.the_def eval_stmt_i_i_o_def)
