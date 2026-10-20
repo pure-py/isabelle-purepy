@@ -33,7 +33,7 @@ To browse the theories with the prover running, open the session directory in th
 | `Semantics.thy`        | Values, results, auxiliary functions and evaluation judgements |
 | `Correctness.thy`      | Inversion lemmas and determinism of evaluation                 |
 | `Typing.thy`           | Subtyping, contexts, static outcomes and typing                |
-| `Executable.thy`       | Code equations                                                 |
+| `Executable.thy`       | Operator resolution and subtyping in executable form           |
 | `Examples.thy`         | Example evaluations                                            |
 | `python/Codegen.thy`   | Python generation                                              |
-| `python/smoke_test.py` | Temporary test of the generated type checker                   |
+| `python/smoke_test.py` | Test of generated type checker                                 |

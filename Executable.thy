@@ -8,7 +8,7 @@ proof (cases \<sigma>)
   then show ?thesis by (cases l) simp_all
 qed simp_all
 
-(* Overloads for operand types \<sigma>\<^sub>1 and \<sigma>\<^sub>2 by rules other than the base-type rule *)
+(* Overloads for operand types \<sigma>\<^sub>1 and \<sigma>\<^sub>2 by rules other than base-type rule *)
 definition binop_table :: "bop \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> ((ty \<times> ty) \<times> ty) list"
 where
 "binop_table op \<sigma>\<^sub>1 \<sigma>\<^sub>2 =
@@ -63,7 +63,7 @@ proof
     by auto
 qed
 
-(* Overloads for operand type \<sigma> by rules other than the base-type rule *)
+(* Overloads for operand type \<sigma> by rules other than base-type rule *)
 definition unop_table :: "uop \<Rightarrow> ty \<Rightarrow> (ty \<times> ty) list"
 where
 "unop_table op \<sigma> =
