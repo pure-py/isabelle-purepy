@@ -1,13 +1,13 @@
 theory Codegen
-  imports "isabelle-purepy.Typing" "isabelle-purepy.Util" "Python.Python_Setup"
+  imports "isabelle-purepy.Typing" "Python.Python_Setup"
 begin
 
 code_pred subty .
 code_pred binop_overload .
 code_pred unop_overload .
 
-(* Overload resolution is a definite description, which cannot be executed; compiled overload rules give
-   finite set of overloads to choose from *)
+(* Sets of overloads in resolution are defined by overload rules, so cannot be computed directly; compiled
+   rules list their elements *)
 lemma resolve_binop_code [code]:
   "resolve_binop op \<sigma>\<^sub>1 \<sigma>\<^sub>2 =
     (let bs = set_of_pred (binop_overload_i_i_i_PPooo op \<sigma>\<^sub>1 \<sigma>\<^sub>2);
@@ -20,7 +20,7 @@ proof -
       {x. binop_overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 x} = {x. binop_most_specific op \<sigma>\<^sub>1 \<sigma>\<^sub>2 x}"
     by (auto simp: binop_most_specific_def split_def)
   show ?thesis
-    unfolding Let_def S MS resolve_binop_def by (simp add: is_singleton_unique the_elem_unique)
+    unfolding Let_def S MS resolve_binop_def by simp
 qed
 
 lemma resolve_unop_code [code]:
@@ -34,7 +34,7 @@ proof -
       {x. unop_most_specific op \<sigma> x}"
     by (auto simp: unop_most_specific_def split_def)
   show ?thesis
-    unfolding Let_def S MS resolve_unop_def by (simp add: is_singleton_unique the_elem_unique)
+    unfolding Let_def S MS resolve_unop_def by simp
 qed
 
 export_code stmt_ty

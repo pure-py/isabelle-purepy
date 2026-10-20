@@ -3,7 +3,6 @@ session "isabelle-purepy" = HOL +
   sessions
     "HOL-Library"
   theories
-    Util
     Syntax
     Semantics
     Correctness

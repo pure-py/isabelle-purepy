@@ -251,12 +251,12 @@ where
 definition resolve_binop :: "bop \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> ty option"
 where
 "resolve_binop op \<sigma>\<^sub>1 \<sigma>\<^sub>2 =
-  (if \<exists>!b. binop_most_specific op \<sigma>\<^sub>1 \<sigma>\<^sub>2 b then Some (snd (THE b. binop_most_specific op \<sigma>\<^sub>1 \<sigma>\<^sub>2 b)) else None)"
+  (let ms = Collect (binop_most_specific op \<sigma>\<^sub>1 \<sigma>\<^sub>2) in if is_singleton ms then Some (snd (the_elem ms)) else None)"
 
 definition resolve_unop :: "uop \<Rightarrow> ty \<Rightarrow> ty option"
 where
 "resolve_unop op \<sigma> =
-  (if \<exists>!b. unop_most_specific op \<sigma> b then Some (snd (THE b. unop_most_specific op \<sigma> b)) else None)"
+  (let ms = Collect (unop_most_specific op \<sigma>) in if is_singleton ms then Some (snd (the_elem ms)) else None)"
 
 fun numeric_literal :: "expr \<Rightarrow> bool"
 where
