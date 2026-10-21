@@ -97,15 +97,14 @@ where
 "var_ty (PU \<tau>) = Some \<tau>" |
 "var_ty _ = None"
 
-(* Possibly unassigned at the same type or scheme, the other forms being undefined *)
-fun merge_undefined :: "cxt_entry \<Rightarrow> cxt_entry"
+fun possibly_unassigned :: "cxt_entry \<Rightarrow> cxt_entry"
 where
-"merge_undefined (Ty \<tau>) = PU \<tau>" |
-"merge_undefined (DU \<tau>) = PU \<tau>" |
-"merge_undefined (PU \<tau>) = PU \<tau>" |
-"merge_undefined (Scheme \<pi>) = PUScheme \<pi>" |
-"merge_undefined (PUScheme \<pi>) = PUScheme \<pi>" |
-"merge_undefined _ = undefined"
+"possibly_unassigned (Ty \<tau>) = PU \<tau>" |
+"possibly_unassigned (DU \<tau>) = PU \<tau>" |
+"possibly_unassigned (PU \<tau>) = PU \<tau>" |
+"possibly_unassigned (Scheme \<pi>) = PUScheme \<pi>" |
+"possibly_unassigned (PUScheme \<pi>) = PUScheme \<pi>" |
+"possibly_unassigned _ = undefined"
 
 fun merge_cxt_entry :: "cxt_entry option \<Rightarrow> cxt_entry option \<Rightarrow> cxt_entry"
 where
@@ -115,8 +114,8 @@ where
 "merge_cxt_entry (Some \<theta>) (Some \<theta>') =
   (if \<theta> = \<theta>' then \<theta>
    else case (var_ty \<theta>, var_ty \<theta>') of (Some \<sigma>, Some \<tau>) \<Rightarrow> PU (\<sigma> \<squnion> \<tau>) | _ \<Rightarrow> undefined)" |
-"merge_cxt_entry (Some \<theta>) None = merge_undefined \<theta>" |
-"merge_cxt_entry None (Some \<theta>) = merge_undefined \<theta>" |
+"merge_cxt_entry (Some \<theta>) None = possibly_unassigned \<theta>" |
+"merge_cxt_entry None (Some \<theta>) = possibly_unassigned \<theta>" |
 "merge_cxt_entry None None = undefined"
 
 definition merge :: "cxt \<Rightarrow> cxt \<Rightarrow> cxt" (infixl "\<oplus>" 65)
