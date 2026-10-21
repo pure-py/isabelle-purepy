@@ -131,6 +131,11 @@ where
 "R \<oplus>\<^sub>R Returns\<^sub>R = R" |
 "Returns\<^sub>R \<oplus>\<^sub>R R = R"
 
+fun merges :: "static_outcome option list \<Rightarrow> static_outcome option"
+where
+"merges [] = Some Returns\<^sub>R" |
+"merges (R # Rs) = (case (R, merges Rs) of (Some R, Some R') \<Rightarrow> Some (R \<oplus>\<^sub>R R') | _ \<Rightarrow> None)"
+
 fun override_outcome :: "static_outcome \<Rightarrow> static_outcome \<Rightarrow> static_outcome" (infixl "\<otimes>\<^sub>R" 100)
 where
 "Assigns\<^sub>R \<Delta> \<otimes>\<^sub>R Assigns\<^sub>R \<Delta>' = Assigns\<^sub>R (\<Delta> \<otimes> \<Delta>')" |
@@ -375,11 +380,6 @@ where
    | _ \<Rightarrow> None)"
 
 abbreviation false_lit :: expr where "false_lit \<equiv> ExprLiteral (LitBool False)"
-
-fun merges :: "static_outcome option list \<Rightarrow> static_outcome option"
-where
-"merges [] = Some Returns\<^sub>R" |
-"merges (R # Rs) = (case (R, merges Rs) of (Some R, Some R') \<Rightarrow> Some (R \<oplus>\<^sub>R R') | _ \<Rightarrow> None)"
 
 fun check_stmt :: "cxt \<Rightarrow> ty option \<Rightarrow> stmt \<Rightarrow> static_outcome option"
 and check_elifs :: "cxt \<Rightarrow> ty option \<Rightarrow> (expr \<times> stmt) list \<Rightarrow> static_outcome option list"
