@@ -1,5 +1,7 @@
 session "isabelle-purepy" = HOL +
   options [timeout = 600]
+  sessions
+    "HOL-Library"
   theories
     Syntax
     Semantics

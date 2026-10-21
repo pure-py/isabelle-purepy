@@ -97,7 +97,7 @@ datatype ty =
   | TyClass name "ty list"
   | TyUnion ty ty
 
-datatype scheme =
+datatype ty_scheme =
     TyScheme "var list" ty
   | FieldScheme "var list" "(var \<times> ty) list"
 
@@ -105,6 +105,8 @@ datatype import =
     Import name
   | FromImport name "var list"
 
+(* Two spec forms differing only in an omitted component share a constructor, with an option for the
+   component. A dataclass always has a field list; an empty field list is written `pass` *)
 datatype stmt =
     StmtPass
   | StmtSeq stmt stmt

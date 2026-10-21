@@ -22,7 +22,7 @@ lemma ex_lambda_eval: "\<epsilon>, ex_lambda \<Rightarrow>\<^sub>e Val (VLit (Li
 proof -
   have args: "\<epsilon>, [ExprLiteral (LitInt 2)] \<Rightarrow>\<^sub>e\<^sub>s Val [VLit (LitInt 2)]"
     using EvalExprsCons[OF EvalLiteral EvalExprsNil] by simp
-  let ?\<rho> = "\<epsilon>([''x''] [\<mapsto>] [VLit (LitInt 2)])"
+  let ?\<rho> = "\<epsilon> \<otimes> fmap_of_list (zip [''x''] [VLit (LitInt 2)])"
   have "?\<rho>, ExprVar ''x'' \<Rightarrow>\<^sub>e Val (VLit (LitInt 2))" by (rule EvalVar) simp
   then have "?\<rho>, ExprBinOp BOpAdd (ExprVar ''x'') (ExprLiteral (LitInt 1))
     \<Rightarrow>\<^sub>e mlet (Val (VLit (LitInt 1))) (binop_meaning BOpAdd (VLit (LitInt 2)))"

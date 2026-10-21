@@ -1,21 +1,21 @@
 theory Semantics
-    imports Syntax HOL.Map
+    imports Syntax "HOL-Library.Finite_Map"
 begin
 
 (* Free o for outcomes, as in the spec *)
 no_notation (ASCII) comp (infixl \<open>o\<close> 55)
-notation map_add (infixl "\<otimes>" 100)
+notation fmadd (infixl "\<otimes>" 100)
 
 datatype val =
       VLit lit
     | VList "val list"
     | VTuple "val list"
-    | VLamClosure "var \<rightharpoonup> val" "var list" expr  ("Lam'(_, _, _')")
-    | VDefClosure "var \<rightharpoonup> val" "func list" nat  ("Def'(_, _, _')")
+    | VLamClosure "(var, val) fmap" "var list" expr  ("Lam'(_, _, _')")
+    | VDefClosure "(var, val) fmap" "func list" nat  ("Def'(_, _, _')")
     | VUnbound
 
-type_synonym env = "var \<rightharpoonup> val"
-abbreviation \<epsilon> :: env where "\<epsilon> \<equiv> Map.empty"
+type_synonym env = "(var, val) fmap"
+abbreviation \<epsilon> :: env where "\<epsilon> \<equiv> fmempty"
 
 datatype termination_kind =
     TypeError
@@ -213,12 +213,22 @@ where
 "declares (StmtMatch _ cases) = concat (map (\<lambda>(_, s). declares s) cases)" |
 "declares _ = []"
 
+definition fmconst :: "'a set \<Rightarrow> 'b \<Rightarrow> ('a, 'b) fmap"
+where
+"fmconst A u = Finite_Set.fold (\<lambda>x. fmupd x u) fmempty A"
+
+lemma comp_fun_idem_fmupd: "comp_fun_idem_on UNIV (\<lambda>x. fmupd x u)"
+  by unfold_locales (auto simp: fun_eq_iff intro!: fmap_ext)
+
+lemma fmconst_code [code]: "fmconst (set xs) u = fold (\<lambda>x. fmupd x u) xs fmempty"
+  unfolding fmconst_def by (rule comp_fun_idem_on.fold_set_fold[OF comp_fun_idem_fmupd subset_UNIV])
+
 (* u marks a variable unbound: the value or the context entry *)
-definition scope :: "'a \<Rightarrow> var set \<Rightarrow> stmt \<Rightarrow> (var \<rightharpoonup> 'a) option"
+definition scope :: "'a \<Rightarrow> var set \<Rightarrow> stmt \<Rightarrow> (var, 'a) fmap option"
 where
 "scope u Y s =
   (if distinct (declares s) \<and> Y \<inter> set (declares s) = {} \<and> Y \<inter> binds s = {} \<and> set (declares s) \<inter> binds s = {}
-   then Some (\<lambda>x. if x \<in> assigns s - Y then Some u else None)
+   then Some (fmconst (assigns s - Y) u)
    else None)"
 
 abbreviation true :: val where "true \<equiv> VLit (LitBool True)"
@@ -232,7 +242,7 @@ inductive
   eval_stmt  :: "env \<Rightarrow> stmt \<Rightarrow> outcome \<Rightarrow> bool"               ("_, _ \<Rightarrow>\<^sub>s _" [60,0,60] 60) and
   eval_elif  :: "env \<Rightarrow> elif_block \<Rightarrow> outcome \<Rightarrow> bool"         ("_, _ \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f _" [60,0,60] 60)
 where
-EvalVar: "\<rho> x = Some v \<Longrightarrow> \<rho>, ExprVar x \<Rightarrow>\<^sub>e Val v" |
+EvalVar: "fmlookup \<rho> x = Some v \<Longrightarrow> \<rho>, ExprVar x \<Rightarrow>\<^sub>e Val v" |
 EvalLiteral: "\<rho>, ExprLiteral l \<Rightarrow>\<^sub>e Val (VLit l)" |
 EvalLambda: "\<rho>, ExprLambda xs e \<Rightarrow>\<^sub>e Val Lam(\<rho>, xs, e)" |
 EvalUnOp: "\<rho>, e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, ExprUnOp op e \<Rightarrow>\<^sub>e mlet r (unop_meaning op)" |
@@ -256,7 +266,7 @@ EvalCallLambda:
   "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val Lam(\<rho>', xs, e')
   ; \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Val us
   ; length xs = length us
-  ; \<rho>'(xs [\<mapsto>] us), e' \<Rightarrow>\<^sub>e r
+  ; \<rho>' \<otimes> fmap_of_list (zip xs us), e' \<Rightarrow>\<^sub>e r
   \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e (es, []) \<Rightarrow>\<^sub>e r" |
 EvalCallLambdaArity:
   "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val Lam(\<rho>', xs, e')
@@ -270,7 +280,7 @@ EvalCallDef:
   ; \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Val us
   ; length xps = length us
   ; scope VUnbound (set (map fst xps)) s = Some \<rho>s
-  ; \<rho>'(map def_name ds [\<mapsto>] vs, map fst xps [\<mapsto>] us) \<otimes> \<rho>s, s \<Rightarrow>\<^sub>s o
+  ; \<rho>' \<otimes> fmap_of_list (zip (map def_name ds) vs) \<otimes> fmap_of_list (zip (map fst xps) us) \<otimes> \<rho>s, s \<Rightarrow>\<^sub>s o
   \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e (es, []) \<Rightarrow>\<^sub>e call_result o" |
 EvalCallDefArity:
   "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val Def(\<rho>', ds, j)
@@ -291,13 +301,13 @@ EvalExprsCons: "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<rho>, es \<R
 EvalExprsFail: "\<rho>, e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, e # es \<Rightarrow>\<^sub>e\<^sub>s Aborts \<kappa>" |
 
 EvalPass: "\<rho>, StmtPass \<Rightarrow>\<^sub>s Assigns \<epsilon>" |
-EvalAssign: "\<rho>, e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtAssign x \<pi> e \<Rightarrow>\<^sub>s mlet r (\<lambda>v. Assigns [x \<mapsto> v])" |
+EvalAssign: "\<rho>, e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtAssign x \<pi> e \<Rightarrow>\<^sub>s mlet r (\<lambda>v. Assigns (fmupd x v \<epsilon>))" |
 EvalExprStmt: "\<rho>, e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtExpr e \<Rightarrow>\<^sub>s mlet r (\<lambda>v. Assigns \<epsilon>)" |
 EvalReturn: "\<rho>, e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtReturn (Some e) \<Rightarrow>\<^sub>s mlet r (\<lambda>v. Returns v)" |
 EvalReturnNone: "\<rho>, StmtReturn None \<Rightarrow>\<^sub>s Returns (VLit LitNone)" |
 EvalDefs:
   "vs = map (\<lambda>i. Def(\<rho>, ds, i)) [0..<length ds]
-  \<Longrightarrow> \<rho>, StmtMutualRegion ds \<Rightarrow>\<^sub>s Assigns (\<epsilon>(map def_name ds [\<mapsto>] vs))" |
+  \<Longrightarrow> \<rho>, StmtMutualRegion ds \<Rightarrow>\<^sub>s Assigns (fmap_of_list (zip (map def_name ds) vs))" |
 EvalAssert: "\<rho>, e \<Rightarrow>\<^sub>e Val true \<Longrightarrow> \<rho>, StmtAssert e None \<Rightarrow>\<^sub>s Assigns \<epsilon>" |
 EvalAssertFalse: "\<rho>, e \<Rightarrow>\<^sub>e Val false \<Longrightarrow> \<rho>, StmtAssert e None \<Rightarrow>\<^sub>s Aborts\<^sub>o (AssertionError None)" |
 EvalAssertFail: "\<rho>, e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtAssert e None \<Rightarrow>\<^sub>s Aborts\<^sub>o \<kappa>" |
