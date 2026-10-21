@@ -38,7 +38,7 @@ def annotated_int(e):
 
 def test_assign_typed():
     s = annotated_int(Syntax.ExprBinOp(Syntax.BOpAdd(), lit(1), lit(2)))
-    match Typing.stmt_ty(predef, Option.Nonea(), s):
+    match Typing.check_stmt(predef, Option.Nonea(), s):
         case Option.Some(Typing.Assigns_R(delta)):
             assert lookup(delta, "x") == Option.Some(Typing.Ty(Syntax.TyPrim(Syntax.int())))
         case r:
@@ -47,7 +47,7 @@ def test_assign_typed():
 
 def test_if_merge():
     s = Syntax.StmtIf(Syntax.ExprLiteral(Syntax.LitBool(True)), annotated_int(lit(1)), [], Option.Nonea())
-    match Typing.stmt_ty(predef, Option.Nonea(), s):
+    match Typing.check_stmt(predef, Option.Nonea(), s):
         case Option.Some(Typing.Assigns_R(delta)):
             assert lookup(delta, "x") == Option.Some(Typing.PU(Syntax.TyPrim(Syntax.int())))
         case r:
@@ -56,15 +56,15 @@ def test_if_merge():
 
 def test_assign_ill_typed():
     s = annotated_int(Syntax.ExprLiteral(Syntax.LitString(chars("a"))))
-    assert Typing.stmt_ty(predef, Option.Nonea(), s) == Option.Nonea()
+    assert Typing.check_stmt(predef, Option.Nonea(), s) == Option.Nonea()
 
 
 def test_binop_typed():
     float_ty = Syntax.TyPrim(Syntax.float())
     cxt = Finite_Map.fmap_of_list([(chars("y"), Typing.Ty(float_ty))])
     s = ret(Syntax.ExprBinOp(Syntax.BOpAdd(), lit(1), var("y")))
-    assert Typing.stmt_ty(cxt, Option.Some(float_ty), s) == Option.Some(Typing.Returns_R())
-    assert Typing.stmt_ty(cxt, Option.Some(Syntax.TyPrim(Syntax.int())), s) == Option.Nonea()
+    assert Typing.check_stmt(cxt, Option.Some(float_ty), s) == Option.Some(Typing.Returns_R())
+    assert Typing.check_stmt(cxt, Option.Some(Syntax.TyPrim(Syntax.int())), s) == Option.Nonea()
 
 
 if __name__ == "__main__":
