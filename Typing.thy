@@ -360,11 +360,11 @@ by (relation "inv_image (less_than <*lex*> less_than) (\<lambda>x. case x of
    | Inr (Inr (Inr (\<Gamma>, es, \<tau>s))) \<Rightarrow> (size_list size es, 2))")
    (auto dest!: nth_mem intro: size_list_estimation' simp: less_Suc_eq_le)
 
-(* Type scheme as a context entry: itself, or its type when it has no type parameters *)
-fun scheme_cxt_entry :: "scheme \<Rightarrow> cxt_entry"
+(* Signature as a context entry: a type when there are no type parameters, otherwise a scheme *)
+fun signature_entry :: "scheme \<Rightarrow> cxt_entry"
 where
-"scheme_cxt_entry (TyScheme [] \<tau>) = Ty \<tau>" |
-"scheme_cxt_entry \<pi> = Scheme \<pi>"
+"signature_entry (TyScheme [] \<tau>) = Ty \<tau>" |
+"signature_entry \<pi> = Scheme \<pi>"
 
 fun def_signature :: "cxt \<Rightarrow> func \<Rightarrow> scheme option"
 where
@@ -424,7 +424,7 @@ where
 "check_stmt \<Gamma> \<zeta> (StmtMutualRegion ds) =
   (case those (map (def_signature \<Gamma>) ds) of
      Some \<pi>s \<Rightarrow>
-       let \<Delta> = fmap_of_list (zip (map def_name ds) (map scheme_cxt_entry \<pi>s)) in
+       let \<Delta> = fmap_of_list (zip (map def_name ds) (map signature_entry \<pi>s)) in
        if check_defs (\<Gamma> \<otimes> \<Delta>) ds \<pi>s then Some (Assigns\<^sub>R \<Delta>) else None
    | None \<Rightarrow> None)" |
 "check_stmt \<Gamma> \<zeta> (StmtMatch e bs) = None" |
