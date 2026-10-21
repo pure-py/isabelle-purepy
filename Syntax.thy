@@ -105,8 +105,8 @@ datatype import =
     Import name
   | FromImport name "var list"
 
-(* Spec forms differing only by omitted component are one constructor with option. Dataclass field list
-   is not an instance, since empty field list is `pass`. *)
+(* Two spec forms differing only in an omitted component share a constructor, with an option for the
+   component. A dataclass always has a field list; an empty field list is written `pass` *)
 datatype stmt =
     StmtPass
   | StmtSeq stmt stmt
