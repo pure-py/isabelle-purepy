@@ -246,26 +246,35 @@ UnopOverloadFloat:
 UnopOverloadBase:
   "\<lbrakk> literal_type \<sigma> ; unop_overload op (base_type \<sigma>) (\<tau>, \<tau>') \<rbrakk> \<Longrightarrow> unop_overload op \<sigma> (\<tau>, \<tau>')"
 
-definition binop_most_specific :: "bop \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> (ty \<times> ty) \<times> ty \<Rightarrow> bool"
+definition binop_overloads :: "bop \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> ((ty \<times> ty) \<times> ty) set"
 where
-"binop_most_specific op \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<omega> \<longleftrightarrow>
-  binop_overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<omega> \<and>
-  (\<forall>\<omega>'. binop_overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<omega>' \<longrightarrow> fst (fst \<omega>) <: fst (fst \<omega>') \<and> snd (fst \<omega>) <: snd (fst \<omega>'))"
+"binop_overloads op \<sigma>\<^sub>1 \<sigma>\<^sub>2 = {\<omega>. binop_overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<omega>}"
 
-definition unop_most_specific :: "uop \<Rightarrow> ty \<Rightarrow> ty \<times> ty \<Rightarrow> bool"
+definition unop_overloads :: "uop \<Rightarrow> ty \<Rightarrow> (ty \<times> ty) set"
 where
-"unop_most_specific op \<sigma> \<omega> \<longleftrightarrow> unop_overload op \<sigma> \<omega> \<and> (\<forall>\<omega>'. unop_overload op \<sigma> \<omega>' \<longrightarrow> fst \<omega> <: fst \<omega>')"
+"unop_overloads op \<sigma> = {\<omega>. unop_overload op \<sigma> \<omega>}"
+
+definition binop_most_specific :: "bop \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> ((ty \<times> ty) \<times> ty) set"
+where
+"binop_most_specific op \<sigma>\<^sub>1 \<sigma>\<^sub>2 =
+  (let overloads = binop_overloads op \<sigma>\<^sub>1 \<sigma>\<^sub>2 in
+   Set.filter (\<lambda>((\<tau>\<^sub>1, \<tau>\<^sub>2), _). \<forall>((\<tau>\<^sub>1', \<tau>\<^sub>2'), _) \<in> overloads. \<tau>\<^sub>1 <: \<tau>\<^sub>1' \<and> \<tau>\<^sub>2 <: \<tau>\<^sub>2') overloads)"
+
+definition unop_most_specific :: "uop \<Rightarrow> ty \<Rightarrow> (ty \<times> ty) set"
+where
+"unop_most_specific op \<sigma> =
+  (let overloads = unop_overloads op \<sigma> in Set.filter (\<lambda>(\<tau>, _). \<forall>(\<tau>', _) \<in> overloads. \<tau> <: \<tau>') overloads)"
 
 definition resolve_binop :: "bop \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> ty option"
 where
 "resolve_binop op \<sigma>\<^sub>1 \<sigma>\<^sub>2 =
-  (let most_specific = Collect (binop_most_specific op \<sigma>\<^sub>1 \<sigma>\<^sub>2) in
+  (let most_specific = binop_most_specific op \<sigma>\<^sub>1 \<sigma>\<^sub>2 in
    if is_singleton most_specific then Some (snd (the_elem most_specific)) else None)"
 
 definition resolve_unop :: "uop \<Rightarrow> ty \<Rightarrow> ty option"
 where
 "resolve_unop op \<sigma> =
-  (let most_specific = Collect (unop_most_specific op \<sigma>) in
+  (let most_specific = unop_most_specific op \<sigma> in
    if is_singleton most_specific then Some (snd (the_elem most_specific)) else None)"
 
 fun numeric_literal :: "expr \<Rightarrow> bool"
