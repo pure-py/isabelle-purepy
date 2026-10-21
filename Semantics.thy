@@ -213,7 +213,6 @@ where
 "declares (StmtMatch _ cases) = concat (map (\<lambda>(_, s). declares s) cases)" |
 "declares _ = []"
 
-(* Finite map sending each element of A to u *)
 definition fmconst :: "'a set \<Rightarrow> 'b \<Rightarrow> ('a, 'b) fmap"
 where
 "fmconst A u = Finite_Set.fold (\<lambda>x. fmupd x u) fmempty A"
