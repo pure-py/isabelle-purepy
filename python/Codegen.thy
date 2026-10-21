@@ -6,13 +6,13 @@ code_pred subty .
 code_pred binop_overload .
 code_pred unop_overload .
 
-(* Sets of overloads in resolution are defined by overload rules, so cannot be computed directly; compiled
-   rules list their elements *)
+(* Resolve by enumerating overloads with compiled rules, since set comprehension is not executable *)
 lemma resolve_binop_code [code]:
   "resolve_binop op \<sigma>\<^sub>1 \<sigma>\<^sub>2 =
-    (let bs = set_of_pred (binop_overload_i_i_i_PPooo op \<sigma>\<^sub>1 \<sigma>\<^sub>2);
-         ms = Set.filter (\<lambda>((\<tau>\<^sub>1, \<tau>\<^sub>2), _). \<forall>((\<tau>\<^sub>1', \<tau>\<^sub>2'), _) \<in> bs. \<tau>\<^sub>1 <: \<tau>\<^sub>1' \<and> \<tau>\<^sub>2 <: \<tau>\<^sub>2') bs in
-     if is_singleton ms then Some (snd (the_elem ms)) else None)"
+    (let overloads = set_of_pred (binop_overload_i_i_i_PPooo op \<sigma>\<^sub>1 \<sigma>\<^sub>2);
+         most_specific =
+           Set.filter (\<lambda>((\<tau>\<^sub>1, \<tau>\<^sub>2), _). \<forall>((\<tau>\<^sub>1', \<tau>\<^sub>2'), _) \<in> overloads. \<tau>\<^sub>1 <: \<tau>\<^sub>1' \<and> \<tau>\<^sub>2 <: \<tau>\<^sub>2') overloads in
+     if is_singleton most_specific then Some (snd (the_elem most_specific)) else None)"
 proof -
   have S: "set_of_pred (binop_overload_i_i_i_PPooo op \<sigma>\<^sub>1 \<sigma>\<^sub>2) = {x. binop_overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 x}"
     by (auto simp: binop_overload_i_i_i_PPooo_def)
@@ -25,8 +25,9 @@ qed
 
 lemma resolve_unop_code [code]:
   "resolve_unop op \<sigma> =
-    (let bs = set_of_pred (unop_overload_i_i_Poo op \<sigma>); ms = Set.filter (\<lambda>(\<tau>, _). \<forall>(\<tau>', _) \<in> bs. \<tau> <: \<tau>') bs in
-     if is_singleton ms then Some (snd (the_elem ms)) else None)"
+    (let overloads = set_of_pred (unop_overload_i_i_Poo op \<sigma>);
+         most_specific = Set.filter (\<lambda>(\<tau>, _). \<forall>(\<tau>', _) \<in> overloads. \<tau> <: \<tau>') overloads in
+     if is_singleton most_specific then Some (snd (the_elem most_specific)) else None)"
 proof -
   have S: "set_of_pred (unop_overload_i_i_Poo op \<sigma>) = {x. unop_overload op \<sigma> x}"
     by (auto simp: unop_overload_i_i_Poo_def)

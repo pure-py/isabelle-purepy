@@ -248,23 +248,25 @@ UnopOverloadBase:
 
 definition binop_most_specific :: "bop \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> (ty \<times> ty) \<times> ty \<Rightarrow> bool"
 where
-"binop_most_specific op \<sigma>\<^sub>1 \<sigma>\<^sub>2 b \<longleftrightarrow>
-  binop_overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 b \<and>
-  (\<forall>b'. binop_overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 b' \<longrightarrow> fst (fst b) <: fst (fst b') \<and> snd (fst b) <: snd (fst b'))"
+"binop_most_specific op \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<omega> \<longleftrightarrow>
+  binop_overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<omega> \<and>
+  (\<forall>\<omega>'. binop_overload op \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<omega>' \<longrightarrow> fst (fst \<omega>) <: fst (fst \<omega>') \<and> snd (fst \<omega>) <: snd (fst \<omega>'))"
 
 definition unop_most_specific :: "uop \<Rightarrow> ty \<Rightarrow> ty \<times> ty \<Rightarrow> bool"
 where
-"unop_most_specific op \<sigma> b \<longleftrightarrow> unop_overload op \<sigma> b \<and> (\<forall>b'. unop_overload op \<sigma> b' \<longrightarrow> fst b <: fst b')"
+"unop_most_specific op \<sigma> \<omega> \<longleftrightarrow> unop_overload op \<sigma> \<omega> \<and> (\<forall>\<omega>'. unop_overload op \<sigma> \<omega>' \<longrightarrow> fst \<omega> <: fst \<omega>')"
 
 definition resolve_binop :: "bop \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> ty option"
 where
 "resolve_binop op \<sigma>\<^sub>1 \<sigma>\<^sub>2 =
-  (let ms = Collect (binop_most_specific op \<sigma>\<^sub>1 \<sigma>\<^sub>2) in if is_singleton ms then Some (snd (the_elem ms)) else None)"
+  (let most_specific = Collect (binop_most_specific op \<sigma>\<^sub>1 \<sigma>\<^sub>2) in
+   if is_singleton most_specific then Some (snd (the_elem most_specific)) else None)"
 
 definition resolve_unop :: "uop \<Rightarrow> ty \<Rightarrow> ty option"
 where
 "resolve_unop op \<sigma> =
-  (let ms = Collect (unop_most_specific op \<sigma>) in if is_singleton ms then Some (snd (the_elem ms)) else None)"
+  (let most_specific = Collect (unop_most_specific op \<sigma>) in
+   if is_singleton most_specific then Some (snd (the_elem most_specific)) else None)"
 
 fun numeric_literal :: "expr \<Rightarrow> bool"
 where
