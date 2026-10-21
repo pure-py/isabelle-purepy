@@ -365,7 +365,7 @@ by (relation "inv_image (less_than <*lex*> less_than) (\<lambda>x. case x of
    | Inr (Inr (Inr (\<Gamma>, es, \<tau>s))) \<Rightarrow> (size_list size es, 2))")
    (auto dest!: nth_mem intro: size_list_estimation' simp: less_Suc_eq_le)
 
-(* Signature as a context entry: a type when there are no type parameters, otherwise a type scheme *)
+(* Context entry for a type scheme, which is a plain type if it has no type parameters *)
 fun signature_entry :: "ty_scheme \<Rightarrow> cxt_entry"
 where
 "signature_entry (TyScheme [] \<tau>) = Ty \<tau>" |
