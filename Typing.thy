@@ -97,6 +97,7 @@ where
 "var_ty (PU \<tau>) = Some \<tau>" |
 "var_ty _ = None"
 
+(* Merge of a context entry with undefined *)
 fun possibly_unassigned :: "cxt_entry \<Rightarrow> cxt_entry"
 where
 "possibly_unassigned (Ty \<tau>) = PU \<tau>" |
