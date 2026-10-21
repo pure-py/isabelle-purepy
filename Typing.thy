@@ -254,27 +254,19 @@ definition unop_overloads :: "uop \<Rightarrow> ty \<Rightarrow> (ty \<times> ty
 where
 "unop_overloads op \<sigma> = {\<omega>. unop_overload op \<sigma> \<omega>}"
 
-definition binop_most_specific :: "bop \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> ((ty \<times> ty) \<times> ty) set"
-where
-"binop_most_specific op \<sigma>\<^sub>1 \<sigma>\<^sub>2 =
-  (let overloads = binop_overloads op \<sigma>\<^sub>1 \<sigma>\<^sub>2 in
-   Set.filter (\<lambda>((\<tau>\<^sub>1, \<tau>\<^sub>2), _). \<forall>((\<tau>\<^sub>1', \<tau>\<^sub>2'), _) \<in> overloads. \<tau>\<^sub>1 <: \<tau>\<^sub>1' \<and> \<tau>\<^sub>2 <: \<tau>\<^sub>2') overloads)"
-
-definition unop_most_specific :: "uop \<Rightarrow> ty \<Rightarrow> (ty \<times> ty) set"
-where
-"unop_most_specific op \<sigma> =
-  (let overloads = unop_overloads op \<sigma> in Set.filter (\<lambda>(\<tau>, _). \<forall>(\<tau>', _) \<in> overloads. \<tau> <: \<tau>') overloads)"
-
 definition resolve_binop :: "bop \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> ty option"
 where
 "resolve_binop op \<sigma>\<^sub>1 \<sigma>\<^sub>2 =
-  (let most_specific = binop_most_specific op \<sigma>\<^sub>1 \<sigma>\<^sub>2 in
+  (let overloads = binop_overloads op \<sigma>\<^sub>1 \<sigma>\<^sub>2;
+       most_specific =
+         Set.filter (\<lambda>((\<tau>\<^sub>1, \<tau>\<^sub>2), _). \<forall>((\<tau>\<^sub>1', \<tau>\<^sub>2'), _) \<in> overloads. \<tau>\<^sub>1 <: \<tau>\<^sub>1' \<and> \<tau>\<^sub>2 <: \<tau>\<^sub>2') overloads in
    if is_singleton most_specific then Some (snd (the_elem most_specific)) else None)"
 
 definition resolve_unop :: "uop \<Rightarrow> ty \<Rightarrow> ty option"
 where
 "resolve_unop op \<sigma> =
-  (let most_specific = unop_most_specific op \<sigma> in
+  (let overloads = unop_overloads op \<sigma>;
+       most_specific = Set.filter (\<lambda>(\<tau>, _). \<forall>(\<tau>', _) \<in> overloads. \<tau> <: \<tau>') overloads in
    if is_singleton most_specific then Some (snd (the_elem most_specific)) else None)"
 
 fun numeric_literal :: "expr \<Rightarrow> bool"
