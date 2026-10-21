@@ -6,7 +6,7 @@ code_pred subty .
 code_pred binop_overload .
 code_pred unop_overload .
 
-(* Compute sets of overloads by running compiled overload rules, since definition by comprehension not executable *)
+(* Compute sets of overloads by the predicates compiled above, since their defining comprehensions can't be executed *)
 lemma binop_overloads_code [code]:
   "binop_overloads op \<sigma>\<^sub>1 \<sigma>\<^sub>2 = set_of_pred (binop_overload_i_i_i_PPooo op \<sigma>\<^sub>1 \<sigma>\<^sub>2)"
   by (auto simp: binop_overloads_def binop_overload_i_i_i_PPooo_def)
