@@ -97,7 +97,7 @@ datatype ty =
   | TyClass name "ty list"
   | TyUnion ty ty
 
-datatype scheme =
+datatype ty_scheme =
     TyScheme "var list" ty
   | FieldScheme "var list" "(var \<times> ty) list"
 

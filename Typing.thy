@@ -8,8 +8,8 @@ datatype cxt_entry =
   | PU ty
   | Unbound
   | TypeVar
-  | Scheme scheme
-  | PUScheme scheme
+  | Scheme ty_scheme
+  | PUScheme ty_scheme
   | PredefName
 
 type_synonym cxt = "(var, cxt_entry) fmap"
@@ -365,13 +365,13 @@ by (relation "inv_image (less_than <*lex*> less_than) (\<lambda>x. case x of
    | Inr (Inr (Inr (\<Gamma>, es, \<tau>s))) \<Rightarrow> (size_list size es, 2))")
    (auto dest!: nth_mem intro: size_list_estimation' simp: less_Suc_eq_le)
 
-(* Signature as a context entry: a type when there are no type parameters, otherwise a scheme *)
-fun signature_entry :: "scheme \<Rightarrow> cxt_entry"
+(* Signature as a context entry: a type when there are no type parameters, otherwise a type scheme *)
+fun signature_entry :: "ty_scheme \<Rightarrow> cxt_entry"
 where
 "signature_entry (TyScheme [] \<tau>) = Ty \<tau>" |
 "signature_entry \<pi> = Scheme \<pi>"
 
-fun def_signature :: "cxt \<Rightarrow> func \<Rightarrow> scheme option"
+fun def_signature :: "cxt \<Rightarrow> func \<Rightarrow> ty_scheme option"
 where
 "def_signature \<Gamma> (Def f \<alpha>s xps \<psi> s) =
    (let \<Gamma>' = \<Gamma> \<otimes> fmconst (set \<alpha>s) TypeVar in
@@ -383,8 +383,8 @@ abbreviation false_lit :: expr where "false_lit \<equiv> ExprLiteral (LitBool Fa
 
 fun check_stmt :: "cxt \<Rightarrow> ty option \<Rightarrow> stmt \<Rightarrow> static_outcome option"
 and check_elifs :: "cxt \<Rightarrow> ty option \<Rightarrow> (expr \<times> stmt) list \<Rightarrow> static_outcome option list"
-and check_defs :: "cxt \<Rightarrow> func list \<Rightarrow> scheme list \<Rightarrow> bool"
-and check_def :: "cxt \<Rightarrow> func \<Rightarrow> scheme \<Rightarrow> bool"
+and check_defs :: "cxt \<Rightarrow> func list \<Rightarrow> ty_scheme list \<Rightarrow> bool"
+and check_def :: "cxt \<Rightarrow> func \<Rightarrow> ty_scheme \<Rightarrow> bool"
 where
 "check_stmt \<Gamma> \<zeta> StmtPass = Some (Assigns\<^sub>R fmempty)" |
 "check_stmt \<Gamma> \<zeta> (StmtDeclare x \<psi>) = map_option (\<lambda>\<tau>. Assigns\<^sub>R (fmupd x (DU \<tau>) fmempty)) (resolve_type \<Gamma> \<psi>)" |
