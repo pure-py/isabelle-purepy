@@ -18,9 +18,9 @@ The target checks that `isabelle` is that release; if it is not on `PATH`, pass 
 
 The build also generates Python from the executable definitions, under `python/python_out`, with the
 [Python code generator](https://github.com/pure-py/isabelle-python-codegen) at the commit named in
-`.python-codegen-version`, which the build fetches into `python/isabelle-python-codegen`. It then runs the
-generated type checker on small programs. This test will be deleted once the PurePy conformance suite is
-run on the generated code.
+`.python-codegen-version`, fetched into `python/isabelle-python-codegen`. The build then runs the generated
+type checker on small programs; this test will be deleted once the PurePy conformance suite is run on the
+generated code.
 
 To browse the theories with the prover running, open the session directory in the bundled editor, after a
 build has fetched the generator:
