@@ -7,6 +7,9 @@ datatype cxt_entry =
   | DU ty
   | PU ty
   | Unbound
+  | ModStub name
+  | ModChecked name "(var, cxt_entry) fmap"
+  | Type name
   | TypeVar
   | Scheme ty_scheme
   | PUScheme ty_scheme
@@ -447,5 +450,327 @@ where
          | None \<Rightarrow> False)
     | None \<Rightarrow> False))" |
 "check_def \<Gamma> _ _ = False"
+
+section \<open>Modules\<close>
+
+fun child :: "name \<Rightarrow> var \<Rightarrow> name"
+where
+"child (y, ys) x = (y, ys @ [x])"
+
+fun parent :: "name \<Rightarrow> name option"
+where
+"parent (y, ys) = (if ys = [] then None else Some (y, butlast ys))"
+
+fun last_var :: "name \<Rightarrow> var"
+where
+"last_var (y, ys) = (if ys = [] then y else last ys)"
+
+fun prefix_of :: "name \<Rightarrow> name \<Rightarrow> bool" (infix "\<preceq>" 50)
+where
+"(y, ys) \<preceq> (y', ys') = (y = y' \<and> take (length ys) ys' = ys)"
+
+definition proper_prefix_of :: "name \<Rightarrow> name \<Rightarrow> bool" (infix "\<prec>" 50)
+where
+"q \<prec> q' = (q \<preceq> q' \<and> q \<noteq> q')"
+
+(* In prefix order *)
+fun proper_prefixes :: "name \<Rightarrow> name list"
+where
+"proper_prefixes (y, ys) = map (\<lambda>i. (y, take i ys)) [0..<length ys]"
+
+definition containing :: "name \<Rightarrow> name \<Rightarrow> name list"
+where
+"containing q q' = filter (\<lambda>p. \<not> p \<preceq> q) (proper_prefixes q')"
+
+lemma parent_child [simp]: "parent (child q x) = Some q"
+  by (cases q) simp
+
+lemma last_var_child [simp]: "last_var (child q x) = x"
+  by (cases q) simp
+
+lemma child_of_parent: "parent q' = Some q \<Longrightarrow> q' = child q (last_var q')"
+  by (cases q') (auto split: if_splits simp: append_butlast_last_id)
+
+definition builtins :: name where "builtins = (''builtins'', [])"
+definition main :: name where "main = (''__main__'', [])"
+
+abbreviation name_entry :: "var \<times> cxt_entry" where "name_entry \<equiv> (''__name__'', Ty (TyPrim str))"
+
+(* Context of a predefined module *)
+definition predefined :: "name \<Rightarrow> cxt option"
+where
+"predefined q =
+  (if q = builtins then Some (fmap_of_list
+     ([name_entry,
+       (''print'', Ty (TyCallable [TyPrim object] (TyPrim NoneType))),
+       (''len'', Ty (TyCallable [TyPrim Sized] (TyPrim int))),
+       (''range'', Type (child builtins ''range'')),
+       (''round'', Ty (TyCallable [TyPrim float] (TyPrim int)))]
+      @ map (\<lambda>\<nu>. (prim_name \<nu>, PredefName)) [NoneType, object, bool, int, float, str]
+      @ [(''list'', PredefName), (''dict'', PredefName), (''tuple'', PredefName)]))
+   else if q = (''sys'', []) then Some (fmap_of_list
+     [name_entry, (''argv'', Ty (TyList (TyPrim str))), (''exit'', Ty (TyCallable [TyPrim int] (TyPrim Never)))])
+   else if q = (''typing'', []) then Some (fmap_of_list
+     [name_entry, (''Callable'', PredefName), (''Literal'', PredefName),
+      (prim_name Never, PredefName), (prim_name Sized, PredefName)])
+   else if q = (''dataclasses'', []) then Some (fmap_of_list [name_entry, (''dataclass'', PredefName)])
+   else None)"
+
+(* Pointwise combination of a map of extension functions with a context, over the keys of either *)
+definition extend_with :: "(var, cxt_entry option \<Rightarrow> cxt_entry) fmap \<Rightarrow> cxt \<Rightarrow> cxt"
+where
+"extend_with F \<Gamma>' =
+  fmmap_keys (\<lambda>x _. case fmlookup F x of Some f \<Rightarrow> f (fmlookup \<Gamma>' x) | None \<Rightarrow> the (fmlookup \<Gamma>' x))
+    (fmmap (\<lambda>_. ()) F \<otimes> fmmap (\<lambda>_. ()) \<Gamma>')"
+
+definition extend_plain :: "cxt_entry \<Rightarrow> cxt_entry option \<Rightarrow> cxt_entry"
+where
+"extend_plain \<theta> \<theta>' = (case \<theta>' of None \<Rightarrow> \<theta> | Some \<theta>'' \<Rightarrow> \<theta>'')"
+
+primrec extend_entry :: "cxt_entry \<Rightarrow> cxt_entry option \<Rightarrow> cxt_entry"
+where
+"extend_entry (Ty \<tau>) = extend_plain (Ty \<tau>)" |
+"extend_entry (DU \<tau>) = extend_plain (DU \<tau>)" |
+"extend_entry (PU \<tau>) = extend_plain (PU \<tau>)" |
+"extend_entry Unbound = extend_plain Unbound" |
+"extend_entry (ModStub q) =
+  (\<lambda>\<theta>'. case \<theta>' of None \<Rightarrow> ModStub q | Some (ModChecked q' \<Gamma>) \<Rightarrow> ModChecked q' \<Gamma> | Some \<theta> \<Rightarrow> \<theta>)" |
+"extend_entry (ModChecked q \<Gamma>) =
+  (\<lambda>\<theta>'. case \<theta>' of
+     None \<Rightarrow> ModChecked q \<Gamma>
+   | Some (ModStub q') \<Rightarrow> if q = q' then ModChecked q \<Gamma> else ModStub q'
+   | Some (ModChecked q' \<Gamma>') \<Rightarrow>
+       if q = q' then ModChecked q (extend_with (fmmap extend_entry \<Gamma>) \<Gamma>') else ModChecked q' \<Gamma>'
+   | Some \<theta> \<Rightarrow> \<theta>)" |
+"extend_entry (Type C) = extend_plain (Type C)" |
+"extend_entry TypeVar = extend_plain TypeVar" |
+"extend_entry (Scheme \<pi>) = extend_plain (Scheme \<pi>)" |
+"extend_entry (PUScheme \<pi>) = extend_plain (PUScheme \<pi>)" |
+"extend_entry PredefName = extend_plain PredefName"
+
+definition extend :: "cxt \<Rightarrow> cxt \<Rightarrow> cxt" (infixl "\<boxplus>" 65)
+where
+"\<Gamma> \<boxplus> \<Gamma>' = extend_with (fmmap extend_entry \<Gamma>) \<Gamma>'"
+
+type_synonym module_table = "(name, module_body) fmap"
+
+context includes fmap.lifting
+begin
+
+lift_definition submods :: "module_table \<Rightarrow> name \<Rightarrow> cxt"
+  is "\<lambda>M q x. if child q x \<in> dom M then Some (ModStub (child q x)) else None"
+proof -
+  fix M :: "name \<Rightarrow> module_body option" and q
+  assume "finite (dom M)"
+  have "dom (\<lambda>x. if child q x \<in> dom M then Some (ModStub (child q x)) else None) \<subseteq> last_var ` dom M"
+    by (auto simp: dom_def image_iff intro: rev_image_eqI)
+  then show "finite (dom (\<lambda>x. if child q x \<in> dom M then Some (ModStub (child q x)) else None))"
+    using \<open>finite (dom M)\<close> by (blast intro: finite_subset finite_imageI)
+qed
+
+end
+
+lemma map_of_submods:
+  "map_of (map (\<lambda>(q', _). (last_var q', ModStub q')) (filter (\<lambda>(q', _). parent q' = Some q) m)) x
+   = (if child q x \<in> dom (map_of m) then Some (ModStub (child q x)) else None)"
+proof (induction m)
+  case Nil
+  then show ?case by simp
+next
+  case (Cons e m)
+  obtain q' b where e: "e = (q', b)" by (cases e)
+  show ?case
+  proof (cases "parent q' = Some q")
+    case True
+    then have q': "q' = child q (last_var q')" by (rule child_of_parent)
+    show ?thesis
+    proof (cases "x = last_var q'")
+      case True
+      with q' e \<open>parent q' = Some q\<close> show ?thesis by (simp add: dom_def)
+    next
+      case False
+      with q' have "child q x \<noteq> q'" by (metis last_var_child)
+      with Cons.IH e \<open>parent q' = Some q\<close> False show ?thesis by (simp add: dom_def)
+    qed
+  next
+    case False
+    then have "child q x \<noteq> q'" by (metis parent_child)
+    with Cons.IH e False show ?thesis by (simp add: dom_def)
+  qed
+qed
+
+lemma submods_of_list [code]:
+  "submods (fmap_of_list m) q
+   = fmap_of_list (map (\<lambda>(q', _). (last_var q', ModStub q')) (filter (\<lambda>(q', _). parent q' = Some q) m))"
+  by (rule fmap_ext) (simp add: submods.rep_eq fmlookup_of_list map_of_submods)
+
+fun declares_imports :: "import list \<Rightarrow> var list"
+where
+"declares_imports [] = []" |
+"declares_imports (Import (x, xs) # \<iota>s) =
+  (if list_ex (\<lambda>\<iota>. case \<iota> of Import (x', _) \<Rightarrow> x' = x | _ \<Rightarrow> False) \<iota>s then declares_imports \<iota>s
+   else x # declares_imports \<iota>s)" |
+"declares_imports (FromImport q xs # \<iota>s) = xs @ declares_imports \<iota>s"
+
+fun type_def_name :: "type_def \<Rightarrow> var"
+where
+"type_def_name (Dataclass c _ _ _) = c" |
+"type_def_name (TypeAlias x _ _) = x"
+
+fun declares_top :: "top_stmt \<Rightarrow> var list"
+where
+"declares_top (Stmt s) = declares s" |
+"declares_top (TopSeq t t') = declares_top t @ declares_top t'" |
+"declares_top (TypeDefs \<chi>s) = map type_def_name \<chi>s"
+
+fun assigns_top :: "top_stmt \<Rightarrow> var set"
+where
+"assigns_top (Stmt s) = assigns s" |
+"assigns_top (TopSeq t t') = assigns_top t \<union> assigns_top t'" |
+"assigns_top (TypeDefs \<chi>s) = set (map type_def_name \<chi>s)"
+
+fun binds_top :: "top_stmt \<Rightarrow> var set"
+where
+"binds_top (Stmt s) = binds s" |
+"binds_top (TopSeq t t') = binds_top t \<union> binds_top t'" |
+"binds_top (TypeDefs \<chi>s) = {}"
+
+(* u marks a variable unbound, as for scope *)
+definition scope_top :: "'a \<Rightarrow> var list \<Rightarrow> top_stmt \<Rightarrow> (var, 'a) fmap option"
+where
+"scope_top u ys t =
+  (if distinct ys \<and> distinct (declares_top t) \<and> set ys \<inter> set (declares_top t) = {} \<and> set ys \<inter> binds_top t = {}
+      \<and> set (declares_top t) \<inter> binds_top t = {}
+   then Some (fmconst (assigns_top t - set ys) u)
+   else None)"
+
+fun check_top_stmt :: "cxt \<Rightarrow> top_stmt \<Rightarrow> static_outcome option"
+where
+"check_top_stmt \<Gamma> (Stmt s) = check_stmt \<Gamma> None s" |
+"check_top_stmt \<Gamma> (TopSeq t t') =
+  (case check_top_stmt \<Gamma> t of
+     Some (Assigns\<^sub>R \<Delta>) \<Rightarrow> map_option (\<lambda>R. Assigns\<^sub>R \<Delta> \<otimes>\<^sub>R R) (check_top_stmt (\<Gamma> \<otimes> \<Delta>) t')
+   | _ \<Rightarrow> None)" |
+"check_top_stmt \<Gamma> (TypeDefs \<chi>s) = None"
+
+(* Entry of a name looked up in a module signature, as resolution of a simple name finds it *)
+fun resolve_name :: "cxt \<Rightarrow> var \<Rightarrow> cxt_entry option"
+where
+"resolve_name \<Gamma> x =
+  (case fmlookup \<Gamma> x of
+     Some (Ty \<tau>) \<Rightarrow> Some (Ty \<tau>)
+   | Some (ModChecked q \<Gamma>') \<Rightarrow> Some (ModChecked q \<Gamma>')
+   | Some (Type C) \<Rightarrow> Some (Type C)
+   | Some (Scheme \<pi>) \<Rightarrow> Some (Scheme \<pi>)
+   | Some PredefName \<Rightarrow> Some PredefName
+   | _ \<Rightarrow> None)"
+
+(* V holds the modules being checked, so that an import cycle has no derivation *)
+function (sequential)
+  check_module :: "module_table \<Rightarrow> name set \<Rightarrow> name \<Rightarrow> cxt option" and
+  check_imports :: "module_table \<Rightarrow> name set \<Rightarrow> name \<Rightarrow> import list \<Rightarrow> cxt option" and
+  submodules :: "module_table \<Rightarrow> name set \<Rightarrow> cxt_entry \<Rightarrow> var list \<Rightarrow> cxt_entry option" and
+  imports_entry :: "module_table \<Rightarrow> name set \<Rightarrow> cxt \<Rightarrow> var \<Rightarrow> cxt_entry option" and
+  imports_entries :: "module_table \<Rightarrow> name set \<Rightarrow> cxt \<Rightarrow> var list \<Rightarrow> cxt_entry list option" and
+  check_containing :: "module_table \<Rightarrow> name set \<Rightarrow> name list \<Rightarrow> bool"
+where
+"check_module M V q =
+  (case predefined q of
+     Some \<Gamma> \<Rightarrow> Some \<Gamma>
+   | None \<Rightarrow>
+     if q \<in> V then None
+     else case fmlookup M q of
+       None \<Rightarrow> None
+     | Some (ModuleBody \<iota>s t) \<Rightarrow>
+       (case check_imports M (insert q V) q \<iota>s of
+          None \<Rightarrow> None
+        | Some \<Gamma>' \<Rightarrow>
+          (case scope_top Unbound (declares_imports \<iota>s) t of
+             None \<Rightarrow> None
+           | Some \<Gamma>\<^sub>s \<Rightarrow>
+             (case check_top_stmt (the (predefined builtins) \<otimes> \<Gamma>' \<otimes> \<Gamma>\<^sub>s) t of
+                Some (Assigns\<^sub>R \<Delta>) \<Rightarrow>
+                  let S = submods M q in
+                  if fmpred (\<lambda>x _. fmlookup S x = None) \<Gamma>' \<and> fmpred (\<lambda>x _. fmlookup S x = None) \<Delta>
+                  then Some (S \<otimes> \<Delta>) else None
+              | _ \<Rightarrow> None))))" |
+"check_imports M V q [] = Some fmempty" |
+"check_imports M V q (Import q' # \<iota>s) =
+  (case q' of (x, xs) \<Rightarrow>
+   if q \<prec> q' then None
+   else case check_module M V (x, []) of
+     None \<Rightarrow> None
+   | Some \<Delta> \<Rightarrow>
+     (case submodules M V (ModChecked (x, []) \<Delta>) xs of
+        None \<Rightarrow> None
+      | Some \<theta> \<Rightarrow> map_option (\<lambda>\<Gamma>. fmupd x \<theta> fmempty \<boxplus> \<Gamma>) (check_imports M V q \<iota>s)))" |
+"check_imports M V q (FromImport q' xs # \<iota>s) =
+  (if \<not> distinct xs then None
+   else case check_module M V q' of
+     None \<Rightarrow> None
+   | Some \<Delta> \<Rightarrow>
+     if \<not> check_containing M V (containing q q') then None
+     else case imports_entries M V \<Delta> xs of
+       None \<Rightarrow> None
+     | Some \<theta>s \<Rightarrow> map_option (\<lambda>\<Gamma>. fmap_of_list (zip xs \<theta>s) \<boxplus> \<Gamma>) (check_imports M V q \<iota>s))" |
+"submodules M V \<theta> [] = Some \<theta>" |
+"submodules M V (ModChecked q \<Gamma>) (x # xs) =
+  (case check_module M V (child q x) of
+     None \<Rightarrow> None
+   | Some \<Gamma>' \<Rightarrow>
+     map_option (\<lambda>\<theta>'. ModChecked q (\<Gamma> \<boxplus> fmupd x \<theta>' fmempty)) (submodules M V (ModChecked (child q x) \<Gamma>') xs))" |
+"submodules M V _ _ = None" |
+"imports_entry M V \<Gamma> x =
+  (case fmlookup \<Gamma> x of
+     Some (ModStub q) \<Rightarrow> map_option (ModChecked q) (check_module M V q)
+   | _ \<Rightarrow> resolve_name \<Gamma> x)" |
+"imports_entries M V \<Gamma> [] = Some []" |
+"imports_entries M V \<Gamma> (x # xs) =
+  (case imports_entry M V \<Gamma> x of
+     None \<Rightarrow> None
+   | Some \<theta> \<Rightarrow> map_option (\<lambda>\<theta>s. \<theta> # \<theta>s) (imports_entries M V \<Gamma> xs))" |
+"check_containing M V [] = True" |
+"check_containing M V (q # qs) = (check_module M V q \<noteq> None \<and> check_containing M V qs)"
+by pat_completeness auto
+
+lemma card_fmdom_insert:
+  assumes "fmlookup M q = Some m" and "q \<notin> V"
+  shows "card (fmdom' M - insert q V) < card (fmdom' M - V)"
+proof -
+  have "q \<in> fmdom' M - V" using assms by (simp add: fmlookup_dom'_iff)
+  moreover have "fmdom' M - insert q V = (fmdom' M - V) - {q}" by auto
+  ultimately show ?thesis by (metis card_Diff1_less finite_Diff finite_fmdom')
+qed
+
+(* Modules still to be checked, then the caller before the callee among the judgements at one V, then the
+   list argument *)
+termination
+by (relation "measures [
+     \<lambda>x. case x of
+       Inl (Inl (M, V, _)) \<Rightarrow> card (fmdom' M - V)
+     | Inl (Inr (Inl (M, V, _, _))) \<Rightarrow> card (fmdom' M - V)
+     | Inl (Inr (Inr (M, V, _, _))) \<Rightarrow> card (fmdom' M - V)
+     | Inr (Inl (M, V, _, _)) \<Rightarrow> card (fmdom' M - V)
+     | Inr (Inr (Inl (M, V, _, _))) \<Rightarrow> card (fmdom' M - V)
+     | Inr (Inr (Inr (M, V, _))) \<Rightarrow> card (fmdom' M - V),
+     \<lambda>x. case x of
+       Inl (Inl _) \<Rightarrow> 0
+     | Inl (Inr (Inl _)) \<Rightarrow> 3
+     | Inl (Inr (Inr _)) \<Rightarrow> 1
+     | Inr (Inl _) \<Rightarrow> 1
+     | Inr (Inr (Inl _)) \<Rightarrow> 2
+     | Inr (Inr (Inr _)) \<Rightarrow> 1,
+     \<lambda>x. case x of
+       Inl (Inl _) \<Rightarrow> 0
+     | Inl (Inr (Inl (_, _, _, \<iota>s))) \<Rightarrow> length \<iota>s
+     | Inl (Inr (Inr (_, _, _, xs))) \<Rightarrow> length xs
+     | Inr (Inl _) \<Rightarrow> 0
+     | Inr (Inr (Inl (_, _, _, xs))) \<Rightarrow> length xs
+     | Inr (Inr (Inr (_, _, qs))) \<Rightarrow> length qs]")
+   (auto simp: card_fmdom_insert)
+
+definition check_program :: "module_table \<Rightarrow> bool"
+where
+"check_program M = (check_module M {} main \<noteq> None)"
 
 end
