@@ -13,18 +13,6 @@ Install the [Isabelle](https://isabelle.in.tum.de/) release named in `.isabelle-
 make build
 ```
 
-The target checks that `isabelle` is that release; if it is not on `PATH`, pass it explicitly with
-`make build ISABELLE=<path to isabelle>`.
-
-The build also generates Python from the executable definitions, under `python/python_out`, with the
-[Python code generator](https://github.com/pure-py/isabelle-python-codegen) at the commit named in
-`.python-codegen-version`, fetched into `python/isabelle-python-codegen` by `fetch-codegen.sh`. The build then runs the generated
-type checker on small programs; this test will be deleted once the PurePy conformance suite is run on the
-generated code.
-
-`make dist DEST=<dir>` copies the sources and the generator into `<dir>`, which builds without fetching
-anything; the copy carries no CI configuration and no fetch script.
-
 To browse the theories with the prover running, open the session directory in the bundled editor, after a
 build has fetched the generator:
 
