@@ -13,7 +13,7 @@ check-version:
 	@test "$$($(ISABELLE) version)" = "$(ISABELLE_VERSION)" || \
 		{ echo "$(ISABELLE) is $$($(ISABELLE) version), not $(ISABELLE_VERSION)"; exit 1; }
 
-# Python code generator, fetched unless copied in by dist
+# Fetch Python code generator, unless this is a copy made by dist, which includes it
 codegen:
 	@test -e $(CODEGEN)/Python.thy -a ! -e $(CODEGEN)/.git || ./fetch-codegen.sh
 
