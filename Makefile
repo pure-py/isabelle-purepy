@@ -22,7 +22,7 @@ build: check-version codegen
 	$(PYTHON) -m py_compile $$(find $(CODE) -name '*.py')
 	PYTHONPATH=$(CODE) $(PYTHON) python/smoke_test.py
 
-# Sources and code generator under DEST, without CI configuration or the fetch script
+# Self-contained copy under DEST
 dist: codegen
 	@test -n "$(DEST)" || { echo "usage: make dist DEST=<dir>"; exit 1; }
 	@test ! -e $(DEST) || { echo "$(DEST) exists"; exit 1; }
