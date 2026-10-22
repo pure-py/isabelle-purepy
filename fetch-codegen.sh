@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Python code generator at the commit named in .python-codegen-version, under python/isabelle-python-codegen.
+# Python code generator at the pinned commit.
 set -euo pipefail
 
 CODEGEN=python/isabelle-python-codegen
