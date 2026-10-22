@@ -13,7 +13,7 @@ check-version:
 	@test "$$($(ISABELLE) version)" = "$(ISABELLE_VERSION)" || \
 		{ echo "$(ISABELLE) is $$($(ISABELLE) version), not $(ISABELLE_VERSION)"; exit 1; }
 
-# Python code generator at pinned commit, unless its files are present without a repository, as in a distribution
+# Python code generator, fetched unless copied in by dist
 codegen:
 	@test -e $(CODEGEN)/Python.thy -a ! -e $(CODEGEN)/.git || ./fetch-codegen.sh
 
