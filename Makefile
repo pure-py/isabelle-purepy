@@ -4,7 +4,6 @@ PYTHON ?= uv run --no-project python
 
 ISABELLE_VERSION := $(shell cat .isabelle-version)
 CODEGEN := python/isabelle-python-codegen
-CODEGEN_VERSION := $(shell cat .python-codegen-version)
 CODE := python/python_out/isabelle-purepy-python.Codegen/code
 
 default: build
@@ -14,12 +13,8 @@ check-version:
 	@test "$$($(ISABELLE) version)" = "$(ISABELLE_VERSION)" || \
 		{ echo "$(ISABELLE) is $$($(ISABELLE) version), not $(ISABELLE_VERSION)"; exit 1; }
 
-# Python code generator at pinned commit
 codegen:
-	@test -d $(CODEGEN)/.git || git init -q $(CODEGEN)
-	@test "$$(git -C $(CODEGEN) rev-parse -q --verify HEAD)" = "$(CODEGEN_VERSION)" || \
-		{ git -C $(CODEGEN) fetch -q --depth 1 https://github.com/pure-py/isabelle-python-codegen.git \
-			$(CODEGEN_VERSION) && git -C $(CODEGEN) checkout -q --detach $(CODEGEN_VERSION); }
+	@test -e $(CODEGEN)/Python.thy -a ! -e $(CODEGEN)/.git || ./fetch-codegen.sh
 
 build: check-version codegen
 	rm -rf python/python_out
@@ -27,4 +22,13 @@ build: check-version codegen
 	$(PYTHON) -m py_compile $$(find $(CODE) -name '*.py')
 	PYTHONPATH=$(CODE) $(PYTHON) python/smoke_test.py
 
-.PHONY: default check-version codegen build
+# Self-contained copy under DEST
+dist: codegen
+	@test -n "$(DEST)" || { echo "usage: make dist DEST=<dir>"; exit 1; }
+	@test ! -e $(DEST) || { echo "$(DEST) exists"; exit 1; }
+	mkdir -p $(DEST)/$(CODEGEN)
+	git archive --format=tar HEAD | tar -x -C $(DEST)
+	git -C $(CODEGEN) archive --format=tar HEAD | tar -x -C $(DEST)/$(CODEGEN)
+	rm -rf $(DEST)/.github $(DEST)/.claude $(DEST)/fetch-codegen.sh
+
+.PHONY: default check-version codegen build dist
