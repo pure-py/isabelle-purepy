@@ -30,9 +30,9 @@ fun proper_prefixes :: "name \<Rightarrow> name list"
 where
 "proper_prefixes (y, ys) = map (\<lambda>i. (y, take i ys)) [0..<length ys]"
 
-definition containing :: "name \<Rightarrow> name \<Rightarrow> name list"
+definition unique_to :: "name \<Rightarrow> name \<Rightarrow> name list"
 where
-"containing q q' = filter (\<lambda>p. \<not> p \<preceq> q) (proper_prefixes q')"
+"unique_to q' q = filter (\<lambda>p. \<not> p \<preceq> q) (proper_prefixes q')"
 
 definition builtins :: name where "builtins = (''builtins'', [])"
 definition main :: name where "main = (''__main__'', [])"
@@ -827,7 +827,7 @@ function (sequential)
   submodules :: "module_table \<Rightarrow> name set \<Rightarrow> cxt_entry \<Rightarrow> var list \<Rightarrow> cxt_entry option" and
   imports_entry :: "module_table \<Rightarrow> name set \<Rightarrow> cxt \<Rightarrow> var \<Rightarrow> cxt_entry option" and
   imports_entries :: "module_table \<Rightarrow> name set \<Rightarrow> cxt \<Rightarrow> var list \<Rightarrow> cxt_entry list option" and
-  check_containing :: "module_table \<Rightarrow> name set \<Rightarrow> name list \<Rightarrow> bool"
+  check_modules :: "module_table \<Rightarrow> name set \<Rightarrow> name list \<Rightarrow> bool"
 where
 "check_module M V q =
   (case predefined q of
@@ -864,7 +864,7 @@ where
    else case check_module M V q' of
      None \<Rightarrow> None
    | Some \<Delta> \<Rightarrow>
-     if \<not> check_containing M V (containing q q') then None
+     if \<not> check_modules M V (unique_to q' q) then None
      else case imports_entries M V \<Delta> xs of
        None \<Rightarrow> None
      | Some \<theta>s \<Rightarrow> map_option (\<lambda>\<Gamma>. fmap_of_list (zip xs \<theta>s) \<boxplus> \<Gamma>) (check_imports M V q \<iota>s))" |
@@ -884,8 +884,8 @@ where
   (case imports_entry M V \<Gamma> x of
      None \<Rightarrow> None
    | Some \<theta> \<Rightarrow> map_option (\<lambda>\<theta>s. \<theta> # \<theta>s) (imports_entries M V \<Gamma> xs))" |
-"check_containing M V [] = True" |
-"check_containing M V (q # qs) = (check_module M V q \<noteq> None \<and> check_containing M V qs)"
+"check_modules M V [] = True" |
+"check_modules M V (q # qs) = (check_module M V q \<noteq> None \<and> check_modules M V qs)"
 by pat_completeness auto
 
 lemma card_fmdom_insert:
