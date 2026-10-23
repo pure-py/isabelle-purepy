@@ -598,12 +598,12 @@ termination
   by (relation "measure (\<lambda>p. case p of Inl (\<theta>, _) \<Rightarrow> size \<theta> | Inr (\<Gamma>, _) \<Rightarrow> size_fmap (\<lambda>_. 0) size \<Gamma>)")
      (simp_all add: size_fmap_lookup del: size_fmap_def)
 
-type_synonym module_table = "(name, module_body) fmap"
+type_synonym program = "(name, module_body) fmap"
 
 context includes fmap.lifting
 begin
 
-lift_definition submods :: "module_table \<Rightarrow> name \<Rightarrow> cxt"
+lift_definition submods :: "program \<Rightarrow> name \<Rightarrow> cxt"
   is "\<lambda>M q x. if snoc q x \<in> dom M then Some (ModStub (snoc q x)) else None"
 proof -
   fix M :: "name \<Rightarrow> module_body option" and q
@@ -673,12 +673,12 @@ where
 
 (* V holds the modules being checked, so that an import cycle has no derivation *)
 function (sequential)
-  check_module :: "module_table \<Rightarrow> name set \<Rightarrow> name \<Rightarrow> cxt option" and
-  check_imports :: "module_table \<Rightarrow> name set \<Rightarrow> name \<Rightarrow> import list \<Rightarrow> cxt option" and
-  submodules :: "module_table \<Rightarrow> name set \<Rightarrow> cxt_entry \<Rightarrow> var list \<Rightarrow> cxt_entry option" and
-  imports_entry :: "module_table \<Rightarrow> name set \<Rightarrow> cxt \<Rightarrow> var \<Rightarrow> cxt_entry option" and
-  imports_entries :: "module_table \<Rightarrow> name set \<Rightarrow> cxt \<Rightarrow> var list \<Rightarrow> cxt_entry list option" and
-  check_modules :: "module_table \<Rightarrow> name set \<Rightarrow> name list \<Rightarrow> bool"
+  check_module :: "program \<Rightarrow> name set \<Rightarrow> name \<Rightarrow> cxt option" and
+  check_imports :: "program \<Rightarrow> name set \<Rightarrow> name \<Rightarrow> import list \<Rightarrow> cxt option" and
+  submodules :: "program \<Rightarrow> name set \<Rightarrow> cxt_entry \<Rightarrow> var list \<Rightarrow> cxt_entry option" and
+  imports_entry :: "program \<Rightarrow> name set \<Rightarrow> cxt \<Rightarrow> var \<Rightarrow> cxt_entry option" and
+  imports_entries :: "program \<Rightarrow> name set \<Rightarrow> cxt \<Rightarrow> var list \<Rightarrow> cxt_entry list option" and
+  check_modules :: "program \<Rightarrow> name set \<Rightarrow> name list \<Rightarrow> bool"
 where
 "check_module M V q =
   (case fmlookup predefined q of
@@ -775,7 +775,7 @@ by (relation "measures [
      | Inr (Inr (Inr (_, _, qs))) \<Rightarrow> length qs]")
    (auto simp: card_fmdom_insert)
 
-definition check_program :: "module_table \<Rightarrow> bool"
+definition check_program :: "program \<Rightarrow> bool"
 where
 "check_program M = (check_module M {} main \<noteq> None)"
 
