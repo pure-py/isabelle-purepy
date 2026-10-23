@@ -49,7 +49,6 @@ where
    | Some PredefName \<Rightarrow> Some PredefName
    | _ \<Rightarrow> None)"
 
-
 fun base_type_lit :: "lit \<Rightarrow> ty"
 where
 "base_type_lit (LitInt _) = TyPrim int" |
@@ -315,7 +314,6 @@ where
 "numeric_literal (ExprLiteral (LitInt _)) = True" |
 "numeric_literal (ExprLiteral (LitFloat _)) = True" |
 "numeric_literal _ = False"
-
 
 fun binds_quals :: "qualifier list \<Rightarrow> var set"
 where
