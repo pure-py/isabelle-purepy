@@ -582,8 +582,10 @@ where
       (prim_name Never, PredefName), (prim_name Sized, PredefName)]),
    ((''dataclasses'', []), fmap_of_list [name_binding, (''dataclass'', PredefName)])]"
 
-(* Extend \<Gamma>' by F, a context with each entry replaced by the function extending that entry, since primitive
-   recursion through a nested context yields such a map rather than the context itself *)
+(* A checked module entry holds a signature (finite map of context entries), and primitive recursion
+   through a map receives the map with the function applied to each entry, not the map itself; this
+   definition therefore takes the left context in that form, a map from each variable to the function
+   extending its entry. *)
 definition extend_with :: "(var, cxt_entry option \<Rightarrow> cxt_entry) fmap \<Rightarrow> cxt \<Rightarrow> cxt"
 where
 "extend_with F \<Gamma>' =
