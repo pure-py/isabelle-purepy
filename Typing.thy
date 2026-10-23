@@ -712,8 +712,8 @@ proof -
   ultimately show ?thesis by (metis card_Diff1_less finite_Diff finite_fmdom')
 qed
 
-(* Modules still to be checked, then the caller before the callee among the judgements at one V, then the
-   list argument *)
+(* Measures: count of modules of M not in V; then a topological rank of the call graph, which is acyclic
+   if we remove the call from the module rule to its imports; then the length of the list argument *)
 termination
 by (relation "measures [
      \<lambda>x. case x of
