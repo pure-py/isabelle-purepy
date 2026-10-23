@@ -17,18 +17,6 @@ datatype cxt_entry =
 
 type_synonym cxt = "(var, cxt_entry) fmap"
 
-fun child :: "name \<Rightarrow> var \<Rightarrow> name"
-where
-"child (y, ys) x = (y, ys @ [x])"
-
-fun parent :: "name \<Rightarrow> name option"
-where
-"parent (y, ys) = (if ys = [] then None else Some (y, butlast ys))"
-
-fun last_var :: "name \<Rightarrow> var"
-where
-"last_var (y, ys) = (if ys = [] then y else last ys)"
-
 fun prefix_of :: "name \<Rightarrow> name \<Rightarrow> bool" (infix "\<preceq>" 50)
 where
 "(y, ys) \<preceq> (y', ys') = (y = y' \<and> take (length ys) ys' = ys)"
@@ -45,15 +33,6 @@ where
 definition containing :: "name \<Rightarrow> name \<Rightarrow> name list"
 where
 "containing q q' = filter (\<lambda>p. \<not> p \<preceq> q) (proper_prefixes q')"
-
-lemma parent_child [simp]: "parent (child q x) = Some q"
-  by (cases q) simp
-
-lemma last_var_child [simp]: "last_var (child q x) = x"
-  by (cases q) simp
-
-lemma child_of_parent: "parent q' = Some q \<Longrightarrow> q' = child q (last_var q')"
-  by (cases q') (auto split: if_splits simp: append_butlast_last_id)
 
 definition builtins :: name where "builtins = (''builtins'', [])"
 definition main :: name where "main = (''__main__'', [])"
@@ -399,7 +378,7 @@ where
 "elem_type (TyPrim str) = Some (TyPrim str)" |
 "elem_type (TyLiteral (LitString _)) = Some (TyPrim str)" |
 "elem_type (TyDict _) = Some (TyPrim str)" |
-"elem_type (TyClass C []) = (if C = child builtins ''range'' then Some (TyPrim int) else None)" |
+"elem_type (TyClass C []) = (if C = snoc builtins ''range'' then Some (TyPrim int) else None)" |
 "elem_type (TyTuple \<tau>s) = Some (joins (map base_type \<tau>s))" |
 "elem_type (TyUnion \<sigma> \<tau>) =
   (case (elem_type \<sigma>, elem_type \<tau>) of (Some \<sigma>', Some \<tau>') \<Rightarrow> Some (\<sigma>' \<squnion> \<tau>') | _ \<Rightarrow> None)" |
@@ -680,7 +659,7 @@ where
      ([name_entry,
        (''print'', Ty (TyCallable [TyPrim object] (TyPrim NoneType))),
        (''len'', Ty (TyCallable [TyPrim Sized] (TyPrim int))),
-       (''range'', Type (child builtins ''range'')),
+       (''range'', Type (snoc builtins ''range'')),
        (''round'', Ty (TyCallable [TyPrim float] (TyPrim int)))]
       @ map (\<lambda>\<nu>. (prim_name \<nu>, PredefName)) [NoneType, object, bool, int, float, str]
       @ [(''list'', PredefName), (''dict'', PredefName), (''tuple'', PredefName)]))
@@ -734,21 +713,23 @@ context includes fmap.lifting
 begin
 
 lift_definition submods :: "module_table \<Rightarrow> name \<Rightarrow> cxt"
-  is "\<lambda>M q x. if child q x \<in> dom M then Some (ModStub (child q x)) else None"
+  is "\<lambda>M q x. if snoc q x \<in> dom M then Some (ModStub (snoc q x)) else None"
 proof -
   fix M :: "name \<Rightarrow> module_body option" and q
   assume "finite (dom M)"
-  have "dom (\<lambda>x. if child q x \<in> dom M then Some (ModStub (child q x)) else None) \<subseteq> last_var ` dom M"
+  have "dom (\<lambda>x. if snoc q x \<in> dom M then Some (ModStub (snoc q x)) else None)
+        \<subseteq> (\<lambda>q'. snd (the (unsnoc q'))) ` dom M"
     by (auto simp: dom_def image_iff intro: rev_image_eqI)
-  then show "finite (dom (\<lambda>x. if child q x \<in> dom M then Some (ModStub (child q x)) else None))"
+  then show "finite (dom (\<lambda>x. if snoc q x \<in> dom M then Some (ModStub (snoc q x)) else None))"
     using \<open>finite (dom M)\<close> by (blast intro: finite_subset finite_imageI)
 qed
 
 end
 
 lemma map_of_submods:
-  "map_of (map (\<lambda>(q', _). (last_var q', ModStub q')) (filter (\<lambda>(q', _). parent q' = Some q) m)) x
-   = (if child q x \<in> dom (map_of m) then Some (ModStub (child q x)) else None)"
+  "map_of (map (\<lambda>(q', _). (snd (the (unsnoc q')), ModStub q'))
+             (filter (\<lambda>(q', _). case unsnoc q' of Some (q'', _) \<Rightarrow> q'' = q | None \<Rightarrow> False) m)) x
+   = (if snoc q x \<in> dom (map_of m) then Some (ModStub (snoc q x)) else None)"
 proof (induction m)
   case Nil
   then show ?case by simp
@@ -756,28 +737,38 @@ next
   case (Cons e m)
   obtain q' b where e: "e = (q', b)" by (cases e)
   show ?case
-  proof (cases "parent q' = Some q")
-    case True
-    then have q': "q' = child q (last_var q')" by (rule child_of_parent)
+  proof (cases "unsnoc q'")
+    case None
+    then have "snoc q x \<noteq> q'" by (metis unsnoc_snoc option.distinct(1))
+    with Cons.IH e None show ?thesis by (simp add: dom_def)
+  next
+    case (Some p)
+    obtain q'' x' where p: "p = (q'', x')" by (cases p)
     show ?thesis
-    proof (cases "x = last_var q'")
+    proof (cases "q'' = q")
       case True
-      with q' e \<open>parent q' = Some q\<close> show ?thesis by (simp add: dom_def)
+      with Some p have q': "q' = snoc q x'" by (simp add: snoc_unsnoc)
+      show ?thesis
+      proof (cases "x = x'")
+        case True
+        with q' e Some p \<open>q'' = q\<close> show ?thesis by (simp add: dom_def)
+      next
+        case False
+        with q' have "snoc q x \<noteq> q'" by (metis unsnoc_snoc option.inject prod.inject)
+        with Cons.IH e Some p \<open>q'' = q\<close> False show ?thesis by (simp add: dom_def)
+      qed
     next
       case False
-      with q' have "child q x \<noteq> q'" by (metis last_var_child)
-      with Cons.IH e \<open>parent q' = Some q\<close> False show ?thesis by (simp add: dom_def)
+      with Some p have "snoc q x \<noteq> q'" by (metis unsnoc_snoc option.inject prod.inject)
+      with Cons.IH e Some p False show ?thesis by (simp add: dom_def)
     qed
-  next
-    case False
-    then have "child q x \<noteq> q'" by (metis parent_child)
-    with Cons.IH e False show ?thesis by (simp add: dom_def)
   qed
 qed
 
 lemma submods_of_list [code]:
   "submods (fmap_of_list m) q
-   = fmap_of_list (map (\<lambda>(q', _). (last_var q', ModStub q')) (filter (\<lambda>(q', _). parent q' = Some q) m))"
+   = fmap_of_list (map (\<lambda>(q', _). (snd (the (unsnoc q')), ModStub q'))
+                       (filter (\<lambda>(q', _). case unsnoc q' of Some (q'', _) \<Rightarrow> q'' = q | None \<Rightarrow> False) m))"
   by (rule fmap_ext) (simp add: submods.rep_eq fmlookup_of_list map_of_submods)
 
 fun declares_imports :: "import list \<Rightarrow> var list"
@@ -879,10 +870,10 @@ where
      | Some \<theta>s \<Rightarrow> map_option (\<lambda>\<Gamma>. fmap_of_list (zip xs \<theta>s) \<boxplus> \<Gamma>) (check_imports M V q \<iota>s))" |
 "submodules M V \<theta> [] = Some \<theta>" |
 "submodules M V (ModChecked q \<Gamma>) (x # xs) =
-  (case check_module M V (child q x) of
+  (case check_module M V (snoc q x) of
      None \<Rightarrow> None
    | Some \<Gamma>' \<Rightarrow>
-     map_option (\<lambda>\<theta>'. ModChecked q (\<Gamma> \<boxplus> fmupd x \<theta>' fmempty)) (submodules M V (ModChecked (child q x) \<Gamma>') xs))" |
+     map_option (\<lambda>\<theta>'. ModChecked q (\<Gamma> \<boxplus> fmupd x \<theta>' fmempty)) (submodules M V (ModChecked (snoc q x) \<Gamma>') xs))" |
 "submodules M V _ _ = None" |
 "imports_entry M V \<Gamma> x =
   (case fmlookup \<Gamma> x of

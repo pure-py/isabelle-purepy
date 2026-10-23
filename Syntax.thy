@@ -1,10 +1,10 @@
 theory Syntax
-  imports Complex_Main
+  imports Complex_Main Util
 begin
 
 type_alias var = string
 
-type_synonym name = "var \<times> var list"
+type_synonym name = "var nonempty"
 
 datatype lit =
     LitInt int
