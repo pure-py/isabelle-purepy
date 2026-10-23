@@ -17,9 +17,6 @@ datatype cxt_entry =
 
 type_synonym cxt = "(var, cxt_entry) fmap"
 
-definition builtins :: name where "builtins = (''builtins'', [])"
-definition main :: name where "main = (''__main__'', [])"
-
 (* None if x is undefined or unusable *)
 fun resolve_name :: "cxt \<Rightarrow> var \<Rightarrow> cxt_entry option"
 where
@@ -564,13 +561,13 @@ where
     | None \<Rightarrow> False))" |
 "check_def \<Gamma> _ _ = False"
 
-abbreviation name_entry :: "var \<times> cxt_entry" where "name_entry \<equiv> (''__name__'', Ty (TyPrim str))"
+abbreviation name_binding :: "var \<times> cxt_entry" where "name_binding \<equiv> (''__name__'', Ty (TyPrim str))"
 
 definition predefined :: "name \<Rightarrow> cxt option"
 where
 "predefined q =
   (if q = builtins then Some (fmap_of_list
-     ([name_entry,
+     ([name_binding,
        (''print'', Ty (TyCallable [TyPrim object] (TyPrim NoneType))),
        (''len'', Ty (TyCallable [TyPrim Sized] (TyPrim int))),
        (''range'', Type (snoc builtins ''range'')),
@@ -578,11 +575,11 @@ where
       @ map (\<lambda>\<nu>. (prim_name \<nu>, PredefName)) [NoneType, object, bool, int, float, str]
       @ [(''list'', PredefName), (''dict'', PredefName), (''tuple'', PredefName)]))
    else if q = (''sys'', []) then Some (fmap_of_list
-     [name_entry, (''argv'', Ty (TyList (TyPrim str))), (''exit'', Ty (TyCallable [TyPrim int] (TyPrim Never)))])
+     [name_binding, (''argv'', Ty (TyList (TyPrim str))), (''exit'', Ty (TyCallable [TyPrim int] (TyPrim Never)))])
    else if q = (''typing'', []) then Some (fmap_of_list
-     [name_entry, (''Callable'', PredefName), (''Literal'', PredefName),
+     [name_binding, (''Callable'', PredefName), (''Literal'', PredefName),
       (prim_name Never, PredefName), (prim_name Sized, PredefName)])
-   else if q = (''dataclasses'', []) then Some (fmap_of_list [name_entry, (''dataclass'', PredefName)])
+   else if q = (''dataclasses'', []) then Some (fmap_of_list [name_binding, (''dataclass'', PredefName)])
    else None)"
 
 (* Pointwise combination of a map of extension functions with a context, over the keys of either *)

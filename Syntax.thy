@@ -150,6 +150,9 @@ definition unique_to :: "name \<Rightarrow> name \<Rightarrow> name list"
 where
 "unique_to q' q = filter (\<lambda>p. \<not> p \<preceq> q) (proper_prefixes q')"
 
+definition builtins :: name where "builtins = (''builtins'', [])"
+definition main :: name where "main = (''__main__'', [])"
+
 fun def_name :: "func \<Rightarrow> var"
 where
 "def_name (Def f _ _ _ _) = f"
