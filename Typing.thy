@@ -337,15 +337,6 @@ where
   (case resolve_qualified \<Gamma> e of Some (ModChecked q \<Gamma>') \<Rightarrow> resolve_name \<Gamma>' x | _ \<Rightarrow> None)" |
 "resolve_qualified \<Gamma> _ = None"
 
-lemma size_prod_pair [simp]: "size_prod f g p = f (fst p) + g (snd p) + Suc 0"
-  by (cases p) simp
-
-lemma size_list_fst: "size_list (size \<circ> fst) kvs \<le> size_list (\<lambda>x. Suc (size (fst x) + size (snd x))) kvs"
-  by (rule size_list_pointwise) simp
-
-lemma size_list_snd: "size_list (size \<circ> snd) kvs \<le> size_list (\<lambda>x. Suc (size (fst x) + size (snd x))) kvs"
-  by (rule size_list_pointwise) simp
-
 function (sequential)
   synth_expr :: "cxt \<Rightarrow> expr \<Rightarrow> ty option" and
   synth_exprs :: "cxt \<Rightarrow> expr list \<Rightarrow> ty option list" and
