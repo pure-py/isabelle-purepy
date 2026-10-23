@@ -20,6 +20,13 @@ build has fetched the generator:
 isabelle vscode -d . -d python/isabelle-python-codegen .
 ```
 
+The repository is an Isabelle component which defines the symbols of the specification missing from the
+distribution, such as context extension. Register it once, so that the editors render them:
+
+```bash
+isabelle components -u .
+```
+
 ## Theories
 
 | File                   | Content                                                                 |
