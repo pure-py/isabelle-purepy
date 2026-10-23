@@ -37,7 +37,7 @@ where
 definition builtins :: name where "builtins = (''builtins'', [])"
 definition main :: name where "main = (''__main__'', [])"
 
-(* None if x is undefined or not yet usable: unbound, unassigned, a stub or a type parameter *)
+(* None if x is undefined or unusable *)
 fun resolve_name :: "cxt \<Rightarrow> var \<Rightarrow> cxt_entry option"
 where
 "resolve_name \<Gamma> x =
