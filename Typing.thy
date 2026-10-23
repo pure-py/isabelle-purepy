@@ -37,7 +37,6 @@ where
 definition builtins :: name where "builtins = (''builtins'', [])"
 definition main :: name where "main = (''__main__'', [])"
 
-(* Entry of a name looked up in a module signature, as resolution of a simple name finds it *)
 fun resolve_name :: "cxt \<Rightarrow> var \<Rightarrow> cxt_entry option"
 where
 "resolve_name \<Gamma> x =
@@ -323,7 +322,6 @@ where
 "binds_quals (Guard _ # gs) = binds_quals gs" |
 "binds_quals (Generator x _ # gs) = {x} \<union> binds_quals gs"
 
-(* Free variables; the generators of a comprehension bind in the later qualifiers and in its elements *)
 fun fv :: "expr \<Rightarrow> var set" and fv_quals :: "qualifier list \<Rightarrow> var set"
 where
 "fv (ExprVar x) = {x}" |
@@ -371,7 +369,6 @@ where
 "captures_quals (Guard e # gs) = captures e \<union> captures_quals gs" |
 "captures_quals (Generator x e # gs) = captures e \<union> (captures_quals gs - {x})"
 
-(* Type of the elements drawn by a generator *)
 fun elem_type :: "ty \<Rightarrow> ty option"
 where
 "elem_type (TyList \<tau>) = Some \<tau>" |
@@ -384,8 +381,8 @@ where
   (case (elem_type \<sigma>, elem_type \<tau>) of (Some \<sigma>', Some \<tau>') \<Rightarrow> Some (\<sigma>' \<squnion> \<tau>') | _ \<Rightarrow> None)" |
 "elem_type _ = None"
 
-(* Type of a subscript of a value of the first type, given whether the index checks against int and
-   against str and the type it synthesises; a union is subscripted at each alternative *)
+(* Subscript rules by container type, given whether the index checks against int and against str, and
+   the type it synthesises *)
 fun subscript_type :: "ty \<Rightarrow> bool \<Rightarrow> bool \<Rightarrow> ty option \<Rightarrow> ty option"
 where
 "subscript_type (TyUnion \<sigma> \<sigma>') int_ok str_ok idx =
@@ -403,7 +400,6 @@ where
 "subscript_type \<sigma> int_ok str_ok idx =
   (if base_type \<sigma> = TyPrim str \<and> int_ok then Some (TyPrim str) else None)"
 
-(* Entry of a qualified name, as resolution finds it in the signatures of checked modules *)
 fun resolve_qualified :: "cxt \<Rightarrow> expr \<Rightarrow> cxt_entry option"
 where
 "resolve_qualified \<Gamma> (ExprVar x) = resolve_name \<Gamma> x" |
@@ -651,7 +647,6 @@ section \<open>Modules\<close>
 
 abbreviation name_entry :: "var \<times> cxt_entry" where "name_entry \<equiv> (''__name__'', Ty (TyPrim str))"
 
-(* Context of a predefined module *)
 definition predefined :: "name \<Rightarrow> cxt option"
 where
 "predefined q =
@@ -802,7 +797,6 @@ where
 "binds_top (TopSeq t t') = binds_top t \<union> binds_top t'" |
 "binds_top (TypeDefs \<chi>s) = {}"
 
-(* u marks a variable unbound, as for scope *)
 definition scope_top :: "'a \<Rightarrow> var list \<Rightarrow> top_stmt \<Rightarrow> (var, 'a) fmap option"
 where
 "scope_top u ys t =
