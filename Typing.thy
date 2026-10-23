@@ -582,14 +582,16 @@ where
       (prim_name Never, PredefName), (prim_name Sized, PredefName)]),
    ((''dataclasses'', []), fmap_of_list [name_binding, (''dataclass'', PredefName)])]"
 
+(* Written with a disjoint-union symbol, since the boxed plus of the specification isn't in Isabelle's
+   symbol table *)
 fun extend_entry :: "cxt_entry \<Rightarrow> cxt_entry \<Rightarrow> cxt_entry"
-and extend :: "cxt \<Rightarrow> cxt \<Rightarrow> cxt" (infixl "\<boxplus>" 65)
+and extend :: "cxt \<Rightarrow> cxt \<Rightarrow> cxt" (infixl "\<uplus>" 65)
 where
 "extend_entry (ModChecked q \<Gamma>) (ModStub q') = (if q = q' then ModChecked q \<Gamma> else ModStub q')" |
 "extend_entry (ModChecked q \<Gamma>) (ModChecked q' \<Gamma>') =
-   (if q = q' then ModChecked q (\<Gamma> \<boxplus> \<Gamma>') else ModChecked q' \<Gamma>')" |
+   (if q = q' then ModChecked q (\<Gamma> \<uplus> \<Gamma>') else ModChecked q' \<Gamma>')" |
 "extend_entry _ \<theta>' = \<theta>'" |
-"\<Gamma> \<boxplus> \<Gamma>' =
+"\<Gamma> \<uplus> \<Gamma>' =
    \<Gamma> ++\<^sub>f fmmap_keys (\<lambda>x \<theta>'. case fmlookup \<Gamma> x of None \<Rightarrow> \<theta>' | Some \<theta> \<Rightarrow> extend_entry \<theta> \<theta>') \<Gamma>'"
 
 termination
@@ -707,7 +709,7 @@ where
    | Some \<Delta> \<Rightarrow>
      (case submodules M V (ModChecked (x, []) \<Delta>) xs of
         None \<Rightarrow> None
-      | Some \<theta> \<Rightarrow> map_option (\<lambda>\<Gamma>. fmupd x \<theta> fmempty \<boxplus> \<Gamma>) (check_imports M V q \<iota>s)))" |
+      | Some \<theta> \<Rightarrow> map_option (\<lambda>\<Gamma>. fmupd x \<theta> fmempty \<uplus> \<Gamma>) (check_imports M V q \<iota>s)))" |
 "check_imports M V q (FromImport q' xs # \<iota>s) =
   (if \<not> distinct xs then None
    else case check_module M V q' of
@@ -716,13 +718,13 @@ where
      if \<not> check_modules M V (unique_to q' q) then None
      else case imports_entries M V \<Delta> xs of
        None \<Rightarrow> None
-     | Some \<theta>s \<Rightarrow> map_option (\<lambda>\<Gamma>. fmap_of_list (zip xs \<theta>s) \<boxplus> \<Gamma>) (check_imports M V q \<iota>s))" |
+     | Some \<theta>s \<Rightarrow> map_option (\<lambda>\<Gamma>. fmap_of_list (zip xs \<theta>s) \<uplus> \<Gamma>) (check_imports M V q \<iota>s))" |
 "submodules M V \<theta> [] = Some \<theta>" |
 "submodules M V (ModChecked q \<Gamma>) (x # xs) =
   (case check_module M V (snoc q x) of
      None \<Rightarrow> None
    | Some \<Gamma>' \<Rightarrow>
-     map_option (\<lambda>\<theta>'. ModChecked q (\<Gamma> \<boxplus> fmupd x \<theta>' fmempty)) (submodules M V (ModChecked (snoc q x) \<Gamma>') xs))" |
+     map_option (\<lambda>\<theta>'. ModChecked q (\<Gamma> \<uplus> fmupd x \<theta>' fmempty)) (submodules M V (ModChecked (snoc q x) \<Gamma>') xs))" |
 "submodules M V _ _ = None" |
 "imports_entry M V \<Gamma> x =
   (case fmlookup \<Gamma> x of

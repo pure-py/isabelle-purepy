@@ -1,2 +1,0 @@
-# Symbols of the specification missing from the Isabelle distribution
-ISABELLE_SYMBOLS="$ISABELLE_SYMBOLS:$COMPONENT/etc/symbols"
