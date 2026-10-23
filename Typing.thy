@@ -575,24 +575,28 @@ where
       @ map (\<lambda>\<nu>. (prim_name \<nu>, PredefName)) [NoneType, object, bool, int, float, str]
       @ [(''list'', PredefName), (''dict'', PredefName), (''tuple'', PredefName)])),
    ((''sys'', []), fmap_of_list
-     [name_binding, (''argv'', Ty (TyList (TyPrim str))), (''exit'', Ty (TyCallable [TyPrim int] (TyPrim Never)))]),
+     [name_binding, (''argv'', Ty (TyList (TyPrim str))),
+      (''exit'', Ty (TyCallable [TyPrim int] (TyPrim Never)))]),
    ((''typing'', []), fmap_of_list
      [name_binding, (''Callable'', PredefName), (''Literal'', PredefName),
       (prim_name Never, PredefName), (prim_name Sized, PredefName)]),
    ((''dataclasses'', []), fmap_of_list [name_binding, (''dataclass'', PredefName)])]"
 
-(* Extend context, left entries given as functions of the right entry at the same key, since primitive
-   recursion through a signature yields functions *)
+(* Extend \<Gamma>' by F, a context with each entry replaced by the function extending that entry, since primitive
+   recursion through a nested context yields such a map rather than the context itself *)
 definition extend_with :: "(var, cxt_entry option \<Rightarrow> cxt_entry) fmap \<Rightarrow> cxt \<Rightarrow> cxt"
 where
 "extend_with F \<Gamma>' =
   fmmap_keys (\<lambda>x _. case fmlookup F x of Some f \<Rightarrow> f (fmlookup \<Gamma>' x) | None \<Rightarrow> the (fmlookup \<Gamma>' x))
     (fmmap (\<lambda>_. ()) F \<otimes> fmmap (\<lambda>_. ()) \<Gamma>')"
 
-definition extend_plain :: "cxt_entry \<Rightarrow> cxt_entry option \<Rightarrow> cxt_entry"
+fun extend_plain :: "cxt_entry \<Rightarrow> cxt_entry option \<Rightarrow> cxt_entry"
 where
-"extend_plain \<theta> \<theta>' = (case \<theta>' of None \<Rightarrow> \<theta> | Some \<theta>'' \<Rightarrow> \<theta>'')"
+"extend_plain \<theta> None = \<theta>" |
+"extend_plain _ (Some \<theta>') = \<theta>'"
 
+(* Primitive recursion, which needs no termination proof for the recursive call through a nested context,
+   so the second argument is matched in a lambda rather than a clause *)
 primrec extend_entry :: "cxt_entry \<Rightarrow> cxt_entry option \<Rightarrow> cxt_entry"
 where
 "extend_entry (Ty \<tau>) = extend_plain (Ty \<tau>)" |
