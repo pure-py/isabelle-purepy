@@ -617,17 +617,19 @@ qed
 
 end
 
-lemma map_of_submods:
-  "map_of (map (\<lambda>(q', _). (snd (the (unsnoc q')), ModStub q'))
-             (filter (\<lambda>(q', _). case unsnoc q' of Some (q'', _) \<Rightarrow> q'' = q | None \<Rightarrow> False) m)) x
-   = (if snoc q x \<in> dom (map_of m) then Some (ModStub (snoc q x)) else None)"
-  by (induction m) (auto simp: dom_def snoc_eq_iff simp del: snoc.simps unsnoc.simps split: option.splits)
-
 lemma submods_of_list [code]:
   "submods (fmap_of_list m) q
    = fmap_of_list (map (\<lambda>(q', _). (snd (the (unsnoc q')), ModStub q'))
                        (filter (\<lambda>(q', _). case unsnoc q' of Some (q'', _) \<Rightarrow> q'' = q | None \<Rightarrow> False) m))"
-  by (rule fmap_ext) (simp add: submods.rep_eq fmlookup_of_list map_of_submods)
+proof (rule fmap_ext)
+  fix x
+  let ?l = "map (\<lambda>(q', _). (snd (the (unsnoc q')), ModStub q'))
+              (filter (\<lambda>(q', _). case unsnoc q' of Some (q'', _) \<Rightarrow> q'' = q | None \<Rightarrow> False) m)"
+  have "map_of ?l x = (if snoc q x \<in> dom (map_of m) then Some (ModStub (snoc q x)) else None)"
+    by (induction m) (auto simp: dom_def snoc_eq_iff simp del: snoc.simps unsnoc.simps split: option.splits)
+  then show "fmlookup (submods (fmap_of_list m) q) x = fmlookup (fmap_of_list ?l) x"
+    by (simp add: submods.rep_eq fmlookup_of_list)
+qed
 
 fun check_top_stmt :: "cxt \<Rightarrow> top_stmt \<Rightarrow> static_outcome option"
 where
