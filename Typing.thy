@@ -564,8 +564,6 @@ where
     | None \<Rightarrow> False))" |
 "check_def \<Gamma> _ _ = False"
 
-section \<open>Modules\<close>
-
 abbreviation name_entry :: "var \<times> cxt_entry" where "name_entry \<equiv> (''__name__'', Ty (TyPrim str))"
 
 definition predefined :: "name \<Rightarrow> cxt option"
