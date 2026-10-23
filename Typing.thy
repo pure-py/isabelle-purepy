@@ -583,7 +583,7 @@ where
    ((''dataclasses'', []), fmap_of_list [name_binding, (''dataclass'', PredefName)])]"
 
 (* Boxed plus of the specification isn't in Isabelle's symbol table *)
-fun extend_entry :: "cxt_entry \<Rightarrow> cxt_entry \<Rightarrow> cxt_entry"
+function (sequential) extend_entry :: "cxt_entry \<Rightarrow> cxt_entry \<Rightarrow> cxt_entry"
 and extend :: "cxt \<Rightarrow> cxt \<Rightarrow> cxt" (infixl "\<uplus>" 65)
 where
 "extend_entry (ModChecked q \<Gamma>) (ModStub q') = (if q = q' then ModChecked q \<Gamma> else ModStub q')" |
@@ -592,10 +592,11 @@ where
 "extend_entry _ \<theta>' = \<theta>'" |
 "\<Gamma> \<uplus> \<Gamma>' =
    \<Gamma> ++\<^sub>f fmmap_keys (\<lambda>x \<theta>'. case fmlookup \<Gamma> x of None \<Rightarrow> \<theta>' | Some \<theta> \<Rightarrow> extend_entry \<theta> \<theta>') \<Gamma>'"
+  by pat_completeness auto
 
 termination
   by (relation "measure (\<lambda>p. case p of Inl (\<theta>, _) \<Rightarrow> size \<theta> | Inr (\<Gamma>, _) \<Rightarrow> size_fmap (\<lambda>_. 0) size \<Gamma>)")
-     (auto simp: size_fmap_lookup)
+     (simp_all add: size_fmap_lookup del: size_fmap_def)
 
 type_synonym module_table = "(name, module_body) fmap"
 
