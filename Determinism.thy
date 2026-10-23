@@ -41,6 +41,9 @@ next
   case EvalVarUnknown
   then show ?case by (auto elim!: VarE)
 next
+  case EvalVarUnbound
+  then show ?case by (auto elim!: VarE)
+next
   case EvalLiteral
   then show ?case by (auto elim!: LiteralE)
 next
@@ -216,6 +219,10 @@ next
   from EvalAssertFail.prems EvalAssertFail.hyps show ?case
     by (auto elim!: AssertE dest: EvalAssertFail.IH)
 next
+  case EvalAssertNonBool
+  from EvalAssertNonBool.prems EvalAssertNonBool.hyps show ?case
+    by (auto elim!: AssertE dest: EvalAssertNonBool.IH)
+next
   case EvalAssertMsg
   from EvalAssertMsg.prems EvalAssertMsg.hyps show ?case
     by (auto elim!: AssertE dest: EvalAssertMsg.IH)
@@ -224,9 +231,21 @@ next
   from EvalAssertMsgFalse.prems EvalAssertMsgFalse.hyps show ?case
     by (auto elim!: AssertE dest: EvalAssertMsgFalse.IH)
 next
+  case EvalAssertMsgFalseFail
+  from EvalAssertMsgFalseFail.prems EvalAssertMsgFalseFail.hyps show ?case
+    by (auto elim!: AssertE dest: EvalAssertMsgFalseFail.IH)
+next
   case EvalAssertMsgFail
   from EvalAssertMsgFail.prems EvalAssertMsgFail.hyps show ?case
     by (auto elim!: AssertE dest: EvalAssertMsgFail.IH)
+next
+  case EvalAssertMsgNonBool
+  from EvalAssertMsgNonBool.prems EvalAssertMsgNonBool.hyps show ?case
+    by (auto elim!: AssertE dest: EvalAssertMsgNonBool.IH)
+next
+  case EvalAssertMsgNonStr
+  from EvalAssertMsgNonStr.prems EvalAssertMsgNonStr.hyps show ?case
+    by (auto elim!: AssertE dest: EvalAssertMsgNonStr.IH)
 next
   case EvalIfTrue
   from EvalIfTrue.prems EvalIfTrue.hyps show ?case
@@ -239,6 +258,10 @@ next
   case EvalIfFail
   from EvalIfFail.prems EvalIfFail.hyps show ?case
     by (auto elim!: IfE dest: EvalIfFail.IH)
+next
+  case EvalIfNonBool
+  from EvalIfNonBool.prems EvalIfNonBool.hyps show ?case
+    by (auto elim!: IfE dest: EvalIfNonBool.IH)
 next
   case EvalSeq
   from EvalSeq.prems EvalSeq.hyps show ?case
@@ -270,6 +293,10 @@ next
   case EvalElifFail
   from EvalElifFail.prems EvalElifFail.hyps show ?case
     by (auto elim!: ElifConsE dest: EvalElifFail.IH)
+next
+  case EvalElifNonBool
+  from EvalElifNonBool.prems EvalElifNonBool.hyps show ?case
+    by (auto elim!: ElifConsE dest: EvalElifNonBool.IH)
 qed
 
 end
