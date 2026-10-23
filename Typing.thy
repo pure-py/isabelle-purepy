@@ -581,8 +581,8 @@ where
       (prim_name Never, PredefName), (prim_name Sized, PredefName)]),
    ((''dataclasses'', []), fmap_of_list [name_binding, (''dataclass'', PredefName)])]"
 
-(* Extension of a context by another, with each entry of the first given as a function of the entry
-   of the second at the same key, as primitive recursion through a signature supplies it *)
+(* Extend context, left entries given as functions of the right entry at the same key, since primitive
+   recursion through a signature yields functions *)
 definition extend_with :: "(var, cxt_entry option \<Rightarrow> cxt_entry) fmap \<Rightarrow> cxt \<Rightarrow> cxt"
 where
 "extend_with F \<Gamma>' =
