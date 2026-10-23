@@ -17,23 +17,6 @@ datatype cxt_entry =
 
 type_synonym cxt = "(var, cxt_entry) fmap"
 
-fun prefix_of :: "name \<Rightarrow> name \<Rightarrow> bool" (infix "\<preceq>" 50)
-where
-"(y, ys) \<preceq> (y', ys') = (y = y' \<and> take (length ys) ys' = ys)"
-
-definition proper_prefix_of :: "name \<Rightarrow> name \<Rightarrow> bool" (infix "\<prec>" 50)
-where
-"q \<prec> q' = (q \<preceq> q' \<and> q \<noteq> q')"
-
-(* Shortest first *)
-fun proper_prefixes :: "name \<Rightarrow> name list"
-where
-"proper_prefixes (y, ys) = map (\<lambda>i. (y, take i ys)) [0..<length ys]"
-
-definition unique_to :: "name \<Rightarrow> name \<Rightarrow> name list"
-where
-"unique_to q' q = filter (\<lambda>p. \<not> p \<preceq> q) (proper_prefixes q')"
-
 definition builtins :: name where "builtins = (''builtins'', [])"
 definition main :: name where "main = (''__main__'', [])"
 
@@ -315,59 +298,6 @@ where
 "numeric_literal (ExprLiteral (LitFloat _)) = True" |
 "numeric_literal _ = False"
 
-fun binds_quals :: "qualifier list \<Rightarrow> var set"
-where
-"binds_quals [] = {}" |
-"binds_quals (Guard _ # gs) = binds_quals gs" |
-"binds_quals (Generator x _ # gs) = {x} \<union> binds_quals gs"
-
-fun fv :: "expr \<Rightarrow> var set" and fv_quals :: "qualifier list \<Rightarrow> var set"
-where
-"fv (ExprVar x) = {x}" |
-"fv (ExprLiteral _) = {}" |
-"fv (ExprCall e (es, kws)) = fv e \<union> \<Union> (set (map fv es)) \<union> \<Union> (set (map (fv \<circ> snd) kws))" |
-"fv (ExprDict kvs) = \<Union> (set (map (fv \<circ> fst) kvs)) \<union> \<Union> (set (map (fv \<circ> snd) kvs))" |
-"fv (ExprAttribute e _) = fv e" |
-"fv (ExprSubscript e e') = fv e \<union> fv e'" |
-"fv (ExprBinOp _ e e') = fv e \<union> fv e'" |
-"fv (ExprUnOp _ e) = fv e" |
-"fv (ExprAnd e e') = fv e \<union> fv e'" |
-"fv (ExprOr e e') = fv e \<union> fv e'" |
-"fv (ExprCond e\<^sub>1 e e\<^sub>2) = fv e\<^sub>1 \<union> fv e \<union> fv e\<^sub>2" |
-"fv (ExprList es) = \<Union> (set (map fv es))" |
-"fv (ExprTuple es) = \<Union> (set (map fv es))" |
-"fv (ExprListComp e gs) = fv_quals gs \<union> (fv e - binds_quals gs)" |
-"fv (ExprDictComp e e' gs) = fv_quals gs \<union> ((fv e \<union> fv e') - binds_quals gs)" |
-"fv (ExprLambda xs e) = fv e - set xs" |
-
-"fv_quals [] = {}" |
-"fv_quals (Guard e # gs) = fv e \<union> fv_quals gs" |
-"fv_quals (Generator x e # gs) = fv e \<union> (fv_quals gs - {x})"
-
-fun captures :: "expr \<Rightarrow> var set" and captures_quals :: "qualifier list \<Rightarrow> var set"
-where
-"captures (ExprVar _) = {}" |
-"captures (ExprLiteral _) = {}" |
-"captures (ExprCall e (es, kws)) =
-  captures e \<union> \<Union> (set (map captures es)) \<union> \<Union> (set (map (captures \<circ> snd) kws))" |
-"captures (ExprDict kvs) = \<Union> (set (map (captures \<circ> fst) kvs)) \<union> \<Union> (set (map (captures \<circ> snd) kvs))" |
-"captures (ExprAttribute e _) = captures e" |
-"captures (ExprSubscript e e') = captures e \<union> captures e'" |
-"captures (ExprBinOp _ e e') = captures e \<union> captures e'" |
-"captures (ExprUnOp _ e) = captures e" |
-"captures (ExprAnd e e') = captures e \<union> captures e'" |
-"captures (ExprOr e e') = captures e \<union> captures e'" |
-"captures (ExprCond e\<^sub>1 e e\<^sub>2) = captures e\<^sub>1 \<union> captures e \<union> captures e\<^sub>2" |
-"captures (ExprList es) = \<Union> (set (map captures es))" |
-"captures (ExprTuple es) = \<Union> (set (map captures es))" |
-"captures (ExprListComp e gs) = captures_quals gs \<union> (captures e - binds_quals gs)" |
-"captures (ExprDictComp e e' gs) = captures_quals gs \<union> ((captures e \<union> captures e') - binds_quals gs)" |
-"captures (ExprLambda xs e) = fv e - set xs" |
-
-"captures_quals [] = {}" |
-"captures_quals (Guard e # gs) = captures e \<union> captures_quals gs" |
-"captures_quals (Generator x e # gs) = captures e \<union> (captures_quals gs - {x})"
-
 fun elem_type :: "ty \<Rightarrow> ty option"
 where
 "elem_type (TyList \<tau>) = Some \<tau>" |
@@ -537,7 +467,7 @@ where
 "quals \<Gamma> (Generator x e # gs) =
   (case map_option elem_type (synth_expr \<Gamma> e) of
      Some (Some \<sigma>) \<Rightarrow>
-       if x \<in> captures_quals gs then None
+       if x \<in> captures gs then None
        else map_option (\<lambda>\<Delta>. fmupd x (Ty \<sigma>) fmempty \<otimes> \<Delta>) (quals (\<Gamma> \<otimes> fmupd x (Ty \<sigma>) fmempty) gs)
    | _ \<Rightarrow> None)"
 by pat_completeness auto
@@ -765,45 +695,6 @@ lemma submods_of_list [code]:
                        (filter (\<lambda>(q', _). case unsnoc q' of Some (q'', _) \<Rightarrow> q'' = q | None \<Rightarrow> False) m))"
   by (rule fmap_ext) (simp add: submods.rep_eq fmlookup_of_list map_of_submods)
 
-fun declares_imports :: "import list \<Rightarrow> var list"
-where
-"declares_imports [] = []" |
-"declares_imports (Import (x, xs) # \<iota>s) =
-  (if list_ex (\<lambda>\<iota>. case \<iota> of Import (x', _) \<Rightarrow> x' = x | _ \<Rightarrow> False) \<iota>s then declares_imports \<iota>s
-   else x # declares_imports \<iota>s)" |
-"declares_imports (FromImport q xs # \<iota>s) = xs @ declares_imports \<iota>s"
-
-fun type_def_name :: "type_def \<Rightarrow> var"
-where
-"type_def_name (Dataclass c _ _ _) = c" |
-"type_def_name (TypeAlias x _ _) = x"
-
-fun declares_top :: "top_stmt \<Rightarrow> var list"
-where
-"declares_top (Stmt s) = declares s" |
-"declares_top (TopSeq t t') = declares_top t @ declares_top t'" |
-"declares_top (TypeDefs \<chi>s) = map type_def_name \<chi>s"
-
-fun assigns_top :: "top_stmt \<Rightarrow> var set"
-where
-"assigns_top (Stmt s) = assigns s" |
-"assigns_top (TopSeq t t') = assigns_top t \<union> assigns_top t'" |
-"assigns_top (TypeDefs \<chi>s) = set (map type_def_name \<chi>s)"
-
-fun binds_top :: "top_stmt \<Rightarrow> var set"
-where
-"binds_top (Stmt s) = binds s" |
-"binds_top (TopSeq t t') = binds_top t \<union> binds_top t'" |
-"binds_top (TypeDefs \<chi>s) = {}"
-
-definition scope_top :: "'a \<Rightarrow> var list \<Rightarrow> top_stmt \<Rightarrow> (var, 'a) fmap option"
-where
-"scope_top u ys t =
-  (if distinct ys \<and> distinct (declares_top t) \<and> set ys \<inter> set (declares_top t) = {} \<and> set ys \<inter> binds_top t = {}
-      \<and> set (declares_top t) \<inter> binds_top t = {}
-   then Some (fmconst (assigns_top t - set ys) u)
-   else None)"
-
 fun check_top_stmt :: "cxt \<Rightarrow> top_stmt \<Rightarrow> static_outcome option"
 where
 "check_top_stmt \<Gamma> (Stmt s) = check_stmt \<Gamma> None s" |
@@ -833,7 +724,7 @@ where
        (case check_imports M (insert q V) q \<iota>s of
           None \<Rightarrow> None
         | Some \<Gamma>' \<Rightarrow>
-          (case scope_top Unbound (declares_imports \<iota>s) t of
+          (case scope Unbound (declares \<iota>s) t of
              None \<Rightarrow> None
            | Some \<Gamma>\<^sub>s \<Rightarrow>
              (case check_top_stmt (the (predefined builtins) \<otimes> \<Gamma>' \<otimes> \<Gamma>\<^sub>s) t of

@@ -1,5 +1,5 @@
 theory Syntax
-  imports Complex_Main Util
+  imports Complex_Main Util "HOL-Library.Finite_Map"
 begin
 
 type_alias var = string
@@ -132,5 +132,191 @@ datatype top_stmt =
   | TypeDefs "type_def list"
 
 datatype module_body = ModuleBody "import list" top_stmt
+
+fun prefix_of :: "name \<Rightarrow> name \<Rightarrow> bool" (infix "\<preceq>" 50)
+where
+"(y, ys) \<preceq> (y', ys') = (y = y' \<and> take (length ys) ys' = ys)"
+
+definition proper_prefix_of :: "name \<Rightarrow> name \<Rightarrow> bool" (infix "\<prec>" 50)
+where
+"q \<prec> q' = (q \<preceq> q' \<and> q \<noteq> q')"
+
+(* Shortest first *)
+fun proper_prefixes :: "name \<Rightarrow> name list"
+where
+"proper_prefixes (y, ys) = map (\<lambda>i. (y, take i ys)) [0..<length ys]"
+
+definition unique_to :: "name \<Rightarrow> name \<Rightarrow> name list"
+where
+"unique_to q' q = filter (\<lambda>p. \<not> p \<preceq> q) (proper_prefixes q')"
+
+fun def_name :: "func \<Rightarrow> var"
+where
+"def_name (Def f _ _ _ _) = f"
+
+fun type_def_name :: "type_def \<Rightarrow> var"
+where
+"type_def_name (Dataclass c _ _ _) = c" |
+"type_def_name (TypeAlias x _ _) = x"
+
+fun binds_pat :: "pat \<Rightarrow> var set"
+where
+"binds_pat (PatVar x) = {x}" |
+"binds_pat (PatAs p x) = binds_pat p \<union> {x}" |
+"binds_pat (PatList ps) = \<Union> (set (map binds_pat ps))" |
+"binds_pat (PatTuple ps) = \<Union> (set (map binds_pat ps))" |
+"binds_pat (PatConstr q (ps, kps)) = \<Union> (set (map binds_pat ps)) \<union> \<Union> (set (map (binds_pat \<circ> snd) kps))" |
+"binds_pat (PatDict kps) = \<Union> (set (map (binds_pat \<circ> snd) kps))" |
+"binds_pat _ = {}"
+
+fun binds_stmt :: "stmt \<Rightarrow> var set"
+where
+"binds_stmt (StmtSeq s s') = binds_stmt s \<union> binds_stmt s'" |
+"binds_stmt (StmtIf _ s elifs else') =
+  binds_stmt s \<union> \<Union> (set (map (\<lambda>(_, s'). binds_stmt s') elifs)) \<union> (case else' of None \<Rightarrow> {} | Some s' \<Rightarrow> binds_stmt s')" |
+"binds_stmt (StmtMatch _ cases) = \<Union> (set (map (\<lambda>(p, s). binds_pat p \<union> binds_stmt s) cases))" |
+"binds_stmt _ = {}"
+
+fun binds_quals :: "qualifier list \<Rightarrow> var set"
+where
+"binds_quals [] = {}" |
+"binds_quals (Guard _ # gs) = binds_quals gs" |
+"binds_quals (Generator x _ # gs) = {x} \<union> binds_quals gs"
+
+fun binds_top :: "top_stmt \<Rightarrow> var set"
+where
+"binds_top (Stmt s) = binds_stmt s" |
+"binds_top (TopSeq t t') = binds_top t \<union> binds_top t'" |
+"binds_top (TypeDefs \<chi>s) = {}"
+
+fun assigns_stmt :: "stmt \<Rightarrow> var set"
+where
+"assigns_stmt (StmtDeclare x _) = {x}" |
+"assigns_stmt (StmtAssign x _ _) = {x}" |
+"assigns_stmt (StmtSeq s s') = assigns_stmt s \<union> assigns_stmt s'" |
+"assigns_stmt (StmtMutualRegion ds) = set (map def_name ds)" |
+"assigns_stmt (StmtIf _ s elifs else') =
+  assigns_stmt s \<union> \<Union> (set (map (\<lambda>(_, s'). assigns_stmt s') elifs)) \<union> (case else' of None \<Rightarrow> {} | Some s' \<Rightarrow> assigns_stmt s')" |
+"assigns_stmt (StmtMatch _ cases) = \<Union> (set (map (\<lambda>(p, s). binds_pat p \<union> assigns_stmt s) cases))" |
+"assigns_stmt _ = {}"
+
+fun assigns_top :: "top_stmt \<Rightarrow> var set"
+where
+"assigns_top (Stmt s) = assigns_stmt s" |
+"assigns_top (TopSeq t t') = assigns_top t \<union> assigns_top t'" |
+"assigns_top (TypeDefs \<chi>s) = set (map type_def_name \<chi>s)"
+
+fun declares_stmt :: "stmt \<Rightarrow> var list"
+where
+"declares_stmt (StmtDeclare x _) = [x]" |
+"declares_stmt (StmtAssign x (Some _) _) = [x]" |
+"declares_stmt (StmtSeq s s') = declares_stmt s @ declares_stmt s'" |
+"declares_stmt (StmtMutualRegion ds) = map def_name ds" |
+"declares_stmt (StmtIf _ s elifs else') =
+  declares_stmt s @ concat (map (\<lambda>(_, s'). declares_stmt s') elifs) @ (case else' of None \<Rightarrow> [] | Some s' \<Rightarrow> declares_stmt s')" |
+"declares_stmt (StmtMatch _ cases) = concat (map (\<lambda>(_, s). declares_stmt s) cases)" |
+"declares_stmt _ = []"
+
+fun declares_imports :: "import list \<Rightarrow> var list"
+where
+"declares_imports [] = []" |
+"declares_imports (Import (x, xs) # \<iota>s) =
+  (if list_ex (\<lambda>\<iota>. case \<iota> of Import (x', _) \<Rightarrow> x' = x | _ \<Rightarrow> False) \<iota>s then declares_imports \<iota>s
+   else x # declares_imports \<iota>s)" |
+"declares_imports (FromImport q xs # \<iota>s) = xs @ declares_imports \<iota>s"
+
+fun declares_top :: "top_stmt \<Rightarrow> var list"
+where
+"declares_top (Stmt s) = declares_stmt s" |
+"declares_top (TopSeq t t') = declares_top t @ declares_top t'" |
+"declares_top (TypeDefs \<chi>s) = map type_def_name \<chi>s"
+
+fun fv_expr :: "expr \<Rightarrow> var set" and fv_quals :: "qualifier list \<Rightarrow> var set"
+where
+"fv_expr (ExprVar x) = {x}" |
+"fv_expr (ExprLiteral _) = {}" |
+"fv_expr (ExprCall e (es, kws)) = fv_expr e \<union> \<Union> (set (map fv_expr es)) \<union> \<Union> (set (map (fv_expr \<circ> snd) kws))" |
+"fv_expr (ExprDict kvs) = \<Union> (set (map (fv_expr \<circ> fst) kvs)) \<union> \<Union> (set (map (fv_expr \<circ> snd) kvs))" |
+"fv_expr (ExprAttribute e _) = fv_expr e" |
+"fv_expr (ExprSubscript e e') = fv_expr e \<union> fv_expr e'" |
+"fv_expr (ExprBinOp _ e e') = fv_expr e \<union> fv_expr e'" |
+"fv_expr (ExprUnOp _ e) = fv_expr e" |
+"fv_expr (ExprAnd e e') = fv_expr e \<union> fv_expr e'" |
+"fv_expr (ExprOr e e') = fv_expr e \<union> fv_expr e'" |
+"fv_expr (ExprCond e\<^sub>1 e e\<^sub>2) = fv_expr e\<^sub>1 \<union> fv_expr e \<union> fv_expr e\<^sub>2" |
+"fv_expr (ExprList es) = \<Union> (set (map fv_expr es))" |
+"fv_expr (ExprTuple es) = \<Union> (set (map fv_expr es))" |
+"fv_expr (ExprListComp e gs) = fv_quals gs \<union> (fv_expr e - binds_quals gs)" |
+"fv_expr (ExprDictComp e e' gs) = fv_quals gs \<union> ((fv_expr e \<union> fv_expr e') - binds_quals gs)" |
+"fv_expr (ExprLambda xs e) = fv_expr e - set xs" |
+
+"fv_quals [] = {}" |
+"fv_quals (Guard e # gs) = fv_expr e \<union> fv_quals gs" |
+"fv_quals (Generator x e # gs) = fv_expr e \<union> (fv_quals gs - {x})"
+
+fun captures_expr :: "expr \<Rightarrow> var set" and captures_quals :: "qualifier list \<Rightarrow> var set"
+where
+"captures_expr (ExprVar _) = {}" |
+"captures_expr (ExprLiteral _) = {}" |
+"captures_expr (ExprCall e (es, kws)) =
+  captures_expr e \<union> \<Union> (set (map captures_expr es)) \<union> \<Union> (set (map (captures_expr \<circ> snd) kws))" |
+"captures_expr (ExprDict kvs) = \<Union> (set (map (captures_expr \<circ> fst) kvs)) \<union> \<Union> (set (map (captures_expr \<circ> snd) kvs))" |
+"captures_expr (ExprAttribute e _) = captures_expr e" |
+"captures_expr (ExprSubscript e e') = captures_expr e \<union> captures_expr e'" |
+"captures_expr (ExprBinOp _ e e') = captures_expr e \<union> captures_expr e'" |
+"captures_expr (ExprUnOp _ e) = captures_expr e" |
+"captures_expr (ExprAnd e e') = captures_expr e \<union> captures_expr e'" |
+"captures_expr (ExprOr e e') = captures_expr e \<union> captures_expr e'" |
+"captures_expr (ExprCond e\<^sub>1 e e\<^sub>2) = captures_expr e\<^sub>1 \<union> captures_expr e \<union> captures_expr e\<^sub>2" |
+"captures_expr (ExprList es) = \<Union> (set (map captures_expr es))" |
+"captures_expr (ExprTuple es) = \<Union> (set (map captures_expr es))" |
+"captures_expr (ExprListComp e gs) = captures_quals gs \<union> (captures_expr e - binds_quals gs)" |
+"captures_expr (ExprDictComp e e' gs) = captures_quals gs \<union> ((captures_expr e \<union> captures_expr e') - binds_quals gs)" |
+"captures_expr (ExprLambda xs e) = fv_expr e - set xs" |
+
+"captures_quals [] = {}" |
+"captures_quals (Guard e # gs) = captures_expr e \<union> captures_quals gs" |
+"captures_quals (Generator x e # gs) = captures_expr e \<union> (captures_quals gs - {x})"
+
+definition fmconst :: "'a set \<Rightarrow> 'b \<Rightarrow> ('a, 'b) fmap"
+where
+"fmconst A u = Finite_Set.fold (\<lambda>x. fmupd x u) fmempty A"
+
+lemma comp_fun_idem_fmupd: "comp_fun_idem_on UNIV (\<lambda>x. fmupd x u)"
+  by unfold_locales (auto simp: fun_eq_iff intro!: fmap_ext)
+
+lemma fmconst_code [code]: "fmconst (set xs) u = fold (\<lambda>x. fmupd x u) xs fmempty"
+  unfolding fmconst_def by (rule comp_fun_idem_on.fold_set_fold[OF comp_fun_idem_fmupd subset_UNIV])
+
+(* u marks a variable unbound: the value or the context entry *)
+definition scope_stmt :: "'a \<Rightarrow> var set \<Rightarrow> stmt \<Rightarrow> (var, 'a) fmap option"
+where
+"scope_stmt u Y s =
+  (if distinct (declares_stmt s) \<and> Y \<inter> set (declares_stmt s) = {} \<and> Y \<inter> binds_stmt s = {} \<and> set (declares_stmt s) \<inter> binds_stmt s = {}
+   then Some (fmconst (assigns_stmt s - Y) u)
+   else None)"
+
+definition scope_top :: "'a \<Rightarrow> var list \<Rightarrow> top_stmt \<Rightarrow> (var, 'a) fmap option"
+where
+"scope_top u ys t =
+  (if distinct ys \<and> distinct (declares_top t) \<and> set ys \<inter> set (declares_top t) = {} \<and> set ys \<inter> binds_top t = {}
+      \<and> set (declares_top t) \<inter> binds_top t = {}
+   then Some (fmconst (assigns_top t - set ys) u)
+   else None)"
+
+consts
+  binds :: "'a \<Rightarrow> var set"
+  assigns :: "'a \<Rightarrow> var set"
+  declares :: "'a \<Rightarrow> var list"
+  fv :: "'a \<Rightarrow> var set"
+  captures :: "'a \<Rightarrow> var set"
+  scope :: "'u \<Rightarrow> 'y \<Rightarrow> 'a \<Rightarrow> (var, 'u) fmap option"
+
+adhoc_overloading binds \<rightleftharpoons> binds_pat binds_stmt binds_quals binds_top
+adhoc_overloading assigns \<rightleftharpoons> assigns_stmt assigns_top
+adhoc_overloading declares \<rightleftharpoons> declares_stmt declares_top declares_imports
+adhoc_overloading fv \<rightleftharpoons> fv_expr fv_quals
+adhoc_overloading captures \<rightleftharpoons> captures_expr captures_quals
+adhoc_overloading scope \<rightleftharpoons> scope_stmt scope_top
 
 end
