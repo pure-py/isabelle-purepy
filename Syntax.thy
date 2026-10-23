@@ -282,11 +282,12 @@ where
 "captures_quals (Generator x e # gs) = captures_expr e \<union> (captures_quals gs - {x})"
 
 (* u marks a variable unbound: the value or the context entry *)
-definition scope_stmt :: "'a \<Rightarrow> var set \<Rightarrow> stmt \<Rightarrow> (var, 'a) fmap option"
+definition scope_stmt :: "'a \<Rightarrow> var list \<Rightarrow> stmt \<Rightarrow> (var, 'a) fmap option"
 where
-"scope_stmt u Y s =
-  (if distinct (declares_stmt s) \<and> Y \<inter> set (declares_stmt s) = {} \<and> Y \<inter> binds_stmt s = {} \<and> set (declares_stmt s) \<inter> binds_stmt s = {}
-   then Some (fmconst (assigns_stmt s - Y) u)
+"scope_stmt u ys s =
+  (if distinct ys \<and> distinct (declares_stmt s) \<and> set ys \<inter> set (declares_stmt s) = {}
+      \<and> set ys \<inter> binds_stmt s = {} \<and> set (declares_stmt s) \<inter> binds_stmt s = {}
+   then Some (fmconst (assigns_stmt s - set ys) u)
    else None)"
 
 definition scope_top :: "'a \<Rightarrow> var list \<Rightarrow> top_stmt \<Rightarrow> (var, 'a) fmap option"

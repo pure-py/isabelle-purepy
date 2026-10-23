@@ -553,7 +553,7 @@ where
 "check_def \<Gamma> (Def f \<alpha>s xps \<psi> s) (TyScheme \<alpha>s' (TyCallable \<sigma>s \<tau>)) =
   (let xs = map fst xps in
    distinct xs \<and> length xs = length \<sigma>s \<and>
-   (case scope Unbound (set xs) s of
+   (case scope Unbound xs s of
       Some \<Delta> \<Rightarrow>
         (case check_stmt (\<Gamma> \<otimes> fmconst (set \<alpha>s) TypeVar \<otimes> fmap_of_list (zip xs (map Ty \<sigma>s)) \<otimes> \<Delta>) (Some \<tau>) s of
            Some R \<Rightarrow> R = Returns\<^sub>R \<or> \<tau> \<approx> TyPrim NoneType
