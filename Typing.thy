@@ -478,7 +478,7 @@ by (relation "measures [\<lambda>x. case x of
    | Inr (Inr (Inr _)) \<Rightarrow> 0]")
    (auto dest!: nth_mem intro: size_list_estimation' simp: less_Suc_eq_le size_list_fst size_list_snd)
 
-(* Context entry for a type scheme, which is a plain type if it has no parameters *)
+(* Context entry for a type scheme, which is a plain type when its parameter list is empty *)
 fun signature_entry :: "ty_scheme \<Rightarrow> cxt_entry"
 where
 "signature_entry (TyScheme [] \<tau>) = Ty \<tau>" |
