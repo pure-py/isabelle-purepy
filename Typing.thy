@@ -607,11 +607,11 @@ lift_definition submods :: "program \<Rightarrow> name \<Rightarrow> cxt"
   is "\<lambda>M q x. if snoc q x \<in> dom M then Some (ModStub (snoc q x)) else None"
 proof -
   fix M :: "name \<Rightarrow> module_body option" and q
+  let ?S = "\<lambda>x. if snoc q x \<in> dom M then Some (ModStub (snoc q x)) else None"
   assume "finite (dom M)"
-  have "dom (\<lambda>x. if snoc q x \<in> dom M then Some (ModStub (snoc q x)) else None)
-        \<subseteq> (\<lambda>q'. snd (the (unsnoc q'))) ` dom M"
+  have "dom ?S \<subseteq> (\<lambda>q'. snd (the (unsnoc q'))) ` dom M"
     by (auto simp: dom_def image_iff intro: rev_image_eqI)
-  then show "finite (dom (\<lambda>x. if snoc q x \<in> dom M then Some (ModStub (snoc q x)) else None))"
+  then show "finite (dom ?S)"
     using \<open>finite (dom M)\<close> by (blast intro: finite_subset finite_imageI)
 qed
 
