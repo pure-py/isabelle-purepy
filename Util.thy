@@ -52,9 +52,19 @@ proof (rule fmap_ext)
     using assms by (cases "fmlookup m' x") simp_all
 qed
 
-(* Size of an entry below size of its map, for termination through finite maps *)
+(* Measures for termination through finite maps: size of an entry below size of its map, and count of
+   keys outside a set falling when a key is added to the set *)
 lemma size_fmap_lookup: "fmlookup m x = Some v \<Longrightarrow> g v < size_fmap f g m"
   using member_le_sum[of "(x, v)" "fset (fset_of_fmap m)" "\<lambda>(a, b). Suc (f a + g b)"]
   by (simp add: fset_of_fmap_iff' case_prod_unfold)
+
+lemma card_fmdom_insert:
+  assumes "fmlookup M q = Some m" and "q \<notin> V"
+  shows "card (fmdom' M - insert q V) < card (fmdom' M - V)"
+proof -
+  have "q \<in> fmdom' M - V" using assms by (simp add: fmlookup_dom'_iff)
+  moreover have "fmdom' M - insert q V = (fmdom' M - V) - {q}" by auto
+  ultimately show ?thesis by (metis card_Diff1_less finite_Diff finite_fmdom')
+qed
 
 end

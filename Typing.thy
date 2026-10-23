@@ -703,15 +703,6 @@ where
 "check_modules M V (q # qs) = (check_module M V q \<noteq> None \<and> check_modules M V qs)"
 by pat_completeness auto
 
-lemma card_fmdom_insert:
-  assumes "fmlookup M q = Some m" and "q \<notin> V"
-  shows "card (fmdom' M - insert q V) < card (fmdom' M - V)"
-proof -
-  have "q \<in> fmdom' M - V" using assms by (simp add: fmlookup_dom'_iff)
-  moreover have "fmdom' M - insert q V = (fmdom' M - V) - {q}" by auto
-  ultimately show ?thesis by (metis card_Diff1_less finite_Diff finite_fmdom')
-qed
-
 (* Measures: count of modules of M not in V; then a topological rank of the call graph, which is acyclic
    if we remove the call from the module rule to its imports; then the length of the list argument *)
 termination
