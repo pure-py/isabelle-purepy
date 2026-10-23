@@ -18,6 +18,7 @@ inductive_cases
 inductive_cases ExprsNilE: "\<rho>, [] \<Rightarrow>\<^sub>e\<^sub>s rs"
 inductive_cases ExprsConsE: "\<rho>, e # es \<Rightarrow>\<^sub>e\<^sub>s rs"
 inductive_cases PassE: "\<rho>, StmtPass \<Rightarrow>\<^sub>s o"
+inductive_cases DeclareE: "\<rho>, StmtDeclare x \<psi> \<Rightarrow>\<^sub>s o"
 inductive_cases AssignE: "\<rho>, StmtAssign x \<pi> e \<Rightarrow>\<^sub>s o"
 inductive_cases ExprStmtE: "\<rho>, StmtExpr e \<Rightarrow>\<^sub>s o"
 inductive_cases ReturnE: "\<rho>, StmtReturn e \<Rightarrow>\<^sub>s o"
@@ -188,6 +189,9 @@ next
 next
   case EvalPass
   then show ?case by (auto elim!: PassE)
+next
+  case EvalDeclare
+  then show ?case by (auto elim!: DeclareE)
 next
   case EvalAssign
   from EvalAssign.prems EvalAssign.hyps show ?case

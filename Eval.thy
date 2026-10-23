@@ -44,10 +44,26 @@ where
 "as_bool (VLit (LitBool b)) = Some b" |
 "as_bool _ = None"
 
-(* Calls to defs are Stuck until statements are evaluated *)
+fun flet_outcome :: "'a result fuelled \<Rightarrow> ('a \<Rightarrow> outcome fuelled) \<Rightarrow> outcome fuelled"
+where
+"flet_outcome (Done (Val v)) f = f v" |
+"flet_outcome (Done (Aborts \<kappa>)) f = Done (Aborts\<^sub>o \<kappa>)" |
+"flet_outcome Stuck f = Stuck" |
+"flet_outcome OutOfFuel f = OutOfFuel"
+
+(* Sequential composition: run f on the environment of an Assigns, and compose the outcomes *)
+fun fseq :: "outcome fuelled \<Rightarrow> (env \<Rightarrow> outcome fuelled) \<Rightarrow> outcome fuelled"
+where
+"fseq (Done (Assigns \<rho>')) f = map_fuelled (\<lambda>o. Assigns \<rho>' \<otimes>\<^sub>o o) (f \<rho>')" |
+"fseq (Done o) f = Done o" |
+"fseq Stuck f = Stuck" |
+"fseq OutOfFuel f = OutOfFuel"
+
 fun
   eval_expr  :: "nat \<Rightarrow> env \<Rightarrow> expr \<Rightarrow> val result fuelled" and
-  eval_exprs :: "nat \<Rightarrow> env \<Rightarrow> expr list \<Rightarrow> val list result fuelled"
+  eval_exprs :: "nat \<Rightarrow> env \<Rightarrow> expr list \<Rightarrow> val list result fuelled" and
+  eval_stmt  :: "nat \<Rightarrow> env \<Rightarrow> stmt \<Rightarrow> outcome fuelled" and
+  eval_elif  :: "nat \<Rightarrow> env \<Rightarrow> elif_block \<Rightarrow> outcome fuelled"
 where
 "eval_expr 0 \<rho> e = OutOfFuel" |
 "eval_expr (Suc n) \<rho> (ExprVar x) = 
@@ -84,7 +100,14 @@ where
   | Def(\<rho>', ds, j) \<Rightarrow>
       if j < length ds then
         (case ds ! j of Def f \<alpha>s xps \<psi> s \<Rightarrow>
-          if length xps = length us then Stuck
+          if length xps = length us then
+            (case scope VUnbound (map fst xps) s of
+              Some \<rho>s \<Rightarrow>
+                map_fuelled call_result
+                  (eval_stmt n
+                    (\<rho>' \<otimes> fmap_of_list (zip (map def_name ds) (map (\<lambda>i. Def(\<rho>', ds, i)) [0..<length ds]))
+                       \<otimes> fmap_of_list (zip (map fst xps) us) \<otimes> \<rho>s) s)
+            | None \<Rightarrow> Stuck)
           else Done (Aborts TypeError))
       else Stuck
   | _ \<Rightarrow> Done (Aborts TypeError)))" |
@@ -93,6 +116,45 @@ where
 "eval_exprs 0 \<rho> es = OutOfFuel" |
 "eval_exprs (Suc n) \<rho> [] = Done (Val [])" |
 "eval_exprs (Suc n) \<rho> (e # es) =
-  flet (eval_expr n \<rho> e) (\<lambda>v. flet (eval_exprs n \<rho> es) (\<lambda>vs. Done (Val (v # vs))))"
+  flet (eval_expr n \<rho> e) (\<lambda>v. flet (eval_exprs n \<rho> es) (\<lambda>vs. Done (Val (v # vs))))" |
+
+"eval_stmt 0 \<rho> s = OutOfFuel" |
+"eval_stmt (Suc n) \<rho> StmtPass = Done (Assigns \<epsilon>)" |
+"eval_stmt (Suc n) \<rho> (StmtDeclare x \<psi>) = Done (Assigns \<epsilon>)" |
+"eval_stmt (Suc n) \<rho> (StmtAssign x \<pi> e) = flet_outcome (eval_expr n \<rho> e) (\<lambda>v. Done (Assigns (fmupd x v \<epsilon>)))" |
+"eval_stmt (Suc n) \<rho> (StmtExpr e) = flet_outcome (eval_expr n \<rho> e) (\<lambda>v. Done (Assigns \<epsilon>))" |
+"eval_stmt (Suc n) \<rho> (StmtReturn (Some e)) = flet_outcome (eval_expr n \<rho> e) (\<lambda>v. Done (Returns v))" |
+"eval_stmt (Suc n) \<rho> (StmtReturn None) = Done (Returns (VLit LitNone))" |
+"eval_stmt (Suc n) \<rho> (StmtMutualRegion ds) =
+  Done (Assigns (fmap_of_list (zip (map def_name ds) (map (\<lambda>i. Def(\<rho>, ds, i)) [0..<length ds]))))" |
+"eval_stmt (Suc n) \<rho> (StmtAssert e None) =
+  flet_outcome (eval_expr n \<rho> e) (\<lambda>v. case as_bool v of
+    Some True \<Rightarrow> Done (Assigns \<epsilon>)
+  | Some False \<Rightarrow> Done (Aborts\<^sub>o (AssertionError None))
+  | None \<Rightarrow> Done (Aborts\<^sub>o Excluded))" |
+"eval_stmt (Suc n) \<rho> (StmtAssert e (Some e')) =
+  flet_outcome (eval_expr n \<rho> e) (\<lambda>v. case as_bool v of
+    Some True \<Rightarrow> Done (Assigns \<epsilon>)
+  | Some False \<Rightarrow>
+      flet_outcome (eval_expr n \<rho> e') (\<lambda>v'. case v' of
+        VLit (LitString w) \<Rightarrow> Done (Aborts\<^sub>o (AssertionError (Some w)))
+      | _ \<Rightarrow> Done (Aborts\<^sub>o Excluded))
+  | None \<Rightarrow> Done (Aborts\<^sub>o Excluded))" |
+"eval_stmt (Suc n) \<rho> (StmtIf e s elifs else') =
+  flet_outcome (eval_expr n \<rho> e) (\<lambda>v. case as_bool v of
+    Some True \<Rightarrow> eval_stmt n \<rho> s
+  | Some False \<Rightarrow> eval_elif n \<rho> (elifs, else')
+  | None \<Rightarrow> Done (Aborts\<^sub>o Excluded))" |
+"eval_stmt (Suc n) \<rho> (StmtSeq s s') = fseq (eval_stmt n \<rho> s) (\<lambda>\<rho>'. eval_stmt n (\<rho> \<otimes> \<rho>') s')" |
+"eval_stmt (Suc n) \<rho> _ = Stuck" |
+
+"eval_elif 0 \<rho> eb = OutOfFuel" |
+"eval_elif (Suc n) \<rho> ([], None) = Done (Assigns \<epsilon>)" |
+"eval_elif (Suc n) \<rho> ([], Some s) = eval_stmt n \<rho> s" |
+"eval_elif (Suc n) \<rho> ((e, s) # elifs, else') =
+  flet_outcome (eval_expr n \<rho> e) (\<lambda>v. case as_bool v of
+    Some True \<Rightarrow> eval_stmt n \<rho> s
+  | Some False \<Rightarrow> eval_elif n \<rho> (elifs, else')
+  | None \<Rightarrow> Done (Aborts\<^sub>o Excluded))"
 
 end

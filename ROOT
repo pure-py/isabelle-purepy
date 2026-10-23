@@ -7,10 +7,9 @@ session "isabelle-purepy" = HOL +
     Semantics
     Determinism
     Eval
+    Correctness
     Typing
     Examples
-  theories [quick_and_dirty]
-    Correctness
 
 session "isabelle-purepy-python" in "python" = "isabelle-purepy" +
   options [timeout = 600]

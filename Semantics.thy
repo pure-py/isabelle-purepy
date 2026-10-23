@@ -297,12 +297,14 @@ EvalCallDef:
   ; length xps = length us
   ; scope VUnbound (map fst xps) s = Some \<rho>s
   ; \<rho>' \<otimes> fmap_of_list (zip (map def_name ds) vs) \<otimes> fmap_of_list (zip (map fst xps) us) \<otimes> \<rho>s, s \<Rightarrow>\<^sub>s o
+  ; j < length ds
   \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e (es, []) \<Rightarrow>\<^sub>e call_result o" |
 EvalCallDefArity:
   "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val Def(\<rho>', ds, j)
   ; ds ! j = Def f \<alpha>s xps \<psi> s
   ; \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Val us
   ; length xps \<noteq> length us
+  ; j < length ds
   \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e (es, []) \<Rightarrow>\<^sub>e Aborts TypeError" |
 EvalCallNonFun:
   "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Val us ; \<not> is_closure v \<rbrakk>
@@ -317,6 +319,7 @@ EvalExprsCons: "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<rho>, es \<R
 EvalExprsFail: "\<rho>, e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, e # es \<Rightarrow>\<^sub>e\<^sub>s Aborts \<kappa>" |
 
 EvalPass: "\<rho>, StmtPass \<Rightarrow>\<^sub>s Assigns \<epsilon>" |
+EvalDeclare: "\<rho>, StmtDeclare x \<psi> \<Rightarrow>\<^sub>s Assigns \<epsilon>" |
 EvalAssign: "\<rho>, e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtAssign x \<pi> e \<Rightarrow>\<^sub>s mlet r (\<lambda>v. Assigns (fmupd x v \<epsilon>))" |
 EvalExprStmt: "\<rho>, e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtExpr e \<Rightarrow>\<^sub>s mlet r (\<lambda>v. Assigns \<epsilon>)" |
 EvalReturn: "\<rho>, e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtReturn (Some e) \<Rightarrow>\<^sub>s mlet r (\<lambda>v. Returns v)" |
