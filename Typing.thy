@@ -25,7 +25,7 @@ definition proper_prefix_of :: "name \<Rightarrow> name \<Rightarrow> bool" (inf
 where
 "q \<prec> q' = (q \<preceq> q' \<and> q \<noteq> q')"
 
-(* In prefix order *)
+(* Shortest first *)
 fun proper_prefixes :: "name \<Rightarrow> name list"
 where
 "proper_prefixes (y, ys) = map (\<lambda>i. (y, take i ys)) [0..<length ys]"
