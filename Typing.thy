@@ -563,24 +563,23 @@ where
 
 abbreviation name_binding :: "var \<times> cxt_entry" where "name_binding \<equiv> (''__name__'', Ty (TyPrim str))"
 
-definition predefined :: "name \<Rightarrow> cxt option"
+definition predefined :: "(name, cxt) fmap"
 where
-"predefined q =
-  (if q = builtins then Some (fmap_of_list
+"predefined = fmap_of_list
+  [(builtins, fmap_of_list
      ([name_binding,
        (''print'', Ty (TyCallable [TyPrim object] (TyPrim NoneType))),
        (''len'', Ty (TyCallable [TyPrim Sized] (TyPrim int))),
        (''range'', Type (snoc builtins ''range'')),
        (''round'', Ty (TyCallable [TyPrim float] (TyPrim int)))]
       @ map (\<lambda>\<nu>. (prim_name \<nu>, PredefName)) [NoneType, object, bool, int, float, str]
-      @ [(''list'', PredefName), (''dict'', PredefName), (''tuple'', PredefName)]))
-   else if q = (''sys'', []) then Some (fmap_of_list
-     [name_binding, (''argv'', Ty (TyList (TyPrim str))), (''exit'', Ty (TyCallable [TyPrim int] (TyPrim Never)))])
-   else if q = (''typing'', []) then Some (fmap_of_list
+      @ [(''list'', PredefName), (''dict'', PredefName), (''tuple'', PredefName)])),
+   ((''sys'', []), fmap_of_list
+     [name_binding, (''argv'', Ty (TyList (TyPrim str))), (''exit'', Ty (TyCallable [TyPrim int] (TyPrim Never)))]),
+   ((''typing'', []), fmap_of_list
      [name_binding, (''Callable'', PredefName), (''Literal'', PredefName),
-      (prim_name Never, PredefName), (prim_name Sized, PredefName)])
-   else if q = (''dataclasses'', []) then Some (fmap_of_list [name_binding, (''dataclass'', PredefName)])
-   else None)"
+      (prim_name Never, PredefName), (prim_name Sized, PredefName)]),
+   ((''dataclasses'', []), fmap_of_list [name_binding, (''dataclass'', PredefName)])]"
 
 (* Pointwise combination of a map of extension functions with a context, over the keys of either *)
 definition extend_with :: "(var, cxt_entry option \<Rightarrow> cxt_entry) fmap \<Rightarrow> cxt \<Rightarrow> cxt"
@@ -701,7 +700,7 @@ function (sequential)
   check_modules :: "module_table \<Rightarrow> name set \<Rightarrow> name list \<Rightarrow> bool"
 where
 "check_module M V q =
-  (case predefined q of
+  (case fmlookup predefined q of
      Some \<Gamma> \<Rightarrow> Some \<Gamma>
    | None \<Rightarrow>
      if q \<in> V then None
@@ -714,7 +713,7 @@ where
           (case scope Unbound (declares \<iota>s) t of
              None \<Rightarrow> None
            | Some \<Gamma>\<^sub>s \<Rightarrow>
-             (case check_top_stmt (the (predefined builtins) \<otimes> \<Gamma>' \<otimes> \<Gamma>\<^sub>s) t of
+             (case check_top_stmt (the (fmlookup predefined builtins) \<otimes> \<Gamma>' \<otimes> \<Gamma>\<^sub>s) t of
                 Some (Assigns\<^sub>R \<Delta>) \<Rightarrow>
                   let S = submods M q in
                   if fmpred (\<lambda>x _. fmlookup S x = None) \<Gamma>' \<and> fmpred (\<lambda>x _. fmlookup S x = None) \<Delta>
