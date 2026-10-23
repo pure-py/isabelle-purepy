@@ -640,7 +640,7 @@ where
    | _ \<Rightarrow> None)" |
 "check_top_stmt \<Gamma> (TypeDefs \<chi>s) = None"
 
-(* V holds the modules being checked, so that an import cycle has no derivation *)
+(* V holds the modules being checked, so that an import cycle is rejected *)
 function (sequential)
   check_module :: "program \<Rightarrow> name set \<Rightarrow> name \<Rightarrow> cxt option" and
   check_imports :: "program \<Rightarrow> name set \<Rightarrow> name \<Rightarrow> import list \<Rightarrow> cxt option" and
