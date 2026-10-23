@@ -1,5 +1,5 @@
 theory Typing
-  imports Semantics
+  imports Semantics "HOL-Library.Monad_Syntax"
 begin
 
 datatype cxt_entry =
@@ -656,54 +656,50 @@ where
      if q \<in> V then None
      else case fmlookup M q of
        None \<Rightarrow> None
-     | Some (ModuleBody \<iota>s t) \<Rightarrow>
-       (case check_imports M (insert q V) q \<iota>s of
-          None \<Rightarrow> None
-        | Some \<Gamma>' \<Rightarrow>
-          (case scope Unbound (declares \<iota>s) t of
-             None \<Rightarrow> None
-           | Some \<Gamma>\<^sub>s \<Rightarrow>
-             (case check_top_stmt (the (fmlookup predefined builtins) \<otimes> \<Gamma>' \<otimes> \<Gamma>\<^sub>s) t of
-                Some (Assigns\<^sub>R \<Delta>) \<Rightarrow>
-                  let S = submods M q in
-                  if fmpred (\<lambda>x _. fmlookup S x = None) \<Gamma>' \<and> fmpred (\<lambda>x _. fmlookup S x = None) \<Delta>
-                  then Some (S \<otimes> \<Delta>) else None
-              | _ \<Rightarrow> None))))" |
+     | Some (ModuleBody \<iota>s t) \<Rightarrow> do {
+         \<Gamma>' \<leftarrow> check_imports M (insert q V) q \<iota>s;
+         \<Gamma>\<^sub>s \<leftarrow> scope Unbound (declares \<iota>s) t;
+         r \<leftarrow> check_top_stmt (the (fmlookup predefined builtins) \<otimes> \<Gamma>' \<otimes> \<Gamma>\<^sub>s) t;
+         case r of
+           Assigns\<^sub>R \<Delta> \<Rightarrow>
+             let S = submods M q in
+             if fmpred (\<lambda>x _. fmlookup S x = None) \<Gamma>' \<and> fmpred (\<lambda>x _. fmlookup S x = None) \<Delta>
+             then Some (S \<otimes> \<Delta>) else None
+         | Returns\<^sub>R \<Rightarrow> None
+       })" |
 "check_imports M V q [] = Some fmempty" |
-"check_imports M V q (Import q' # \<iota>s) =
-  (case q' of (x, xs) \<Rightarrow>
-   if q \<prec> q' then None
-   else case check_module M V (x, []) of
-     None \<Rightarrow> None
-   | Some \<Delta> \<Rightarrow>
-     (case submodules M V (ModChecked (x, []) \<Delta>) xs of
-        None \<Rightarrow> None
-      | Some \<theta> \<Rightarrow> map_option (\<lambda>\<Gamma>. fmupd x \<theta> fmempty \<uplus> \<Gamma>) (check_imports M V q \<iota>s)))" |
+"check_imports M V q (Import (x, xs) # \<iota>s) =
+  (if q \<prec> (x, xs) then None
+   else do {
+     \<Delta> \<leftarrow> check_module M V (x, []);
+     \<theta> \<leftarrow> submodules M V (ModChecked (x, []) \<Delta>) xs;
+     \<Gamma> \<leftarrow> check_imports M V q \<iota>s;
+     Some (fmupd x \<theta> fmempty \<uplus> \<Gamma>)
+   })" |
 "check_imports M V q (FromImport q' xs # \<iota>s) =
-  (if \<not> distinct xs then None
-   else case check_module M V q' of
-     None \<Rightarrow> None
-   | Some \<Delta> \<Rightarrow>
-     if \<not> check_modules M V (unique_to q' q) then None
-     else case imports_entries M V \<Delta> xs of
-       None \<Rightarrow> None
-     | Some \<theta>s \<Rightarrow> map_option (\<lambda>\<Gamma>. fmap_of_list (zip xs \<theta>s) \<uplus> \<Gamma>) (check_imports M V q \<iota>s))" |
+  (if distinct xs \<and> check_modules M V (unique_to q' q) then do {
+     \<Delta> \<leftarrow> check_module M V q';
+     \<theta>s \<leftarrow> imports_entries M V \<Delta> xs;
+     \<Gamma> \<leftarrow> check_imports M V q \<iota>s;
+     Some (fmap_of_list (zip xs \<theta>s) \<uplus> \<Gamma>)
+   } else None)" |
 "submodules M V \<theta> [] = Some \<theta>" |
-"submodules M V (ModChecked q \<Gamma>) (x # xs) =
-  (case check_module M V (snoc q x) of
-     None \<Rightarrow> None
-   | Some \<Gamma>' \<Rightarrow>
-     map_option (\<lambda>\<theta>'. ModChecked q (\<Gamma> \<uplus> fmupd x \<theta>' fmempty)) (submodules M V (ModChecked (snoc q x) \<Gamma>') xs))" |
+"submodules M V (ModChecked q \<Gamma>) (x # xs) = do {
+   \<Gamma>' \<leftarrow> check_module M V (snoc q x);
+   \<theta>' \<leftarrow> submodules M V (ModChecked (snoc q x) \<Gamma>') xs;
+   Some (ModChecked q (\<Gamma> \<uplus> fmupd x \<theta>' fmempty))
+ }" |
 "submodules M V _ _ = None" |
 "imports_entry M V \<Gamma> x =
   (case fmlookup \<Gamma> x of
      Some (ModStub q) \<Rightarrow> map_option (ModChecked q) (check_module M V q)
    | _ \<Rightarrow> resolve_name \<Gamma> x)" |
 "imports_entries M V \<Gamma> [] = Some []" |
-"imports_entries M V \<Gamma> (x # xs) =
-  (case imports_entry M V \<Gamma> x of
-     None \<Rightarrow> None
-   | Some \<theta> \<Rightarrow> map_option (\<lambda>\<theta>s. \<theta> # \<theta>s) (imports_entries M V \<Gamma> xs))" |
+"imports_entries M V \<Gamma> (x # xs) = do {
+   \<theta> \<leftarrow> imports_entry M V \<Gamma> x;
+   \<theta>s \<leftarrow> imports_entries M V \<Gamma> xs;
+   Some (\<theta> # \<theta>s)
+ }" |
 "check_modules M V [] = True" |
 "check_modules M V (q # qs) = (check_module M V q \<noteq> None \<and> check_modules M V qs)"
 by pat_completeness auto
