@@ -38,4 +38,14 @@ lemma size_list_fst: "size_list (size \<circ> fst) kvs \<le> size_list (\<lambda
 lemma size_list_snd: "size_list (size \<circ> snd) kvs \<le> size_list (\<lambda>x. Suc (size (fst x) + size (snd x))) kvs"
   by (rule size_list_pointwise) simp
 
+(* Congruence for recursion through a finite map, exposing each entry as looked up *)
+lemma fmmap_keys_cong [fundef_cong]:
+  "m = m' \<Longrightarrow> (\<And>x v. fmlookup m' x = Some v \<Longrightarrow> f x v = g x v) \<Longrightarrow> fmmap_keys f m = fmmap_keys g m'"
+  by (rule fmap_ext) (simp split: option.splits)
+
+(* Size of an entry below size of its map, for termination through finite maps *)
+lemma size_fmap_lookup: "fmlookup m x = Some v \<Longrightarrow> g v < size_fmap f g m"
+  using member_le_sum[of "(x, v)" "fset (fset_of_fmap m)" "\<lambda>(a, b). Suc (f a + g b)"]
+  by (simp add: fset_of_fmap_iff' case_prod_unfold)
+
 end

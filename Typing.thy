@@ -582,47 +582,19 @@ where
       (prim_name Never, PredefName), (prim_name Sized, PredefName)]),
    ((''dataclasses'', []), fmap_of_list [name_binding, (''dataclass'', PredefName)])]"
 
-(* A checked module entry holds a signature (finite map of context entries), and primitive recursion
-   through a map receives the map with the function applied to each entry, not the map itself; this
-   definition therefore takes the left context in that form, a map from each variable to the function
-   extending its entry. *)
-definition extend_with :: "(var, cxt_entry option \<Rightarrow> cxt_entry) fmap \<Rightarrow> cxt \<Rightarrow> cxt"
+fun extend_entry :: "cxt_entry \<Rightarrow> cxt_entry \<Rightarrow> cxt_entry"
+and extend :: "cxt \<Rightarrow> cxt \<Rightarrow> cxt" (infixl "\<boxplus>" 65)
 where
-"extend_with F \<Gamma>' =
-  fmmap_keys (\<lambda>x _. case fmlookup F x of Some f \<Rightarrow> f (fmlookup \<Gamma>' x) | None \<Rightarrow> the (fmlookup \<Gamma>' x))
-    (fmmap (\<lambda>_. ()) F \<otimes> fmmap (\<lambda>_. ()) \<Gamma>')"
+"extend_entry (ModChecked q \<Gamma>) (ModStub q') = (if q = q' then ModChecked q \<Gamma> else ModStub q')" |
+"extend_entry (ModChecked q \<Gamma>) (ModChecked q' \<Gamma>') =
+   (if q = q' then ModChecked q (\<Gamma> \<boxplus> \<Gamma>') else ModChecked q' \<Gamma>')" |
+"extend_entry _ \<theta>' = \<theta>'" |
+"\<Gamma> \<boxplus> \<Gamma>' =
+   \<Gamma> ++\<^sub>f fmmap_keys (\<lambda>x \<theta>'. case fmlookup \<Gamma> x of None \<Rightarrow> \<theta>' | Some \<theta> \<Rightarrow> extend_entry \<theta> \<theta>') \<Gamma>'"
 
-fun extend_plain :: "cxt_entry \<Rightarrow> cxt_entry option \<Rightarrow> cxt_entry"
-where
-"extend_plain \<theta> None = \<theta>" |
-"extend_plain _ (Some \<theta>') = \<theta>'"
-
-(* Primitive recursion, which needs no termination proof for the recursive call through a nested context,
-   so the second argument is matched in a lambda rather than a clause *)
-primrec extend_entry :: "cxt_entry \<Rightarrow> cxt_entry option \<Rightarrow> cxt_entry"
-where
-"extend_entry (Ty \<tau>) = extend_plain (Ty \<tau>)" |
-"extend_entry (DU \<tau>) = extend_plain (DU \<tau>)" |
-"extend_entry (PU \<tau>) = extend_plain (PU \<tau>)" |
-"extend_entry Unbound = extend_plain Unbound" |
-"extend_entry (ModStub q) =
-  (\<lambda>\<theta>'. case \<theta>' of None \<Rightarrow> ModStub q | Some (ModChecked q' \<Gamma>) \<Rightarrow> ModChecked q' \<Gamma> | Some \<theta> \<Rightarrow> \<theta>)" |
-"extend_entry (ModChecked q \<Gamma>) =
-  (\<lambda>\<theta>'. case \<theta>' of
-     None \<Rightarrow> ModChecked q \<Gamma>
-   | Some (ModStub q') \<Rightarrow> if q = q' then ModChecked q \<Gamma> else ModStub q'
-   | Some (ModChecked q' \<Gamma>') \<Rightarrow>
-       if q = q' then ModChecked q (extend_with (fmmap extend_entry \<Gamma>) \<Gamma>') else ModChecked q' \<Gamma>'
-   | Some \<theta> \<Rightarrow> \<theta>)" |
-"extend_entry (Type C) = extend_plain (Type C)" |
-"extend_entry TypeVar = extend_plain TypeVar" |
-"extend_entry (Scheme \<pi>) = extend_plain (Scheme \<pi>)" |
-"extend_entry (PUScheme \<pi>) = extend_plain (PUScheme \<pi>)" |
-"extend_entry PredefName = extend_plain PredefName"
-
-definition extend :: "cxt \<Rightarrow> cxt \<Rightarrow> cxt" (infixl "\<boxplus>" 65)
-where
-"\<Gamma> \<boxplus> \<Gamma>' = extend_with (fmmap extend_entry \<Gamma>) \<Gamma>'"
+termination
+  by (relation "measure (\<lambda>p. case p of Inl (\<theta>, _) \<Rightarrow> size \<theta> | Inr (\<Gamma>, _) \<Rightarrow> size_fmap (\<lambda>_. 0) size \<Gamma>)")
+     (auto simp: size_fmap_lookup)
 
 type_synonym module_table = "(name, module_body) fmap"
 
