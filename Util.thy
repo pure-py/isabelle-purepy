@@ -40,8 +40,13 @@ lemma size_list_snd: "size_list (size \<circ> snd) kvs \<le> size_list (\<lambda
 
 (* Congruence for recursion through a finite map, exposing each entry as looked up *)
 lemma fmmap_keys_cong [fundef_cong]:
-  "m = m' \<Longrightarrow> (\<And>x v. fmlookup m' x = Some v \<Longrightarrow> f x v = g x v) \<Longrightarrow> fmmap_keys f m = fmmap_keys g m'"
-  by (rule fmap_ext) (simp split: option.splits)
+  assumes "m = m'" and "\<And>x v. fmlookup m' x = Some v \<Longrightarrow> f x v = g x v"
+  shows "fmmap_keys f m = fmmap_keys g m'"
+proof (rule fmap_ext)
+  fix x
+  show "fmlookup (fmmap_keys f m) x = fmlookup (fmmap_keys g m') x"
+    using assms by (cases "fmlookup m' x") simp_all
+qed
 
 (* Size of an entry below size of its map, for termination through finite maps *)
 lemma size_fmap_lookup: "fmlookup m x = Some v \<Longrightarrow> g v < size_fmap f g m"

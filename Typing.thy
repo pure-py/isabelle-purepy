@@ -582,8 +582,7 @@ where
       (prim_name Never, PredefName), (prim_name Sized, PredefName)]),
    ((''dataclasses'', []), fmap_of_list [name_binding, (''dataclass'', PredefName)])]"
 
-(* Written with a disjoint-union symbol, since the boxed plus of the specification isn't in Isabelle's
-   symbol table *)
+(* Boxed plus of the specification isn't in Isabelle's symbol table *)
 fun extend_entry :: "cxt_entry \<Rightarrow> cxt_entry \<Rightarrow> cxt_entry"
 and extend :: "cxt \<Rightarrow> cxt \<Rightarrow> cxt" (infixl "\<uplus>" 65)
 where
