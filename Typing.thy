@@ -311,23 +311,23 @@ where
   (case (elem_type \<sigma>, elem_type \<tau>) of (Some \<sigma>', Some \<tau>') \<Rightarrow> Some (\<sigma>' \<squnion> \<tau>') | _ \<Rightarrow> None)" |
 "elem_type _ = None"
 
-(* Subscript rules by container type, given whether the index checks against int and against str, and
-   the type it synthesises *)
+(* Type of a subscript, by the type of the subscripted value, given whether the index checks against
+   int, whether it checks against str, and the type it synthesises; None where no rule applies *)
 fun subscript_type :: "ty \<Rightarrow> bool \<Rightarrow> bool \<Rightarrow> ty option \<Rightarrow> ty option"
 where
 "subscript_type (TyUnion \<sigma> \<sigma>') int_ok str_ok idx =
   (case (subscript_type \<sigma> int_ok str_ok idx, subscript_type \<sigma>' int_ok str_ok idx) of
      (Some \<tau>, Some \<tau>') \<Rightarrow> Some (\<tau> \<squnion> \<tau>') | _ \<Rightarrow> None)" |
-"subscript_type (TyList \<tau>) int_ok str_ok idx = (if int_ok then Some \<tau> else None)" |
-"subscript_type (TyDict \<tau>) int_ok str_ok idx = (if str_ok then Some \<tau> else None)" |
-"subscript_type (TyTuple \<tau>s) int_ok str_ok idx =
+"subscript_type (TyList \<tau>) int_ok _ _ = (if int_ok then Some \<tau> else None)" |
+"subscript_type (TyDict \<tau>) _ str_ok _ = (if str_ok then Some \<tau> else None)" |
+"subscript_type (TyTuple \<tau>s) _ _ idx =
   (case idx of
      Some (TyLiteral (LitInt n)) \<Rightarrow>
        if 0 \<le> n \<and> n < of_nat (length \<tau>s) then Some (\<tau>s ! nat n)
        else if - of_nat (length \<tau>s) \<le> n \<and> n < 0 then Some (\<tau>s ! nat (of_nat (length \<tau>s) + n)) else None
    | Some (TyPrim int) \<Rightarrow> Some (joins \<tau>s)
    | _ \<Rightarrow> None)" |
-"subscript_type \<sigma> int_ok str_ok idx =
+"subscript_type \<sigma> int_ok _ _ =
   (if base_type \<sigma> = TyPrim str \<and> int_ok then Some (TyPrim str) else None)"
 
 fun resolve_qualified :: "cxt \<Rightarrow> expr \<Rightarrow> cxt_entry option"
