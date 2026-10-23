@@ -32,7 +32,7 @@ lemma comp_fun_idem_fmupd: "comp_fun_idem_on UNIV (\<lambda>x. fmupd x u)"
 lemma fmconst_code [code]: "fmconst (set xs) u = fold (\<lambda>x. fmupd x u) xs fmempty"
   unfolding fmconst_def by (rule comp_fun_idem_on.fold_set_fold[OF comp_fun_idem_fmupd subset_UNIV])
 
-(* Sizes of pairs and of their projections, for termination through lists of pairs *)
+(* Termination through lists of pairs and finite maps *)
 lemma size_prod_pair [simp]: "size_prod f g p = f (fst p) + g (snd p) + Suc 0"
   by (cases p) simp
 
@@ -42,7 +42,6 @@ lemma size_list_fst: "size_list (size \<circ> fst) kvs \<le> size_list (\<lambda
 lemma size_list_snd: "size_list (size \<circ> snd) kvs \<le> size_list (\<lambda>x. Suc (size (fst x) + size (snd x))) kvs"
   by (rule size_list_pointwise) simp
 
-(* Congruence for recursion through a finite map, exposing each entry as looked up *)
 lemma fmmap_keys_cong [fundef_cong]:
   assumes "m = m'" and "\<And>x v. fmlookup m' x = Some v \<Longrightarrow> f x v = g x v"
   shows "fmmap_keys f m = fmmap_keys g m'"
@@ -52,7 +51,6 @@ proof (rule fmap_ext)
     using assms by (cases "fmlookup m' x") simp_all
 qed
 
-(* Measures for termination through finite maps *)
 lemma size_fmap_lookup: "fmlookup m x = Some v \<Longrightarrow> g v < size_fmap f g m"
   using member_le_sum[of "(x, v)" "fset (fset_of_fmap m)" "\<lambda>(a, b). Suc (f a + g b)"]
   by (simp add: fset_of_fmap_iff' case_prod_unfold)
