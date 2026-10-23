@@ -621,40 +621,7 @@ lemma map_of_submods:
   "map_of (map (\<lambda>(q', _). (snd (the (unsnoc q')), ModStub q'))
              (filter (\<lambda>(q', _). case unsnoc q' of Some (q'', _) \<Rightarrow> q'' = q | None \<Rightarrow> False) m)) x
    = (if snoc q x \<in> dom (map_of m) then Some (ModStub (snoc q x)) else None)"
-proof (induction m)
-  case Nil
-  then show ?case by simp
-next
-  case (Cons e m)
-  obtain q' b where e: "e = (q', b)" by (cases e)
-  show ?case
-  proof (cases "unsnoc q'")
-    case None
-    then have "snoc q x \<noteq> q'" by (metis unsnoc_snoc option.distinct(1))
-    with Cons.IH e None show ?thesis by (simp add: dom_def)
-  next
-    case (Some p)
-    obtain q'' x' where p: "p = (q'', x')" by (cases p)
-    show ?thesis
-    proof (cases "q'' = q")
-      case True
-      with Some p have q': "q' = snoc q x'" by (simp add: snoc_unsnoc)
-      show ?thesis
-      proof (cases "x = x'")
-        case True
-        with q' e Some p \<open>q'' = q\<close> show ?thesis by (simp add: dom_def)
-      next
-        case False
-        with q' have "snoc q x \<noteq> q'" by (metis unsnoc_snoc option.inject prod.inject)
-        with Cons.IH e Some p \<open>q'' = q\<close> False show ?thesis by (simp add: dom_def)
-      qed
-    next
-      case False
-      with Some p have "snoc q x \<noteq> q'" by (metis unsnoc_snoc option.inject prod.inject)
-      with Cons.IH e Some p False show ?thesis by (simp add: dom_def)
-    qed
-  qed
-qed
+  by (induction m) (auto simp: dom_def snoc_eq_iff simp del: snoc.simps unsnoc.simps split: option.splits)
 
 lemma submods_of_list [code]:
   "submods (fmap_of_list m) q
