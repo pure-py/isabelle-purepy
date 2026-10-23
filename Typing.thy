@@ -324,7 +324,7 @@ where
   (case idx of
      Some (TyLiteral (LitInt n)) \<Rightarrow>
        if 0 \<le> n \<and> n < of_nat (length \<tau>s) then Some (\<tau>s ! nat n)
-       else if - of_nat (length \<tau>s) \<le> n \<and> n < 0 then Some (\<tau>s ! nat (of_nat (length \<tau>s) + n)) else None
+       else if n < 0 \<and> 0 \<le> of_nat (length \<tau>s) + n then Some (\<tau>s ! nat (of_nat (length \<tau>s) + n)) else None
    | Some (TyPrim int) \<Rightarrow> Some (joins \<tau>s)
    | _ \<Rightarrow> None)" |
 "subscript_type \<sigma> int_ok _ _ =
