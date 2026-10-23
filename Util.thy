@@ -52,8 +52,7 @@ proof (rule fmap_ext)
     using assms by (cases "fmlookup m' x") simp_all
 qed
 
-(* Measures for termination through finite maps: size of an entry below size of its map, and count of
-   keys outside a set falling when a key is added to the set *)
+(* Measures for termination through finite maps *)
 lemma size_fmap_lookup: "fmlookup m x = Some v \<Longrightarrow> g v < size_fmap f g m"
   using member_le_sum[of "(x, v)" "fset (fset_of_fmap m)" "\<lambda>(a, b). Suc (f a + g b)"]
   by (simp add: fset_of_fmap_iff' case_prod_unfold)
