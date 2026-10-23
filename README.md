@@ -24,7 +24,7 @@ isabelle vscode -d . -d python/isabelle-python-codegen .
 
 | File                   | Content                                                                 |
 |------------------------|-------------------------------------------------------------------------|
-| `Util.thy`             | Non-empty lists                                                         |
+| `Util.thy`             | General definitions                                                     |
 | `Syntax.thy`           | Abstract syntax                                                         |
 | `Semantics.thy`        | Values, results, auxiliary functions and evaluation judgements          |
 | `Correctness.thy`      | Inversion lemmas and determinism of evaluation                          |
