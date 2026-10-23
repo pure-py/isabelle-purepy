@@ -38,6 +38,12 @@ proof (induction arbitrary: r' and rs' and o' and o'' rule: eval_induct)
   case EvalVar
   then show ?case by (auto elim!: VarE)
 next
+  case EvalVarUnknown
+  then show ?case by (auto elim!: VarE)
+next
+  case EvalVarUnbound
+  then show ?case by (auto elim!: VarE)
+next
   case EvalLiteral
   then show ?case by (auto elim!: LiteralE)
 next
@@ -68,6 +74,10 @@ next
   from EvalAndFail.prems EvalAndFail.hyps show ?case
     by (auto elim!: AndE dest: EvalAndFail.IH)
 next
+  case EvalAndNonBool
+  from EvalAndNonBool.prems EvalAndNonBool.hyps show ?case
+    by (auto elim!: AndE dest: EvalAndNonBool.IH)
+next
   case EvalOrTrue
   from EvalOrTrue.prems EvalOrTrue.hyps show ?case
     by (auto elim!: OrE dest: EvalOrTrue.IH)
@@ -80,6 +90,10 @@ next
   from EvalOrFail.prems EvalOrFail.hyps show ?case
     by (auto elim!: OrE dest: EvalOrFail.IH)
 next
+  case EvalOrNonBool
+  from EvalOrNonBool.prems EvalOrNonBool.hyps show ?case
+    by (auto elim!: OrE dest: EvalOrNonBool.IH)
+next
   case EvalCondTrue
   from EvalCondTrue.prems EvalCondTrue.hyps show ?case
     by (auto elim!: CondE dest: EvalCondTrue.IH)
@@ -91,6 +105,10 @@ next
   case EvalCondFail
   from EvalCondFail.prems EvalCondFail.hyps show ?case
     by (auto elim!: CondE dest: EvalCondFail.IH)
+next
+  case EvalCondNonBool
+  from EvalCondNonBool.prems EvalCondNonBool.hyps show ?case
+    by (auto elim!: CondE dest: EvalCondNonBool.IH)
 next
   case EvalList
   from EvalList.prems EvalList.hyps show ?case
@@ -201,6 +219,10 @@ next
   from EvalAssertFail.prems EvalAssertFail.hyps show ?case
     by (auto elim!: AssertE dest: EvalAssertFail.IH)
 next
+  case EvalAssertNonBool
+  from EvalAssertNonBool.prems EvalAssertNonBool.hyps show ?case
+    by (auto elim!: AssertE dest: EvalAssertNonBool.IH)
+next
   case EvalAssertMsg
   from EvalAssertMsg.prems EvalAssertMsg.hyps show ?case
     by (auto elim!: AssertE dest: EvalAssertMsg.IH)
@@ -209,9 +231,21 @@ next
   from EvalAssertMsgFalse.prems EvalAssertMsgFalse.hyps show ?case
     by (auto elim!: AssertE dest: EvalAssertMsgFalse.IH)
 next
+  case EvalAssertMsgFalseFail
+  from EvalAssertMsgFalseFail.prems EvalAssertMsgFalseFail.hyps show ?case
+    by (auto elim!: AssertE dest: EvalAssertMsgFalseFail.IH)
+next
   case EvalAssertMsgFail
   from EvalAssertMsgFail.prems EvalAssertMsgFail.hyps show ?case
     by (auto elim!: AssertE dest: EvalAssertMsgFail.IH)
+next
+  case EvalAssertMsgNonBool
+  from EvalAssertMsgNonBool.prems EvalAssertMsgNonBool.hyps show ?case
+    by (auto elim!: AssertE dest: EvalAssertMsgNonBool.IH)
+next
+  case EvalAssertMsgNonStr
+  from EvalAssertMsgNonStr.prems EvalAssertMsgNonStr.hyps show ?case
+    by (auto elim!: AssertE dest: EvalAssertMsgNonStr.IH)
 next
   case EvalIfTrue
   from EvalIfTrue.prems EvalIfTrue.hyps show ?case
@@ -224,6 +258,10 @@ next
   case EvalIfFail
   from EvalIfFail.prems EvalIfFail.hyps show ?case
     by (auto elim!: IfE dest: EvalIfFail.IH)
+next
+  case EvalIfNonBool
+  from EvalIfNonBool.prems EvalIfNonBool.hyps show ?case
+    by (auto elim!: IfE dest: EvalIfNonBool.IH)
 next
   case EvalSeq
   from EvalSeq.prems EvalSeq.hyps show ?case
@@ -255,6 +293,10 @@ next
   case EvalElifFail
   from EvalElifFail.prems EvalElifFail.hyps show ?case
     by (auto elim!: ElifConsE dest: EvalElifFail.IH)
+next
+  case EvalElifNonBool
+  from EvalElifNonBool.prems EvalElifNonBool.hyps show ?case
+    by (auto elim!: ElifConsE dest: EvalElifNonBool.IH)
 qed
 
 end
