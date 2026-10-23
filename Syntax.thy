@@ -278,6 +278,7 @@ where
 "captures_quals (Guard e # gs) = captures_expr e \<union> captures_quals gs" |
 "captures_quals (Generator x e # gs) = captures_expr e \<union> (captures_quals gs - {x})"
 
+(* u marks a variable unbound: the value or the context entry *)
 definition scope_stmt :: "'a \<Rightarrow> var set \<Rightarrow> stmt \<Rightarrow> (var, 'a) fmap option"
 where
 "scope_stmt u Y s =
