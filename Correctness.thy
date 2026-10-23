@@ -63,11 +63,15 @@ theorem completeness_eventually:
 proof (induction rule: eval_induct)
   case EvalVar
   show ?case
-    by (rule eventually_sequentially_Suc[THEN iffD1]) (use EvalVar in auto)
+    by (rule eventually_sequentially_Suc[THEN iffD1]) (use EvalVar in \<open>auto split: val.split\<close>)
 next
   case EvalVarUnknown
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1]) (use EvalVarUnknown in auto)
+next
+  case EvalVarUnbound
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1]) (use EvalVarUnbound in auto)
 next
   case EvalLiteral
   show ?case

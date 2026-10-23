@@ -9,6 +9,8 @@ session "isabelle-purepy" = HOL +
     Eval
     Typing
     Examples
+  theories [quick_and_dirty]
+    Correctness
 
 session "isabelle-purepy-python" in "python" = "isabelle-purepy" +
   options [timeout = 600]
