@@ -298,7 +298,7 @@ where
 "numeric_literal (ExprLiteral (LitFloat _)) = True" |
 "numeric_literal _ = False"
 
-(* Type of the elements a generator draws; None if the type can't be iterated *)
+(* Type of the elements of an iterable type; None otherwise *)
 fun elem_type :: "ty \<Rightarrow> ty option"
 where
 "elem_type (TyList \<tau>) = Some \<tau>" |
