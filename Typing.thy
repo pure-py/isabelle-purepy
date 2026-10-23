@@ -663,8 +663,7 @@ where
          case r of
            Assigns\<^sub>R \<Delta> \<Rightarrow>
              let S = submods M q in
-             if fmpred (\<lambda>x _. fmlookup S x = None) \<Gamma>' \<and> fmpred (\<lambda>x _. fmlookup S x = None) \<Delta>
-             then Some (S \<otimes> \<Delta>) else None
+             if (fmdom \<Gamma>' |\<union>| fmdom \<Delta>) |\<inter>| fmdom S = {||} then Some (S \<otimes> \<Delta>) else None
          | Returns\<^sub>R \<Rightarrow> None
        })" |
 "check_imports M V q [] = Some fmempty" |
