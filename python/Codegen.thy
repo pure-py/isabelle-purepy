@@ -35,7 +35,7 @@ lemmas eval_step_code [code] =
   eval_expr.simps(2-)[folded eval_steps_def] eval_exprs.simps(2-)[folded eval_steps_def]
   eval_stmt.simps(2-)[folded eval_steps_def] eval_elif.simps(2-)[folded eval_steps_def]
 
-export_code check_stmt eval_expr eval_stmt
+export_code check_stmt check_program eval_expr eval_stmt
   in Python file_prefix "."
 
 end

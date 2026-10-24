@@ -271,69 +271,6 @@ where
    | NoMatch \<Rightarrow> dispatch \<rho> v cases
    | MatchAborts \<kappa> \<Rightarrow> Aborts \<kappa>)"
 
-fun def_name :: "func \<Rightarrow> var"
-where
-"def_name (Def f _ _ _ _) = f"
-
-fun binds_pat :: "pat \<Rightarrow> var set"
-where
-"binds_pat (PatVar x) = {x}" |
-"binds_pat (PatAs p x) = binds_pat p \<union> {x}" |
-"binds_pat (PatList ps) = \<Union> (set (map binds_pat ps))" |
-"binds_pat (PatTuple ps) = \<Union> (set (map binds_pat ps))" |
-"binds_pat (PatConstr q (ps, kps)) = \<Union> (set (map binds_pat ps)) \<union> \<Union> (set (map (binds_pat \<circ> snd) kps))" |
-"binds_pat (PatDict kps) = \<Union> (set (map (binds_pat \<circ> snd) kps))" |
-"binds_pat _ = {}"
-
-fun binds :: "stmt \<Rightarrow> var set"
-where
-"binds (StmtSeq s s') = binds s \<union> binds s'" |
-"binds (StmtIf _ s elifs else') =
-  binds s \<union> \<Union> (set (map (\<lambda>(_, s'). binds s') elifs)) \<union> (case else' of None \<Rightarrow> {} | Some s' \<Rightarrow> binds s')" |
-"binds (StmtMatch _ cases) = \<Union> (set (map (\<lambda>(p, s). binds_pat p \<union> binds s) cases))" |
-"binds _ = {}"
-
-fun assigns :: "stmt \<Rightarrow> var set"
-where
-"assigns (StmtDeclare x _) = {x}" |
-"assigns (StmtAssign x _ _) = {x}" |
-"assigns (StmtSeq s s') = assigns s \<union> assigns s'" |
-"assigns (StmtMutualRegion ds) = set (map def_name ds)" |
-"assigns (StmtIf _ s elifs else') =
-  assigns s \<union> \<Union> (set (map (\<lambda>(_, s'). assigns s') elifs)) \<union> (case else' of None \<Rightarrow> {} | Some s' \<Rightarrow> assigns s')" |
-"assigns (StmtMatch _ cases) = \<Union> (set (map (\<lambda>(p, s). binds_pat p \<union> assigns s) cases))" |
-"assigns _ = {}"
-
-fun declares :: "stmt \<Rightarrow> var list"
-where
-"declares (StmtDeclare x _) = [x]" |
-"declares (StmtAssign x (Some _) _) = [x]" |
-"declares (StmtSeq s s') = declares s @ declares s'" |
-"declares (StmtMutualRegion ds) = map def_name ds" |
-"declares (StmtIf _ s elifs else') =
-  declares s @ concat (map (\<lambda>(_, s'). declares s') elifs) @ (case else' of None \<Rightarrow> [] | Some s' \<Rightarrow> declares s')" |
-"declares (StmtMatch _ cases) = concat (map (\<lambda>(_, s). declares s) cases)" |
-"declares _ = []"
-
-definition fmconst :: "'a set \<Rightarrow> 'b \<Rightarrow> ('a, 'b) fmap"
-where
-"fmconst A u = Finite_Set.fold (\<lambda>x. fmupd x u) fmempty A"
-
-lemma comp_fun_idem_fmupd: "comp_fun_idem_on UNIV (\<lambda>x. fmupd x u)"
-  by unfold_locales (auto simp: fun_eq_iff intro!: fmap_ext)
-
-lemma fmconst_code [code]: "fmconst (set xs) u = fold (\<lambda>x. fmupd x u) xs fmempty"
-  unfolding fmconst_def by (rule comp_fun_idem_on.fold_set_fold[OF comp_fun_idem_fmupd subset_UNIV])
-
-(* u marks a variable unbound: the value or the context entry *)
-definition scope :: "'a \<Rightarrow> var list \<Rightarrow> stmt \<Rightarrow> (var, 'a) fmap option"
-where
-"scope u ys s =
-  (if distinct ys \<and> distinct (declares s)
-     \<and> set ys \<inter> set (declares s) = {} \<and> set ys \<inter> binds s = {} \<and> set (declares s) \<inter> binds s = {}
-   then Some (fmconst (assigns s - set ys) u)
-   else None)"
-
 abbreviation true :: val where "true \<equiv> VLit (LitBool True)"
 abbreviation false :: val where "false \<equiv> VLit (LitBool False)"
 

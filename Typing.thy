@@ -1,5 +1,5 @@
 theory Typing
-  imports Semantics
+  imports Semantics "HOL-Library.Monad_Syntax"
 begin
 
 datatype cxt_entry =
@@ -7,12 +7,27 @@ datatype cxt_entry =
   | DU ty
   | PU ty
   | Unbound
+  | ModStub name
+  | ModChecked name "(var, cxt_entry) fmap"
+  | Type name
   | TypeVar
   | Scheme ty_scheme
   | PUScheme ty_scheme
   | PredefName
 
 type_synonym cxt = "(var, cxt_entry) fmap"
+
+(* None if x is undefined or unusable *)
+fun resolve_name :: "cxt \<Rightarrow> var \<Rightarrow> cxt_entry option"
+where
+"resolve_name \<Gamma> x =
+  (case fmlookup \<Gamma> x of
+     Some (Ty \<tau>) \<Rightarrow> Some (Ty \<tau>)
+   | Some (ModChecked q \<Gamma>') \<Rightarrow> Some (ModChecked q \<Gamma>')
+   | Some (Type C) \<Rightarrow> Some (Type C)
+   | Some (Scheme \<pi>) \<Rightarrow> Some (Scheme \<pi>)
+   | Some PredefName \<Rightarrow> Some PredefName
+   | _ \<Rightarrow> None)"
 
 fun base_type_lit :: "lit \<Rightarrow> ty"
 where
@@ -280,12 +295,52 @@ where
 "numeric_literal (ExprLiteral (LitFloat _)) = True" |
 "numeric_literal _ = False"
 
+(* Type of the elements of an iterable type; None otherwise *)
+fun elem_type :: "ty \<Rightarrow> ty option"
+where
+"elem_type (TyList \<tau>) = Some \<tau>" |
+"elem_type (TyPrim str) = Some (TyPrim str)" |
+"elem_type (TyLiteral (LitString _)) = Some (TyPrim str)" |
+"elem_type (TyDict _) = Some (TyPrim str)" |
+"elem_type (TyClass C []) = (if C = snoc builtins ''range'' then Some (TyPrim int) else None)" |
+"elem_type (TyTuple \<tau>s) = Some (joins (map base_type \<tau>s))" |
+"elem_type (TyUnion \<sigma> \<tau>) =
+  (case (elem_type \<sigma>, elem_type \<tau>) of (Some \<sigma>', Some \<tau>') \<Rightarrow> Some (\<sigma>' \<squnion> \<tau>') | _ \<Rightarrow> None)" |
+"elem_type _ = None"
+
+(* Type of a subscript, by the type of the subscripted value, given whether the index checks against
+   int, whether it checks against str, and the type it synthesises; None where no rule applies *)
+fun subscript_type :: "ty \<Rightarrow> bool \<Rightarrow> bool \<Rightarrow> ty option \<Rightarrow> ty option"
+where
+"subscript_type (TyUnion \<sigma> \<sigma>') int_ok str_ok idx =
+  (case (subscript_type \<sigma> int_ok str_ok idx, subscript_type \<sigma>' int_ok str_ok idx) of
+     (Some \<tau>, Some \<tau>') \<Rightarrow> Some (\<tau> \<squnion> \<tau>') | _ \<Rightarrow> None)" |
+"subscript_type (TyList \<tau>) int_ok _ _ = (if int_ok then Some \<tau> else None)" |
+"subscript_type (TyDict \<tau>) _ str_ok _ = (if str_ok then Some \<tau> else None)" |
+"subscript_type (TyTuple \<tau>s) _ _ idx =
+  (case idx of
+     Some (TyLiteral (LitInt n)) \<Rightarrow>
+       if 0 \<le> n \<and> n < of_nat (length \<tau>s) then Some (\<tau>s ! nat n)
+       else if n < 0 \<and> 0 \<le> of_nat (length \<tau>s) + n then Some (\<tau>s ! nat (of_nat (length \<tau>s) + n)) else None
+   | Some (TyPrim int) \<Rightarrow> Some (joins \<tau>s)
+   | _ \<Rightarrow> None)" |
+"subscript_type \<sigma> int_ok _ _ =
+  (if base_type \<sigma> = TyPrim str \<and> int_ok then Some (TyPrim str) else None)"
+
+fun resolve_qualified :: "cxt \<Rightarrow> expr \<Rightarrow> cxt_entry option"
+where
+"resolve_qualified \<Gamma> (ExprVar x) = resolve_name \<Gamma> x" |
+"resolve_qualified \<Gamma> (ExprAttribute e x) =
+  (case resolve_qualified \<Gamma> e of Some (ModChecked q \<Gamma>') \<Rightarrow> resolve_name \<Gamma>' x | _ \<Rightarrow> None)" |
+"resolve_qualified \<Gamma> _ = None"
+
 function (sequential)
   synth_expr :: "cxt \<Rightarrow> expr \<Rightarrow> ty option" and
   synth_exprs :: "cxt \<Rightarrow> expr list \<Rightarrow> ty option list" and
   check_expr :: "cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> bool" and
   check_expr' :: "cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> bool" and
-  check_exprs :: "cxt \<Rightarrow> expr list \<Rightarrow> ty list \<Rightarrow> bool"
+  check_exprs :: "cxt \<Rightarrow> expr list \<Rightarrow> ty list \<Rightarrow> bool" and
+  quals :: "cxt \<Rightarrow> qualifier list \<Rightarrow> cxt option"
 where
 "synth_expr \<Gamma> (ExprVar x) = (case fmlookup \<Gamma> x of Some (Ty \<tau>) \<Rightarrow> Some \<tau> | _ \<Rightarrow> None)" |
 "synth_expr \<Gamma> (ExprLiteral l) = (case l of LitFloat _ \<Rightarrow> Some (TyPrim float) | _ \<Rightarrow> Some (TyLiteral l))" |
@@ -324,6 +379,31 @@ where
    if es \<noteq> [] \<and> (\<exists>\<sigma> \<in> set \<sigma>s. \<sigma> \<noteq> None) \<and> (\<forall>j < length es. \<sigma>s ! j = None \<longrightarrow> check_expr \<Gamma> (es ! j) \<tau>)
    then Some (TyList \<tau>) else None)" |
 "synth_expr \<Gamma> (ExprTuple es) = map_option TyTuple (those (synth_exprs \<Gamma> es))" |
+"synth_expr \<Gamma> (ExprAttribute e x) =
+  (case resolve_qualified \<Gamma> (ExprAttribute e x) of Some (Ty \<tau>) \<Rightarrow> Some \<tau> | _ \<Rightarrow> None)" |
+"synth_expr \<Gamma> (ExprSubscript e e') =
+  (case synth_expr \<Gamma> e of
+     Some \<sigma> \<Rightarrow>
+       subscript_type \<sigma> (check_expr \<Gamma> e' (TyPrim int)) (check_expr \<Gamma> e' (TyPrim str)) (synth_expr \<Gamma> e')
+   | None \<Rightarrow> None)" |
+"synth_expr \<Gamma> (ExprDict kvs) =
+  (let \<sigma>s = synth_exprs \<Gamma> (map snd kvs); \<tau> = joins (map base_type (map the (filter (\<lambda>\<sigma>. \<sigma> \<noteq> None) \<sigma>s))) in
+   if kvs \<noteq> [] \<and> check_exprs \<Gamma> (map fst kvs) (replicate (length kvs) (TyPrim str))
+      \<and> (\<exists>\<sigma> \<in> set \<sigma>s. \<sigma> \<noteq> None)
+      \<and> (\<forall>j < length kvs. \<sigma>s ! j = None \<longrightarrow> check_expr \<Gamma> (snd (kvs ! j)) \<tau>)
+   then Some (TyDict \<tau>) else None)" |
+"synth_expr \<Gamma> (ExprListComp e gs) =
+  (case quals \<Gamma> gs of
+     Some \<Delta> \<Rightarrow>
+       if fmpred (\<lambda>x _. x \<notin> captures e) \<Delta>
+       then map_option (\<lambda>\<tau>. TyList (base_type \<tau>)) (synth_expr (\<Gamma> \<otimes> \<Delta>) e) else None
+   | None \<Rightarrow> None)" |
+"synth_expr \<Gamma> (ExprDictComp e e' gs) =
+  (case quals \<Gamma> gs of
+     Some \<Delta> \<Rightarrow>
+       if fmpred (\<lambda>x _. x \<notin> captures e \<union> captures e') \<Delta> \<and> check_expr (\<Gamma> \<otimes> \<Delta>) e (TyPrim str)
+       then map_option (\<lambda>\<tau>. TyDict (base_type \<tau>)) (synth_expr (\<Gamma> \<otimes> \<Delta>) e') else None
+   | None \<Rightarrow> None)" |
 "synth_expr \<Gamma> _ = None" |
 
 "synth_exprs \<Gamma> [] = []" |
@@ -349,23 +429,56 @@ where
   (case \<tau> of TyList \<tau>' \<Rightarrow> check_exprs \<Gamma> es (replicate (length es) \<tau>') | _ \<Rightarrow> False)" |
 "check_expr' \<Gamma> (ExprTuple es) \<tau> = (case \<tau> of TyTuple \<tau>s \<Rightarrow> check_exprs \<Gamma> es \<tau>s | _ \<Rightarrow> False)" |
 "check_expr' \<Gamma> (ExprCond e\<^sub>1 e e\<^sub>2) \<tau> = (check_expr \<Gamma> e (TyPrim bool) \<and> check_expr \<Gamma> e\<^sub>1 \<tau> \<and> check_expr \<Gamma> e\<^sub>2 \<tau>)" |
+"check_expr' \<Gamma> (ExprDict kvs) \<tau> =
+  (case \<tau> of
+     TyDict \<tau>' \<Rightarrow>
+       check_exprs \<Gamma> (map fst kvs) (replicate (length kvs) (TyPrim str))
+       \<and> check_exprs \<Gamma> (map snd kvs) (replicate (length kvs) \<tau>')
+   | _ \<Rightarrow> False)" |
+"check_expr' \<Gamma> (ExprListComp e gs) \<tau> =
+  (case (\<tau>, quals \<Gamma> gs) of
+     (TyList \<tau>', Some \<Delta>) \<Rightarrow> fmpred (\<lambda>x _. x \<notin> captures e) \<Delta> \<and> check_expr (\<Gamma> \<otimes> \<Delta>) e \<tau>'
+   | _ \<Rightarrow> False)" |
+"check_expr' \<Gamma> (ExprDictComp e e' gs) \<tau> =
+  (case (\<tau>, quals \<Gamma> gs) of
+     (TyDict \<tau>', Some \<Delta>) \<Rightarrow>
+       fmpred (\<lambda>x _. x \<notin> captures e \<union> captures e') \<Delta> \<and> check_expr (\<Gamma> \<otimes> \<Delta>) e (TyPrim str)
+       \<and> check_expr (\<Gamma> \<otimes> \<Delta>) e' \<tau>'
+   | _ \<Rightarrow> False)" |
 "check_expr' \<Gamma> _ _ = False" |
 
 "check_exprs \<Gamma> [] [] = True" |
 "check_exprs \<Gamma> (e # es) (\<tau> # \<tau>s) = (check_expr \<Gamma> e \<tau> \<and> check_exprs \<Gamma> es \<tau>s)" |
-"check_exprs \<Gamma> _ _ = False"
+"check_exprs \<Gamma> _ _ = False" |
+
+"quals \<Gamma> [] = Some fmempty" |
+"quals \<Gamma> (Guard e # gs) = (if check_expr \<Gamma> e (TyPrim bool) then quals \<Gamma> gs else None)" |
+"quals \<Gamma> (Generator x e # gs) =
+  (case map_option elem_type (synth_expr \<Gamma> e) of
+     Some (Some \<sigma>) \<Rightarrow>
+       if x \<in> captures gs then None
+       else map_option (\<lambda>\<Delta>. fmupd x (Ty \<sigma>) fmempty \<otimes> \<Delta>) (quals (\<Gamma> \<otimes> fmupd x (Ty \<sigma>) fmempty) gs)
+   | _ \<Rightarrow> None)"
 by pat_completeness auto
 
 termination
-by (relation "inv_image (less_than <*lex*> less_than) (\<lambda>x. case x of
-     Inl (Inl (\<Gamma>, e)) \<Rightarrow> (size e, 0)
-   | Inl (Inr (\<Gamma>, es)) \<Rightarrow> (size_list size es, 0)
-   | Inr (Inl (\<Gamma>, e, \<tau>)) \<Rightarrow> (size e, 2)
-   | Inr (Inr (Inl (\<Gamma>, e, \<tau>))) \<Rightarrow> (size e, 1)
-   | Inr (Inr (Inr (\<Gamma>, es, \<tau>s))) \<Rightarrow> (size_list size es, 2))")
-   (auto dest!: nth_mem intro: size_list_estimation' simp: less_Suc_eq_le)
+by (relation "measures [\<lambda>x. case x of
+     Inl (Inl (\<Gamma>, e)) \<Rightarrow> size e
+   | Inl (Inr (Inl (\<Gamma>, es))) \<Rightarrow> size_list size es
+   | Inl (Inr (Inr (\<Gamma>, e, \<tau>))) \<Rightarrow> size e
+   | Inr (Inl (\<Gamma>, e, \<tau>)) \<Rightarrow> size e
+   | Inr (Inr (Inl (\<Gamma>, es, \<tau>s))) \<Rightarrow> size_list size es
+   | Inr (Inr (Inr (\<Gamma>, gs))) \<Rightarrow> size_list size gs,
+   \<lambda>x. case x of
+     Inl (Inl _) \<Rightarrow> 0
+   | Inl (Inr (Inl _)) \<Rightarrow> 0
+   | Inl (Inr (Inr _)) \<Rightarrow> 2
+   | Inr (Inl _) \<Rightarrow> 1
+   | Inr (Inr (Inl _)) \<Rightarrow> 2
+   | Inr (Inr (Inr _)) \<Rightarrow> 0]")
+   (auto dest!: nth_mem intro: size_list_estimation' simp: less_Suc_eq_le size_list_fst size_list_snd)
 
-(* Context entry for a type scheme, which is a plain type if it has no type parameters *)
+(* Context entry for a type scheme, which is a plain type when its parameter list is empty *)
 fun signature_entry :: "ty_scheme \<Rightarrow> cxt_entry"
 where
 "signature_entry (TyScheme [] \<tau>) = Ty \<tau>" |
@@ -447,5 +560,178 @@ where
          | None \<Rightarrow> False)
     | None \<Rightarrow> False))" |
 "check_def \<Gamma> _ _ = False"
+
+abbreviation name_binding :: "var \<times> cxt_entry" where "name_binding \<equiv> (''__name__'', Ty (TyPrim str))"
+
+definition predefined :: "(name, cxt) fmap"
+where
+"predefined = fmap_of_list
+  [(builtins, fmap_of_list
+     ([name_binding,
+       (''print'', Ty (TyCallable [TyPrim object] (TyPrim NoneType))),
+       (''len'', Ty (TyCallable [TyPrim Sized] (TyPrim int))),
+       (''range'', Type (snoc builtins ''range'')),
+       (''round'', Ty (TyCallable [TyPrim float] (TyPrim int)))]
+      @ map (\<lambda>\<nu>. (prim_name \<nu>, PredefName)) [NoneType, object, bool, int, float, str]
+      @ [(''list'', PredefName), (''dict'', PredefName), (''tuple'', PredefName)])),
+   ((''sys'', []), fmap_of_list
+     [name_binding, (''argv'', Ty (TyList (TyPrim str))),
+      (''exit'', Ty (TyCallable [TyPrim int] (TyPrim Never)))]),
+   ((''typing'', []), fmap_of_list
+     [name_binding, (''Callable'', PredefName), (''Literal'', PredefName),
+      (prim_name Never, PredefName), (prim_name Sized, PredefName)]),
+   ((''dataclasses'', []), fmap_of_list [name_binding, (''dataclass'', PredefName)])]"
+
+(* Boxed plus of the specification isn't in Isabelle's symbol table *)
+function (sequential) extend_entry :: "cxt_entry \<Rightarrow> cxt_entry \<Rightarrow> cxt_entry"
+and extend :: "cxt \<Rightarrow> cxt \<Rightarrow> cxt" (infixl "\<uplus>" 65)
+where
+"extend_entry (ModChecked q \<Gamma>) (ModStub q') = (if q = q' then ModChecked q \<Gamma> else ModStub q')" |
+"extend_entry (ModChecked q \<Gamma>) (ModChecked q' \<Gamma>') =
+   (if q = q' then ModChecked q (\<Gamma> \<uplus> \<Gamma>') else ModChecked q' \<Gamma>')" |
+"extend_entry _ \<theta>' = \<theta>'" |
+"\<Gamma> \<uplus> \<Gamma>' =
+   \<Gamma> ++\<^sub>f fmmap_keys (\<lambda>x \<theta>'. case fmlookup \<Gamma> x of None \<Rightarrow> \<theta>' | Some \<theta> \<Rightarrow> extend_entry \<theta> \<theta>') \<Gamma>'"
+  by pat_completeness auto
+
+termination
+  by (relation "measure (\<lambda>p. case p of Inl (\<theta>, _) \<Rightarrow> size \<theta> | Inr (\<Gamma>, _) \<Rightarrow> size_fmap (\<lambda>_. 0) size \<Gamma>)")
+     (simp_all add: size_fmap_lookup del: size_fmap_def)
+
+type_synonym program = "(name, module_body) fmap"
+
+context includes fmap.lifting
+begin
+
+lift_definition submods :: "program \<Rightarrow> name \<Rightarrow> cxt"
+  is "\<lambda>M q x. if snoc q x \<in> dom M then Some (ModStub (snoc q x)) else None"
+proof -
+  fix M :: "name \<Rightarrow> module_body option" and q
+  let ?S = "\<lambda>x. if snoc q x \<in> dom M then Some (ModStub (snoc q x)) else None"
+  assume "finite (dom M)"
+  have "dom ?S \<subseteq> (\<lambda>q'. snd (the (unsnoc q'))) ` dom M"
+    by (auto simp: dom_def image_iff intro: rev_image_eqI)
+  then show "finite (dom ?S)"
+    using \<open>finite (dom M)\<close> by (blast intro: finite_subset finite_imageI)
+qed
+
+end
+
+lemma submods_of_list [code]:
+  "submods (fmap_of_list m) q
+   = fmap_of_list (map (\<lambda>(q', _). (snd (the (unsnoc q')), ModStub q'))
+                       (filter (\<lambda>(q', _). case unsnoc q' of Some (q'', _) \<Rightarrow> q'' = q | None \<Rightarrow> False) m))"
+proof (rule fmap_ext)
+  fix x
+  let ?l = "map (\<lambda>(q', _). (snd (the (unsnoc q')), ModStub q'))
+              (filter (\<lambda>(q', _). case unsnoc q' of Some (q'', _) \<Rightarrow> q'' = q | None \<Rightarrow> False) m)"
+  have "map_of ?l x = (if snoc q x \<in> dom (map_of m) then Some (ModStub (snoc q x)) else None)"
+    by (induction m) (auto simp: dom_def snoc_eq_iff simp del: snoc.simps unsnoc.simps split: option.splits)
+  then show "fmlookup (submods (fmap_of_list m) q) x = fmlookup (fmap_of_list ?l) x"
+    by (simp add: submods.rep_eq fmlookup_of_list)
+qed
+
+fun check_top_stmt :: "cxt \<Rightarrow> top_stmt \<Rightarrow> static_outcome option"
+where
+"check_top_stmt \<Gamma> (Stmt s) = check_stmt \<Gamma> None s" |
+"check_top_stmt \<Gamma> (TopSeq t t') =
+  (case check_top_stmt \<Gamma> t of
+     Some (Assigns\<^sub>R \<Delta>) \<Rightarrow> map_option (\<lambda>R. Assigns\<^sub>R \<Delta> \<otimes>\<^sub>R R) (check_top_stmt (\<Gamma> \<otimes> \<Delta>) t')
+   | _ \<Rightarrow> None)" |
+"check_top_stmt \<Gamma> (TypeDefs \<chi>s) = None"
+
+(* V holds the modules being checked, so that an import cycle is rejected *)
+function (sequential)
+  check_module :: "program \<Rightarrow> name set \<Rightarrow> name \<Rightarrow> cxt option" and
+  check_imports :: "program \<Rightarrow> name set \<Rightarrow> name \<Rightarrow> import list \<Rightarrow> cxt option" and
+  submodules :: "program \<Rightarrow> name set \<Rightarrow> cxt_entry \<Rightarrow> var list \<Rightarrow> cxt_entry option" and
+  imports_entry :: "program \<Rightarrow> name set \<Rightarrow> cxt \<Rightarrow> var \<Rightarrow> cxt_entry option" and
+  imports_entries :: "program \<Rightarrow> name set \<Rightarrow> cxt \<Rightarrow> var list \<Rightarrow> cxt_entry list option" and
+  check_modules :: "program \<Rightarrow> name set \<Rightarrow> name list \<Rightarrow> bool"
+where
+"check_module M V q =
+  (case fmlookup predefined q of
+     Some \<Gamma> \<Rightarrow> Some \<Gamma>
+   | None \<Rightarrow>
+     if q \<in> V then None
+     else case fmlookup M q of
+       None \<Rightarrow> None
+     | Some (ModuleBody \<iota>s t) \<Rightarrow> do {
+         \<Gamma>' \<leftarrow> check_imports M (insert q V) q \<iota>s;
+         \<Gamma>\<^sub>s \<leftarrow> scope Unbound (declares \<iota>s) t;
+         r \<leftarrow> check_top_stmt (the (fmlookup predefined builtins) \<otimes> \<Gamma>' \<otimes> \<Gamma>\<^sub>s) t;
+         case r of
+           Assigns\<^sub>R \<Delta> \<Rightarrow>
+             let S = submods M q in
+             if (fmdom \<Gamma>' |\<union>| fmdom \<Delta>) |\<inter>| fmdom S = {||} then Some (S \<otimes> \<Delta>) else None
+         | Returns\<^sub>R \<Rightarrow> None
+       })" |
+"check_imports M V q [] = Some fmempty" |
+"check_imports M V q (Import (x, xs) # \<iota>s) =
+  (if q \<prec> (x, xs) then None
+   else do {
+     \<Delta> \<leftarrow> check_module M V (x, []);
+     \<theta> \<leftarrow> submodules M V (ModChecked (x, []) \<Delta>) xs;
+     \<Gamma> \<leftarrow> check_imports M V q \<iota>s;
+     Some (fmupd x \<theta> fmempty \<uplus> \<Gamma>)
+   })" |
+"check_imports M V q (FromImport q' xs # \<iota>s) =
+  (if distinct xs \<and> check_modules M V (unique_to q' q) then do {
+     \<Delta> \<leftarrow> check_module M V q';
+     \<theta>s \<leftarrow> imports_entries M V \<Delta> xs;
+     \<Gamma> \<leftarrow> check_imports M V q \<iota>s;
+     Some (fmap_of_list (zip xs \<theta>s) \<uplus> \<Gamma>)
+   } else None)" |
+"submodules M V \<theta> [] = Some \<theta>" |
+"submodules M V (ModChecked q \<Gamma>) (x # xs) = do {
+   \<Gamma>' \<leftarrow> check_module M V (snoc q x);
+   \<theta>' \<leftarrow> submodules M V (ModChecked (snoc q x) \<Gamma>') xs;
+   Some (ModChecked q (\<Gamma> \<uplus> fmupd x \<theta>' fmempty))
+ }" |
+"submodules M V _ _ = None" |
+"imports_entry M V \<Gamma> x =
+  (case fmlookup \<Gamma> x of
+     Some (ModStub q) \<Rightarrow> map_option (ModChecked q) (check_module M V q)
+   | _ \<Rightarrow> resolve_name \<Gamma> x)" |
+"imports_entries M V \<Gamma> [] = Some []" |
+"imports_entries M V \<Gamma> (x # xs) = do {
+   \<theta> \<leftarrow> imports_entry M V \<Gamma> x;
+   \<theta>s \<leftarrow> imports_entries M V \<Gamma> xs;
+   Some (\<theta> # \<theta>s)
+ }" |
+"check_modules M V [] = True" |
+"check_modules M V (q # qs) = (check_module M V q \<noteq> None \<and> check_modules M V qs)"
+by pat_completeness auto
+
+(* Measures: count of modules of M not in V; then a topological rank of the call graph, which is acyclic
+   if we remove the call from the module rule to its imports; then the length of the list argument *)
+termination
+by (relation "measures [
+     \<lambda>x. case x of
+       Inl (Inl (M, V, _)) \<Rightarrow> card (fmdom' M - V)
+     | Inl (Inr (Inl (M, V, _, _))) \<Rightarrow> card (fmdom' M - V)
+     | Inl (Inr (Inr (M, V, _, _))) \<Rightarrow> card (fmdom' M - V)
+     | Inr (Inl (M, V, _, _)) \<Rightarrow> card (fmdom' M - V)
+     | Inr (Inr (Inl (M, V, _, _))) \<Rightarrow> card (fmdom' M - V)
+     | Inr (Inr (Inr (M, V, _))) \<Rightarrow> card (fmdom' M - V),
+     \<lambda>x. case x of
+       Inl (Inl _) \<Rightarrow> 0
+     | Inl (Inr (Inl _)) \<Rightarrow> 3
+     | Inl (Inr (Inr _)) \<Rightarrow> 1
+     | Inr (Inl _) \<Rightarrow> 1
+     | Inr (Inr (Inl _)) \<Rightarrow> 2
+     | Inr (Inr (Inr _)) \<Rightarrow> 1,
+     \<lambda>x. case x of
+       Inl (Inl _) \<Rightarrow> 0
+     | Inl (Inr (Inl (_, _, _, \<iota>s))) \<Rightarrow> length \<iota>s
+     | Inl (Inr (Inr (_, _, _, xs))) \<Rightarrow> length xs
+     | Inr (Inl _) \<Rightarrow> 0
+     | Inr (Inr (Inl (_, _, _, xs))) \<Rightarrow> length xs
+     | Inr (Inr (Inr (_, _, qs))) \<Rightarrow> length qs]")
+   (auto simp: card_fmdom_insert)
+
+definition check_program :: "program \<Rightarrow> bool"
+where
+"check_program M = (check_module M {} main \<noteq> None)"
 
 end
