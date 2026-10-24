@@ -174,6 +174,53 @@ def test_eval_subscript():
     assert evaluate(Syntax.ExprSubscript(lit(5), lit(0))) == aborts(Semantics.TypeError())
 
 
+def pvar(x):
+    return Syntax.PatVar(chars(x))
+
+
+def plit(n):
+    return Syntax.PatLiteral(Syntax.LitInt(n))
+
+
+def call_match(cases, arg):
+    """Call of a function of parameter n whose body is a match on n"""
+    body = Syntax.StmtMatch(var("n"), cases)
+    return Eval.eval_expr(50, defs(("g", "n", body)), call("g", arg))
+
+
+def test_eval_match_sequences():
+    add = ret(Syntax.ExprBinOp(Syntax.BOpAdd(), var("x"), var("y")))
+    cases = [(Syntax.PatList([pvar("x"), pvar("y")]), add), (Syntax.PatWildcard(), ret(lit(0)))]
+    assert call_match(cases, Syntax.ExprList([lit(3), lit(4)])) == int_val(7)
+    assert call_match(cases, Syntax.ExprList([lit(3)])) == int_val(0)
+    assert call_match(cases, Syntax.ExprTuple([lit(3), lit(4)])) == aborts(Semantics.Excluded())
+    as_x = [(Syntax.PatAs(Syntax.PatList([plit(1), Syntax.PatWildcard()]), chars("x")), ret(var("x")))]
+    pair = Syntax.ExprList([lit(1), lit(2)])
+    assert call_match(as_x, pair) == evaluate(pair)
+
+
+def test_eval_match_literals():
+    cases = [(Syntax.PatLiteral(Syntax.LitBool(True)), ret(lit(1))), (plit(1), ret(lit(2)))]
+    assert call_match(cases, lit(1)) == int_val(2)
+    assert call_match(cases, Syntax.ExprLiteral(Syntax.LitBool(True))) == int_val(1)
+    none = val(Semantics.VLit(Syntax.LitNone()))
+    assert call_match(cases, lit(5)) == none
+
+
+def test_eval_match_dict():
+    cases = [(Syntax.PatDict([(chars("a"), pvar("x"))]), ret(var("x"))), (Syntax.PatWildcard(), ret(lit(0)))]
+    assert call_match(cases, Syntax.ExprDict([(string("a"), lit(1)), (string("b"), lit(2))])) == int_val(1)
+    assert call_match(cases, Syntax.ExprDict([(string("b"), lit(2))])) == int_val(0)
+
+
+def test_eval_match_constructor_head():
+    def constr(*q):
+        return [(Syntax.PatConstr((chars(q[0]), [chars(x) for x in q[1:]]), ([], [])), ret(lit(1)))]
+    assert call_match(constr("C"), lit(0)) == aborts(Semantics.NameError())
+    assert call_match(constr("n"), lit(0)) == aborts(Semantics.TypeError())
+    assert call_match(constr("n", "C"), lit(0)) == aborts(Semantics.AttributeError())
+
+
 if __name__ == "__main__":
     tests = [f for name, f in sorted(globals().items()) if name.startswith("test_")]
     for test in tests:

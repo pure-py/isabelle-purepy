@@ -223,6 +223,54 @@ where
    | (Some vs, VLit (LitBool _)) \<Rightarrow> Aborts Excluded
    | _ \<Rightarrow> Aborts TypeError)"
 
+datatype match_result = Match env | NoMatch | MatchAborts termination_kind
+
+fun compose_match :: "match_result \<Rightarrow> match_result \<Rightarrow> match_result" (infixl "\<otimes>\<^sub>m" 100)
+where
+"Match \<rho> \<otimes>\<^sub>m Match \<rho>' = Match (\<rho> \<otimes> \<rho>')" |
+"Match \<rho> \<otimes>\<^sub>m m = m" |
+"NoMatch \<otimes>\<^sub>m m = NoMatch" |
+"MatchAborts \<kappa> \<otimes>\<^sub>m m = MatchAborts \<kappa>"
+
+(* Without class values, the head of a constructor pattern denotes no class *)
+fun match :: "env \<Rightarrow> pat \<Rightarrow> val \<Rightarrow> match_result"
+  and match_all :: "env \<Rightarrow> pat list \<Rightarrow> val list \<Rightarrow> match_result"
+  and match_dict :: "env \<Rightarrow> (string \<times> pat) list \<Rightarrow> (string \<times> val) list \<Rightarrow> match_result"
+where
+"match \<rho> (PatLiteral l) v =
+  (if is_bool (VLit l) \<and> as_real v \<noteq> None then NoMatch
+   else case eq (VLit l) v of Val True \<Rightarrow> Match \<epsilon> | Val False \<Rightarrow> NoMatch | Aborts \<kappa> \<Rightarrow> MatchAborts \<kappa>)" |
+"match \<rho> (PatVar x) v = Match (fmupd x v \<epsilon>)" |
+"match \<rho> PatWildcard v = Match \<epsilon>" |
+"match \<rho> (PatAs p x) v = match \<rho> p v \<otimes>\<^sub>m Match (fmupd x v \<epsilon>)" |
+"match \<rho> (PatList ps) (VList vs) = (if length ps = length vs then match_all \<rho> ps vs else NoMatch)" |
+"match \<rho> (PatList ps) (VTuple vs) = MatchAborts Excluded" |
+"match \<rho> (PatTuple ps) (VTuple vs) = (if length ps = length vs then match_all \<rho> ps vs else NoMatch)" |
+"match \<rho> (PatTuple ps) (VList vs) = MatchAborts Excluded" |
+"match \<rho> (PatDict kps) (VDict \<delta>) =
+  (if set (map fst kps) \<subseteq> set (map fst \<delta>) then match_dict \<rho> kps \<delta> else NoMatch)" |
+"match \<rho> (PatConstr (x, xs) a) v =
+  (case fmlookup \<rho> x of
+     None \<Rightarrow> MatchAborts NameError
+   | Some VUnbound \<Rightarrow> MatchAborts NameError
+   | Some _ \<Rightarrow> if xs = [] then MatchAborts TypeError else MatchAborts AttributeError)" |
+"match \<rho> _ _ = NoMatch" |
+
+"match_all \<rho> (p # ps) (v # vs) = match \<rho> p v \<otimes>\<^sub>m match_all \<rho> ps vs" |
+"match_all \<rho> _ _ = Match \<epsilon>" |
+
+"match_dict \<rho> ((w, p) # kps) \<delta> = match \<rho> p (the (map_of \<delta> w)) \<otimes>\<^sub>m match_dict \<rho> kps \<delta>" |
+"match_dict \<rho> [] \<delta> = Match \<epsilon>"
+
+fun dispatch :: "env \<Rightarrow> val \<Rightarrow> (pat \<times> stmt) list \<Rightarrow> (env \<times> stmt) result"
+where
+"dispatch \<rho> v [] = Val (\<epsilon>, StmtPass)" |
+"dispatch \<rho> v ((p, s) # cases) =
+  (case match \<rho> p v of
+     Match \<rho>' \<Rightarrow> Val (\<rho>', s)
+   | NoMatch \<Rightarrow> dispatch \<rho> v cases
+   | MatchAborts \<kappa> \<Rightarrow> Aborts \<kappa>)"
+
 fun def_name :: "func \<Rightarrow> var"
 where
 "def_name (Def f _ _ _ _) = f"
@@ -404,6 +452,12 @@ EvalIfFalse: "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val false ; \<rho>, (eli
 EvalIfFail: "\<rho>, e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtIf e s elifs else' \<Rightarrow>\<^sub>s Aborts\<^sub>o \<kappa>" |
 EvalIfNonBool:
   "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; v \<notin> {true, false} \<rbrakk> \<Longrightarrow> \<rho>, StmtIf e s elifs else' \<Rightarrow>\<^sub>s Aborts\<^sub>o Excluded" |
+EvalMatch:
+  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; dispatch \<rho> v cases = Val (\<rho>', s') ; \<rho> \<otimes> \<rho>', s' \<Rightarrow>\<^sub>s o \<rbrakk>
+  \<Longrightarrow> \<rho>, StmtMatch e cases \<Rightarrow>\<^sub>s Assigns \<rho>' \<otimes>\<^sub>o o" |
+EvalMatchFail: "\<rho>, e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtMatch e cases \<Rightarrow>\<^sub>s Aborts\<^sub>o \<kappa>" |
+EvalMatchAbort:
+  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; dispatch \<rho> v cases = Aborts \<kappa> \<rbrakk> \<Longrightarrow> \<rho>, StmtMatch e cases \<Rightarrow>\<^sub>s Aborts\<^sub>o \<kappa>" |
 EvalSeq: "\<lbrakk> \<rho>, s \<Rightarrow>\<^sub>s Assigns \<rho>' ; \<rho> \<otimes> \<rho>', s' \<Rightarrow>\<^sub>s o \<rbrakk>
   \<Longrightarrow> \<rho>, StmtSeq s s' \<Rightarrow>\<^sub>s Assigns \<rho>' \<otimes>\<^sub>o o" |
 EvalSeqReturn: "\<rho>, s \<Rightarrow>\<^sub>s Returns v \<Longrightarrow> \<rho>, StmtSeq s s' \<Rightarrow>\<^sub>s Returns v" |

@@ -104,7 +104,7 @@ proof (induction n \<rho> e and n \<rho> es and n \<rho> s and n \<rho> eb arbit
     rule: eval_expr_eval_exprs_eval_stmt_eval_elif.induct)
 qed (auto simp: eval_simps map_fuelled_Done as_bool_Some as_bool_None
   split: fuelled.splits result.splits outcome.splits option.splits bool.splits val.splits lit.splits
-    func.splits if_splits
+    func.splits prod.splits if_splits
   intro: eval_intros)
 
 (* Every large enough fuel gives the outcome of a derivation *)
@@ -415,6 +415,21 @@ next
     by (rule eventually_sequentially_Suc[THEN iffD1])
       (use EvalIfNonBool.IH in \<open>eventually_elim, insert EvalIfNonBool.hyps(2),
         auto simp: eval_simps as_bool_nonbool split: val.split\<close>)
+next
+  case EvalMatch
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalMatch.IH in \<open>eventually_elim, insert EvalMatch.hyps(2), auto simp: eval_simps\<close>)
+next
+  case EvalMatchFail
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalMatchFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+next
+  case EvalMatchAbort
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalMatchAbort.IH in \<open>eventually_elim, insert EvalMatchAbort.hyps(2), auto simp: eval_simps\<close>)
 next
   case EvalSeq
   show ?case

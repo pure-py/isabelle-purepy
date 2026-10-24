@@ -153,7 +153,10 @@ where
   | Some False \<Rightarrow> eval_elif n \<rho> (elifs, else')
   | None \<Rightarrow> Done (Aborts\<^sub>o Excluded))" |
 "eval_stmt (Suc n) \<rho> (StmtSeq s s') = fseq (eval_stmt n \<rho> s) (\<lambda>\<rho>'. eval_stmt n (\<rho> \<otimes> \<rho>') s')" |
-"eval_stmt (Suc n) \<rho> _ = Stuck" |
+"eval_stmt (Suc n) \<rho> (StmtMatch e cases) =
+  flet_outcome (eval_expr n \<rho> e) (\<lambda>v. case dispatch \<rho> v cases of
+    Val (\<rho>', s') \<Rightarrow> map_fuelled (\<lambda>o. Assigns \<rho>' \<otimes>\<^sub>o o) (eval_stmt n (\<rho> \<otimes> \<rho>') s')
+  | Aborts \<kappa> \<Rightarrow> Done (Aborts\<^sub>o \<kappa>))" |
 
 "eval_elif 0 \<rho> eb = OutOfFuel" |
 "eval_elif (Suc n) \<rho> ([], None) = Done (Assigns \<epsilon>)" |

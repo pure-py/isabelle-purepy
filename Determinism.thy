@@ -28,6 +28,7 @@ inductive_cases DefsE: "\<rho>, StmtMutualRegion ds \<Rightarrow>\<^sub>s o"
 inductive_cases AssertE: "\<rho>, StmtAssert e e' \<Rightarrow>\<^sub>s o"
 inductive_cases IfE: "\<rho>, StmtIf e s elifs else' \<Rightarrow>\<^sub>s o"
 inductive_cases SeqE: "\<rho>, StmtSeq s s' \<Rightarrow>\<^sub>s o"
+inductive_cases MatchE: "\<rho>, StmtMatch e cases \<Rightarrow>\<^sub>s o"
 inductive_cases ElifNilE: "\<rho>, ([], else') \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o"
 inductive_cases ElifConsE: "\<rho>, ((e, s) # elifs, else') \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o"
 
@@ -288,6 +289,18 @@ next
   case EvalIfNonBool
   from EvalIfNonBool.prems EvalIfNonBool.hyps show ?case
     by (auto elim!: IfE dest: EvalIfNonBool.IH)
+next
+  case EvalMatch
+  from EvalMatch.prems show ?case
+    by (auto elim!: MatchE dest!: EvalMatch.IH(1) simp: EvalMatch.hyps(2) dest: EvalMatch.IH(2))
+next
+  case EvalMatchFail
+  from EvalMatchFail.prems EvalMatchFail.hyps show ?case
+    by (auto elim!: MatchE dest: EvalMatchFail.IH)
+next
+  case EvalMatchAbort
+  from EvalMatchAbort.prems EvalMatchAbort.hyps show ?case
+    by (auto elim!: MatchE dest: EvalMatchAbort.IH)
 next
   case EvalSeq
   from EvalSeq.prems EvalSeq.hyps show ?case
