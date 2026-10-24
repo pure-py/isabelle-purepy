@@ -133,6 +133,47 @@ def test_eval_nonbool_condition():
     assert result == Eval.Done(Semantics.Aborts(Semantics.Excluded()))
 
 
+def string(w):
+    return Syntax.ExprLiteral(Syntax.LitString(chars(w)))
+
+
+def evaluate(e):
+    return Eval.eval_expr(50, Finite_Map.fmempty, e)
+
+
+def val(v):
+    return Eval.Done(Semantics.Val(v))
+
+
+def aborts(kappa):
+    return Eval.Done(Semantics.Aborts(kappa))
+
+
+def test_eval_dict():
+    d = Syntax.ExprDict([(string("a"), lit(1)), (string("b"), lit(2)), (string("a"), lit(3))])
+    entries = [(chars("a"), Semantics.VLit(Syntax.LitInt(3))), (chars("b"), Semantics.VLit(Syntax.LitInt(2)))]
+    assert evaluate(d) == val(Semantics.VDict(entries))
+    assert evaluate(Syntax.ExprSubscript(d, string("b"))) == int_val(2)
+    assert evaluate(Syntax.ExprSubscript(d, string("c"))) == aborts(Semantics.KeyError())
+    assert evaluate(Syntax.ExprSubscript(d, lit(0))) == aborts(Semantics.Excluded())
+    assert evaluate(Syntax.ExprDict([(lit(1), lit(2))])) == aborts(Semantics.Excluded())
+    true = val(Semantics.VLit(Syntax.LitBool(True)))
+    assert evaluate(Syntax.ExprBinOp(Syntax.BOpIn(), string("a"), d)) == true
+    swapped = Syntax.ExprDict([(string("b"), lit(2)), (string("a"), lit(3))])
+    assert evaluate(Syntax.ExprBinOp(Syntax.BOpEq(), d, swapped)) == true
+
+
+def test_eval_subscript():
+    xs = Syntax.ExprList([lit(10), lit(20), lit(30)])
+    assert evaluate(Syntax.ExprSubscript(xs, lit(1))) == int_val(20)
+    assert evaluate(Syntax.ExprSubscript(xs, Syntax.ExprUnOp(Syntax.UOpNeg(), lit(1)))) == int_val(30)
+    assert evaluate(Syntax.ExprSubscript(xs, lit(3))) == aborts(Semantics.IndexError())
+    assert evaluate(Syntax.ExprSubscript(xs, Syntax.ExprLiteral(Syntax.LitBool(True)))) == aborts(Semantics.Excluded())
+    c = val(Semantics.VLit(Syntax.LitString(chars("b"))))
+    assert evaluate(Syntax.ExprSubscript(string("abc"), lit(1))) == c
+    assert evaluate(Syntax.ExprSubscript(lit(5), lit(0))) == aborts(Semantics.TypeError())
+
+
 if __name__ == "__main__":
     tests = [f for name, f in sorted(globals().items()) if name.startswith("test_")]
     for test in tests:

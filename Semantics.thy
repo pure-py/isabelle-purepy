@@ -10,6 +10,7 @@ datatype val =
       VLit lit
     | VList "val list"
     | VTuple "val list"
+    | VDict "(string \<times> val) list"
     | VLamClosure "(var, val) fmap" "var list" expr  ("Lam'(_, _, _')")
     | VDefClosure "(var, val) fmap" "func list" nat  ("Def'(_, _, _')")
     | VUnbound
@@ -83,6 +84,9 @@ where
 "eq (VLit (LitFloat _)) (VLit (LitBool _)) = Aborts Undef" |
 "eq (VList vs) (VList vs') = eq_elems vs vs'" |
 "eq (VTuple vs) (VTuple vs') = eq_elems vs vs'" |
+"eq (VDict \<delta>) (VDict \<delta>') =
+  (if set (map fst \<delta>) = set (map fst \<delta>') then eq_elems (map snd \<delta>) (map (the \<circ> map_of \<delta>') (map fst \<delta>))
+   else Val False)" |
 "eq Lam(_, _, _) Lam(_, _, _) = Aborts Undef" |
 "eq Lam(_, _, _) Def(_, _, _) = Aborts Undef" |
 "eq Def(_, _, _) Lam(_, _, _) = Aborts Undef" |
@@ -99,6 +103,8 @@ fun contains :: "val \<Rightarrow> val \<Rightarrow> bool result" and contains_e
 where
 "contains (VList vs) v = contains_elems vs v" |
 "contains (VTuple vs) v = contains_elems vs v" |
+"contains (VDict \<delta>) (VLit (LitString w)) = Val (w \<in> set (map fst \<delta>))" |
+"contains (VDict \<delta>) _ = Aborts Excluded" |
 "contains (VLit (LitString w')) (VLit (LitString w)) = Val (\<exists>w1 w2. w' = w1 @ w @ w2)" |
 "contains _ _ = Aborts TypeError" |
 
@@ -178,6 +184,44 @@ where
 "unop_meaning UOpNot _ = Aborts Excluded" |
 "unop_meaning _ (VLit (LitBool _)) = Aborts Excluded" |
 "unop_meaning _ _ = Aborts TypeError"
+
+fun setitem :: "(string \<times> val) list \<Rightarrow> string \<Rightarrow> val \<Rightarrow> (string \<times> val) list"
+where
+"setitem [] w v = [(w, v)]" |
+"setitem ((w', v') # \<delta>) w v = (if w = w' then (w, v) # \<delta> else (w', v') # setitem \<delta> w v)"
+
+fun update :: "(string \<times> val) list \<Rightarrow> (string \<times> val) list \<Rightarrow> (string \<times> val) list"
+where
+"update \<delta> [] = \<delta>" |
+"update \<delta> ((w, v) # \<delta>') = update (setitem \<delta> w v) \<delta>'"
+
+(* Entries from keys and values in alternation; None if a key is not a string *)
+fun dict_entries :: "val list \<Rightarrow> (string \<times> val) list option"
+where
+"dict_entries [] = Some []" |
+"dict_entries (VLit (LitString w) # v # vs) = map_option (Cons (w, v)) (dict_entries vs)" |
+"dict_entries _ = None"
+
+fun elems :: "val \<Rightarrow> val list option"
+where
+"elems (VList vs) = Some vs" |
+"elems (VTuple vs) = Some vs" |
+"elems (VLit (LitString w)) = Some (map (\<lambda>c. VLit (LitString [c])) w)" |
+"elems _ = None"
+
+fun getitem :: "val \<Rightarrow> val \<Rightarrow> val result"
+where
+"getitem (VDict \<delta>) (VLit (LitString w)) = (case map_of \<delta> w of Some v \<Rightarrow> Val v | None \<Rightarrow> Aborts KeyError)" |
+"getitem (VDict \<delta>) _ = Aborts Excluded" |
+"getitem v v' =
+  (case (elems v, v') of
+     (Some vs, VLit (LitInt n)) \<Rightarrow>
+       let m = of_nat (length vs) :: int in
+       if 0 \<le> n \<and> n < m then Val (vs ! nat n)
+       else if - m \<le> n \<and> n < 0 then Val (vs ! nat (m + n))
+       else Aborts IndexError
+   | (Some vs, VLit (LitBool _)) \<Rightarrow> Aborts Excluded
+   | _ \<Rightarrow> Aborts TypeError)"
 
 fun def_name :: "func \<Rightarrow> var"
 where
@@ -278,6 +322,16 @@ EvalList: "\<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Val vs \<Longrightarrow> \<r
 EvalListFail: "\<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Aborts \<kappa> \<Longrightarrow> \<rho>, ExprList es \<Rightarrow>\<^sub>e Aborts \<kappa>" |
 EvalTuple: "\<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Val vs \<Longrightarrow> \<rho>, ExprTuple es \<Rightarrow>\<^sub>e Val (VTuple vs)" |
 EvalTupleFail: "\<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Aborts \<kappa> \<Longrightarrow> \<rho>, ExprTuple es \<Rightarrow>\<^sub>e Aborts \<kappa>" |
+EvalDict:
+  "\<lbrakk> \<rho>, concat (map (\<lambda>(e, e'). [e, e']) kes) \<Rightarrow>\<^sub>e\<^sub>s Val vs ; dict_entries vs = Some \<delta> \<rbrakk>
+  \<Longrightarrow> \<rho>, ExprDict kes \<Rightarrow>\<^sub>e Val (VDict (update [] \<delta>))" |
+EvalDictFail:
+  "\<rho>, concat (map (\<lambda>(e, e'). [e, e']) kes) \<Rightarrow>\<^sub>e\<^sub>s Aborts \<kappa> \<Longrightarrow> \<rho>, ExprDict kes \<Rightarrow>\<^sub>e Aborts \<kappa>" |
+EvalDictNonStr:
+  "\<lbrakk> \<rho>, concat (map (\<lambda>(e, e'). [e, e']) kes) \<Rightarrow>\<^sub>e\<^sub>s Val vs ; dict_entries vs = None \<rbrakk>
+  \<Longrightarrow> \<rho>, ExprDict kes \<Rightarrow>\<^sub>e Aborts Excluded" |
+EvalSubscript: "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<rho>, e' \<Rightarrow>\<^sub>e r \<rbrakk> \<Longrightarrow> \<rho>, ExprSubscript e e' \<Rightarrow>\<^sub>e mlet r (getitem v)" |
+EvalSubscriptFail: "\<rho>, e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, ExprSubscript e e' \<Rightarrow>\<^sub>e Aborts \<kappa>" |
 EvalCallLambda:
   "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val Lam(\<rho>', xs, e')
   ; \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Val us

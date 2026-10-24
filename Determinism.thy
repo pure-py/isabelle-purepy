@@ -12,6 +12,8 @@ inductive_cases OrE: "\<rho>, ExprOr e e' \<Rightarrow>\<^sub>e r"
 inductive_cases CondE: "\<rho>, ExprCond e1 e e2 \<Rightarrow>\<^sub>e r"
 inductive_cases ListE: "\<rho>, ExprList es \<Rightarrow>\<^sub>e r"
 inductive_cases TupleE: "\<rho>, ExprTuple es \<Rightarrow>\<^sub>e r"
+inductive_cases DictE: "\<rho>, ExprDict kes \<Rightarrow>\<^sub>e r"
+inductive_cases SubscriptE: "\<rho>, ExprSubscript e e' \<Rightarrow>\<^sub>e r"
 inductive_cases
   CallE[consumes 1, case_names CallLambda CallLambdaArity CallDef CallDefArity CallNonFun CallFail CallFailArgs]:
   "\<rho>, ExprCall e (es, []) \<Rightarrow>\<^sub>e r"
@@ -126,6 +128,26 @@ next
   case EvalTupleFail
   from EvalTupleFail.prems EvalTupleFail.hyps show ?case
     by (auto elim!: TupleE dest: EvalTupleFail.IH)
+next
+  case EvalDict
+  from EvalDict.prems EvalDict.hyps show ?case
+    by (auto elim!: DictE dest: EvalDict.IH)
+next
+  case EvalDictFail
+  from EvalDictFail.prems EvalDictFail.hyps show ?case
+    by (auto elim!: DictE dest: EvalDictFail.IH)
+next
+  case EvalDictNonStr
+  from EvalDictNonStr.prems EvalDictNonStr.hyps show ?case
+    by (auto elim!: DictE dest: EvalDictNonStr.IH)
+next
+  case EvalSubscript
+  from EvalSubscript.prems EvalSubscript.hyps show ?case
+    by (auto elim!: SubscriptE dest: EvalSubscript.IH)
+next
+  case EvalSubscriptFail
+  from EvalSubscriptFail.prems EvalSubscriptFail.hyps show ?case
+    by (auto elim!: SubscriptE dest: EvalSubscriptFail.IH)
 next
   case EvalCallLambda
   from EvalCallLambda.prems EvalCallLambda.hyps show ?case

@@ -51,6 +51,14 @@ lemma EvalBinOpVal:
   "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<rho>, e' \<Rightarrow>\<^sub>e Val v' \<rbrakk> \<Longrightarrow> \<rho>, ExprBinOp op e e' \<Rightarrow>\<^sub>e binop_meaning op v v'"
   using EvalBinOp by fastforce
 
+lemma EvalSubscriptVal:
+  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<rho>, e' \<Rightarrow>\<^sub>e Val v' \<rbrakk> \<Longrightarrow> \<rho>, ExprSubscript e e' \<Rightarrow>\<^sub>e getitem v v'"
+  using EvalSubscript by fastforce
+
+lemma EvalSubscriptAborts:
+  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<rho>, e' \<Rightarrow>\<^sub>e Aborts \<kappa> \<rbrakk> \<Longrightarrow> \<rho>, ExprSubscript e e' \<Rightarrow>\<^sub>e Aborts \<kappa>"
+  using EvalSubscript by fastforce
+
 lemma EvalBinOpAborts:
   "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<rho>, e' \<Rightarrow>\<^sub>e Aborts \<kappa> \<rbrakk> \<Longrightarrow> \<rho>, ExprBinOp op e e' \<Rightarrow>\<^sub>e Aborts \<kappa>"
   using EvalBinOp by fastforce
@@ -83,7 +91,8 @@ lemma EvalReturnAborts: "\<rho>, e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longr
 
 lemmas eval_intros =
   eval_expr_eval_exprs_eval_stmt_eval_elif.intros
-  EvalUnOpVal EvalUnOpAborts EvalBinOpVal EvalBinOpAborts EvalExprsConsVal EvalExprsConsAborts
+  EvalUnOpVal EvalUnOpAborts EvalBinOpVal EvalBinOpAborts EvalSubscriptVal EvalSubscriptAborts
+  EvalExprsConsVal EvalExprsConsAborts
   EvalAssignVal EvalAssignAborts EvalExprStmtVal EvalExprStmtAborts EvalReturnVal EvalReturnAborts
 
 theorem soundness:
@@ -222,6 +231,31 @@ next
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
       (use EvalTupleFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+next
+  case EvalDict
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalDict.IH in \<open>eventually_elim, insert EvalDict.hyps(2), auto simp: eval_simps\<close>)
+next
+  case EvalDictFail
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalDictFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+next
+  case EvalDictNonStr
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalDictNonStr.IH in \<open>eventually_elim, insert EvalDictNonStr.hyps(2), auto simp: eval_simps\<close>)
+next
+  case EvalSubscript
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalSubscript.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+next
+  case EvalSubscriptFail
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalSubscriptFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
 next
   case EvalCallLambda
   show ?case

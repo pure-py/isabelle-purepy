@@ -30,6 +30,7 @@ lemma contains_code [code]:
     (case v' of
       VList vs \<Rightarrow> contains_elems vs v
     | VTuple vs \<Rightarrow> contains_elems vs v
+    | VDict \<delta> \<Rightarrow> (case v of VLit (LitString w) \<Rightarrow> Val (w \<in> set (map fst \<delta>)) | _ \<Rightarrow> Aborts Excluded)
     | VLit (LitString w') \<Rightarrow> (case v of VLit (LitString w) \<Rightarrow> Val (sublist w w') | _ \<Rightarrow> Aborts TypeError)
     | _ \<Rightarrow> Aborts TypeError)"
   by (cases v'; cases v; auto simp: sublist_def split: lit.split)
@@ -93,6 +94,12 @@ where
   | None \<Rightarrow> Done (Aborts Excluded))" |
 "eval_expr (Suc n) \<rho> (ExprList es) = flet (eval_exprs n \<rho> es) (\<lambda>vs. Done (Val (VList vs)))" |
 "eval_expr (Suc n) \<rho> (ExprTuple es) = flet (eval_exprs n \<rho> es) (\<lambda>vs. Done (Val (VTuple vs)))" |
+"eval_expr (Suc n) \<rho> (ExprDict kes) =
+  flet (eval_exprs n \<rho> (concat (map (\<lambda>(e, e'). [e, e']) kes))) (\<lambda>vs. case dict_entries vs of
+    Some \<delta> \<Rightarrow> Done (Val (VDict (update [] \<delta>)))
+  | None \<Rightarrow> Done (Aborts Excluded))" |
+"eval_expr (Suc n) \<rho> (ExprSubscript e e') =
+  flet (eval_expr n \<rho> e) (\<lambda>v. flet (eval_expr n \<rho> e') (\<lambda>v'. Done (getitem v v')))" |
 "eval_expr (Suc n) \<rho> (ExprCall e (es, [])) =
   flet (eval_expr n \<rho> e) (\<lambda>v. flet (eval_exprs n \<rho> es) (\<lambda>us. case v of
     Lam(\<rho>', xs, e') \<Rightarrow>
