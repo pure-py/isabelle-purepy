@@ -16,11 +16,6 @@ lemma unop_overloads_code [code]:
   "unop_overloads op \<sigma> = set_of_pred (unop_overload_i_i_Poo op \<sigma>)"
   by (auto simp: unop_overloads_def unop_overload_i_i_Poo_def)
 
-(* Code.abort in expression position, where the codegen's raise statement is not valid Python; it occurs in powr
-   on reals, which is computed only for a positive base and an integer exponent *)
-code_printing
-  constant Code.abort \<rightharpoonup> (Python) "(x for x in ()).throw(RuntimeError( _))"
-
 (* Natural numbers are target integers, so the evaluator's equations can't match the fuel against 0 and Suc. One
    equation per function tests the fuel; the equations for positive fuel are stated for a step function. *)
 definition eval_expr_step where "eval_expr_step n = eval_expr (Suc n)"
