@@ -75,14 +75,14 @@ where
 "lookup \<Gamma> (x, []) = fmlookup \<Gamma> x" |
 "lookup \<Gamma> (x, y # ys) = (case fmlookup \<Gamma> x of Some (ModChecked _ \<Gamma>') \<Rightarrow> lookup \<Gamma>' (y, ys) | _ \<Rightarrow> None)"
 
-fun resolve_name :: "cxt \<Rightarrow> name \<Rightarrow> cxt_entry option"
+definition resolve_name :: "cxt \<Rightarrow> name \<Rightarrow> cxt_entry option"
 where
 "resolve_name \<Gamma> q =
   (case lookup \<Gamma> q of
      Some (Ty \<tau>) \<Rightarrow> Some (Ty \<tau>)
-   | Some (ModChecked q \<Gamma>') \<Rightarrow> Some (ModChecked q \<Gamma>')
+   | Some (ModChecked q' \<Gamma>') \<Rightarrow> Some (ModChecked q' \<Gamma>')
    | Some (Type C) \<Rightarrow> Some (Type C)
-   | Some (TypeAlias \<Gamma>' q \<chi>s i) \<Rightarrow> Some (TypeAlias \<Gamma>' q \<chi>s i)
+   | Some (TypeAlias \<Gamma>' q' \<chi>s i) \<Rightarrow> Some (TypeAlias \<Gamma>' q' \<chi>s i)
    | Some (Scheme \<pi>) \<Rightarrow> Some (Scheme \<pi>)
    | Some PredefName \<Rightarrow> Some PredefName
    | _ \<Rightarrow> None)"
@@ -105,13 +105,15 @@ where
 "literal_type (TyLiteral _) = True" |
 "literal_type _ = False"
 
+definition range_class :: name where "range_class = snoc builtins ''range''"
+
 fun sized :: "ty \<Rightarrow> bool"
 where
 "sized (TyList _) = True" |
 "sized (TyDict _) = True" |
 "sized (TyPrim str) = True" |
 "sized (TyTuple _) = True" |
-"sized (TyClass C []) = (C = snoc builtins ''range'')" |
+"sized (TyClass C []) = (C = range_class)" |
 "sized _ = False"
 
 fun prim_name :: "prim_ty \<Rightarrow> var"
@@ -441,7 +443,7 @@ where
 "elem_type \<Sigma> (TyPrim str) = Some (TyPrim str)" |
 "elem_type \<Sigma> (TyLiteral (LitString _)) = Some (TyPrim str)" |
 "elem_type \<Sigma> (TyDict _) = Some (TyPrim str)" |
-"elem_type \<Sigma> (TyClass C []) = (if C = snoc builtins ''range'' then Some (TyPrim int) else None)" |
+"elem_type \<Sigma> (TyClass C []) = (if C = range_class then Some (TyPrim int) else None)" |
 "elem_type \<Sigma> (TyTuple \<tau>s) = Some (joins \<Sigma> (map base_type \<tau>s))" |
 "elem_type \<Sigma> (TyUnion \<sigma> \<tau>) =
   (case (elem_type \<Sigma> \<sigma>, elem_type \<Sigma> \<tau>) of (Some \<sigma>', Some \<tau>') \<Rightarrow> Some (\<sigma>' \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>') | _ \<Rightarrow> None)" |
@@ -469,12 +471,11 @@ where
 "subscript_type \<Sigma> \<sigma> int_ok _ _ =
   (if base_type \<sigma> = TyPrim str then do { int_ok; Inr (TyPrim str) } else Inl (NotSubscriptable \<sigma>))"
 
-(* Qualified name of a variable or attribute *)
-fun expr_name :: "expr \<Rightarrow> name option"
+fun dotted_name :: "expr \<Rightarrow> name option"
 where
-"expr_name (ExprVar x) = Some (x, [])" |
-"expr_name (ExprAttribute e x) = map_option (\<lambda>q. snoc q x) (expr_name e)" |
-"expr_name _ = None"
+"dotted_name (ExprVar x) = Some (x, [])" |
+"dotted_name (ExprAttribute e x) = map_option (\<lambda>q. snoc q x) (dotted_name e)" |
+"dotted_name _ = None"
 
 (* Failure for variable x, which isn't bound at a type, by its context entry *)
 fun var_reason :: "var \<Rightarrow> cxt_entry option \<Rightarrow> reason"
@@ -493,10 +494,9 @@ where
 "var_reason x (Some (Ty _)) = undefined" |
 "var_reason x None = UndefinedVariable x"
 
-(* Type of member x of module q, as attribute q' *)
-definition member_type :: "name \<Rightarrow> cxt \<Rightarrow> var \<Rightarrow> name \<Rightarrow> reason + ty"
+definition attr_module :: "name \<Rightarrow> cxt \<Rightarrow> var \<Rightarrow> name \<Rightarrow> reason + ty"
 where
-"member_type q \<Gamma> x q' =
+"attr_module q \<Gamma> x q' =
   (case fmlookup \<Gamma> x of
      None \<Rightarrow> Inl (UnknownMember x q)
    | Some (Ty \<tau>) \<Rightarrow> Inr \<tau>
@@ -533,9 +533,9 @@ where
 "captured X \<Delta> =
   (let Y = X \<inter> fset (fmdom \<Delta>) in if Y = {} then Inr () else Inl (CapturedGeneratorVariable (Min Y)))"
 
-definition names_class :: "cxt \<Rightarrow> expr \<Rightarrow> bool"
+definition class_of_name :: "cxt \<Rightarrow> expr \<Rightarrow> name option"
 where
-"names_class \<Gamma> e = (case Option.bind (expr_name e) (resolve_name \<Gamma>) of Some (Type _) \<Rightarrow> True | _ \<Rightarrow> False)"
+"class_of_name \<Gamma> e = (case Option.bind (dotted_name e) (resolve_name \<Gamma>) of Some (Type C) \<Rightarrow> Some C | _ \<Rightarrow> None)"
 
 function (sequential)
   synth_expr :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> reason + ty" and
@@ -556,7 +556,8 @@ where
        if distinct xs then synth_expr \<Sigma> (\<Gamma> \<otimes> fmap_of_list (zip xs (map Ty \<tau>s))) e' else Inl undefined
      }
    | _ \<Rightarrow>
-     if names_class \<Gamma> e \<or> (case e of ExprSubscript e' _ \<Rightarrow> names_class \<Gamma> e' | _ \<Rightarrow> False) then undefined
+     if class_of_name \<Gamma> e \<noteq> None \<or> (case e of ExprSubscript e' _ \<Rightarrow> class_of_name \<Gamma> e' \<noteq> None | _ \<Rightarrow> False)
+     then undefined
      else do {
        \<sigma> \<leftarrow> synth_expr \<Sigma> \<Gamma> e;
        case \<sigma> of
@@ -601,10 +602,10 @@ where
    else Inl (synth_failure \<sigma>s))" |
 "synth_expr \<Sigma> \<Gamma> (ExprTuple es) = do { \<tau>s \<leftarrow> those_sum (synth_exprs \<Sigma> \<Gamma> es); Inr (TyTuple \<tau>s) }" |
 "synth_expr \<Sigma> \<Gamma> (ExprAttribute e x) =
-  (case expr_name e of
+  (case dotted_name e of
      Some q \<Rightarrow>
        (case (resolve_name \<Gamma> q, lookup \<Gamma> q) of
-          (Some (ModChecked q' \<Gamma>'), _) \<Rightarrow> member_type q' \<Gamma>' x (snoc q x)
+          (Some (ModChecked q' \<Gamma>'), _) \<Rightarrow> attr_module q' \<Gamma>' x (snoc q x)
         | (_, Some (ModStub q')) \<Rightarrow> Inl (SubmoduleNotImported q')
         | _ \<Rightarrow> do { \<sigma> \<leftarrow> synth_expr \<Sigma> \<Gamma> e; attribute_type \<Sigma> \<sigma> x })
    | None \<Rightarrow> do { \<sigma> \<leftarrow> synth_expr \<Sigma> \<Gamma> e; attribute_type \<Sigma> \<sigma> x })" |
@@ -887,7 +888,7 @@ where
      ([name_binding,
        (''print'', Ty (TyCallable [TyPrim object] (TyPrim NoneType))),
        (''len'', Ty (TyCallable [TyPrim Sized] (TyPrim int))),
-       (''range'', Type (snoc builtins ''range'')),
+       (''range'', Type range_class),
        (''round'', Ty (TyCallable [TyPrim float] (TyPrim int)))]
       @ map (\<lambda>\<nu>. (prim_name \<nu>, PredefName)) [NoneType, object, bool, int, float, str]
       @ [(''list'', PredefName), (''dict'', PredefName), (''tuple'', PredefName)])),
@@ -969,7 +970,7 @@ where
 definition predefined_classes :: class_table
 where
 "predefined_classes =
-  fmupd (snoc builtins ''range'')
+  fmupd range_class
     (ClassDef (the (fmlookup predefined builtins)) builtins
       [Dataclass ''range'' [] None [(''start'', TyExprPrim int), (''stop'', TyExprPrim int)]] 0)
     fmempty"

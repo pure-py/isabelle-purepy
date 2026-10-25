@@ -16,7 +16,7 @@ lemma unop_overloads_code [code]:
   "unop_overloads \<Sigma> op \<sigma> = set_of_pred (unop_overload_i_i_i_Poo \<Sigma> op \<sigma>)"
   by (auto simp: unop_overloads_def unop_overload_i_i_i_Poo_def)
 
-export_code check_stmt check_program
+export_code check_program
   in Python file_prefix "."
 
 end
