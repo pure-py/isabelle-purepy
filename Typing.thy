@@ -63,11 +63,15 @@ datatype reason =
   | ImportCycle "name list"
   | MypyCompatibility reason
 
-(* None if x is undefined or unusable *)
-fun resolve_name :: "cxt \<Rightarrow> var \<Rightarrow> cxt_entry option"
+fun lookup :: "cxt \<Rightarrow> name \<Rightarrow> cxt_entry option"
 where
-"resolve_name \<Gamma> x =
-  (case fmlookup \<Gamma> x of
+"lookup \<Gamma> (x, []) = fmlookup \<Gamma> x" |
+"lookup \<Gamma> (x, y # ys) = (case fmlookup \<Gamma> x of Some (ModChecked _ \<Gamma>') \<Rightarrow> lookup \<Gamma>' (y, ys) | _ \<Rightarrow> None)"
+
+fun resolve_name :: "cxt \<Rightarrow> name \<Rightarrow> cxt_entry option"
+where
+"resolve_name \<Gamma> q =
+  (case lookup \<Gamma> q of
      Some (Ty \<tau>) \<Rightarrow> Some (Ty \<tau>)
    | Some (ModChecked q \<Gamma>') \<Rightarrow> Some (ModChecked q \<Gamma>')
    | Some (Type C) \<Rightarrow> Some (Type C)
@@ -219,25 +223,18 @@ definition check_predefined :: "cxt \<Rightarrow> var \<Rightarrow> reason + uni
 where
 "check_predefined \<Gamma> x = ensure (predef \<Gamma> x) (NotPredefinedName x)"
 
-fun members_entry :: "cxt_entry option \<Rightarrow> var list \<Rightarrow> cxt_entry option"
+definition not_type_name :: "cxt \<Rightarrow> name \<Rightarrow> reason"
 where
-"members_entry \<theta> [] = \<theta>" |
-"members_entry (Some (ModChecked _ \<Gamma>)) (x # xs) = members_entry (fmlookup \<Gamma> x) xs" |
-"members_entry _ _ = None"
-
-fun name_entry :: "cxt \<Rightarrow> name \<Rightarrow> cxt_entry option"
-where
-"name_entry \<Gamma> (x, xs) = members_entry (fmlookup \<Gamma> x) xs"
+"not_type_name \<Gamma> q = (case lookup \<Gamma> q of Some Unbound \<Rightarrow> UnboundName (fst q) | _ \<Rightarrow> NotClass q)"
 
 fun resolve_type :: "cxt \<Rightarrow> ty_expr \<Rightarrow> reason + ty"
 where
 "resolve_type \<Gamma> (TyExprPrim \<nu>) = do { check_predefined \<Gamma> (prim_name \<nu>); Inr (TyPrim \<nu>) }" |
 "resolve_type \<Gamma> (TyExprName q \<psi>s) =
-  (case name_entry \<Gamma> q of
-     Some Unbound \<Rightarrow> Inl (UnboundName (fst q))
-   | Some TypeVar \<Rightarrow> if \<psi>s = [] then Inr (TyVar (fst q)) else Inl (NotClass q)
-   | Some (Type _) \<Rightarrow> undefined
-   | _ \<Rightarrow> Inl (NotClass q))" |
+  (if snd q = [] \<and> \<psi>s = [] \<and> fmlookup \<Gamma> (fst q) = Some TypeVar then Inr (TyVar (fst q))
+   else case resolve_name \<Gamma> q of
+     Some (Type _) \<Rightarrow> undefined
+   | _ \<Rightarrow> Inl (not_type_name \<Gamma> q))" |
 "resolve_type \<Gamma> (TyExprLiteral l) = do { check_predefined \<Gamma> ''Literal''; Inr (TyLiteral l) }" |
 "resolve_type \<Gamma> (TyExprList \<psi>) = do { check_predefined \<Gamma> ''list''; \<tau> \<leftarrow> resolve_type \<Gamma> \<psi>; Inr (TyList \<tau>) }" |
 "resolve_type \<Gamma> (TyExprDict \<psi>) = do {
@@ -523,9 +520,9 @@ where
 "synth_expr \<Gamma> (ExprAttribute e x) =
   (case expr_name e of
      Some q \<Rightarrow>
-       (case name_entry \<Gamma> q of
-          Some (ModChecked q' \<Gamma>') \<Rightarrow> member_type q' \<Gamma>' x (snoc q x)
-        | Some (ModStub q') \<Rightarrow> Inl (SubmoduleNotImported q')
+       (case (resolve_name \<Gamma> q, lookup \<Gamma> q) of
+          (Some (ModChecked q' \<Gamma>'), _) \<Rightarrow> member_type q' \<Gamma>' x (snoc q x)
+        | (_, Some (ModStub q')) \<Rightarrow> Inl (SubmoduleNotImported q')
         | _ \<Rightarrow> do { \<sigma> \<leftarrow> synth_expr \<Gamma> e; attribute_type \<sigma> x })
    | None \<Rightarrow> do { \<sigma> \<leftarrow> synth_expr \<Gamma> e; attribute_type \<sigma> x })" |
 "synth_expr \<Gamma> (ExprSubscript e e') = do {
@@ -943,9 +940,11 @@ where
 "submodules M V q _ _ = undefined" |
 "imports_entry M V q q' \<Gamma> x =
   (case fmlookup \<Gamma> x of
-     None \<Rightarrow> Inl (q, UnknownMember x q')
-   | Some (ModStub q'') \<Rightarrow> do { \<Gamma>' \<leftarrow> check_module M V q''; Inr (ModChecked q'' \<Gamma>') }
-   | Some _ \<Rightarrow> (case resolve_name \<Gamma> x of Some \<theta> \<Rightarrow> Inr \<theta> | None \<Rightarrow> Inl (q, UnassignedMember x q')))" |
+     Some (ModStub q'') \<Rightarrow> do { \<Gamma>' \<leftarrow> check_module M V q''; Inr (ModChecked q'' \<Gamma>') }
+   | \<theta> \<Rightarrow>
+       (case resolve_name \<Gamma> (x, []) of
+          Some \<theta>' \<Rightarrow> Inr \<theta>'
+        | None \<Rightarrow> Inl (q, case \<theta> of None \<Rightarrow> UnknownMember x q' | Some _ \<Rightarrow> UnassignedMember x q')))" |
 "imports_entries M V q q' \<Gamma> [] = Inr []" |
 "imports_entries M V q q' \<Gamma> (x # xs) = do {
    \<theta> \<leftarrow> imports_entry M V q q' \<Gamma> x;
