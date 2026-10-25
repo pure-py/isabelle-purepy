@@ -501,8 +501,10 @@ where
      \<sigma> \<leftarrow> synth_expr \<Gamma> e;
      case resolve_unop op \<sigma> of Some \<tau> \<Rightarrow> Inr \<tau> | None \<Rightarrow> Inl (NoUnaryOverload op \<sigma>)
    })" |
-"synth_expr \<Gamma> (ExprAnd e e') = do { check_expr \<Gamma> e (TyPrim bool); check_expr \<Gamma> e' (TyPrim bool); Inr (TyPrim bool) }" |
-"synth_expr \<Gamma> (ExprOr e e') = do { check_expr \<Gamma> e (TyPrim bool); check_expr \<Gamma> e' (TyPrim bool); Inr (TyPrim bool) }" |
+"synth_expr \<Gamma> (ExprAnd e e') =
+  do { check_expr \<Gamma> e (TyPrim bool); check_expr \<Gamma> e' (TyPrim bool); Inr (TyPrim bool) }" |
+"synth_expr \<Gamma> (ExprOr e e') =
+  do { check_expr \<Gamma> e (TyPrim bool); check_expr \<Gamma> e' (TyPrim bool); Inr (TyPrim bool) }" |
 "synth_expr \<Gamma> (ExprCond e\<^sub>1 e e\<^sub>2) = do {
    check_expr \<Gamma> e (TyPrim bool);
    case (synth_expr \<Gamma> e\<^sub>1, synth_expr \<Gamma> e\<^sub>2) of
