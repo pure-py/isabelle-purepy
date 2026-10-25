@@ -243,36 +243,38 @@ abbreviation equiv :: "class_table \<Rightarrow> ty \<Rightarrow> ty \<Rightarro
 where
 "\<Sigma> \<turnstile> \<sigma> \<approx> \<tau> \<equiv> \<Sigma> \<turnstile> \<sigma> <: \<tau> \<and> \<Sigma> \<turnstile> \<tau> <: \<sigma>"
 
-definition join :: "ty \<Rightarrow> class_table \<Rightarrow> ty \<Rightarrow> ty" ("_ \<squnion>\<^bsub>_\<^esub> _" [65, 0, 66] 65)
+definition join :: "class_table \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> ty"
 where
-"\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau> =
-  (if \<Sigma> \<turnstile> \<sigma> <: \<tau> then \<tau> else if \<Sigma> \<turnstile> \<tau> <: \<sigma> then \<sigma> else TyUnion \<sigma> \<tau>)"
+"join \<Sigma> \<sigma> \<tau> = (if \<Sigma> \<turnstile> \<sigma> <: \<tau> then \<tau> else if \<Sigma> \<turnstile> \<tau> <: \<sigma> then \<sigma> else TyUnion \<sigma> \<tau>)"
+
+syntax "_join" :: "ty \<Rightarrow> class_table \<Rightarrow> ty \<Rightarrow> ty" ("_ \<squnion>\<^bsub>_\<^esub> _" [65, 0, 66] 65)
+translations "\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>" \<rightleftharpoons> "CONST join \<Sigma> \<sigma> \<tau>"
 
 definition joins :: "class_table \<Rightarrow> ty list \<Rightarrow> ty"
 where
 "joins \<Sigma> \<tau>s = foldr (\<lambda>\<sigma> \<tau>. \<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>) \<tau>s (TyPrim Never)"
 
-fun meet :: "ty \<Rightarrow> class_table \<Rightarrow> ty \<Rightarrow> ty" ("_ \<sqinter>\<^bsub>_\<^esub> _" [70, 0, 71] 70)
+fun meet :: "class_table \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> ty"
 and meets :: "class_table \<Rightarrow> ty list \<Rightarrow> ty list \<Rightarrow> ty list"
 where
-"TyUnion \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<sqinter>\<^bsub>\<Sigma>\<^esub> \<tau> =
+"meet \<Sigma> (TyUnion \<sigma>\<^sub>1 \<sigma>\<^sub>2) \<tau> =
   (if \<Sigma> \<turnstile> TyUnion \<sigma>\<^sub>1 \<sigma>\<^sub>2 <: \<tau> then TyUnion \<sigma>\<^sub>1 \<sigma>\<^sub>2 else if \<Sigma> \<turnstile> \<tau> <: TyUnion \<sigma>\<^sub>1 \<sigma>\<^sub>2 then \<tau>
-   else (\<sigma>\<^sub>1 \<sqinter>\<^bsub>\<Sigma>\<^esub> \<tau>) \<squnion>\<^bsub>\<Sigma>\<^esub> (\<sigma>\<^sub>2 \<sqinter>\<^bsub>\<Sigma>\<^esub> \<tau>))" |
-"\<sigma> \<sqinter>\<^bsub>\<Sigma>\<^esub> TyUnion \<tau>\<^sub>1 \<tau>\<^sub>2 =
+   else (meet \<Sigma> \<sigma>\<^sub>1 \<tau>) \<squnion>\<^bsub>\<Sigma>\<^esub> (meet \<Sigma> \<sigma>\<^sub>2 \<tau>))" |
+"meet \<Sigma> \<sigma> (TyUnion \<tau>\<^sub>1 \<tau>\<^sub>2) =
   (if \<Sigma> \<turnstile> \<sigma> <: TyUnion \<tau>\<^sub>1 \<tau>\<^sub>2 then \<sigma> else if \<Sigma> \<turnstile> TyUnion \<tau>\<^sub>1 \<tau>\<^sub>2 <: \<sigma> then TyUnion \<tau>\<^sub>1 \<tau>\<^sub>2
-   else (\<sigma> \<sqinter>\<^bsub>\<Sigma>\<^esub> \<tau>\<^sub>1) \<squnion>\<^bsub>\<Sigma>\<^esub> (\<sigma> \<sqinter>\<^bsub>\<Sigma>\<^esub> \<tau>\<^sub>2))" |
-"TyCallable \<sigma>s \<sigma> \<sqinter>\<^bsub>\<Sigma>\<^esub> TyCallable \<tau>s \<tau> =
+   else (meet \<Sigma> \<sigma> \<tau>\<^sub>1) \<squnion>\<^bsub>\<Sigma>\<^esub> (meet \<Sigma> \<sigma> \<tau>\<^sub>2))" |
+"meet \<Sigma> (TyCallable \<sigma>s \<sigma>) (TyCallable \<tau>s \<tau>) =
   (if \<Sigma> \<turnstile> TyCallable \<sigma>s \<sigma> <: TyCallable \<tau>s \<tau> then TyCallable \<sigma>s \<sigma>
    else if \<Sigma> \<turnstile> TyCallable \<tau>s \<tau> <: TyCallable \<sigma>s \<sigma> then TyCallable \<tau>s \<tau>
    else if length \<sigma>s = length \<tau>s
-   then TyCallable (map2 (\<lambda>\<sigma>' \<tau>'. \<sigma>' \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>') \<sigma>s \<tau>s) (\<sigma> \<sqinter>\<^bsub>\<Sigma>\<^esub> \<tau>)
+   then TyCallable (map2 (\<lambda>\<sigma>' \<tau>'. \<sigma>' \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>') \<sigma>s \<tau>s) (meet \<Sigma> \<sigma> \<tau>)
    else TyPrim Never)" |
-"TyTuple \<sigma>s \<sqinter>\<^bsub>\<Sigma>\<^esub> TyTuple \<tau>s =
+"meet \<Sigma> (TyTuple \<sigma>s) (TyTuple \<tau>s) =
   (if \<Sigma> \<turnstile> TyTuple \<sigma>s <: TyTuple \<tau>s then TyTuple \<sigma>s else if \<Sigma> \<turnstile> TyTuple \<tau>s <: TyTuple \<sigma>s then TyTuple \<tau>s
    else if length \<sigma>s = length \<tau>s then TyTuple (meets \<Sigma> \<sigma>s \<tau>s) else TyPrim Never)" |
-"\<sigma> \<sqinter>\<^bsub>\<Sigma>\<^esub> \<tau> = (if \<Sigma> \<turnstile> \<sigma> <: \<tau> then \<sigma> else if \<Sigma> \<turnstile> \<tau> <: \<sigma> then \<tau> else TyPrim Never)" |
+"meet \<Sigma> \<sigma> \<tau> = (if \<Sigma> \<turnstile> \<sigma> <: \<tau> then \<sigma> else if \<Sigma> \<turnstile> \<tau> <: \<sigma> then \<tau> else TyPrim Never)" |
 
-"meets \<Sigma> (\<sigma> # \<sigma>s) (\<tau> # \<tau>s) = (\<sigma> \<sqinter>\<^bsub>\<Sigma>\<^esub> \<tau>) # meets \<Sigma> \<sigma>s \<tau>s" |
+"meets \<Sigma> (\<sigma> # \<sigma>s) (\<tau> # \<tau>s) = meet \<Sigma> \<sigma> \<tau> # meets \<Sigma> \<sigma>s \<tau>s" |
 "meets _ _ _ = []"
 
 (* Type at which a variable is bound or declared *)
@@ -305,9 +307,12 @@ where
 "merge_cxt_entry \<Sigma> None (Some \<theta>) = possibly_unassigned \<theta>" |
 "merge_cxt_entry \<Sigma> None None = undefined"
 
-definition merge :: "cxt \<Rightarrow> class_table \<Rightarrow> cxt \<Rightarrow> cxt" ("_ \<oplus>\<^bsub>_\<^esub> _" [65, 0, 66] 65)
+definition merge :: "class_table \<Rightarrow> cxt \<Rightarrow> cxt \<Rightarrow> cxt"
 where
-"\<Gamma> \<oplus>\<^bsub>\<Sigma>\<^esub> \<Gamma>' = fmmap_keys (\<lambda>x _. merge_cxt_entry \<Sigma> (fmlookup \<Gamma> x) (fmlookup \<Gamma>' x)) (\<Gamma> \<otimes> \<Gamma>')"
+"merge \<Sigma> \<Gamma> \<Gamma>' = fmmap_keys (\<lambda>x _. merge_cxt_entry \<Sigma> (fmlookup \<Gamma> x) (fmlookup \<Gamma>' x)) (\<Gamma> \<otimes> \<Gamma>')"
+
+syntax "_merge" :: "cxt \<Rightarrow> class_table \<Rightarrow> cxt \<Rightarrow> cxt" ("_ \<oplus>\<^bsub>_\<^esub> _" [65, 0, 66] 65)
+translations "\<Gamma> \<oplus>\<^bsub>\<Sigma>\<^esub> \<Gamma>'" \<rightleftharpoons> "CONST merge \<Sigma> \<Gamma> \<Gamma>'"
 
 datatype static_outcome = Assigns\<^sub>R cxt | Returns\<^sub>R
 
