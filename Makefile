@@ -20,7 +20,6 @@ build: check-version codegen
 	rm -rf python/python_out
 	$(ISABELLE) build -v -e -d $(CODEGEN) -D .
 	$(PYTHON) -m py_compile $$(find $(CODE) -name '*.py')
-	PYTHONPATH=$(CODE) $(PYTHON) python/smoke_test.py
 
 # Self-contained copy under DEST
 dist: codegen

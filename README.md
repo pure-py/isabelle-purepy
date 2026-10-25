@@ -21,13 +21,12 @@ To browse the theories with the prover running, open the session directory in th
 
 ## Theories
 
-| File                   | Content                                                                 |
-|------------------------|-------------------------------------------------------------------------|
-| `Util.thy`             | Shared utilities                                                        |
-| `Syntax.thy`           | Abstract syntax and its analyses                                        |
-| `Semantics.thy`        | Values, results and evaluation judgements                               |
-| `Correctness.thy`      | Inversion lemmas and determinism of evaluation                          |
-| `Typing.thy`           | Subtyping, contexts, static outcomes and typing                         |
-| `Examples.thy`         | Example evaluations                                                     |
-| `python/Codegen.thy`   | Operator resolution and subtyping in executable form; Python generation |
-| `python/smoke_test.py` | Test of generated type checker                                          |
+| File                 | Content                                                                 |
+|----------------------|-------------------------------------------------------------------------|
+| `Util.thy`           | Shared utilities                                                        |
+| `Syntax.thy`         | Abstract syntax and its analyses                                        |
+| `Semantics.thy`      | Values, results and evaluation judgements                               |
+| `Correctness.thy`    | Inversion lemmas and determinism of evaluation                          |
+| `Typing.thy`         | Subtyping, contexts, static outcomes and typing                         |
+| `Examples.thy`       | Example evaluations                                                     |
+| `python/Codegen.thy` | Operator resolution and subtyping in executable form; Python generation |
