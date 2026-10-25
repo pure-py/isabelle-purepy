@@ -13,11 +13,10 @@ Install the [Isabelle](https://isabelle.in.tum.de/) release named in `.isabelle-
 make build
 ```
 
-To browse the theories with the prover running, open the session directory in the bundled editor, after a
-build has fetched the generator:
+To browse the theories with the prover running, open the session directory in the bundled editor:
 
 ```bash
-isabelle vscode -d . -d python/isabelle-python-codegen .
+./vscode.sh
 ```
 
 ## Theories
