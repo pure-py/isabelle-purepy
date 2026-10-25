@@ -24,7 +24,9 @@ type_synonym class_table = "(name, class_entry) fmap"
 
 (* Reasons for ill-formedness, refining the single failure of the typing rules *)
 datatype reason =
-    UndefinedVariable var
+    DuplicateField var var
+  | InheritedField var var var
+  | UndefinedVariable var
   | UnassignedVariable var
   | PossiblyUnassigned var
   | UnboundName var
@@ -35,6 +37,8 @@ datatype reason =
   | PossibleReassignment var
   | CapturedGeneratorVariable var
   | UnreachableStatement
+  | ConstructorArityMismatch var nat nat
+  | UnknownConstructorKeyword var "var list"
   | NotPredefinedName var
   | NotClass name
   | ClassArityMismatch name nat nat
@@ -64,6 +68,7 @@ datatype reason =
   | TupleIndexOutOfRange int nat
   | NotIterable ty
   | NotSynthesised
+  | UnknownField var var
   | NoAttributes ty
   | BareReturn ty
   | MissingReturn var ty
@@ -213,6 +218,39 @@ where
 "subst \<tau>s \<alpha>s (TyUnion \<sigma> \<sigma>') = TyUnion (subst \<tau>s \<alpha>s \<sigma>) (subst \<tau>s \<alpha>s \<sigma>')" |
 "subst \<tau>s \<alpha>s \<sigma> = \<sigma>"
 
+fun short_name :: "name \<Rightarrow> var"
+where
+"short_name (x, xs) = (if xs = [] then x else last xs)"
+
+definition instantiate :: "ty_scheme \<Rightarrow> ty list \<Rightarrow> (var \<times> ty) list"
+where
+"instantiate \<pi> \<tau>s =
+  (case \<pi> of FieldScheme \<alpha>s x\<sigma>s \<Rightarrow> map (\<lambda>(x, \<sigma>). (x, subst \<tau>s \<alpha>s \<sigma>)) x\<sigma>s | TyScheme _ _ \<Rightarrow> undefined)"
+
+(* Fields of class C, through at most n base classes; the base-class relation is acyclic, so the number of
+   classes in \<Sigma> suffices *)
+fun fields_upto :: "nat \<Rightarrow> class_table \<Rightarrow> name \<Rightarrow> ty_scheme"
+where
+"fields_upto 0 \<Sigma> C = undefined" |
+"fields_upto (Suc n) \<Sigma> C =
+  (case fmlookup \<Sigma> C of
+     Some (ClassDef \<Gamma> q \<chi>s i) \<Rightarrow>
+       (case \<chi>s ! i of
+          Dataclass _ \<alpha>s _ \<phi> \<Rightarrow>
+            let own = map (\<lambda>(x, \<psi>). (x, projr (resolve_type \<Sigma> (type_context \<Gamma> q \<chi>s i) \<psi>))) \<phi> in
+            FieldScheme \<alpha>s
+              (case base \<Sigma> C of None \<Rightarrow> own | Some (D, \<sigma>s) \<Rightarrow> instantiate (fields_upto n \<Sigma> D) \<sigma>s @ own)
+        | TypeStmt _ _ _ \<Rightarrow> undefined)
+   | None \<Rightarrow> undefined)"
+
+definition fields :: "class_table \<Rightarrow> name \<Rightarrow> ty_scheme"
+where
+"fields \<Sigma> C = fields_upto (fcard (fmdom \<Sigma>)) \<Sigma> C"
+
+definition field_names :: "class_table \<Rightarrow> name \<Rightarrow> var list"
+where
+"field_names \<Sigma> C = map fst (instantiate (fields \<Sigma> C) [])"
+
 inductive subty :: "class_table \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> bool" ("_ \<turnstile> _ <: _" [51, 51, 51] 50)
 and subtys :: "class_table \<Rightarrow> ty list \<Rightarrow> ty list \<Rightarrow> bool" ("_ \<turnstile> _ [<:] _" [51, 51, 51] 50)
 for \<Sigma> :: class_table
@@ -332,15 +370,27 @@ where
 "Assigns\<^sub>R \<Delta> \<otimes>\<^sub>R Assigns\<^sub>R \<Delta>' = Assigns\<^sub>R (\<Delta> \<otimes> \<Delta>')" |
 "_ \<otimes>\<^sub>R _ = Returns\<^sub>R"
 
-fun equality_type :: "class_table \<Rightarrow> ty \<Rightarrow> bool"
+(* V holds the classes whose fields are being checked, each taken to be an equality type, so a recursive
+   class is one when its other fields are *)
+function (sequential) equality_type :: "class_table \<Rightarrow> name list \<Rightarrow> ty \<Rightarrow> bool"
 where
-"equality_type \<Sigma> (TyPrim _) = True" |
-"equality_type \<Sigma> (TyLiteral _) = True" |
-"equality_type \<Sigma> (TyList \<tau>) = equality_type \<Sigma> \<tau>" |
-"equality_type \<Sigma> (TyDict \<tau>) = equality_type \<Sigma> \<tau>" |
-"equality_type \<Sigma> (TyTuple \<tau>s) = list_all (equality_type \<Sigma>) \<tau>s" |
-"equality_type \<Sigma> (TyUnion \<sigma> \<tau>) = (equality_type \<Sigma> \<sigma> \<and> equality_type \<Sigma> \<tau>)" |
-"equality_type \<Sigma> _ = False"
+"equality_type \<Sigma> V (TyPrim _) = True" |
+"equality_type \<Sigma> V (TyLiteral _) = True" |
+"equality_type \<Sigma> V (TyList \<tau>) = equality_type \<Sigma> V \<tau>" |
+"equality_type \<Sigma> V (TyDict \<tau>) = equality_type \<Sigma> V \<tau>" |
+"equality_type \<Sigma> V (TyTuple \<tau>s) = list_all (equality_type \<Sigma> V) \<tau>s" |
+"equality_type \<Sigma> V (TyUnion \<sigma> \<tau>) = (equality_type \<Sigma> V \<sigma> \<and> equality_type \<Sigma> V \<tau>)" |
+"equality_type \<Sigma> V (TyClass C \<sigma>s) =
+  (if C \<in> set V then True
+   else case fmlookup \<Sigma> C of
+     Some _ \<Rightarrow> list_all (equality_type \<Sigma> (C # V) \<circ> snd) (instantiate (fields \<Sigma> C) \<sigma>s)
+   | None \<Rightarrow> False)" |
+"equality_type \<Sigma> V _ = False"
+by pat_completeness auto
+
+termination
+by (relation "measures [\<lambda>(\<Sigma>, V, _). card (fmdom' \<Sigma> - set V), \<lambda>(_, _, \<tau>). size \<tau>]")
+   (auto simp: card_fmdom_insert less_Suc_eq intro: size_list_elem)
 
 abbreviation comparable :: "class_table \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> bool" where "comparable \<Sigma> \<sigma> \<tau> \<equiv> \<Sigma> \<turnstile> \<sigma> <: \<tau> \<or> \<Sigma> \<turnstile> \<tau> <: \<sigma>"
 
@@ -348,7 +398,7 @@ inductive binop_overload :: "class_table \<Rightarrow> bop \<Rightarrow> ty \<Ri
 for \<Sigma> :: class_table
 where
 OverloadEq:
-  "\<lbrakk> op \<in> {BOpEq, BOpNeq} ; equality_type \<Sigma> \<sigma>\<^sub>1 ; equality_type \<Sigma> \<sigma>\<^sub>2 ; comparable \<Sigma> \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<rbrakk>
+  "\<lbrakk> op \<in> {BOpEq, BOpNeq} ; equality_type \<Sigma> [] \<sigma>\<^sub>1 ; equality_type \<Sigma> [] \<sigma>\<^sub>2 ; comparable \<Sigma> \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<rbrakk>
   \<Longrightarrow> binop_overload \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2 ((\<sigma>\<^sub>1, \<sigma>\<^sub>2), TyPrim bool)" |
 OverloadInList:
   "\<lbrakk> op \<in> {BOpIn, BOpNotIn} ; comparable \<Sigma> \<sigma>\<^sub>1 \<tau> \<rbrakk>
@@ -519,7 +569,10 @@ fun attribute_type :: "class_table \<Rightarrow> ty \<Rightarrow> var \<Rightarr
 where
 "attribute_type \<Sigma> (TyUnion \<sigma> \<sigma>') x =
   do { \<tau> \<leftarrow> attribute_type \<Sigma> \<sigma> x; \<tau>' \<leftarrow> attribute_type \<Sigma> \<sigma>' x; Inr (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>') }" |
-"attribute_type \<Sigma> (TyClass _ _) _ = undefined" |
+"attribute_type \<Sigma> (TyClass C \<sigma>s) x =
+  (case map_of (instantiate (fields \<Sigma> C) \<sigma>s) x of
+     Some \<sigma> \<Rightarrow> Inr \<sigma>
+   | None \<Rightarrow> Inl (UnknownField (short_name C) x))" |
 "attribute_type \<Sigma> \<sigma> _ = Inl (NoAttributes \<sigma>)"
 
 (* Reason why none of the elements of a list or dictionary synthesises a type: the first failure of an
@@ -541,6 +594,14 @@ where
 definition class_of_name :: "cxt \<Rightarrow> expr \<Rightarrow> name option"
 where
 "class_of_name \<Gamma> e = (case Option.bind (dotted_name e) (resolve_name \<Gamma>) of Some (Type C) \<Rightarrow> Some C | _ \<Rightarrow> None)"
+
+definition check_field_map :: "name \<Rightarrow> var list \<Rightarrow> nat \<Rightarrow> var list \<Rightarrow> reason + unit"
+where
+"check_field_map C xs n ys =
+  (if n + length ys \<noteq> length xs then Inl (ConstructorArityMismatch (short_name C) (length xs) (n + length ys))
+   else if set ys \<noteq> set (drop n xs)
+   then Inl (UnknownConstructorKeyword (short_name C) (sorted_list_of_set (set (drop n xs))))
+   else Inr ())"
 
 definition lambda_arguments :: "var list \<Rightarrow> (var \<times> expr) list \<Rightarrow> expr list \<Rightarrow> (reason + ty) list \<Rightarrow> reason + cxt"
 where
@@ -569,18 +630,28 @@ where
        \<Delta> \<leftarrow> lambda_arguments xs kws es (synth_exprs \<Sigma> \<Gamma> es); synth_expr \<Sigma> (\<Gamma> \<otimes> \<Delta>) e'
      }
    | _ \<Rightarrow>
-     if class_of_name \<Gamma> e \<noteq> None \<or> (case e of ExprSubscript e' _ \<Rightarrow> class_of_name \<Gamma> e' \<noteq> None | _ \<Rightarrow> False)
-     then undefined
-     else do {
-       \<sigma> \<leftarrow> synth_expr \<Sigma> \<Gamma> e;
-       case \<sigma> of
-         TyCallable \<sigma>s \<tau> \<Rightarrow> do {
-           check_args \<Sigma> \<Gamma> kws es \<sigma>s;
-           ensure (\<tau> \<noteq> TyPrim NoneType) (MypyCompatibility NoneResult);
-           Inr \<tau>
-         }
-       | _ \<Rightarrow> Inl (NotCallable \<sigma>)
-     })" |
+     (case class_of_name \<Gamma> e of
+        Some C \<Rightarrow>
+          (case fields \<Sigma> C of
+             FieldScheme [] x\<sigma>s \<Rightarrow> do {
+               check_field_map C (map fst x\<sigma>s) (length es) (map fst kws);
+               check_exprs \<Sigma> \<Gamma> es (map snd (take (length es) x\<sigma>s));
+               those_sum (map (\<lambda>p. check_expr \<Sigma> \<Gamma> (snd p) (the (map_of x\<sigma>s (fst p)))) kws);
+               Inr (TyClass C [])
+             }
+           | _ \<Rightarrow> undefined)
+      | None \<Rightarrow>
+          if (case e of ExprSubscript e' _ \<Rightarrow> class_of_name \<Gamma> e' \<noteq> None | _ \<Rightarrow> False) then undefined
+          else do {
+            \<sigma> \<leftarrow> synth_expr \<Sigma> \<Gamma> e;
+            case \<sigma> of
+              TyCallable \<sigma>s \<tau> \<Rightarrow> do {
+                check_args \<Sigma> \<Gamma> kws es \<sigma>s;
+                ensure (\<tau> \<noteq> TyPrim NoneType) (MypyCompatibility NoneResult);
+                Inr \<tau>
+              }
+            | _ \<Rightarrow> Inl (NotCallable \<sigma>)
+          }))" |
 "synth_expr \<Sigma> \<Gamma> (ExprBinOp op e e') = do {
    \<sigma> \<leftarrow> synth_expr \<Sigma> \<Gamma> e;
    \<sigma>' \<leftarrow> synth_expr \<Sigma> \<Gamma> e';
@@ -735,7 +806,7 @@ by (relation "measures [\<lambda>x. case x of
    | Inr (Inl (Inr _)) \<Rightarrow> 2
    | Inr (Inr (Inl _)) \<Rightarrow> 3
    | Inr (Inr (Inr _)) \<Rightarrow> 0]")
-   (auto dest!: nth_mem intro: size_list_estimation' size_list_elem
+   (auto dest!: nth_mem dest: size_list_snd_elem intro: size_list_estimation' size_list_elem
      simp: less_Suc_eq_le size_list_fst size_list_snd)
 
 (* Context entry for a type scheme, which is a plain type when its parameter list is empty *)
@@ -961,19 +1032,55 @@ proof (rule fmap_ext)
     by (simp add: submods.rep_eq fmlookup_of_list)
 qed
 
-fun check_top_stmt :: "class_table \<Rightarrow> cxt \<Rightarrow> top_stmt \<Rightarrow> reason + static_outcome \<times> class_table"
+definition class_table :: "cxt \<Rightarrow> name \<Rightarrow> type_def list \<Rightarrow> nat \<Rightarrow> class_table"
 where
-"check_top_stmt \<Sigma> \<Gamma> (Stmt s) = do { R \<leftarrow> check_stmt \<Sigma> \<Gamma> None s; Inr (R, \<Sigma>) }" |
-"check_top_stmt \<Sigma> \<Gamma> (TopSeq t t') = do {
-   (R, \<Sigma>') \<leftarrow> check_top_stmt \<Sigma> \<Gamma> t;
+"class_table \<Gamma> q \<chi>s i =
+  (case \<chi>s ! i of
+     Dataclass c _ _ _ \<Rightarrow> fmupd (snoc q c) (ClassDef \<Gamma> q \<chi>s i) fmempty
+   | TypeStmt _ _ _ \<Rightarrow> fmempty)"
+
+fun check_type_def :: "class_table \<Rightarrow> cxt \<Rightarrow> type_def \<Rightarrow> reason + unit"
+where
+"check_type_def \<Sigma> \<Gamma> (Dataclass c \<alpha>s b \<phi>) = do {
+   check_predefined \<Gamma> ''dataclass'';
+   those_sum (map (resolve_type \<Sigma> \<Gamma> \<circ> snd) \<phi>);
+   base_class \<leftarrow>
+     (case b of
+        None \<Rightarrow> Inr None
+      | Some (q', \<psi>s) \<Rightarrow>
+          (case resolve_name \<Gamma> q' of
+             Some (Type D) \<Rightarrow> do { resolve_type \<Sigma> \<Gamma> (TyExprName q' \<psi>s); Inr (Some D) }
+           | _ \<Rightarrow> Inl (not_type_name \<Gamma> q')));
+   (case redeclared {} (map fst \<phi>) of Some x \<Rightarrow> Inl (DuplicateField x c) | None \<Rightarrow> Inr ());
+   (case base_class of
+      Some D \<Rightarrow>
+        (case find (\<lambda>x. x \<in> set (field_names \<Sigma> D)) (map fst \<phi>) of
+           Some x \<Rightarrow> Inl (InheritedField x c (short_name D))
+         | None \<Rightarrow> Inr ())
+    | None \<Rightarrow> Inr ())
+ }" |
+"check_type_def \<Sigma> \<Gamma> (TypeStmt x \<alpha>s \<psi>) = do { resolve_type \<Sigma> \<Gamma> \<psi>; Inr () }"
+
+fun check_top_stmt :: "class_table \<Rightarrow> name \<Rightarrow> cxt \<Rightarrow> top_stmt \<Rightarrow> reason + static_outcome \<times> class_table"
+where
+"check_top_stmt \<Sigma> q \<Gamma> (Stmt s) = do { R \<leftarrow> check_stmt \<Sigma> \<Gamma> None s; Inr (R, \<Sigma>) }" |
+"check_top_stmt \<Sigma> q \<Gamma> (TopSeq t t') = do {
+   (R, \<Sigma>') \<leftarrow> check_top_stmt \<Sigma> q \<Gamma> t;
    case R of
      Assigns\<^sub>R \<Delta> \<Rightarrow> do {
-       (R', \<Sigma>'') \<leftarrow> check_top_stmt \<Sigma>' (\<Gamma> \<otimes> \<Delta>) t';
+       (R', \<Sigma>'') \<leftarrow> check_top_stmt \<Sigma>' q (\<Gamma> \<otimes> \<Delta>) t';
        Inr (Assigns\<^sub>R \<Delta> \<otimes>\<^sub>R R', \<Sigma>'')
      }
    | Returns\<^sub>R \<Rightarrow> Inl TopLevelAssertFalse
  }" |
-"check_top_stmt \<Sigma> \<Gamma> (TypeDefs \<chi>s) = undefined"
+"check_top_stmt \<Sigma> q \<Gamma> (TypeDefs \<chi>s) =
+  (let is = [0..<length \<chi>s];
+       \<Delta> = fmap_of_list (map (\<lambda>i. (type_def_name (\<chi>s ! i), type_entry \<Gamma> q \<chi>s i)) is);
+       \<Sigma>' = fold (\<lambda>i \<Sigma>''. \<Sigma>'' \<otimes> class_table \<Gamma> q \<chi>s i) is \<Sigma> in
+   do {
+     those_sum (map (\<lambda>i. check_type_def \<Sigma>' (type_context \<Gamma> q \<chi>s i) (\<chi>s ! i)) is);
+     Inr (Assigns\<^sub>R \<Delta>, \<Sigma>')
+   })"
 
 definition known_module :: "program \<Rightarrow> name \<Rightarrow> bool"
 where
@@ -1018,7 +1125,7 @@ where
               Some \<Gamma>\<^sub>s \<Rightarrow> Inr \<Gamma>\<^sub>s
             | None \<Rightarrow> Inl (scope_reason (declares \<iota>s) (declares t) (binds t)));
          map_sum (Pair q) id (check_assignments_declared {} (assign_targets_top t) (declares t) (binds t));
-         (R, \<Sigma>'') \<leftarrow> map_sum (Pair q) id (check_top_stmt \<Sigma>' (the (fmlookup predefined builtins) \<otimes> \<Gamma>' \<otimes> \<Gamma>\<^sub>s) t);
+         (R, \<Sigma>'') \<leftarrow> map_sum (Pair q) id (check_top_stmt \<Sigma>' q (the (fmlookup predefined builtins) \<otimes> \<Gamma>' \<otimes> \<Gamma>\<^sub>s) t);
          case R of
            Assigns\<^sub>R \<Delta> \<Rightarrow>
              let S = submods M q; X = (fmdom \<Gamma>' |\<union>| fmdom \<Delta>) |\<inter>| fmdom S in
