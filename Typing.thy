@@ -381,42 +381,41 @@ where
 "fv_ty (TyUnion \<sigma> \<tau>) = fv_ty \<sigma> \<union> fv_ty \<tau>" |
 "fv_ty _ = {}"
 
-(* V holds the classes assumed to be equality classes, those whose fields are being examined; the type
-   parameters of a class are taken to be equality types by instantiating its fields at object *)
+(* V holds the classes assumed to be equality classes, those whose fields are being examined, and \<alpha>s the
+   type variables assumed to be equality types *)
 function (sequential)
-  equality_type :: "class_table \<Rightarrow> name list \<Rightarrow> ty \<Rightarrow> bool" and
+  equality_type :: "class_table \<Rightarrow> name list \<Rightarrow> var list \<Rightarrow> ty \<Rightarrow> bool" and
   equality_class :: "class_table \<Rightarrow> name list \<Rightarrow> name \<Rightarrow> bool"
 where
-"equality_type \<Sigma> V (TyPrim _) = True" |
-"equality_type \<Sigma> V (TyLiteral _) = True" |
-"equality_type \<Sigma> V (TyList \<tau>) = equality_type \<Sigma> V \<tau>" |
-"equality_type \<Sigma> V (TyDict \<tau>) = equality_type \<Sigma> V \<tau>" |
-"equality_type \<Sigma> V (TyTuple \<tau>s) = list_all (equality_type \<Sigma> V) \<tau>s" |
-"equality_type \<Sigma> V (TyUnion \<sigma> \<tau>) = (equality_type \<Sigma> V \<sigma> \<and> equality_type \<Sigma> V \<tau>)" |
-"equality_type \<Sigma> V (TyClass C \<sigma>s) =
+"equality_type \<Sigma> V \<alpha>s (TyPrim _) = True" |
+"equality_type \<Sigma> V \<alpha>s (TyLiteral _) = True" |
+"equality_type \<Sigma> V \<alpha>s (TyVar \<alpha>) = (\<alpha> \<in> set \<alpha>s)" |
+"equality_type \<Sigma> V \<alpha>s (TyList \<tau>) = equality_type \<Sigma> V \<alpha>s \<tau>" |
+"equality_type \<Sigma> V \<alpha>s (TyDict \<tau>) = equality_type \<Sigma> V \<alpha>s \<tau>" |
+"equality_type \<Sigma> V \<alpha>s (TyTuple \<tau>s) = list_all (equality_type \<Sigma> V \<alpha>s) \<tau>s" |
+"equality_type \<Sigma> V \<alpha>s (TyUnion \<sigma> \<tau>) = (equality_type \<Sigma> V \<alpha>s \<sigma> \<and> equality_type \<Sigma> V \<alpha>s \<tau>)" |
+"equality_type \<Sigma> V \<alpha>s (TyClass C \<sigma>s) =
   (equality_class \<Sigma> V C \<and>
    (case fields \<Sigma> C of
-      FieldScheme \<alpha>s x\<tau>s \<Rightarrow>
-        list_all (\<lambda>(\<alpha>, \<sigma>). \<alpha> \<notin> \<Union> (set (map (fv_ty \<circ> snd) x\<tau>s)) \<or> equality_type \<Sigma> V \<sigma>) (zip \<alpha>s \<sigma>s)
+      FieldScheme \<beta>s x\<tau>s \<Rightarrow>
+        list_all (\<lambda>(\<beta>, \<sigma>). \<beta> \<notin> \<Union> (set (map (fv_ty \<circ> snd) x\<tau>s)) \<or> equality_type \<Sigma> V \<alpha>s \<sigma>) (zip \<beta>s \<sigma>s)
     | _ \<Rightarrow> False))" |
-"equality_type \<Sigma> V _ = False" |
+"equality_type \<Sigma> V \<alpha>s _ = False" |
 
 "equality_class \<Sigma> V C =
   (if C \<in> set V then True
    else case fmlookup \<Sigma> C of
      Some _ \<Rightarrow>
        (case fields \<Sigma> C of
-          FieldScheme \<alpha>s x\<tau>s \<Rightarrow>
-            list_all (equality_type \<Sigma> (C # V) \<circ> snd)
-              (instantiate (FieldScheme \<alpha>s x\<tau>s) (replicate (length \<alpha>s) (TyPrim object)))
+          FieldScheme \<alpha>s x\<tau>s \<Rightarrow> list_all (equality_type \<Sigma> (C # V) \<alpha>s \<circ> snd) x\<tau>s
         | _ \<Rightarrow> False)
    | None \<Rightarrow> False)"
 by pat_completeness auto
 
 termination
 by (relation "measures [
-     \<lambda>x. case x of Inl (\<Sigma>, V, _) \<Rightarrow> card (fmdom' \<Sigma> - set V) | Inr (\<Sigma>, V, _) \<Rightarrow> card (fmdom' \<Sigma> - set V),
-     \<lambda>x. case x of Inl (_, _, \<tau>) \<Rightarrow> size \<tau> | Inr _ \<Rightarrow> 0]")
+     \<lambda>x. case x of Inl (\<Sigma>, V, _, _) \<Rightarrow> card (fmdom' \<Sigma> - set V) | Inr (\<Sigma>, V, _) \<Rightarrow> card (fmdom' \<Sigma> - set V),
+     \<lambda>x. case x of Inl (_, _, _, \<tau>) \<Rightarrow> size \<tau> | Inr _ \<Rightarrow> 0]")
    (auto simp: card_fmdom_insert less_Suc_eq dest: set_zip_rightD intro: size_list_elem)
 
 abbreviation comparable :: "class_table \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> bool" where "comparable \<Sigma> \<sigma> \<tau> \<equiv> \<Sigma> \<turnstile> \<sigma> <: \<tau> \<or> \<Sigma> \<turnstile> \<tau> <: \<sigma>"
@@ -425,7 +424,7 @@ inductive binop_overload :: "class_table \<Rightarrow> bop \<Rightarrow> ty \<Ri
 for \<Sigma> :: class_table
 where
 OverloadEq:
-  "\<lbrakk> op \<in> {BOpEq, BOpNeq} ; equality_type \<Sigma> [] \<sigma>\<^sub>1 ; equality_type \<Sigma> [] \<sigma>\<^sub>2 ; comparable \<Sigma> \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<rbrakk>
+  "\<lbrakk> op \<in> {BOpEq, BOpNeq} ; equality_type \<Sigma> [] [] \<sigma>\<^sub>1 ; equality_type \<Sigma> [] [] \<sigma>\<^sub>2 ; comparable \<Sigma> \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<rbrakk>
   \<Longrightarrow> binop_overload \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2 ((\<sigma>\<^sub>1, \<sigma>\<^sub>2), TyPrim bool)" |
 OverloadInList:
   "\<lbrakk> op \<in> {BOpIn, BOpNotIn} ; comparable \<Sigma> \<sigma>\<^sub>1 \<tau> \<rbrakk>
