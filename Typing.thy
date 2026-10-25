@@ -542,12 +542,23 @@ definition class_of_name :: "cxt \<Rightarrow> expr \<Rightarrow> name option"
 where
 "class_of_name \<Gamma> e = (case Option.bind (dotted_name e) (resolve_name \<Gamma>) of Some (Type C) \<Rightarrow> Some C | _ \<Rightarrow> None)"
 
+definition lambda_arguments :: "var list \<Rightarrow> (var \<times> expr) list \<Rightarrow> expr list \<Rightarrow> (reason + ty) list \<Rightarrow> reason + cxt"
+where
+"lambda_arguments xs kws es \<sigma>s = do {
+   ensure (kws = []) KeywordArgumentsNotConstructor;
+   ensure (length xs = length es) (CallArityMismatch (length xs) (length es));
+   \<tau>s \<leftarrow> those_sum \<sigma>s;
+   if distinct xs then Inr (fmap_of_list (zip xs (map Ty \<tau>s))) else Inl undefined
+ }"
+
 function (sequential)
   synth_expr :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> reason + ty" and
   synth_exprs :: "class_table \<Rightarrow> cxt \<Rightarrow> expr list \<Rightarrow> (reason + ty) list" and
+  elements_join :: "class_table \<Rightarrow> cxt \<Rightarrow> expr list \<Rightarrow> reason + ty" and
   check_expr :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> reason + unit" and
   check_expr' :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> (reason + unit) option" and
   check_exprs :: "class_table \<Rightarrow> cxt \<Rightarrow> expr list \<Rightarrow> ty list \<Rightarrow> reason + unit" and
+  check_args :: "class_table \<Rightarrow> cxt \<Rightarrow> (var \<times> expr) list \<Rightarrow> expr list \<Rightarrow> ty list \<Rightarrow> reason + unit" and
   quals :: "class_table \<Rightarrow> cxt \<Rightarrow> qualifier list \<Rightarrow> reason + cxt"
 where
 "synth_expr \<Sigma> \<Gamma> (ExprVar x) = (case fmlookup \<Gamma> x of Some (Ty \<tau>) \<Rightarrow> Inr \<tau> | \<theta> \<Rightarrow> Inl (var_reason x \<theta>))" |
@@ -555,10 +566,7 @@ where
 "synth_expr \<Sigma> \<Gamma> (ExprCall e (es, kws)) =
   (case e of
      ExprLambda xs e' \<Rightarrow> do {
-       ensure (kws = []) KeywordArgumentsNotConstructor;
-       ensure (length xs = length es) (CallArityMismatch (length xs) (length es));
-       \<tau>s \<leftarrow> those_sum (synth_exprs \<Sigma> \<Gamma> es);
-       if distinct xs then synth_expr \<Sigma> (\<Gamma> \<otimes> fmap_of_list (zip xs (map Ty \<tau>s))) e' else Inl undefined
+       \<Delta> \<leftarrow> lambda_arguments xs kws es (synth_exprs \<Sigma> \<Gamma> es); synth_expr \<Sigma> (\<Gamma> \<otimes> \<Delta>) e'
      }
    | _ \<Rightarrow>
      if class_of_name \<Gamma> e \<noteq> None \<or> (case e of ExprSubscript e' _ \<Rightarrow> class_of_name \<Gamma> e' \<noteq> None | _ \<Rightarrow> False)
@@ -567,9 +575,7 @@ where
        \<sigma> \<leftarrow> synth_expr \<Sigma> \<Gamma> e;
        case \<sigma> of
          TyCallable \<sigma>s \<tau> \<Rightarrow> do {
-           ensure (kws = []) KeywordArgumentsNotConstructor;
-           ensure (length \<sigma>s = length es) (CallArityMismatch (length \<sigma>s) (length es));
-           check_exprs \<Sigma> \<Gamma> es \<sigma>s;
+           check_args \<Sigma> \<Gamma> kws es \<sigma>s;
            ensure (\<tau> \<noteq> TyPrim NoneType) (MypyCompatibility NoneResult);
            Inr \<tau>
          }
@@ -598,13 +604,7 @@ where
    | (Inl _, Inr \<sigma>\<^sub>2) \<Rightarrow> do { check_expr \<Sigma> \<Gamma> e\<^sub>1 \<sigma>\<^sub>2; Inr \<sigma>\<^sub>2 }
    | (r\<^sub>1, r\<^sub>2) \<Rightarrow> Inl (synth_failure [r\<^sub>1, r\<^sub>2])
  }" |
-"synth_expr \<Sigma> \<Gamma> (ExprList es) =
-  (let \<sigma>s = synth_exprs \<Sigma> \<Gamma> es; \<tau> = joins \<Sigma> (map (base_type \<circ> projr) (filter (Not \<circ> isl) \<sigma>s)) in
-   if \<not> list_all isl \<sigma>s then do {
-     those_sum (map (\<lambda>j. check_expr \<Sigma> \<Gamma> (es ! j) \<tau>) (filter (\<lambda>j. isl (\<sigma>s ! j)) [0..<length es]));
-     Inr (TyList \<tau>)
-   }
-   else Inl (synth_failure \<sigma>s))" |
+"synth_expr \<Sigma> \<Gamma> (ExprList es) = do { \<tau> \<leftarrow> elements_join \<Sigma> \<Gamma> es; Inr (TyList \<tau>) }" |
 "synth_expr \<Sigma> \<Gamma> (ExprTuple es) = do { \<tau>s \<leftarrow> those_sum (synth_exprs \<Sigma> \<Gamma> es); Inr (TyTuple \<tau>s) }" |
 "synth_expr \<Sigma> \<Gamma> (ExprAttribute e x) =
   (case dotted_name e of
@@ -618,15 +618,11 @@ where
    \<sigma> \<leftarrow> synth_expr \<Sigma> \<Gamma> e;
    subscript_type \<Sigma> \<sigma> (check_expr \<Sigma> \<Gamma> e' (TyPrim int)) (check_expr \<Sigma> \<Gamma> e' (TyPrim str)) (synth_expr \<Sigma> \<Gamma> e')
  }" |
-"synth_expr \<Sigma> \<Gamma> (ExprDict kvs) =
-  (let \<sigma>s = synth_exprs \<Sigma> \<Gamma> (map snd kvs); \<tau> = joins \<Sigma> (map (base_type \<circ> projr) (filter (Not \<circ> isl) \<sigma>s)) in do {
-     check_exprs \<Sigma> \<Gamma> (map fst kvs) (replicate (length kvs) (TyPrim str));
-     if \<not> list_all isl \<sigma>s then do {
-       those_sum (map (\<lambda>j. check_expr \<Sigma> \<Gamma> (snd (kvs ! j)) \<tau>) (filter (\<lambda>j. isl (\<sigma>s ! j)) [0..<length kvs]));
-       Inr (TyDict \<tau>)
-     }
-     else Inl (synth_failure \<sigma>s)
-   })" |
+"synth_expr \<Sigma> \<Gamma> (ExprDict kvs) = do {
+   check_exprs \<Sigma> \<Gamma> (map fst kvs) (replicate (length kvs) (TyPrim str));
+   \<tau> \<leftarrow> elements_join \<Sigma> \<Gamma> (map snd kvs);
+   Inr (TyDict \<tau>)
+ }" |
 "synth_expr \<Sigma> \<Gamma> (ExprListComp e gs) = do {
    \<Delta> \<leftarrow> quals \<Sigma> \<Gamma> gs;
    captured (captures e) \<Delta>;
@@ -645,6 +641,14 @@ where
 "synth_exprs \<Sigma> \<Gamma> [] = []" |
 "synth_exprs \<Sigma> \<Gamma> (e # es) = synth_expr \<Sigma> \<Gamma> e # synth_exprs \<Sigma> \<Gamma> es" |
 
+"elements_join \<Sigma> \<Gamma> es =
+  (let \<sigma>s = synth_exprs \<Sigma> \<Gamma> es; \<tau> = joins \<Sigma> (map (base_type \<circ> projr) (filter (Not \<circ> isl) \<sigma>s)) in
+   if \<not> list_all isl \<sigma>s then do {
+     those_sum (map (\<lambda>j. check_expr \<Sigma> \<Gamma> (es ! j) \<tau>) (filter (\<lambda>j. isl (\<sigma>s ! j)) [0..<length es]));
+     Inr \<tau>
+   }
+   else Inl (synth_failure \<sigma>s))" |
+
 "check_expr \<Sigma> \<Gamma> e \<tau> =
   (case check_expr' \<Sigma> \<Gamma> e \<tau> of
      Some (Inr ()) \<Rightarrow> Inr ()
@@ -660,10 +664,7 @@ where
 "check_expr' \<Sigma> \<Gamma> (ExprCall e (es, kws)) \<tau> =
   (case e of
      ExprLambda xs e' \<Rightarrow> Some (do {
-       ensure (kws = []) KeywordArgumentsNotConstructor;
-       ensure (length xs = length es) (CallArityMismatch (length xs) (length es));
-       \<tau>s \<leftarrow> those_sum (synth_exprs \<Sigma> \<Gamma> es);
-       if distinct xs then check_expr \<Sigma> (\<Gamma> \<otimes> fmap_of_list (zip xs (map Ty \<tau>s))) e' \<tau> else Inl undefined
+       \<Delta> \<leftarrow> lambda_arguments xs kws es (synth_exprs \<Sigma> \<Gamma> es); check_expr \<Sigma> (\<Gamma> \<otimes> \<Delta>) e' \<tau>
      })
    | _ \<Rightarrow> None)" |
 "check_expr' \<Sigma> \<Gamma> (ExprList es) \<tau> =
@@ -698,6 +699,12 @@ where
 "check_exprs \<Sigma> \<Gamma> (e # es) (\<tau> # \<tau>s) = do { check_expr \<Sigma> \<Gamma> e \<tau>; check_exprs \<Sigma> \<Gamma> es \<tau>s }" |
 "check_exprs \<Sigma> \<Gamma> _ _ = undefined" |
 
+"check_args \<Sigma> \<Gamma> kws es \<sigma>s = do {
+   ensure (kws = []) KeywordArgumentsNotConstructor;
+   ensure (length \<sigma>s = length es) (CallArityMismatch (length \<sigma>s) (length es));
+   check_exprs \<Sigma> \<Gamma> es \<sigma>s
+ }" |
+
 "quals \<Sigma> \<Gamma> [] = Inr fmempty" |
 "quals \<Sigma> \<Gamma> (Guard e # gs) = do { check_expr \<Sigma> \<Gamma> e (TyPrim bool); quals \<Sigma> \<Gamma> gs }" |
 "quals \<Sigma> \<Gamma> (Generator x e # gs) = do {
@@ -711,20 +718,25 @@ by pat_completeness auto
 
 termination
 by (relation "measures [\<lambda>x. case x of
-     Inl (Inl (_, _, e)) \<Rightarrow> size e
+     Inl (Inl (Inl (_, _, e))) \<Rightarrow> size e
+   | Inl (Inl (Inr (_, _, es))) \<Rightarrow> size_list size es
    | Inl (Inr (Inl (_, _, es))) \<Rightarrow> size_list size es
    | Inl (Inr (Inr (_, _, e, _))) \<Rightarrow> size e
-   | Inr (Inl (_, _, e, _)) \<Rightarrow> size e
-   | Inr (Inr (Inl (_, _, es, _))) \<Rightarrow> size_list size es
+   | Inr (Inl (Inl (_, _, e, _))) \<Rightarrow> size e
+   | Inr (Inl (Inr (_, _, es, _))) \<Rightarrow> size_list size es
+   | Inr (Inr (Inl (_, _, _, es, _))) \<Rightarrow> size_list size es
    | Inr (Inr (Inr (_, _, gs))) \<Rightarrow> size_list size gs,
    \<lambda>x. case x of
-     Inl (Inl _) \<Rightarrow> 0
-   | Inl (Inr (Inl _)) \<Rightarrow> 0
+     Inl (Inl (Inl _)) \<Rightarrow> 0
+   | Inl (Inl (Inr _)) \<Rightarrow> 0
+   | Inl (Inr (Inl _)) \<Rightarrow> 1
    | Inl (Inr (Inr _)) \<Rightarrow> 2
-   | Inr (Inl _) \<Rightarrow> 1
-   | Inr (Inr (Inl _)) \<Rightarrow> 2
+   | Inr (Inl (Inl _)) \<Rightarrow> 1
+   | Inr (Inl (Inr _)) \<Rightarrow> 2
+   | Inr (Inr (Inl _)) \<Rightarrow> 3
    | Inr (Inr (Inr _)) \<Rightarrow> 0]")
-   (auto dest!: nth_mem intro: size_list_estimation' simp: less_Suc_eq_le size_list_fst size_list_snd)
+   (auto dest!: nth_mem intro: size_list_estimation' size_list_elem
+     simp: less_Suc_eq_le size_list_fst size_list_snd)
 
 (* Context entry for a type scheme, which is a plain type when its parameter list is empty *)
 fun signature_entry :: "ty_scheme \<Rightarrow> cxt_entry"
@@ -823,12 +835,7 @@ where
        (case e of
           ExprCall e' (es, kws) \<Rightarrow>
             (case synth_expr \<Sigma> \<Gamma> e' of
-               Inr (TyCallable \<sigma>s (TyPrim NoneType)) \<Rightarrow> do {
-                 ensure (kws = []) KeywordArgumentsNotConstructor;
-                 ensure (length \<sigma>s = length es) (CallArityMismatch (length \<sigma>s) (length es));
-                 check_exprs \<Sigma> \<Gamma> es \<sigma>s;
-                 Inr (Assigns\<^sub>R fmempty)
-               }
+               Inr (TyCallable \<sigma>s (TyPrim NoneType)) \<Rightarrow> do { check_args \<Sigma> \<Gamma> kws es \<sigma>s; Inr (Assigns\<^sub>R fmempty) }
              | _ \<Rightarrow> Inl r)
         | _ \<Rightarrow> Inl r))" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssert e e') = do {

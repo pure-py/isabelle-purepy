@@ -36,6 +36,9 @@ lemma fmconst_code [code]: "fmconst (set xs) u = fold (\<lambda>x. fmupd x u) xs
 lemma size_prod_pair [simp]: "size_prod f g p = f (fst p) + g (snd p) + Suc 0"
   by (cases p) simp
 
+lemma size_list_elem: "x \<in> set xs \<Longrightarrow> f x < size_list f xs"
+  by (induction xs) auto
+
 lemma size_list_fst: "size_list (size \<circ> fst) kvs \<le> size_list (\<lambda>x. Suc (size (fst x) + size (snd x))) kvs"
   by (rule size_list_pointwise) simp
 
