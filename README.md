@@ -27,6 +27,12 @@ To browse the theories with the prover running, open the session directory in th
 | `Syntax.thy`         | Abstract syntax and its analyses                                        |
 | `Semantics.thy`      | Values, results and evaluation judgements                               |
 | `Correctness.thy`    | Inversion lemmas and determinism of evaluation                          |
-| `Typing.thy`         | Subtyping, contexts, static outcomes and typing                         |
+| `Contexts.thy`       | Context entries, class tables, name resolution, predefined modules      |
+| `Reasons.thy`        | Reasons for ill-formedness                                              |
+| `Types.thy`          | Type resolution, substitution and class definitions                     |
+| `Subtyping.thy`      | Subtyping, join and meet; element, subscript and attribute types        |
+| `Operators.thy`      | Equality types and operator overloads                                   |
+| `Typing.thy`         | Static outcomes; typing of expressions, statements and type definitions |
+| `Programs.thy`       | Typing of imports, modules and programs                                 |
 | `Examples.thy`       | Example evaluations                                                     |
 | `python/Codegen.thy` | Operator resolution and subtyping in executable form; Python generation |
