@@ -27,7 +27,7 @@ datatype reason =
   | UndeclaredAssignment var
   | AssignmentBeforeDeclaration var
   | Reassignment var
-  | MaybeAssigned var
+  | PossibleReassignment var
   | CapturedGeneratorVariable var
   | UnreachableStatement
   | NotPredefinedName var
@@ -658,8 +658,8 @@ abbreviation false_lit :: expr where "false_lit \<equiv> ExprLiteral (LitBool Fa
 fun assign_reason :: "var \<Rightarrow> cxt_entry option \<Rightarrow> reason"
 where
 "assign_reason x None = UndeclaredAssignment x" |
-"assign_reason x (Some (PU _)) = MaybeAssigned x" |
-"assign_reason x (Some (PUScheme _)) = MaybeAssigned x" |
+"assign_reason x (Some (PU _)) = PossibleReassignment x" |
+"assign_reason x (Some (PUScheme _)) = PossibleReassignment x" |
 "assign_reason x (Some Unbound) = AssignmentBeforeDeclaration x" |
 "assign_reason x (Some (Ty _)) = Reassignment x" |
 "assign_reason x (Some (Scheme _)) = Reassignment x" |
