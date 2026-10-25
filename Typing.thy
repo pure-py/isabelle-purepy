@@ -370,9 +370,22 @@ where
 "Assigns\<^sub>R \<Delta> \<otimes>\<^sub>R Assigns\<^sub>R \<Delta>' = Assigns\<^sub>R (\<Delta> \<otimes> \<Delta>')" |
 "_ \<otimes>\<^sub>R _ = Returns\<^sub>R"
 
-(* V holds the classes whose fields are being checked, each taken to be an equality type, so a recursive
-   class is one when its other fields are *)
-function (sequential) equality_type :: "class_table \<Rightarrow> name list \<Rightarrow> ty \<Rightarrow> bool"
+fun fv_ty :: "ty \<Rightarrow> var set"
+where
+"fv_ty (TyVar \<alpha>) = {\<alpha>}" |
+"fv_ty (TyList \<tau>) = fv_ty \<tau>" |
+"fv_ty (TyDict \<tau>) = fv_ty \<tau>" |
+"fv_ty (TyTuple \<tau>s) = \<Union> (set (map fv_ty \<tau>s))" |
+"fv_ty (TyCallable \<sigma>s \<tau>) = \<Union> (set (map fv_ty \<sigma>s)) \<union> fv_ty \<tau>" |
+"fv_ty (TyClass _ \<tau>s) = \<Union> (set (map fv_ty \<tau>s))" |
+"fv_ty (TyUnion \<sigma> \<tau>) = fv_ty \<sigma> \<union> fv_ty \<tau>" |
+"fv_ty _ = {}"
+
+(* V holds the classes assumed to be equality classes, those whose fields are being examined; the type
+   parameters of a class are taken to be equality types by instantiating its fields at object *)
+function (sequential)
+  equality_type :: "class_table \<Rightarrow> name list \<Rightarrow> ty \<Rightarrow> bool" and
+  equality_class :: "class_table \<Rightarrow> name list \<Rightarrow> name \<Rightarrow> bool"
 where
 "equality_type \<Sigma> V (TyPrim _) = True" |
 "equality_type \<Sigma> V (TyLiteral _) = True" |
@@ -381,16 +394,30 @@ where
 "equality_type \<Sigma> V (TyTuple \<tau>s) = list_all (equality_type \<Sigma> V) \<tau>s" |
 "equality_type \<Sigma> V (TyUnion \<sigma> \<tau>) = (equality_type \<Sigma> V \<sigma> \<and> equality_type \<Sigma> V \<tau>)" |
 "equality_type \<Sigma> V (TyClass C \<sigma>s) =
+  (equality_class \<Sigma> V C \<and>
+   (case fields \<Sigma> C of
+      FieldScheme \<alpha>s x\<tau>s \<Rightarrow>
+        list_all (\<lambda>(\<alpha>, \<sigma>). \<alpha> \<notin> \<Union> (set (map (fv_ty \<circ> snd) x\<tau>s)) \<or> equality_type \<Sigma> V \<sigma>) (zip \<alpha>s \<sigma>s)
+    | _ \<Rightarrow> False))" |
+"equality_type \<Sigma> V _ = False" |
+
+"equality_class \<Sigma> V C =
   (if C \<in> set V then True
    else case fmlookup \<Sigma> C of
-     Some _ \<Rightarrow> list_all (equality_type \<Sigma> (C # V) \<circ> snd) (instantiate (fields \<Sigma> C) \<sigma>s)
-   | None \<Rightarrow> False)" |
-"equality_type \<Sigma> V _ = False"
+     Some _ \<Rightarrow>
+       (case fields \<Sigma> C of
+          FieldScheme \<alpha>s x\<tau>s \<Rightarrow>
+            list_all (equality_type \<Sigma> (C # V) \<circ> snd)
+              (instantiate (FieldScheme \<alpha>s x\<tau>s) (replicate (length \<alpha>s) (TyPrim object)))
+        | _ \<Rightarrow> False)
+   | None \<Rightarrow> False)"
 by pat_completeness auto
 
 termination
-by (relation "measures [\<lambda>(\<Sigma>, V, _). card (fmdom' \<Sigma> - set V), \<lambda>(_, _, \<tau>). size \<tau>]")
-   (auto simp: card_fmdom_insert less_Suc_eq intro: size_list_elem)
+by (relation "measures [
+     \<lambda>x. case x of Inl (\<Sigma>, V, _) \<Rightarrow> card (fmdom' \<Sigma> - set V) | Inr (\<Sigma>, V, _) \<Rightarrow> card (fmdom' \<Sigma> - set V),
+     \<lambda>x. case x of Inl (_, _, \<tau>) \<Rightarrow> size \<tau> | Inr _ \<Rightarrow> 0]")
+   (auto simp: card_fmdom_insert less_Suc_eq dest: set_zip_rightD intro: size_list_elem)
 
 abbreviation comparable :: "class_table \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> bool" where "comparable \<Sigma> \<sigma> \<tau> \<equiv> \<Sigma> \<turnstile> \<sigma> <: \<tau> \<or> \<Sigma> \<turnstile> \<tau> <: \<sigma>"
 
