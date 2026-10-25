@@ -1,5 +1,5 @@
 theory Codegen
-  imports "isabelle-purepy.Typing" "Python.Python_Setup"
+  imports "isabelle-purepy.Programs" "Python.Python_Setup"
 begin
 
 code_pred subty .

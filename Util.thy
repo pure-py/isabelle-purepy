@@ -2,6 +2,8 @@ theory Util
   imports "HOL-Library.Finite_Map" "HOL-Library.Monad_Syntax"
 begin
 
+notation fmadd (infixl "\<otimes>" 100)
+
 type_synonym 'a nonempty = "'a \<times> 'a list"
 
 fun snoc :: "'a nonempty \<Rightarrow> 'a \<Rightarrow> 'a nonempty"

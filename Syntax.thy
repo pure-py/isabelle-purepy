@@ -97,9 +97,9 @@ datatype ty =
   | TyClass name "ty list"
   | TyUnion ty ty
 
-datatype ty_scheme =
-    TyScheme "var list" ty
-  | FieldScheme "var list" "(var \<times> ty) list"
+datatype ty_scheme = TyScheme "var list" ty
+
+datatype field_scheme = FieldScheme "var list" "(var \<times> ty) list"
 
 datatype import =
     Import name
@@ -176,7 +176,8 @@ fun binds_stmt :: "stmt \<Rightarrow> var set"
 where
 "binds_stmt (StmtSeq s s') = binds_stmt s \<union> binds_stmt s'" |
 "binds_stmt (StmtIf _ s elifs else') =
-  binds_stmt s \<union> \<Union> (set (map (\<lambda>(_, s'). binds_stmt s') elifs)) \<union> (case else' of None \<Rightarrow> {} | Some s' \<Rightarrow> binds_stmt s')" |
+  binds_stmt s \<union> \<Union> (set (map (\<lambda>(_, s'). binds_stmt s') elifs))
+  \<union> (case else' of None \<Rightarrow> {} | Some s' \<Rightarrow> binds_stmt s')" |
 "binds_stmt (StmtMatch _ cases) = \<Union> (set (map (\<lambda>(p, s). binds_pat p \<union> binds_stmt s) cases))" |
 "binds_stmt _ = {}"
 
@@ -199,7 +200,8 @@ where
 "assigns_stmt (StmtSeq s s') = assigns_stmt s \<union> assigns_stmt s'" |
 "assigns_stmt (StmtMutualRegion ds) = set (map def_name ds)" |
 "assigns_stmt (StmtIf _ s elifs else') =
-  assigns_stmt s \<union> \<Union> (set (map (\<lambda>(_, s'). assigns_stmt s') elifs)) \<union> (case else' of None \<Rightarrow> {} | Some s' \<Rightarrow> assigns_stmt s')" |
+  assigns_stmt s \<union> \<Union> (set (map (\<lambda>(_, s'). assigns_stmt s') elifs))
+  \<union> (case else' of None \<Rightarrow> {} | Some s' \<Rightarrow> assigns_stmt s')" |
 "assigns_stmt (StmtMatch _ cases) = \<Union> (set (map (\<lambda>(p, s). binds_pat p \<union> assigns_stmt s) cases))" |
 "assigns_stmt _ = {}"
 
@@ -216,7 +218,8 @@ where
 "declares_stmt (StmtSeq s s') = declares_stmt s @ declares_stmt s'" |
 "declares_stmt (StmtMutualRegion ds) = map def_name ds" |
 "declares_stmt (StmtIf _ s elifs else') =
-  declares_stmt s @ concat (map (\<lambda>(_, s'). declares_stmt s') elifs) @ (case else' of None \<Rightarrow> [] | Some s' \<Rightarrow> declares_stmt s')" |
+  declares_stmt s @ concat (map (\<lambda>(_, s'). declares_stmt s') elifs)
+  @ (case else' of None \<Rightarrow> [] | Some s' \<Rightarrow> declares_stmt s')" |
 "declares_stmt (StmtMatch _ cases) = concat (map (\<lambda>(_, s). declares_stmt s) cases)" |
 "declares_stmt _ = []"
 
@@ -263,7 +266,8 @@ where
 "captures_expr (ExprLiteral _) = {}" |
 "captures_expr (ExprCall e (es, kws)) =
   captures_expr e \<union> \<Union> (set (map captures_expr es)) \<union> \<Union> (set (map (captures_expr \<circ> snd) kws))" |
-"captures_expr (ExprDict kvs) = \<Union> (set (map (captures_expr \<circ> fst) kvs)) \<union> \<Union> (set (map (captures_expr \<circ> snd) kvs))" |
+"captures_expr (ExprDict kvs) =
+  \<Union> (set (map (captures_expr \<circ> fst) kvs)) \<union> \<Union> (set (map (captures_expr \<circ> snd) kvs))" |
 "captures_expr (ExprAttribute e _) = captures_expr e" |
 "captures_expr (ExprSubscript e e') = captures_expr e \<union> captures_expr e'" |
 "captures_expr (ExprBinOp _ e e') = captures_expr e \<union> captures_expr e'" |
@@ -274,7 +278,8 @@ where
 "captures_expr (ExprList es) = \<Union> (set (map captures_expr es))" |
 "captures_expr (ExprTuple es) = \<Union> (set (map captures_expr es))" |
 "captures_expr (ExprListComp e gs) = captures_quals gs \<union> (captures_expr e - binds_quals gs)" |
-"captures_expr (ExprDictComp e e' gs) = captures_quals gs \<union> ((captures_expr e \<union> captures_expr e') - binds_quals gs)" |
+"captures_expr (ExprDictComp e e' gs) =
+  captures_quals gs \<union> ((captures_expr e \<union> captures_expr e') - binds_quals gs)" |
 "captures_expr (ExprLambda xs e) = fv_expr e - set xs" |
 
 "captures_quals [] = {}" |
@@ -298,19 +303,72 @@ where
    then Some (fmconst (assigns_top t - set ys) u)
    else None)"
 
+fun prim_name :: "prim_ty \<Rightarrow> var"
+where
+"prim_name object = ''object''" |
+"prim_name Never = ''Never''" |
+"prim_name NoneType = ''None''" |
+"prim_name bool = ''bool''" |
+"prim_name int = ''int''" |
+"prim_name float = ''float''" |
+"prim_name str = ''str''" |
+"prim_name Sized = ''Sized''"
+
+fun numeric_literal :: "expr \<Rightarrow> bool"
+where
+"numeric_literal (ExprLiteral (LitInt _)) = True" |
+"numeric_literal (ExprLiteral (LitFloat _)) = True" |
+"numeric_literal _ = False"
+
+fun dotted_name :: "expr \<Rightarrow> name option"
+where
+"dotted_name (ExprVar x) = Some (x, [])" |
+"dotted_name (ExprAttribute e x) = map_option (\<lambda>q. snoc q x) (dotted_name e)" |
+"dotted_name _ = None"
+
+(* Targets of plain assignments, in order *)
+fun assign_targets_stmt :: "stmt \<Rightarrow> var list"
+where
+"assign_targets_stmt (StmtAssign x None _) = [x]" |
+"assign_targets_stmt (StmtSeq s s') = assign_targets_stmt s @ assign_targets_stmt s'" |
+"assign_targets_stmt (StmtIf _ s elifs else') =
+  assign_targets_stmt s @ concat (map (\<lambda>(_, s'). assign_targets_stmt s') elifs)
+  @ (case else' of None \<Rightarrow> [] | Some s' \<Rightarrow> assign_targets_stmt s')" |
+"assign_targets_stmt (StmtMatch _ cases) = concat (map (\<lambda>(_, s). assign_targets_stmt s) cases)" |
+"assign_targets_stmt _ = []"
+
+fun assign_targets_top :: "top_stmt \<Rightarrow> var list"
+where
+"assign_targets_top (Stmt s) = assign_targets_stmt s" |
+"assign_targets_top (TopSeq t t') = assign_targets_top t @ assign_targets_top t'" |
+"assign_targets_top (TypeDefs _) = []"
+
+fun fv_ty :: "ty \<Rightarrow> var set"
+where
+"fv_ty (TyVar \<alpha>) = {\<alpha>}" |
+"fv_ty (TyList \<tau>) = fv_ty \<tau>" |
+"fv_ty (TyDict \<tau>) = fv_ty \<tau>" |
+"fv_ty (TyTuple \<tau>s) = \<Union> (set (map fv_ty \<tau>s))" |
+"fv_ty (TyCallable \<sigma>s \<tau>) = \<Union> (set (map fv_ty \<sigma>s)) \<union> fv_ty \<tau>" |
+"fv_ty (TyClass _ \<tau>s) = \<Union> (set (map fv_ty \<tau>s))" |
+"fv_ty (TyUnion \<sigma> \<tau>) = fv_ty \<sigma> \<union> fv_ty \<tau>" |
+"fv_ty _ = {}"
+
 consts
   binds :: "'a \<Rightarrow> var set"
   assigns :: "'a \<Rightarrow> var set"
   declares :: "'a \<Rightarrow> var list"
   fv :: "'a \<Rightarrow> var set"
   captures :: "'a \<Rightarrow> var set"
+  assign_targets :: "'a \<Rightarrow> var list"
   scope :: "'u \<Rightarrow> 'y \<Rightarrow> 'a \<Rightarrow> (var, 'u) fmap option"
 
 adhoc_overloading binds \<rightleftharpoons> binds_pat binds_stmt binds_quals binds_top
 adhoc_overloading assigns \<rightleftharpoons> assigns_stmt assigns_top
 adhoc_overloading declares \<rightleftharpoons> declares_stmt declares_top declares_imports
-adhoc_overloading fv \<rightleftharpoons> fv_expr fv_quals
+adhoc_overloading fv \<rightleftharpoons> fv_expr fv_quals fv_ty
 adhoc_overloading captures \<rightleftharpoons> captures_expr captures_quals
+adhoc_overloading assign_targets \<rightleftharpoons> assign_targets_stmt assign_targets_top
 adhoc_overloading scope \<rightleftharpoons> scope_stmt scope_top
 
 end

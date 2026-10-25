@@ -7,7 +7,13 @@ session "isabelle-purepy" = HOL +
     Syntax
     Semantics
     Correctness
+    Contexts
+    Reasons
+    Types
+    Subtyping
+    Operators
     Typing
+    Programs
     Examples
 
 session "isabelle-purepy-python" in "python" = "isabelle-purepy" +
