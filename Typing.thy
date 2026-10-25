@@ -671,22 +671,22 @@ definition mypy_only_if :: "bool \<Rightarrow> reason \<Rightarrow> reason"
 where
 "mypy_only_if b r = (if b then MypyCompatibility r else r)"
 
-(* First of xs in S or occurring earlier in xs *)
+(* First of xs in X or occurring earlier in xs *)
 fun redeclared :: "var set \<Rightarrow> var list \<Rightarrow> var option"
 where
-"redeclared S [] = None" |
-"redeclared S (x # xs) = (if x \<in> S then Some x else redeclared (insert x S) xs)"
+"redeclared X [] = None" |
+"redeclared X (x # xs) = (if x \<in> X then Some x else redeclared (insert x X) xs)"
 
-(* Failure of the scope with bound names ys, declared names xs and pattern variables B *)
+(* Failure of the scope with bound names ys, declared names xs and pattern variables X *)
 definition scope_reason :: "var list \<Rightarrow> var list \<Rightarrow> var set \<Rightarrow> reason"
 where
-"scope_reason ys xs B =
+"scope_reason ys xs X =
   (case redeclared {} ys of
      Some y \<Rightarrow> DuplicateImportedName y
    | None \<Rightarrow>
-       (case redeclared (set ys \<union> B) xs of
+       (case redeclared (set ys \<union> X) xs of
           Some x \<Rightarrow> Redeclaration x
-        | None \<Rightarrow> Redeclaration (Min (set ys \<inter> B))))"
+        | None \<Rightarrow> Redeclaration (Min (set ys \<inter> X))))"
 
 (* Targets of plain assignments, in order *)
 fun assign_targets :: "stmt \<Rightarrow> var list"
@@ -705,11 +705,11 @@ where
 "assign_targets_top (TopSeq t t') = assign_targets_top t @ assign_targets_top t'" |
 "assign_targets_top (TypeDefs _) = []"
 
-(* Failure for the first assignment target of xs which isn't in ys, declared or a pattern variable of B *)
+(* Failure for the first assignment target of xs which isn't in X, declared or a pattern variable of Y *)
 definition check_assignments_declared :: "var set \<Rightarrow> var list \<Rightarrow> var list \<Rightarrow> var set \<Rightarrow> reason + unit"
 where
-"check_assignments_declared ys xs ds B =
-  (case find (\<lambda>x. x \<notin> ys \<and> x \<notin> set ds \<and> x \<notin> B) xs of
+"check_assignments_declared X xs ys Y =
+  (case find (\<lambda>x. x \<notin> X \<and> x \<notin> set ys \<and> x \<notin> Y) xs of
      Some x \<Rightarrow> Inl (UndeclaredAssignment x)
    | None \<Rightarrow> Inr ())"
 
