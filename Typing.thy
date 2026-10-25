@@ -219,7 +219,6 @@ definition check_predefined :: "cxt \<Rightarrow> var \<Rightarrow> reason + uni
 where
 "check_predefined \<Gamma> x = ensure (predef \<Gamma> x) (NotPredefinedName x)"
 
-(* Context entry of a qualified name, through the members of checked modules *)
 fun members_entry :: "cxt_entry option \<Rightarrow> var list \<Rightarrow> cxt_entry option"
 where
 "members_entry \<theta> [] = \<theta>" |
