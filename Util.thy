@@ -1,5 +1,5 @@
 theory Util
-  imports "HOL-Library.Finite_Map"
+  imports "HOL-Library.Finite_Map" "HOL-Library.Monad_Syntax"
 begin
 
 type_synonym 'a nonempty = "'a \<times> 'a list"
@@ -63,5 +63,30 @@ proof -
   moreover have "fmdom' M - insert q V = (fmdom' M - V) - {q}" by auto
   ultimately show ?thesis by (metis card_Diff1_less finite_Diff finite_fmdom')
 qed
+
+(* Error monad: failure Inl e or result Inr x *)
+definition bind_sum :: "'e + 'a \<Rightarrow> ('a \<Rightarrow> 'e + 'b) \<Rightarrow> 'e + 'b"
+where
+"bind_sum m f = (case m of Inl e \<Rightarrow> Inl e | Inr x \<Rightarrow> f x)"
+
+adhoc_overloading Monad_Syntax.bind \<rightleftharpoons> bind_sum
+
+lemma bind_sum_simps [simp]: "bind_sum (Inl e) f = Inl e" "bind_sum (Inr x) f = f x"
+  by (simp_all add: bind_sum_def)
+
+lemma bind_sum_cong [fundef_cong]:
+  "\<lbrakk> m = m' ; \<And>x. m' = Inr x \<Longrightarrow> f x = f' x \<rbrakk> \<Longrightarrow> bind_sum m f = bind_sum m' f'"
+  by (cases m') simp_all
+
+(* Failure e unless b; e is computed eagerly by generated code *)
+definition ensure :: "bool \<Rightarrow> 'e \<Rightarrow> 'e + unit"
+where
+"ensure b e = (if b then Inr () else Inl e)"
+
+(* First failure in the list, otherwise the list of results *)
+fun those_sum :: "('e + 'a) list \<Rightarrow> 'e + 'a list"
+where
+"those_sum [] = Inr []" |
+"those_sum (m # ms) = do { x \<leftarrow> m; xs \<leftarrow> those_sum ms; Inr (x # xs) }"
 
 end
