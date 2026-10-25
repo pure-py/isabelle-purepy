@@ -107,4 +107,9 @@ definition class_of_name :: "cxt \<Rightarrow> expr \<Rightarrow> name option"
 where
 "class_of_name \<Gamma> e = (case Option.bind (dotted_name e) (resolve_name \<Gamma>) of Some (Type C) \<Rightarrow> Some C | _ \<Rightarrow> None)"
 
+definition scheme_of_name :: "cxt \<Rightarrow> expr \<Rightarrow> ty_scheme option"
+where
+"scheme_of_name \<Gamma> e =
+  (case Option.bind (dotted_name e) (resolve_name \<Gamma>) of Some (Scheme \<pi>) \<Rightarrow> Some \<pi> | _ \<Rightarrow> None)"
+
 end

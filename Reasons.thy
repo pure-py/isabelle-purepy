@@ -36,6 +36,7 @@ datatype reason =
   | PredefinedNameAsValue name
   | TypeParameterAsValue var
   | TypeSchemeAsValue name
+  | NoTypeArgument var
   | ClassAsValue name
   | TypeAliasAsValue name
   | NoBinaryOverload bop ty ty

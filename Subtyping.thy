@@ -100,6 +100,75 @@ where
 "subscript_type \<Sigma> \<sigma> int_ok _ _ =
   (if base_type \<sigma> = TyPrim str then do { int_ok; Inr (TyPrim str) } else Inl (NotSubscriptable \<sigma>))"
 
+datatype instances = Instance "ty list" | Undetermined | NoInstance
+
+(* Instance of C at \<tau>, by instance-above and otherwise instance-below; the instance below a generic class
+   isn't mechanised *)
+definition instance_above :: "class_table \<Rightarrow> name \<Rightarrow> ty \<Rightarrow> instances"
+where
+"instance_above \<Sigma> C \<tau> =
+  (case \<tau> of
+     TyClass D \<sigma>s \<Rightarrow> if C \<in> set (ancestors \<Sigma> D) then Instance (instantiated_ancestor \<Sigma> D \<sigma>s C) else NoInstance
+   | TyPrim Never \<Rightarrow> if type_params \<Sigma> C = [] then Instance [] else Undetermined
+   | _ \<Rightarrow> NoInstance)"
+
+definition instance_below :: "class_table \<Rightarrow> name \<Rightarrow> ty \<Rightarrow> instances"
+where
+"instance_below \<Sigma> C \<tau> =
+  (case \<tau> of
+     TyClass D \<sigma>s \<Rightarrow>
+       if D \<in> set (ancestors \<Sigma> C) then
+         if type_params \<Sigma> C = [] then
+           if list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (instantiated_ancestor \<Sigma> C [] D) \<sigma>s then Instance [] else NoInstance
+         else undefined
+       else NoInstance
+   | TyPrim object \<Rightarrow> if type_params \<Sigma> C = [] then Instance [] else Undetermined
+   | _ \<Rightarrow> NoInstance)"
+
+definition instance_at :: "class_table \<Rightarrow> name \<Rightarrow> ty \<Rightarrow> instances"
+where
+"instance_at \<Sigma> C \<tau> = (case instance_above \<Sigma> C \<tau> of NoInstance \<Rightarrow> instance_below \<Sigma> C \<tau> | \<iota> \<Rightarrow> \<iota>)"
+
+(* Pointwise join of contexts binding type variables at types *)
+definition join_cxt :: "class_table \<Rightarrow> (var, ty) fmap \<Rightarrow> (var, ty) fmap \<Rightarrow> (var, ty) fmap"
+where
+"join_cxt \<Sigma> \<gamma> \<gamma>' =
+  fmmap_keys (\<lambda>\<alpha> \<tau>. case (fmlookup \<gamma> \<alpha>, fmlookup \<gamma>' \<alpha>) of (Some \<sigma>, Some \<tau>') \<Rightarrow> \<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>' | _ \<Rightarrow> \<tau>) (\<gamma> \<otimes> \<gamma>')"
+
+function (sequential)
+  type_args :: "class_table \<Rightarrow> var list \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> (var, ty) fmap" and
+  type_args_seq :: "class_table \<Rightarrow> var list \<Rightarrow> ty list \<Rightarrow> ty list \<Rightarrow> (var, ty) fmap"
+where
+"type_args \<Sigma> \<alpha>s (TyVar \<alpha>) \<tau> =
+  (if \<alpha> \<in> set \<alpha>s then fmupd \<alpha> (base_type \<tau>) fmempty else fmempty)" |
+"type_args \<Sigma> \<alpha>s \<sigma> (TyUnion \<tau> \<tau>') = join_cxt \<Sigma> (type_args \<Sigma> \<alpha>s \<sigma> \<tau>) (type_args \<Sigma> \<alpha>s \<sigma> \<tau>')" |
+"type_args \<Sigma> \<alpha>s (TyList \<sigma>) (TyList \<tau>) = type_args \<Sigma> \<alpha>s \<sigma> \<tau>" |
+"type_args \<Sigma> \<alpha>s (TyDict \<sigma>) (TyDict \<tau>) = type_args \<Sigma> \<alpha>s \<sigma> \<tau>" |
+"type_args \<Sigma> \<alpha>s (TyTuple \<sigma>s) (TyTuple \<tau>s) = type_args_seq \<Sigma> \<alpha>s \<sigma>s \<tau>s" |
+"type_args \<Sigma> \<alpha>s (TyCallable \<sigma>s \<sigma>) (TyCallable \<tau>s \<tau>) = type_args_seq \<Sigma> \<alpha>s (\<sigma> # \<sigma>s) (\<tau> # \<tau>s)" |
+"type_args \<Sigma> \<alpha>s (TyClass C \<sigma>s) \<tau> =
+  (case instance_at \<Sigma> C \<tau> of Instance \<tau>s \<Rightarrow> type_args_seq \<Sigma> \<alpha>s \<sigma>s \<tau>s | _ \<Rightarrow> fmempty)" |
+"type_args \<Sigma> \<alpha>s (TyUnion \<sigma> \<sigma>') \<tau> =
+  (if (\<Sigma> \<turnstile> \<tau> <: \<sigma> \<and> fv \<sigma> \<inter> set \<alpha>s = {}) \<or> (\<Sigma> \<turnstile> \<tau> <: \<sigma>' \<and> fv \<sigma>' \<inter> set \<alpha>s = {}) then fmempty
+   else join_cxt \<Sigma> (type_args \<Sigma> \<alpha>s \<sigma> \<tau>) (type_args \<Sigma> \<alpha>s \<sigma>' \<tau>))" |
+"type_args \<Sigma> \<alpha>s _ _ = fmempty" |
+
+"type_args_seq \<Sigma> \<alpha>s (\<sigma> # \<sigma>s) (\<tau> # \<tau>s) = join_cxt \<Sigma> (type_args \<Sigma> \<alpha>s \<sigma> \<tau>) (type_args_seq \<Sigma> \<alpha>s \<sigma>s \<tau>s)" |
+"type_args_seq \<Sigma> \<alpha>s _ _ = fmempty"
+by pat_completeness auto
+
+termination
+by (relation "measures [
+     \<lambda>x. case x of Inl (_, _, \<sigma>, _) \<Rightarrow> size \<sigma> | Inr (_, _, \<sigma>s, _) \<Rightarrow> size_list size \<sigma>s,
+     \<lambda>x. case x of Inl _ \<Rightarrow> 1 | Inr _ \<Rightarrow> 0,
+     \<lambda>x. case x of Inl (_, _, _, \<tau>) \<Rightarrow> size \<tau> | Inr _ \<Rightarrow> 0]") auto
+
+(* Type arguments for \<alpha>s from the context \<gamma> found by type_args *)
+definition type_arguments :: "(var, ty) fmap \<Rightarrow> var list \<Rightarrow> reason + ty list"
+where
+"type_arguments \<gamma> \<alpha>s =
+  those_sum (map (\<lambda>\<alpha>. case fmlookup \<gamma> \<alpha> of Some \<tau> \<Rightarrow> Inr \<tau> | None \<Rightarrow> Inl (NoTypeArgument \<alpha>)) \<alpha>s)"
+
 (* Type of attribute x of a value of type \<sigma>, which isn't a module *)
 fun attribute_type :: "class_table \<Rightarrow> ty \<Rightarrow> var \<Rightarrow> reason + ty"
 where

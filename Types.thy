@@ -151,6 +151,30 @@ definition fields :: "class_table \<Rightarrow> name \<Rightarrow> field_scheme"
 where
 "fields \<Sigma> C = fields_upto (fcard (fmdom \<Sigma>)) \<Sigma> C"
 
+(* Class C and its base classes, through at most n of them *)
+fun ancestors_upto :: "nat \<Rightarrow> class_table \<Rightarrow> name \<Rightarrow> name list"
+where
+"ancestors_upto 0 \<Sigma> C = undefined" |
+"ancestors_upto (Suc n) \<Sigma> C = C # (case base \<Sigma> C of None \<Rightarrow> [] | Some (D, _) \<Rightarrow> ancestors_upto n \<Sigma> D)"
+
+definition ancestors :: "class_table \<Rightarrow> name \<Rightarrow> name list"
+where
+"ancestors \<Sigma> C = ancestors_upto (fcard (fmdom \<Sigma>)) \<Sigma> C"
+
+(* Supertype of C[\<tau>s] with class D, an ancestor of C, through at most n base classes *)
+fun instantiated_ancestor_upto :: "nat \<Rightarrow> class_table \<Rightarrow> name \<Rightarrow> ty list \<Rightarrow> name \<Rightarrow> ty list"
+where
+"instantiated_ancestor_upto 0 \<Sigma> C \<tau>s D = undefined" |
+"instantiated_ancestor_upto (Suc n) \<Sigma> C \<tau>s D =
+  (if C = D then \<tau>s
+   else case base \<Sigma> C of
+     Some (D', \<sigma>s) \<Rightarrow> instantiated_ancestor_upto n \<Sigma> D' (map (subst \<tau>s (type_params \<Sigma> C)) \<sigma>s) D
+   | None \<Rightarrow> undefined)"
+
+definition instantiated_ancestor :: "class_table \<Rightarrow> name \<Rightarrow> ty list \<Rightarrow> name \<Rightarrow> ty list"
+where
+"instantiated_ancestor \<Sigma> C \<tau>s D = instantiated_ancestor_upto (fcard (fmdom \<Sigma>)) \<Sigma> C \<tau>s D"
+
 definition field_names :: "class_table \<Rightarrow> name \<Rightarrow> var list"
 where
 "field_names \<Sigma> C = (case fields \<Sigma> C of FieldScheme _ x\<tau>s \<Rightarrow> map fst x\<tau>s)"
@@ -169,5 +193,20 @@ where
    else if set ys \<noteq> set (drop n xs)
    then Inl (UnknownConstructorKeyword (short_name C) (sorted_list_of_set (set (drop n xs))))
    else Inr ())"
+
+(* Field of C supplied by each argument, in order, paired by field-map *)
+definition constructor_args ::
+  "name \<Rightarrow> field_scheme \<Rightarrow> expr list \<Rightarrow> (var \<times> expr) list \<Rightarrow> reason + (ty \<times> expr) list"
+where
+"constructor_args C \<pi> es kws =
+  (case \<pi> of FieldScheme _ x\<sigma>s \<Rightarrow> do {
+     check_field_map C (map fst x\<sigma>s) (length es) (map fst kws);
+     Inr (zip (map snd (take (length es) x\<sigma>s)) es @ map (\<lambda>(y, e). (the (map_of x\<sigma>s y), e)) kws)
+   })"
+
+lemma constructor_args_elem:
+  "\<lbrakk> constructor_args C \<pi> es kws = Inr \<sigma>es ; (\<sigma>, e) \<in> set \<sigma>es \<rbrakk> \<Longrightarrow> e \<in> set es \<or> e \<in> set (map snd kws)"
+  unfolding constructor_args_def
+  by (cases \<pi>) (fastforce simp: bind_sum_def image_iff split: sum.splits dest!: set_zip_rightD)
 
 end

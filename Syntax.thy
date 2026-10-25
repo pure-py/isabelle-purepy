@@ -354,6 +354,61 @@ where
 "fv_ty (TyUnion \<sigma> \<tau>) = fv_ty \<sigma> \<union> fv_ty \<tau>" |
 "fv_ty _ = {}"
 
+(* Whether a synthesis rule applies to the expression *)
+fun synthesises :: "expr \<Rightarrow> bool"
+where
+"synthesises (ExprLambda _ _) = False" |
+"synthesises (ExprCond e\<^sub>1 _ e\<^sub>2) = (synthesises e\<^sub>1 \<or> synthesises e\<^sub>2)" |
+"synthesises (ExprList es) = list_ex synthesises es" |
+"synthesises (ExprDict kvs) = list_ex (synthesises \<circ> snd) kvs" |
+"synthesises (ExprTuple es) = list_all synthesises es" |
+"synthesises (ExprListComp e _) = synthesises e" |
+"synthesises (ExprDictComp _ e _) = synthesises e" |
+"synthesises (ExprCall (ExprLambda _ e) (es, _)) = (synthesises e \<and> list_all synthesises es)" |
+"synthesises _ = True"
+
+definition prim_of_name :: "var \<Rightarrow> prim_ty option"
+where
+"prim_of_name x = find (\<lambda>\<nu>. prim_name \<nu> = x) [object, Never, NoneType, bool, int, float, str, Sized]"
+
+(* Type expression denoted by an expression, as in an annotation; None if it denotes none *)
+function (sequential)
+  parse_annotation :: "expr \<Rightarrow> ty_expr option" and
+  parse_annotations :: "expr list \<Rightarrow> ty_expr list option"
+where
+"parse_annotation (ExprLiteral LitNone) = Some (TyExprPrim NoneType)" |
+"parse_annotation (ExprVar x) =
+  Some (case prim_of_name x of Some \<nu> \<Rightarrow> TyExprPrim \<nu> | None \<Rightarrow> TyExprName (x, []) [])" |
+"parse_annotation (ExprAttribute e x) = map_option (\<lambda>q. TyExprName q []) (dotted_name (ExprAttribute e x))" |
+"parse_annotation (ExprBinOp BOpBitOr e e') = do {
+   \<psi> \<leftarrow> parse_annotation e; \<psi>' \<leftarrow> parse_annotation e'; Some (TyExprUnion \<psi> \<psi>')
+ }" |
+"parse_annotation (ExprSubscript e e') =
+  (let head = (case e of ExprVar x \<Rightarrow> Some x | _ \<Rightarrow> None) in
+   if head = Some ''Literal'' then
+     (case e' of ExprLiteral (LitFloat _) \<Rightarrow> None | ExprLiteral l \<Rightarrow> Some (TyExprLiteral l) | _ \<Rightarrow> None)
+   else if head = Some ''Callable'' then
+     (case e' of
+        ExprTuple [ExprList es, e''] \<Rightarrow> do {
+          \<psi>s \<leftarrow> parse_annotations es; \<psi> \<leftarrow> parse_annotation e''; Some (TyExprCallable \<psi>s \<psi>)
+        }
+      | _ \<Rightarrow> None)
+   else do {
+     \<psi>s \<leftarrow> (case e' of ExprTuple es \<Rightarrow> parse_annotations es | _ \<Rightarrow> parse_annotations [e']);
+     if head = Some ''list'' then (case \<psi>s of [\<psi>] \<Rightarrow> Some (TyExprList \<psi>) | _ \<Rightarrow> None)
+     else if head = Some ''tuple'' then Some (TyExprTuple \<psi>s)
+     else if head = Some ''dict'' then (case \<psi>s of [TyExprPrim str, \<psi>] \<Rightarrow> Some (TyExprDict \<psi>) | _ \<Rightarrow> None)
+     else map_option (\<lambda>q. TyExprName q \<psi>s) (dotted_name e)
+   })" |
+"parse_annotation _ = None" |
+
+"parse_annotations [] = Some []" |
+"parse_annotations (e # es) = do { \<psi> \<leftarrow> parse_annotation e; \<psi>s \<leftarrow> parse_annotations es; Some (\<psi> # \<psi>s) }"
+by pat_completeness auto
+
+termination
+by (relation "measure (\<lambda>x. case x of Inl e \<Rightarrow> 2 * size e + 1 | Inr es \<Rightarrow> 2 * size_list size es)") auto
+
 consts
   binds :: "'a \<Rightarrow> var set"
   assigns :: "'a \<Rightarrow> var set"

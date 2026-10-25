@@ -88,10 +88,24 @@ where
    if distinct xs then Inr (fmap_of_list (zip xs (map Ty \<tau>s))) else Inl undefined
  }"
 
+(* Name bound at a type scheme checked against \<tau>, by var-scheme; None for other expressions *)
+definition var_scheme :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> (reason + unit) option"
+where
+"var_scheme \<Sigma> \<Gamma> e \<tau> =
+  (case scheme_of_name \<Gamma> e of
+     Some (TyScheme \<alpha>s \<sigma>) \<Rightarrow> Some (do {
+       \<tau>s \<leftarrow> type_arguments (type_args \<Sigma> \<alpha>s \<sigma> \<tau>) \<alpha>s;
+       let \<sigma>' = subst \<tau>s \<alpha>s \<sigma>;
+       ensure (\<Sigma> \<turnstile> \<sigma>' <: \<tau>) (TypeMismatch \<tau> \<sigma>')
+     })
+   | None \<Rightarrow> None)"
+
 function (sequential)
   synth_expr :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> reason + ty" and
   synth_exprs :: "class_table \<Rightarrow> cxt \<Rightarrow> expr list \<Rightarrow> (reason + ty) list" and
   elements_join :: "class_table \<Rightarrow> cxt \<Rightarrow> expr list \<Rightarrow> reason + ty" and
+  callee :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> expr list \<Rightarrow> reason + ty" and
+  call_at :: "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow> (var \<times> expr) list \<Rightarrow> expr list \<Rightarrow> reason + ty" and
   check_expr :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> reason + unit" and
   check_expr' :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> (reason + unit) option" and
   check_exprs :: "class_table \<Rightarrow> cxt \<Rightarrow> expr list \<Rightarrow> ty list \<Rightarrow> reason + unit" and
@@ -109,25 +123,31 @@ where
      (case class_of_name \<Gamma> e of
         Some C \<Rightarrow>
           (case fields \<Sigma> C of
-             FieldScheme [] x\<sigma>s \<Rightarrow> do {
-               check_field_map C (map fst x\<sigma>s) (length es) (map fst kws);
-               check_exprs \<Sigma> \<Gamma> es (map snd (take (length es) x\<sigma>s));
-               those_sum (map (\<lambda>p. check_expr \<Sigma> \<Gamma> (snd p) (the (map_of x\<sigma>s (fst p)))) kws);
-               Inr (TyClass C [])
-             }
-           | _ \<Rightarrow> undefined)
+             FieldScheme \<alpha>s x\<sigma>s \<Rightarrow> do {
+               \<sigma>es \<leftarrow> constructor_args C (FieldScheme \<alpha>s x\<sigma>s) es kws;
+               let synthesising = filter (synthesises \<circ> snd) \<sigma>es;
+               \<tau>s \<leftarrow> those_sum (map (synth_expr \<Sigma> \<Gamma> \<circ> snd) synthesising);
+               \<tau>s' \<leftarrow> type_arguments (type_args_seq \<Sigma> \<alpha>s (map fst synthesising) \<tau>s) \<alpha>s;
+               those_sum (map (\<lambda>(\<sigma>, e'). check_expr \<Sigma> \<Gamma> e' (subst \<tau>s' \<alpha>s \<sigma>)) \<sigma>es);
+               Inr (TyClass C \<tau>s')
+             })
       | None \<Rightarrow>
-          if (case e of ExprSubscript e' _ \<Rightarrow> class_of_name \<Gamma> e' \<noteq> None | _ \<Rightarrow> False) then undefined
-          else do {
-            \<sigma> \<leftarrow> synth_expr \<Sigma> \<Gamma> e;
-            case \<sigma> of
-              TyCallable \<sigma>s \<tau> \<Rightarrow> do {
-                check_args \<Sigma> \<Gamma> kws es \<sigma>s;
-                ensure (\<tau> \<noteq> TyPrim NoneType) (MypyCompatibility NoneResult);
-                Inr \<tau>
-              }
-            | _ \<Rightarrow> Inl (NotCallable \<sigma>)
-          }))" |
+          if (case e of ExprSubscript e' _ \<Rightarrow> class_of_name \<Gamma> e' \<noteq> None | _ \<Rightarrow> False) then
+            (case parse_annotation e of
+               Some \<psi> \<Rightarrow> do {
+                 \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>;
+                 case \<tau> of
+                   TyClass C \<tau>s \<Rightarrow>
+                     (case fields \<Sigma> C of
+                        FieldScheme \<alpha>s x\<sigma>s \<Rightarrow> do {
+                          \<sigma>es \<leftarrow> constructor_args C (FieldScheme \<alpha>s x\<sigma>s) es kws;
+                          those_sum (map (\<lambda>(\<sigma>, e'). check_expr \<Sigma> \<Gamma> e' (subst \<tau>s \<alpha>s \<sigma>)) \<sigma>es);
+                          Inr \<tau>
+                        })
+                 | _ \<Rightarrow> undefined
+               }
+             | None \<Rightarrow> undefined)
+          else do { \<sigma> \<leftarrow> callee \<Sigma> \<Gamma> e es; call_at \<Sigma> \<Gamma> \<sigma> kws es }))" |
 "synth_expr \<Sigma> \<Gamma> (ExprBinOp op e e') = do {
    \<sigma> \<leftarrow> synth_expr \<Sigma> \<Gamma> e;
    \<sigma>' \<leftarrow> synth_expr \<Sigma> \<Gamma> e';
@@ -188,6 +208,26 @@ where
 "synth_exprs \<Sigma> \<Gamma> [] = []" |
 "synth_exprs \<Sigma> \<Gamma> (e # es) = synth_expr \<Sigma> \<Gamma> e # synth_exprs \<Sigma> \<Gamma> es" |
 
+"callee \<Sigma> \<Gamma> e es =
+  (case scheme_of_name \<Gamma> e of
+     Some (TyScheme \<alpha>s (TyCallable \<sigma>s \<sigma>)) \<Rightarrow>
+       (let synthesising = filter (synthesises \<circ> snd) (zip \<sigma>s es) in do {
+          \<tau>s \<leftarrow> those_sum (map (synth_expr \<Sigma> \<Gamma> \<circ> snd) synthesising);
+          \<tau>s' \<leftarrow> type_arguments (type_args_seq \<Sigma> \<alpha>s (map fst synthesising) \<tau>s) \<alpha>s;
+          Inr (TyCallable (map (subst \<tau>s' \<alpha>s) \<sigma>s) (subst \<tau>s' \<alpha>s \<sigma>))
+        })
+   | Some _ \<Rightarrow> undefined
+   | None \<Rightarrow> synth_expr \<Sigma> \<Gamma> e)" |
+
+"call_at \<Sigma> \<Gamma> (TyUnion \<sigma> \<sigma>') kws es =
+  do { \<tau> \<leftarrow> call_at \<Sigma> \<Gamma> \<sigma> kws es; \<tau>' \<leftarrow> call_at \<Sigma> \<Gamma> \<sigma>' kws es; Inr (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>') }" |
+"call_at \<Sigma> \<Gamma> (TyCallable \<sigma>s \<tau>) kws es = do {
+   check_args \<Sigma> \<Gamma> kws es \<sigma>s;
+   ensure (\<tau> \<noteq> TyPrim NoneType) (MypyCompatibility NoneResult);
+   Inr \<tau>
+ }" |
+"call_at \<Sigma> \<Gamma> \<sigma> _ _ = Inl (NotCallable \<sigma>)" |
+
 "elements_join \<Sigma> \<Gamma> es =
   (let \<sigma>s = synth_exprs \<Sigma> \<Gamma> es; \<tau> = joins \<Sigma> (map (base_type \<circ> projr) (filter (Not \<circ> isl) \<sigma>s)) in
    if \<not> list_all isl \<sigma>s then do {
@@ -240,6 +280,8 @@ where
        check_expr \<Sigma> (\<Gamma> \<otimes> \<Delta>) e' \<tau>'
      })
    | _ \<Rightarrow> None)" |
+"check_expr' \<Sigma> \<Gamma> (ExprVar x) \<tau> = var_scheme \<Sigma> \<Gamma> (ExprVar x) \<tau>" |
+"check_expr' \<Sigma> \<Gamma> (ExprAttribute e x) \<tau> = var_scheme \<Sigma> \<Gamma> (ExprAttribute e x) \<tau>" |
 "check_expr' \<Sigma> \<Gamma> _ _ = None" |
 
 "check_exprs \<Sigma> \<Gamma> [] [] = Inr ()" |
@@ -268,21 +310,28 @@ by (relation "measures [\<lambda>x. case x of
      Inl (Inl (Inl (_, _, e))) \<Rightarrow> size e
    | Inl (Inl (Inr (_, _, es))) \<Rightarrow> size_list size es
    | Inl (Inr (Inl (_, _, es))) \<Rightarrow> size_list size es
-   | Inl (Inr (Inr (_, _, e, _))) \<Rightarrow> size e
+   | Inl (Inr (Inr (Inl (_, _, e, es)))) \<Rightarrow> size e + size_list size es
+   | Inl (Inr (Inr (Inr (_, _, _, kws, es)))) \<Rightarrow> size_list size es + size_list (\<lambda>p. Suc (size (snd p))) kws
    | Inr (Inl (Inl (_, _, e, _))) \<Rightarrow> size e
-   | Inr (Inl (Inr (_, _, es, _))) \<Rightarrow> size_list size es
-   | Inr (Inr (Inl (_, _, _, es, _))) \<Rightarrow> size_list size es
-   | Inr (Inr (Inr (_, _, gs))) \<Rightarrow> size_list size gs,
+   | Inr (Inl (Inr (_, _, e, _))) \<Rightarrow> size e
+   | Inr (Inr (Inl (_, _, es, _))) \<Rightarrow> size_list size es
+   | Inr (Inr (Inr (Inl (_, _, kws, es, _)))) \<Rightarrow> size_list size es + size_list (\<lambda>p. Suc (size (snd p))) kws
+   | Inr (Inr (Inr (Inr (_, _, gs)))) \<Rightarrow> size_list size gs,
    \<lambda>x. case x of
      Inl (Inl (Inl _)) \<Rightarrow> 0
    | Inl (Inl (Inr _)) \<Rightarrow> 0
    | Inl (Inr (Inl _)) \<Rightarrow> 1
-   | Inl (Inr (Inr _)) \<Rightarrow> 2
-   | Inr (Inl (Inl _)) \<Rightarrow> 1
-   | Inr (Inl (Inr _)) \<Rightarrow> 2
-   | Inr (Inr (Inl _)) \<Rightarrow> 3
-   | Inr (Inr (Inr _)) \<Rightarrow> 0]")
-   (auto dest!: nth_mem dest: size_list_snd_elem intro: size_list_estimation' size_list_elem
+   | Inl (Inr (Inr (Inl _))) \<Rightarrow> 4
+   | Inl (Inr (Inr (Inr _))) \<Rightarrow> 4
+   | Inr (Inl (Inl _)) \<Rightarrow> 2
+   | Inr (Inl (Inr _)) \<Rightarrow> 1
+   | Inr (Inr (Inl _)) \<Rightarrow> 2
+   | Inr (Inr (Inr (Inl _))) \<Rightarrow> 3
+   | Inr (Inr (Inr (Inr _))) \<Rightarrow> 0,
+   \<lambda>x. case x of Inl (Inr (Inr (Inr (_, _, \<tau>, _, _)))) \<Rightarrow> size \<tau> | _ \<Rightarrow> 0]")
+   (auto dest!: nth_mem constructor_args_elem set_zip_rightD
+     dest: size_list_snd_elem size_list_snd_elem' size_list_elem[where f = size]
+     intro: size_list_estimation' size_list_elem
      simp: less_Suc_eq_le size_list_fst size_list_snd)
 
 (* Context entry for a type scheme, which is a plain type when its parameter list is empty *)
@@ -299,6 +348,13 @@ where
       \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma>' \<psi>;
       Inr (TyScheme \<alpha>s (TyCallable \<sigma>s \<tau>))
     })"
+
+(* Call statement at callee type \<sigma>, by call-stmt and call-stmt-union *)
+fun call_stmt_at :: "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow> (var \<times> expr) list \<Rightarrow> expr list \<Rightarrow> reason + unit"
+where
+"call_stmt_at \<Sigma> \<Gamma> (TyUnion \<sigma> \<sigma>') kws es = do { call_stmt_at \<Sigma> \<Gamma> \<sigma> kws es; call_stmt_at \<Sigma> \<Gamma> \<sigma>' kws es }" |
+"call_stmt_at \<Sigma> \<Gamma> (TyCallable \<sigma>s (TyPrim NoneType)) kws es = check_args \<Sigma> \<Gamma> kws es \<sigma>s" |
+"call_stmt_at \<Sigma> \<Gamma> \<sigma> kws es = do { call_at \<Sigma> \<Gamma> \<sigma> kws es; Inr () }"
 
 abbreviation false_lit :: expr where "false_lit \<equiv> ExprLiteral (LitBool False)"
 
@@ -325,15 +381,12 @@ where
    \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; check_expr \<Sigma> \<Gamma> e \<tau>; Inr (Assigns\<^sub>R (fmupd x (Ty \<tau>) fmempty))
  }" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtExpr e) =
-  (case synth_expr \<Sigma> \<Gamma> e of
-     Inr _ \<Rightarrow> Inr (Assigns\<^sub>R fmempty)
-   | Inl r \<Rightarrow>
-       (case e of
-          ExprCall e' (es, kws) \<Rightarrow>
-            (case synth_expr \<Sigma> \<Gamma> e' of
-               Inr (TyCallable \<sigma>s (TyPrim NoneType)) \<Rightarrow> do { check_args \<Sigma> \<Gamma> kws es \<sigma>s; Inr (Assigns\<^sub>R fmempty) }
-             | _ \<Rightarrow> Inl r)
-        | _ \<Rightarrow> Inl r))" |
+  (case e of
+     ExprCall e' (es, kws) \<Rightarrow>
+       if (case e' of ExprLambda _ _ \<Rightarrow> True | _ \<Rightarrow> False) \<or> class_of_name \<Gamma> e' \<noteq> None
+       then do { synth_expr \<Sigma> \<Gamma> e; Inr (Assigns\<^sub>R fmempty) }
+       else do { \<sigma> \<leftarrow> callee \<Sigma> \<Gamma> e' es; call_stmt_at \<Sigma> \<Gamma> \<sigma> kws es; Inr (Assigns\<^sub>R fmempty) }
+   | _ \<Rightarrow> do { synth_expr \<Sigma> \<Gamma> e; Inr (Assigns\<^sub>R fmempty) })" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssert e e') = do {
    (if e = false_lit then Inr () else check_expr \<Sigma> \<Gamma> e (TyPrim bool));
    (case e' of Some e'' \<Rightarrow> check_expr \<Sigma> \<Gamma> e'' (TyPrim str) | None \<Rightarrow> Inr ());

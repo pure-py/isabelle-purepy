@@ -44,6 +44,9 @@ lemma size_list_elem: "x \<in> set xs \<Longrightarrow> f x < size_list f xs"
 lemma size_list_snd_elem: "(a, b) \<in> set xs \<Longrightarrow> size b < size_list (\<lambda>x. Suc (size (snd x))) xs"
   by (induction xs) auto
 
+lemma size_list_snd_elem': "b \<in> set (map snd xs) \<Longrightarrow> size b < size_list (\<lambda>x. Suc (size (snd x))) xs"
+  by (auto dest: size_list_snd_elem)
+
 lemma size_list_fst: "size_list (size \<circ> fst) kvs \<le> size_list (\<lambda>x. Suc (size (fst x) + size (snd x))) kvs"
   by (rule size_list_pointwise) simp
 
