@@ -215,9 +215,9 @@ where
 
 abbreviation predef :: "cxt \<Rightarrow> var \<Rightarrow> bool" where "predef \<Gamma> x \<equiv> fmlookup \<Gamma> x = Some PredefName"
 
-definition check_in_scope :: "cxt \<Rightarrow> var \<Rightarrow> reason + unit"
+definition check_predefined :: "cxt \<Rightarrow> var \<Rightarrow> reason + unit"
 where
-"check_in_scope \<Gamma> x = ensure (predef \<Gamma> x) (NotPredefinedName x)"
+"check_predefined \<Gamma> x = ensure (predef \<Gamma> x) (NotPredefinedName x)"
 
 (* Context entry of a qualified name, through the members of checked modules *)
 fun members_entry :: "cxt_entry option \<Rightarrow> var list \<Rightarrow> cxt_entry option"
@@ -232,23 +232,23 @@ where
 
 fun resolve_type :: "cxt \<Rightarrow> ty_expr \<Rightarrow> reason + ty"
 where
-"resolve_type \<Gamma> (TyExprPrim \<nu>) = do { check_in_scope \<Gamma> (prim_name \<nu>); Inr (TyPrim \<nu>) }" |
+"resolve_type \<Gamma> (TyExprPrim \<nu>) = do { check_predefined \<Gamma> (prim_name \<nu>); Inr (TyPrim \<nu>) }" |
 "resolve_type \<Gamma> (TyExprName q \<psi>s) =
   (case name_entry \<Gamma> q of
      Some Unbound \<Rightarrow> Inl (UnboundName (fst q))
    | Some TypeVar \<Rightarrow> if \<psi>s = [] then Inr (TyVar (fst q)) else Inl (NotClass q)
    | Some (Type _) \<Rightarrow> undefined
    | _ \<Rightarrow> Inl (NotClass q))" |
-"resolve_type \<Gamma> (TyExprLiteral l) = do { check_in_scope \<Gamma> ''Literal''; Inr (TyLiteral l) }" |
-"resolve_type \<Gamma> (TyExprList \<psi>) = do { check_in_scope \<Gamma> ''list''; \<tau> \<leftarrow> resolve_type \<Gamma> \<psi>; Inr (TyList \<tau>) }" |
+"resolve_type \<Gamma> (TyExprLiteral l) = do { check_predefined \<Gamma> ''Literal''; Inr (TyLiteral l) }" |
+"resolve_type \<Gamma> (TyExprList \<psi>) = do { check_predefined \<Gamma> ''list''; \<tau> \<leftarrow> resolve_type \<Gamma> \<psi>; Inr (TyList \<tau>) }" |
 "resolve_type \<Gamma> (TyExprDict \<psi>) = do {
-   check_in_scope \<Gamma> ''dict''; check_in_scope \<Gamma> ''str''; \<tau> \<leftarrow> resolve_type \<Gamma> \<psi>; Inr (TyDict \<tau>)
+   check_predefined \<Gamma> ''dict''; check_predefined \<Gamma> ''str''; \<tau> \<leftarrow> resolve_type \<Gamma> \<psi>; Inr (TyDict \<tau>)
  }" |
 "resolve_type \<Gamma> (TyExprTuple \<psi>s) = do {
-   check_in_scope \<Gamma> ''tuple''; \<tau>s \<leftarrow> those_sum (map (resolve_type \<Gamma>) \<psi>s); Inr (TyTuple \<tau>s)
+   check_predefined \<Gamma> ''tuple''; \<tau>s \<leftarrow> those_sum (map (resolve_type \<Gamma>) \<psi>s); Inr (TyTuple \<tau>s)
  }" |
 "resolve_type \<Gamma> (TyExprCallable \<psi>s \<psi>) = do {
-   check_in_scope \<Gamma> ''Callable'';
+   check_predefined \<Gamma> ''Callable'';
    \<sigma>s \<leftarrow> those_sum (map (resolve_type \<Gamma>) \<psi>s);
    \<tau> \<leftarrow> resolve_type \<Gamma> \<psi>;
    Inr (TyCallable \<sigma>s \<tau>)
