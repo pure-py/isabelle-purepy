@@ -1,5 +1,5 @@
 theory Contexts
-  imports Syntax
+  imports Syntax "HOL-Library.List_Lexorder" "HOL-Library.Char_ord"
 begin
 
 datatype cxt_entry =
@@ -85,6 +85,23 @@ where
     (ClassDef (the (fmlookup predefined builtins)) builtins
       [Dataclass ''range'' [] None [(''start'', TyExprPrim int), (''stop'', TyExprPrim int)]] 0)
     fmempty"
+
+lemma sorted_list_of_fmap_lookup: "(k, v) \<in> set (sorted_list_of_fmap m) \<Longrightarrow> fmlookup m k = Some v"
+  unfolding sorted_list_of_fmap_def by (auto simp: fmlookup_dom_iff)
+
+(* Alias definitions reachable from a context, through the contexts of its aliases and checked modules *)
+function (sequential) entry_aliases :: "cxt_entry \<Rightarrow> nat" and aliases :: "cxt \<Rightarrow> nat"
+where
+"entry_aliases (TypeAlias \<Gamma> _ \<chi>s _) =
+  length (filter (\<lambda>\<chi>. case \<chi> of TypeStmt _ _ _ \<Rightarrow> True | _ \<Rightarrow> False) \<chi>s) + aliases \<Gamma>" |
+"entry_aliases (ModChecked _ \<Gamma>) = aliases \<Gamma>" |
+"entry_aliases _ = 0" |
+"aliases \<Gamma> = sum_list (map (entry_aliases \<circ> snd) (sorted_list_of_fmap \<Gamma>))"
+by pat_completeness auto
+
+termination
+  by (relation "measure (\<lambda>p. case p of Inl \<theta> \<Rightarrow> size \<theta> | Inr \<Gamma> \<Rightarrow> size_fmap (\<lambda>_. 0) size \<Gamma>)")
+     (auto dest!: sorted_list_of_fmap_lookup simp: size_fmap_lookup simp del: size_fmap_def)
 
 definition class_of_name :: "cxt \<Rightarrow> expr \<Rightarrow> name option"
 where

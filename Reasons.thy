@@ -1,5 +1,5 @@
 theory Reasons
-  imports Contexts "HOL-Library.List_Lexorder" "HOL-Library.Char_ord"
+  imports Contexts
 begin
 
 (* Reasons for ill-formedness, refining the single failure of the typing rules *)
@@ -22,6 +22,8 @@ datatype reason =
   | NotPredefinedName var
   | NotClass name
   | ClassArityMismatch name nat nat
+  | TypeAliasArityMismatch name nat nat
+  | CyclicTypeAlias var
   | DuplicateMember var name
   | SubmoduleNotImported name
   | UnassignedMember var name

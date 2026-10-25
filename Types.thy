@@ -51,37 +51,6 @@ where
      Some (ClassDef _ _ \<chi>s i) \<Rightarrow> (case \<chi>s ! i of Dataclass _ \<alpha>s _ _ \<Rightarrow> \<alpha>s | TypeStmt _ _ _ \<Rightarrow> undefined)
    | None \<Rightarrow> undefined)"
 
-fun resolve_type :: "class_table \<Rightarrow> cxt \<Rightarrow> ty_expr \<Rightarrow> reason + ty"
-where
-"resolve_type \<Sigma> \<Gamma> (TyExprPrim \<nu>) = do { check_predefined \<Gamma> (prim_name \<nu>); Inr (TyPrim \<nu>) }" |
-"resolve_type \<Sigma> \<Gamma> (TyExprName q \<psi>s) =
-  (if snd q = [] \<and> \<psi>s = [] \<and> fmlookup \<Gamma> (fst q) = Some TypeVar then Inr (TyVar (fst q))
-   else case resolve_name \<Gamma> q of
-     Some (Type C) \<Rightarrow> do {
-       \<tau>s \<leftarrow> those_sum (map (resolve_type \<Sigma> \<Gamma>) \<psi>s);
-       let n = length (type_params \<Sigma> C);
-       if length \<tau>s = n then Inr (TyClass C \<tau>s) else Inl (ClassArityMismatch q n (length \<tau>s))
-     }
-   | Some (TypeAlias _ _ _ _) \<Rightarrow> undefined
-   | _ \<Rightarrow> Inl (not_type_name \<Gamma> q))" |
-"resolve_type \<Sigma> \<Gamma> (TyExprLiteral l) = do { check_predefined \<Gamma> ''Literal''; Inr (TyLiteral l) }" |
-"resolve_type \<Sigma> \<Gamma> (TyExprList \<psi>) = do { check_predefined \<Gamma> ''list''; \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; Inr (TyList \<tau>) }" |
-"resolve_type \<Sigma> \<Gamma> (TyExprDict \<psi>) = do {
-   check_predefined \<Gamma> ''dict''; check_predefined \<Gamma> ''str''; \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; Inr (TyDict \<tau>)
- }" |
-"resolve_type \<Sigma> \<Gamma> (TyExprTuple \<psi>s) = do {
-   check_predefined \<Gamma> ''tuple''; \<tau>s \<leftarrow> those_sum (map (resolve_type \<Sigma> \<Gamma>) \<psi>s); Inr (TyTuple \<tau>s)
- }" |
-"resolve_type \<Sigma> \<Gamma> (TyExprCallable \<psi>s \<psi>) = do {
-   check_predefined \<Gamma> ''Callable'';
-   \<sigma>s \<leftarrow> those_sum (map (resolve_type \<Sigma> \<Gamma>) \<psi>s);
-   \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>;
-   Inr (TyCallable \<sigma>s \<tau>)
- }" |
-"resolve_type \<Sigma> \<Gamma> (TyExprUnion \<psi> \<psi>') = do {
-   \<sigma> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>'; Inr (TyUnion \<sigma> \<tau>)
- }"
-
 definition type_entry :: "cxt \<Rightarrow> name \<Rightarrow> type_def list \<Rightarrow> nat \<Rightarrow> cxt_entry"
 where
 "type_entry \<Gamma> q \<chi>s i =
@@ -94,6 +63,55 @@ where
    case \<chi>s ! i of
      TypeStmt _ \<alpha>s _ \<Rightarrow> \<Gamma> \<otimes> entries [0..<length \<chi>s] \<otimes> fmconst (set \<alpha>s) TypeVar
    | Dataclass _ \<alpha>s _ _ \<Rightarrow> \<Gamma> \<otimes> entries [0..<i] \<otimes> fmconst (set \<alpha>s) TypeVar)"
+
+(* A holds the aliases being resolved, so that a cyclic alias is rejected; n bounds the aliases resolved
+   along a path, which are distinct, by the alias definitions reachable from the context *)
+fun resolve_type' :: "class_table \<Rightarrow> cxt \<Rightarrow> (name \<times> var) list \<Rightarrow> nat \<Rightarrow> ty_expr \<Rightarrow> reason + ty"
+where
+"resolve_type' \<Sigma> \<Gamma> A n (TyExprPrim \<nu>) = do { check_predefined \<Gamma> (prim_name \<nu>); Inr (TyPrim \<nu>) }" |
+"resolve_type' \<Sigma> \<Gamma> A n (TyExprName q \<psi>s) =
+  (if snd q = [] \<and> \<psi>s = [] \<and> fmlookup \<Gamma> (fst q) = Some TypeVar then Inr (TyVar (fst q))
+   else case resolve_name \<Gamma> q of
+     Some (Type C) \<Rightarrow> do {
+       \<tau>s \<leftarrow> those_sum (map (resolve_type' \<Sigma> \<Gamma> A n) \<psi>s);
+       let m = length (type_params \<Sigma> C);
+       if length \<tau>s = m then Inr (TyClass C \<tau>s) else Inl (ClassArityMismatch q m (length \<tau>s))
+     }
+   | Some (TypeAlias \<Gamma>' q' \<chi>s i) \<Rightarrow>
+       (case \<chi>s ! i of
+          TypeStmt x \<alpha>s \<psi> \<Rightarrow> do {
+            \<sigma>s \<leftarrow> those_sum (map (resolve_type' \<Sigma> \<Gamma> A n) \<psi>s);
+            ensure (length \<sigma>s = length \<alpha>s) (TypeAliasArityMismatch q (length \<alpha>s) (length \<sigma>s));
+            ensure ((q', x) \<notin> set A) (CyclicTypeAlias x);
+            \<tau> \<leftarrow> (case n of
+                   Suc n' \<Rightarrow> resolve_type' \<Sigma> (type_context \<Gamma>' q' \<chi>s i) ((q', x) # A) n' \<psi>
+                 | 0 \<Rightarrow> undefined);
+            Inr (subst \<sigma>s \<alpha>s \<tau>)
+          }
+        | _ \<Rightarrow> undefined)
+   | _ \<Rightarrow> Inl (not_type_name \<Gamma> q))" |
+"resolve_type' \<Sigma> \<Gamma> A n (TyExprLiteral l) = do { check_predefined \<Gamma> ''Literal''; Inr (TyLiteral l) }" |
+"resolve_type' \<Sigma> \<Gamma> A n (TyExprList \<psi>) =
+  do { check_predefined \<Gamma> ''list''; \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>; Inr (TyList \<tau>) }" |
+"resolve_type' \<Sigma> \<Gamma> A n (TyExprDict \<psi>) = do {
+   check_predefined \<Gamma> ''dict''; check_predefined \<Gamma> ''str''; \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>; Inr (TyDict \<tau>)
+ }" |
+"resolve_type' \<Sigma> \<Gamma> A n (TyExprTuple \<psi>s) = do {
+   check_predefined \<Gamma> ''tuple''; \<tau>s \<leftarrow> those_sum (map (resolve_type' \<Sigma> \<Gamma> A n) \<psi>s); Inr (TyTuple \<tau>s)
+ }" |
+"resolve_type' \<Sigma> \<Gamma> A n (TyExprCallable \<psi>s \<psi>) = do {
+   check_predefined \<Gamma> ''Callable'';
+   \<sigma>s \<leftarrow> those_sum (map (resolve_type' \<Sigma> \<Gamma> A n) \<psi>s);
+   \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>;
+   Inr (TyCallable \<sigma>s \<tau>)
+ }" |
+"resolve_type' \<Sigma> \<Gamma> A n (TyExprUnion \<psi> \<psi>') = do {
+   \<sigma> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>; \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>'; Inr (TyUnion \<sigma> \<tau>)
+ }"
+
+definition resolve_type :: "class_table \<Rightarrow> cxt \<Rightarrow> ty_expr \<Rightarrow> reason + ty"
+where
+"resolve_type \<Sigma> \<Gamma> \<psi> = resolve_type' \<Sigma> \<Gamma> [] (aliases \<Gamma>) \<psi>"
 
 definition base :: "class_table \<Rightarrow> name \<Rightarrow> (name \<times> ty list) option"
 where
