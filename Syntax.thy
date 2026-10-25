@@ -124,7 +124,7 @@ type_synonym fields = "(var \<times> ty_expr) list"
 
 datatype type_def =
     Dataclass var "var list" "(name \<times> ty_expr list) option" fields
-  | TypeAlias var "var list" ty_expr
+  | TypeStmt var "var list" ty_expr
 
 datatype top_stmt =
     Stmt stmt
@@ -160,7 +160,7 @@ where
 fun type_def_name :: "type_def \<Rightarrow> var"
 where
 "type_def_name (Dataclass c _ _ _) = c" |
-"type_def_name (TypeAlias x _ _) = x"
+"type_def_name (TypeStmt x _ _) = x"
 
 fun binds_pat :: "pat \<Rightarrow> var set"
 where

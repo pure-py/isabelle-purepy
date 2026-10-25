@@ -9,6 +9,7 @@ datatype cxt_entry =
   | Unbound
   | ModStub name
   | ModChecked name "(var, cxt_entry) fmap"
+  | TypeAlias "(var, cxt_entry) fmap" name "type_def list" nat
   | Type name
   | TypeVar
   | Scheme ty_scheme
@@ -36,6 +37,7 @@ datatype reason =
   | UnreachableStatement
   | NotPredefinedName var
   | NotClass name
+  | ClassArityMismatch name nat nat
   | DuplicateMember var name
   | SubmoduleNotImported name
   | UnassignedMember var name
@@ -49,6 +51,7 @@ datatype reason =
   | TypeParameterAsValue var
   | TypeSchemeAsValue name
   | ClassAsValue name
+  | TypeAliasAsValue name
   | NoBinaryOverload bop ty ty
   | NoUnaryOverload uop ty
   | NotCallable ty
@@ -79,6 +82,7 @@ where
      Some (Ty \<tau>) \<Rightarrow> Some (Ty \<tau>)
    | Some (ModChecked q \<Gamma>') \<Rightarrow> Some (ModChecked q \<Gamma>')
    | Some (Type C) \<Rightarrow> Some (Type C)
+   | Some (TypeAlias \<Gamma>' q \<chi>s i) \<Rightarrow> Some (TypeAlias \<Gamma>' q \<chi>s i)
    | Some (Scheme \<pi>) \<Rightarrow> Some (Scheme \<pi>)
    | Some PredefName \<Rightarrow> Some PredefName
    | _ \<Rightarrow> None)"
@@ -107,13 +111,115 @@ where
 "sized (TyDict _) = True" |
 "sized (TyPrim str) = True" |
 "sized (TyTuple _) = True" |
+"sized (TyClass C []) = (C = snoc builtins ''range'')" |
 "sized _ = False"
+
+fun prim_name :: "prim_ty \<Rightarrow> var"
+where
+"prim_name object = ''object''" |
+"prim_name Never = ''Never''" |
+"prim_name NoneType = ''None''" |
+"prim_name bool = ''bool''" |
+"prim_name int = ''int''" |
+"prim_name float = ''float''" |
+"prim_name str = ''str''" |
+"prim_name Sized = ''Sized''"
+
+abbreviation predef :: "cxt \<Rightarrow> var \<Rightarrow> bool" where "predef \<Gamma> x \<equiv> fmlookup \<Gamma> x = Some PredefName"
+
+definition check_predefined :: "cxt \<Rightarrow> var \<Rightarrow> reason + unit"
+where
+"check_predefined \<Gamma> x = ensure (predef \<Gamma> x) (NotPredefinedName x)"
+
+definition not_type_name :: "cxt \<Rightarrow> name \<Rightarrow> reason"
+where
+"not_type_name \<Gamma> q = (case lookup \<Gamma> q of Some Unbound \<Rightarrow> UnboundName (fst q) | _ \<Rightarrow> NotClass q)"
+
+definition type_params :: "class_table \<Rightarrow> name \<Rightarrow> var list"
+where
+"type_params \<Sigma> C =
+  (case fmlookup \<Sigma> C of
+     Some (ClassDef _ _ \<chi>s i) \<Rightarrow> (case \<chi>s ! i of Dataclass _ \<alpha>s _ _ \<Rightarrow> \<alpha>s | TypeStmt _ _ _ \<Rightarrow> undefined)
+   | None \<Rightarrow> undefined)"
+
+fun resolve_type :: "class_table \<Rightarrow> cxt \<Rightarrow> ty_expr \<Rightarrow> reason + ty"
+where
+"resolve_type \<Sigma> \<Gamma> (TyExprPrim \<nu>) = do { check_predefined \<Gamma> (prim_name \<nu>); Inr (TyPrim \<nu>) }" |
+"resolve_type \<Sigma> \<Gamma> (TyExprName q \<psi>s) =
+  (if snd q = [] \<and> \<psi>s = [] \<and> fmlookup \<Gamma> (fst q) = Some TypeVar then Inr (TyVar (fst q))
+   else case resolve_name \<Gamma> q of
+     Some (Type C) \<Rightarrow> do {
+       \<tau>s \<leftarrow> those_sum (map (resolve_type \<Sigma> \<Gamma>) \<psi>s);
+       let n = length (type_params \<Sigma> C);
+       if length \<tau>s = n then Inr (TyClass C \<tau>s) else Inl (ClassArityMismatch q n (length \<tau>s))
+     }
+   | Some (TypeAlias _ _ _ _) \<Rightarrow> undefined
+   | _ \<Rightarrow> Inl (not_type_name \<Gamma> q))" |
+"resolve_type \<Sigma> \<Gamma> (TyExprLiteral l) = do { check_predefined \<Gamma> ''Literal''; Inr (TyLiteral l) }" |
+"resolve_type \<Sigma> \<Gamma> (TyExprList \<psi>) = do { check_predefined \<Gamma> ''list''; \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; Inr (TyList \<tau>) }" |
+"resolve_type \<Sigma> \<Gamma> (TyExprDict \<psi>) = do {
+   check_predefined \<Gamma> ''dict''; check_predefined \<Gamma> ''str''; \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; Inr (TyDict \<tau>)
+ }" |
+"resolve_type \<Sigma> \<Gamma> (TyExprTuple \<psi>s) = do {
+   check_predefined \<Gamma> ''tuple''; \<tau>s \<leftarrow> those_sum (map (resolve_type \<Sigma> \<Gamma>) \<psi>s); Inr (TyTuple \<tau>s)
+ }" |
+"resolve_type \<Sigma> \<Gamma> (TyExprCallable \<psi>s \<psi>) = do {
+   check_predefined \<Gamma> ''Callable'';
+   \<sigma>s \<leftarrow> those_sum (map (resolve_type \<Sigma> \<Gamma>) \<psi>s);
+   \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>;
+   Inr (TyCallable \<sigma>s \<tau>)
+ }" |
+"resolve_type \<Sigma> \<Gamma> (TyExprUnion \<psi> \<psi>') = do {
+   \<sigma> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>'; Inr (TyUnion \<sigma> \<tau>)
+ }"
+
+definition type_entry :: "cxt \<Rightarrow> name \<Rightarrow> type_def list \<Rightarrow> nat \<Rightarrow> cxt_entry"
+where
+"type_entry \<Gamma> q \<chi>s i =
+  (case \<chi>s ! i of Dataclass c _ _ _ \<Rightarrow> Type (snoc q c) | TypeStmt _ _ _ \<Rightarrow> TypeAlias \<Gamma> q \<chi>s i)"
+
+definition type_context :: "cxt \<Rightarrow> name \<Rightarrow> type_def list \<Rightarrow> nat \<Rightarrow> cxt"
+where
+"type_context \<Gamma> q \<chi>s i =
+  (let entries = \<lambda>js. fmap_of_list (map (\<lambda>j. (type_def_name (\<chi>s ! j), type_entry \<Gamma> q \<chi>s j)) js) in
+   case \<chi>s ! i of
+     TypeStmt _ \<alpha>s _ \<Rightarrow> \<Gamma> \<otimes> entries [0..<length \<chi>s] \<otimes> fmconst (set \<alpha>s) TypeVar
+   | Dataclass _ \<alpha>s _ _ \<Rightarrow> \<Gamma> \<otimes> entries [0..<i] \<otimes> fmconst (set \<alpha>s) TypeVar)"
+
+definition base :: "class_table \<Rightarrow> name \<Rightarrow> (name \<times> ty list) option"
+where
+"base \<Sigma> C =
+  (case fmlookup \<Sigma> C of
+     Some (ClassDef \<Gamma> q \<chi>s i) \<Rightarrow>
+       (case \<chi>s ! i of
+          Dataclass _ _ None _ \<Rightarrow> None
+        | Dataclass _ _ (Some (q', \<psi>s)) _ \<Rightarrow>
+            (case resolve_type \<Sigma> (type_context \<Gamma> q \<chi>s i) (TyExprName q' \<psi>s) of
+               Inr (TyClass D \<sigma>s) \<Rightarrow> Some (D, \<sigma>s)
+             | _ \<Rightarrow> undefined)
+        | TypeStmt _ _ _ \<Rightarrow> undefined)
+   | None \<Rightarrow> undefined)"
+
+fun subst :: "ty list \<Rightarrow> var list \<Rightarrow> ty \<Rightarrow> ty"
+where
+"subst \<tau>s \<alpha>s (TyVar \<alpha>) = (case map_of (zip \<alpha>s \<tau>s) \<alpha> of Some \<tau> \<Rightarrow> \<tau> | None \<Rightarrow> TyVar \<alpha>)" |
+"subst \<tau>s \<alpha>s (TyList \<sigma>) = TyList (subst \<tau>s \<alpha>s \<sigma>)" |
+"subst \<tau>s \<alpha>s (TyTuple \<sigma>s) = TyTuple (map (subst \<tau>s \<alpha>s) \<sigma>s)" |
+"subst \<tau>s \<alpha>s (TyDict \<sigma>) = TyDict (subst \<tau>s \<alpha>s \<sigma>)" |
+"subst \<tau>s \<alpha>s (TyCallable \<sigma>s \<sigma>) = TyCallable (map (subst \<tau>s \<alpha>s) \<sigma>s) (subst \<tau>s \<alpha>s \<sigma>)" |
+"subst \<tau>s \<alpha>s (TyClass C \<sigma>s) = TyClass C (map (subst \<tau>s \<alpha>s) \<sigma>s)" |
+"subst \<tau>s \<alpha>s (TyUnion \<sigma> \<sigma>') = TyUnion (subst \<tau>s \<alpha>s \<sigma>) (subst \<tau>s \<alpha>s \<sigma>')" |
+"subst \<tau>s \<alpha>s \<sigma> = \<sigma>"
 
 inductive subty :: "class_table \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> bool" ("_ \<turnstile> _ <: _" [51, 51, 51] 50)
 and subtys :: "class_table \<Rightarrow> ty list \<Rightarrow> ty list \<Rightarrow> bool" ("_ \<turnstile> _ [<:] _" [51, 51, 51] 50)
 for \<Sigma> :: class_table
 where
 SubtyRefl: "\<Sigma> \<turnstile> \<tau> <: \<tau>" |
+SubtyClassExtend:
+  "\<lbrakk> base \<Sigma> C = Some (D, \<sigma>s) ; \<Sigma> \<turnstile> TyClass D (map (subst \<tau>s (type_params \<Sigma> C)) \<sigma>s) <: \<tau>' \<rbrakk>
+  \<Longrightarrow> \<Sigma> \<turnstile> TyClass C \<tau>s <: \<tau>'" |
+SubtyClass: "\<lbrakk> \<Sigma> \<turnstile> \<sigma>s [<:] \<tau>s ; \<Sigma> \<turnstile> \<tau>s [<:] \<sigma>s \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> TyClass C \<sigma>s <: TyClass C \<tau>s" |
 SubtyNever: "\<Sigma> \<turnstile> TyPrim Never <: \<tau>" |
 SubtyObject: "\<Sigma> \<turnstile> \<tau> <: TyPrim object" |
 SubtyIntFloat: "\<Sigma> \<turnstile> TyPrim int <: TyPrim float" |
@@ -218,53 +324,6 @@ fun override_outcome :: "static_outcome \<Rightarrow> static_outcome \<Rightarro
 where
 "Assigns\<^sub>R \<Delta> \<otimes>\<^sub>R Assigns\<^sub>R \<Delta>' = Assigns\<^sub>R (\<Delta> \<otimes> \<Delta>')" |
 "_ \<otimes>\<^sub>R _ = Returns\<^sub>R"
-
-fun prim_name :: "prim_ty \<Rightarrow> var"
-where
-"prim_name object = ''object''" |
-"prim_name Never = ''Never''" |
-"prim_name NoneType = ''None''" |
-"prim_name bool = ''bool''" |
-"prim_name int = ''int''" |
-"prim_name float = ''float''" |
-"prim_name str = ''str''" |
-"prim_name Sized = ''Sized''"
-
-abbreviation predef :: "cxt \<Rightarrow> var \<Rightarrow> bool" where "predef \<Gamma> x \<equiv> fmlookup \<Gamma> x = Some PredefName"
-
-definition check_predefined :: "cxt \<Rightarrow> var \<Rightarrow> reason + unit"
-where
-"check_predefined \<Gamma> x = ensure (predef \<Gamma> x) (NotPredefinedName x)"
-
-definition not_type_name :: "cxt \<Rightarrow> name \<Rightarrow> reason"
-where
-"not_type_name \<Gamma> q = (case lookup \<Gamma> q of Some Unbound \<Rightarrow> UnboundName (fst q) | _ \<Rightarrow> NotClass q)"
-
-fun resolve_type :: "class_table \<Rightarrow> cxt \<Rightarrow> ty_expr \<Rightarrow> reason + ty"
-where
-"resolve_type \<Sigma> \<Gamma> (TyExprPrim \<nu>) = do { check_predefined \<Gamma> (prim_name \<nu>); Inr (TyPrim \<nu>) }" |
-"resolve_type \<Sigma> \<Gamma> (TyExprName q \<psi>s) =
-  (if snd q = [] \<and> \<psi>s = [] \<and> fmlookup \<Gamma> (fst q) = Some TypeVar then Inr (TyVar (fst q))
-   else case resolve_name \<Gamma> q of
-     Some (Type _) \<Rightarrow> undefined
-   | _ \<Rightarrow> Inl (not_type_name \<Gamma> q))" |
-"resolve_type \<Sigma> \<Gamma> (TyExprLiteral l) = do { check_predefined \<Gamma> ''Literal''; Inr (TyLiteral l) }" |
-"resolve_type \<Sigma> \<Gamma> (TyExprList \<psi>) = do { check_predefined \<Gamma> ''list''; \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; Inr (TyList \<tau>) }" |
-"resolve_type \<Sigma> \<Gamma> (TyExprDict \<psi>) = do {
-   check_predefined \<Gamma> ''dict''; check_predefined \<Gamma> ''str''; \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; Inr (TyDict \<tau>)
- }" |
-"resolve_type \<Sigma> \<Gamma> (TyExprTuple \<psi>s) = do {
-   check_predefined \<Gamma> ''tuple''; \<tau>s \<leftarrow> those_sum (map (resolve_type \<Sigma> \<Gamma>) \<psi>s); Inr (TyTuple \<tau>s)
- }" |
-"resolve_type \<Sigma> \<Gamma> (TyExprCallable \<psi>s \<psi>) = do {
-   check_predefined \<Gamma> ''Callable'';
-   \<sigma>s \<leftarrow> those_sum (map (resolve_type \<Sigma> \<Gamma>) \<psi>s);
-   \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>;
-   Inr (TyCallable \<sigma>s \<tau>)
- }" |
-"resolve_type \<Sigma> \<Gamma> (TyExprUnion \<psi> \<psi>') = do {
-   \<sigma> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>'; Inr (TyUnion \<sigma> \<tau>)
- }"
 
 fun equality_type :: "class_table \<Rightarrow> ty \<Rightarrow> bool"
 where
@@ -423,6 +482,7 @@ where
 "var_reason x (Some (ModStub _)) = ModuleAsValue (x, [])" |
 "var_reason x (Some (ModChecked _ _)) = ModuleAsValue (x, [])" |
 "var_reason x (Some (Type _)) = ClassAsValue (x, [])" |
+"var_reason x (Some (TypeAlias _ _ _ _)) = TypeAliasAsValue (x, [])" |
 "var_reason x (Some PredefName) = PredefinedNameAsValue (x, [])" |
 "var_reason x (Some TypeVar) = TypeParameterAsValue x" |
 "var_reason x (Some (Scheme _)) = TypeSchemeAsValue (x, [])" |
@@ -443,6 +503,7 @@ where
    | Some (ModStub q'') \<Rightarrow> Inl (SubmoduleNotImported q'')
    | Some (ModChecked _ _) \<Rightarrow> Inl (ModuleAsValue q')
    | Some (Type _) \<Rightarrow> Inl (ClassAsValue q')
+   | Some (TypeAlias _ _ _ _) \<Rightarrow> Inl (TypeAliasAsValue q')
    | Some PredefName \<Rightarrow> Inl (PredefinedNameAsValue q')
    | Some (Scheme _) \<Rightarrow> Inl (TypeSchemeAsValue q')
    | Some TypeVar \<Rightarrow> undefined
@@ -472,6 +533,10 @@ where
 "captured X \<Delta> =
   (let Y = X \<inter> fset (fmdom \<Delta>) in if Y = {} then Inr () else Inl (CapturedGeneratorVariable (Min Y)))"
 
+definition names_class :: "cxt \<Rightarrow> expr \<Rightarrow> bool"
+where
+"names_class \<Gamma> e = (case Option.bind (expr_name e) (resolve_name \<Gamma>) of Some (Type _) \<Rightarrow> True | _ \<Rightarrow> False)"
+
 function (sequential)
   synth_expr :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> reason + ty" and
   synth_exprs :: "class_table \<Rightarrow> cxt \<Rightarrow> expr list \<Rightarrow> (reason + ty) list" and
@@ -490,7 +555,9 @@ where
        \<tau>s \<leftarrow> those_sum (synth_exprs \<Sigma> \<Gamma> es);
        if distinct xs then synth_expr \<Sigma> (\<Gamma> \<otimes> fmap_of_list (zip xs (map Ty \<tau>s))) e' else Inl undefined
      }
-   | _ \<Rightarrow> do {
+   | _ \<Rightarrow>
+     if names_class \<Gamma> e \<or> (case e of ExprSubscript e' _ \<Rightarrow> names_class \<Gamma> e' | _ \<Rightarrow> False) then undefined
+     else do {
        \<sigma> \<leftarrow> synth_expr \<Sigma> \<Gamma> e;
        case \<sigma> of
          TyCallable \<sigma>s \<tau> \<Rightarrow> do {
