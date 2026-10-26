@@ -335,6 +335,14 @@ fun short_name :: "name \<Rightarrow> var"
 where
 "short_name (x, xs) = (if xs = [] then x else last xs)"
 
+fun lambda_of :: "expr \<Rightarrow> (var list \<times> expr) option"
+where
+"lambda_of (ExprLambda xs e) = Some (xs, e)" |
+"lambda_of _ = None"
+
+lemma lambda_of_size: "lambda_of e = Some (xs, e') \<Longrightarrow> size e' < size e"
+  by (cases e) auto
+
 fun dotted_name :: "expr \<Rightarrow> name option"
 where
 "dotted_name (ExprVar x) = Some (x, [])" |

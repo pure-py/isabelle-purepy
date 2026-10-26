@@ -115,11 +115,11 @@ where
 "synth_expr \<Sigma> \<Gamma> (ExprVar x) = (case fmlookup \<Gamma> x of Some (Ty \<tau>) \<Rightarrow> Inr \<tau> | \<theta> \<Rightarrow> Inl (var_reason x \<theta>))" |
 "synth_expr \<Sigma> \<Gamma> (ExprLiteral l) = Inr (case l of LitFloat _ \<Rightarrow> TyPrim float | _ \<Rightarrow> TyLiteral l)" |
 "synth_expr \<Sigma> \<Gamma> (ExprCall e (es, kws)) =
-  (case e of
-     ExprLambda xs e' \<Rightarrow> do {
+  (case lambda_of e of
+     Some (xs, e') \<Rightarrow> do {
        \<Delta> \<leftarrow> lambda_arguments xs kws es (synth_exprs \<Sigma> \<Gamma> es); synth_expr \<Sigma> (\<Gamma> \<otimes> \<Delta>) e'
      }
-   | _ \<Rightarrow>
+   | None \<Rightarrow>
      (case constructor_class \<Sigma> \<Gamma> e of
         Some m \<Rightarrow> do {
           (C, explicit) \<leftarrow> m;
@@ -322,7 +322,7 @@ by (relation "measures [\<lambda>x. case x of
    | Inr (Inr (Inr (Inl _))) \<Rightarrow> 3
    | Inr (Inr (Inr (Inr _))) \<Rightarrow> 0,
    \<lambda>x. case x of Inl (Inr (Inr (Inr (_, _, \<tau>, _, _)))) \<Rightarrow> size \<tau> | _ \<Rightarrow> 0]")
-   (auto dest!: nth_mem constructor_args_elem set_zip_rightD
+   (auto dest!: nth_mem constructor_args_elem set_zip_rightD lambda_of_size
      dest: size_list_snd_elem size_list_snd_elem' size_list_elem[where f = size]
      intro: size_list_estimation' size_list_elem
      simp: less_Suc_eq_le size_list_fst size_list_snd)
