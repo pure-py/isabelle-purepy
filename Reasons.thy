@@ -2,6 +2,8 @@ theory Reasons
   imports Contexts
 begin
 
+datatype sequence_kind = TupleKind | ListKind | RangeKind
+
 (* Reasons for ill-formedness *)
 datatype reason =
     DuplicateField var var
@@ -19,6 +21,11 @@ datatype reason =
   | UnreachableStatement
   | ConstructorArityMismatch var nat nat
   | UnknownConstructorKeyword var "var list"
+  | PatternArityMismatch var nat nat
+  | UnknownFieldInPattern var "var list"
+  | RangePattern
+  | PatternClassUndetermined var ty
+  | SequenceKindMismatch sequence_kind ty sequence_kind
   | NotPredefinedName var
   | NotClass name
   | ClassArityMismatch name nat nat

@@ -1,19 +1,6 @@
 theory Matching
-  imports Shapes
+  imports Shapes Patterns
 begin
-
-definition pattern_class :: "cxt \<Rightarrow> name \<Rightarrow> name"
-where
-"pattern_class \<Gamma> q = (case resolve_name \<Gamma> q of Some (Type C) \<Rightarrow> C | _ \<Rightarrow> undefined)"
-
-(* Sub-patterns of a constructor pattern for class C with arguments a, in the order of the fields of C *)
-definition field_patterns :: "class_table \<Rightarrow> name \<Rightarrow> pat args \<Rightarrow> pat list"
-where
-"field_patterns \<Sigma> C a =
-  (case a of (ps, kps) \<Rightarrow> ps @ concat (map (\<lambda>x. [p. (y, p) \<leftarrow> kps, y = x]) (drop (length ps) (field_names \<Sigma> C))))"
-
-lemma field_patterns_elem: "p \<in> set (field_patterns \<Sigma> C (ps, kps)) \<Longrightarrow> p \<in> set ps \<or> p \<in> set (map snd kps)"
-  unfolding field_patterns_def by (auto simp: image_iff) (metis snd_conv)
 
 (* Dictionary shape k with keys ws bound to shapes ks *)
 definition with_keys :: "shape \<Rightarrow> string list \<Rightarrow> shape list \<Rightarrow> shape"
@@ -26,7 +13,7 @@ where
 definition split_class :: "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow> head set \<Rightarrow> name \<Rightarrow> (shape list \<times> shape list) option"
 where
 "split_class \<Sigma> \<Gamma> \<tau> H q =
-  (let C = pattern_class \<Gamma> q in
+  (let C = projr (pattern_class \<Gamma> q) in
    if below_excluded \<Sigma> C H then None
    else case instance_at \<Sigma> C \<tau> of
      Instance \<tau>s \<Rightarrow>
@@ -43,7 +30,7 @@ definition split_subclass ::
   "class_table \<Rightarrow> cxt \<Rightarrow> name \<Rightarrow> ty list \<Rightarrow> shape list \<Rightarrow> head set \<Rightarrow> name \<Rightarrow> (shape list \<times> shape list) option"
 where
 "split_subclass \<Sigma> \<Gamma> C \<tau>s ks H q =
-  (let D = pattern_class \<Gamma> q in
+  (let D = projr (pattern_class \<Gamma> q) in
    case instance_at \<Sigma> D (TyClass C \<tau>s) of
      Instance \<sigma>s \<Rightarrow>
        if D = C \<or> \<not> \<Sigma> \<turnstile> TyClass D \<sigma>s <: TyClass C \<tau>s \<or> below_excluded \<Sigma> D H then None
@@ -157,7 +144,7 @@ where
       | PatConstr q a \<Rightarrow>
           (case k of
              ShapeConstr C \<tau>s ks H \<Rightarrow>
-               (let D = pattern_class \<Gamma> q; ps = field_patterns \<Sigma> D a; m = length ps in
+               (let D = projr (pattern_class \<Gamma> q); ps = field_patterns \<Sigma> D a; m = length ps in
                 if D \<in> set (ancestors \<Sigma> C) then
                   map_result (\<lambda>ks'. ShapeConstr C \<tau>s (ks' @ drop m ks) H)
                     (seq_result (take m ks) (map2 (\<lambda>k' p'. match_shape \<Sigma> \<Gamma> (splits p') k' p') (take m ks) ps))

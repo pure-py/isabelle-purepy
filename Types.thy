@@ -184,12 +184,14 @@ where
      Dataclass c _ _ _ \<Rightarrow> fmupd (snoc q c) (ClassDef \<Gamma> q \<chi>s i) fmempty
    | TypeStmt _ _ _ \<Rightarrow> fmempty)"
 
-definition check_field_map :: "name \<Rightarrow> var list \<Rightarrow> nat \<Rightarrow> var list \<Rightarrow> reason + unit"
+(* Failure unless n positional arguments and keywords ys supply fields xs, by the reasons for a mismatch of
+   arity and for unknown keywords *)
+definition check_field_map ::
+  "(nat \<Rightarrow> nat \<Rightarrow> reason) \<Rightarrow> (var list \<Rightarrow> reason) \<Rightarrow> var list \<Rightarrow> nat \<Rightarrow> var list \<Rightarrow> reason + unit"
 where
-"check_field_map C xs n ys =
-  (if n + length ys \<noteq> length xs then Inl (ConstructorArityMismatch (short_name C) (length xs) (n + length ys))
-   else if set ys \<noteq> set (drop n xs)
-   then Inl (UnknownConstructorKeyword (short_name C) (sorted_list_of_set (set (drop n xs))))
+"check_field_map arity unknown xs n ys =
+  (if n + length ys \<noteq> length xs then Inl (arity (length xs) (n + length ys))
+   else if set ys \<noteq> set (drop n xs) then Inl (unknown (sorted_list_of_set (set (drop n xs))))
    else Inr ())"
 
 (* Type of the field of C supplied by each argument, in order *)
@@ -198,7 +200,8 @@ definition constructor_args ::
 where
 "constructor_args C \<pi> es kws =
   (case \<pi> of FieldScheme _ x\<sigma>s \<Rightarrow> do {
-     check_field_map C (map fst x\<sigma>s) (length es) (map fst kws);
+     check_field_map (ConstructorArityMismatch (short_name C)) (UnknownConstructorKeyword (short_name C))
+       (map fst x\<sigma>s) (length es) (map fst kws);
      Inr (zip (map snd (take (length es) x\<sigma>s)) es @ map (\<lambda>(y, e). (the (map_of x\<sigma>s y), e)) kws)
    })"
 
