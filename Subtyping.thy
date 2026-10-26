@@ -110,16 +110,25 @@ where
    | TyPrim Never \<Rightarrow> if type_params \<Sigma> C = [] then Instance [] else Undetermined
    | _ \<Rightarrow> NoInstance)"
 
-(* Undefined for generic C, since type arguments at which C is a subtype of \<tau> aren't computed *)
+definition instantiation_candidates :: "class_table \<Rightarrow> name \<Rightarrow> ty list \<Rightarrow> ty list list"
+where
+"instantiation_candidates \<Sigma> C \<sigma>s =
+  product_lists
+    (replicate (length (type_params \<Sigma> C))
+      (map (joins \<Sigma>) (subseqs (remdups (concat (map subterms \<sigma>s) @ [TyPrim object])))))"
+
 definition instance_below :: "class_table \<Rightarrow> name \<Rightarrow> ty \<Rightarrow> instances"
 where
 "instance_below \<Sigma> C \<tau> =
   (case \<tau> of
      TyClass D \<sigma>s \<Rightarrow>
        if D \<in> set (ancestors \<Sigma> C) then
-         if type_params \<Sigma> C = [] then
-           if list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (instantiated_ancestor \<Sigma> C [] D) \<sigma>s then Instance [] else NoInstance
-         else undefined
+         (case
+            filter (\<lambda>\<tau>s. list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (instantiated_ancestor \<Sigma> C \<tau>s D) \<sigma>s)
+              (instantiation_candidates \<Sigma> C \<sigma>s) of
+            [] \<Rightarrow> NoInstance
+          | \<tau>s # \<tau>ss \<Rightarrow>
+              if list_all (list_all2 (\<lambda>\<tau> \<tau>'. \<Sigma> \<turnstile> \<tau> \<approx> \<tau>') \<tau>s) \<tau>ss then Instance \<tau>s else Undetermined)
        else NoInstance
    | TyPrim object \<Rightarrow> if type_params \<Sigma> C = [] then Instance [] else Undetermined
    | _ \<Rightarrow> NoInstance)"

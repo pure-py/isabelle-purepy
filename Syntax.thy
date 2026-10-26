@@ -271,6 +271,16 @@ where
 "fv_ty (TyUnion \<sigma> \<tau>) = fv_ty \<sigma> \<union> fv_ty \<tau>" |
 "fv_ty _ = {}"
 
+fun subterms :: "ty \<Rightarrow> ty list"
+where
+"subterms (TyUnion \<sigma> \<tau>) = subterms \<sigma> @ subterms \<tau>" |
+"subterms (TyList \<tau>) = TyList \<tau> # subterms \<tau>" |
+"subterms (TyDict \<tau>) = TyDict \<tau> # subterms \<tau>" |
+"subterms (TyTuple \<tau>s) = TyTuple \<tau>s # concat (map subterms \<tau>s)" |
+"subterms (TyCallable \<tau>s \<tau>) = TyCallable \<tau>s \<tau> # concat (map subterms \<tau>s) @ subterms \<tau>" |
+"subterms (TyClass C \<tau>s) = TyClass C \<tau>s # concat (map subterms \<tau>s)" |
+"subterms \<tau> = [\<tau>]"
+
 fun captures_expr :: "expr \<Rightarrow> var set" and captures_quals :: "qualifier list \<Rightarrow> var set"
 where
 "captures_expr (ExprVar _) = {}" |
