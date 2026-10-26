@@ -100,6 +100,8 @@ where
      })
    | None \<Rightarrow> None)"
 
+(* Type arguments for \<alpha>s inferred from the arguments that synthesise; failing that, the first failure
+   of an argument with a synthesis rule *)
 definition inferred_type_args :: "class_table \<Rightarrow> var list \<Rightarrow> ty list \<Rightarrow> (reason + ty) list \<Rightarrow> reason + ty list"
 where
 "inferred_type_args \<Sigma> \<alpha>s \<sigma>s ms =
