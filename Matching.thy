@@ -80,7 +80,8 @@ where
    | (ShapeConstr C \<tau>s ks H, PatConstr q _) \<Rightarrow> split_subclass \<Sigma> \<Gamma> C \<tau>s ks H q
    | _ \<Rightarrow> None)"
 
-(* Splits of a shape that matching against p may need: one for each key of a dictionary pattern, otherwise one *)
+(* Splits of a shape that matching against p may need: one for each key of a dictionary pattern, otherwise
+   one *)
 fun splits :: "pat \<Rightarrow> nat"
 where
 "splits (PatDict kps) = length kps" |
@@ -100,7 +101,8 @@ where
  }"
 
 (* Matched shapes and residual of a pattern matching shapes L, from the match at each shape of L *)
-definition shapes_result :: "shape list \<Rightarrow> (shape list \<times> shape list) option list \<Rightarrow> (shape list \<times> shape list) option"
+definition shapes_result ::
+  "shape list \<Rightarrow> (shape list \<times> shape list) option list \<Rightarrow> (shape list \<times> shape list) option"
 where
 "shapes_result L ms =
   (let rs = [r. Some r \<leftarrow> ms] in
@@ -131,14 +133,16 @@ where
           (case k of
              ShapeTuple ks \<Rightarrow>
                if length ks = length ps
-               then map_result ShapeTuple (seq_result ks (map2 (\<lambda>k' p'. match_shape \<Sigma> \<Gamma> (splits p') k' p') ks ps))
+               then map_result ShapeTuple
+                      (seq_result ks (map2 (\<lambda>k' p'. match_shape \<Sigma> \<Gamma> (splits p') k' p') ks ps))
                else None
            | _ \<Rightarrow> None)
       | PatList ps \<Rightarrow>
           (case k of
              ShapeList \<tau> ks \<Rightarrow>
                if length ks = length ps
-               then map_result (ShapeList \<tau>) (seq_result ks (map2 (\<lambda>k' p'. match_shape \<Sigma> \<Gamma> (splits p') k' p') ks ps))
+               then map_result (ShapeList \<tau>)
+                      (seq_result ks (map2 (\<lambda>k' p'. match_shape \<Sigma> \<Gamma> (splits p') k' p') ks ps))
                else None
            | _ \<Rightarrow> None)
       | PatDict kps \<Rightarrow>
