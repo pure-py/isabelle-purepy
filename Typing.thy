@@ -117,7 +117,6 @@ function (sequential)
   call_at :: "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow> (var \<times> expr) list \<Rightarrow> expr list \<Rightarrow> reason + ty" and
   check_expr :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> reason + unit" and
   check_expr' :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> (reason + unit) option" and
-  check_exprs :: "class_table \<Rightarrow> cxt \<Rightarrow> expr list \<Rightarrow> ty list \<Rightarrow> reason + unit" and
   check_args :: "class_table \<Rightarrow> cxt \<Rightarrow> (var \<times> expr) list \<Rightarrow> expr list \<Rightarrow> ty list \<Rightarrow> reason + unit" and
   quals :: "class_table \<Rightarrow> cxt \<Rightarrow> qualifier list \<Rightarrow> reason + cxt"
 where
@@ -186,7 +185,7 @@ where
    subscript_type \<Sigma> \<sigma> (check_expr \<Sigma> \<Gamma> e' (TyPrim int)) (check_expr \<Sigma> \<Gamma> e' (TyPrim str)) (synth_expr \<Sigma> \<Gamma> e')
  }" |
 "synth_expr \<Sigma> \<Gamma> (ExprDict kvs) = do {
-   check_exprs \<Sigma> \<Gamma> (map fst kvs) (replicate (length kvs) (TyPrim str));
+   all_sum (map (\<lambda>e. check_expr \<Sigma> \<Gamma> e (TyPrim str)) (map fst kvs));
    \<tau> \<leftarrow> elements_join \<Sigma> \<Gamma> (map snd kvs);
    Inr (TyDict \<tau>)
  }" |
@@ -250,16 +249,18 @@ where
      })
    | _ \<Rightarrow> None)" |
 "check_expr' \<Sigma> \<Gamma> (ExprList es) \<tau> =
-  (case \<tau> of TyList \<tau>' \<Rightarrow> Some (check_exprs \<Sigma> \<Gamma> es (replicate (length es) \<tau>')) | _ \<Rightarrow> None)" |
+  (case \<tau> of TyList \<tau>' \<Rightarrow> Some (all_sum (map (\<lambda>e. check_expr \<Sigma> \<Gamma> e \<tau>') es)) | _ \<Rightarrow> None)" |
 "check_expr' \<Sigma> \<Gamma> (ExprTuple es) \<tau> =
-  (case \<tau> of TyTuple \<tau>s \<Rightarrow> if length es = length \<tau>s then Some (check_exprs \<Sigma> \<Gamma> es \<tau>s) else None | _ \<Rightarrow> None)" |
+  (case \<tau> of
+     TyTuple \<tau>s \<Rightarrow> if length es = length \<tau>s then Some (all_sum (map2 (check_expr \<Sigma> \<Gamma>) es \<tau>s)) else None
+   | _ \<Rightarrow> None)" |
 "check_expr' \<Sigma> \<Gamma> (ExprCond e\<^sub>1 e e\<^sub>2) \<tau> =
   Some (do { check_expr \<Sigma> \<Gamma> e (TyPrim bool); check_expr \<Sigma> \<Gamma> e\<^sub>1 \<tau>; check_expr \<Sigma> \<Gamma> e\<^sub>2 \<tau> })" |
 "check_expr' \<Sigma> \<Gamma> (ExprDict kvs) \<tau> =
   (case \<tau> of
      TyDict \<tau>' \<Rightarrow> Some (do {
-       check_exprs \<Sigma> \<Gamma> (map fst kvs) (replicate (length kvs) (TyPrim str));
-       check_exprs \<Sigma> \<Gamma> (map snd kvs) (replicate (length kvs) \<tau>')
+       all_sum (map (\<lambda>e. check_expr \<Sigma> \<Gamma> e (TyPrim str)) (map fst kvs));
+       all_sum (map (\<lambda>e. check_expr \<Sigma> \<Gamma> e \<tau>') (map snd kvs))
      })
    | _ \<Rightarrow> None)" |
 "check_expr' \<Sigma> \<Gamma> (ExprListComp e gs) \<tau> =
@@ -279,14 +280,11 @@ where
 "check_expr' \<Sigma> \<Gamma> (ExprAttribute e x) \<tau> = var_scheme \<Sigma> \<Gamma> (ExprAttribute e x) \<tau>" |
 "check_expr' \<Sigma> \<Gamma> _ _ = None" |
 
-"check_exprs \<Sigma> \<Gamma> [] [] = Inr ()" |
-"check_exprs \<Sigma> \<Gamma> (e # es) (\<tau> # \<tau>s) = do { check_expr \<Sigma> \<Gamma> e \<tau>; check_exprs \<Sigma> \<Gamma> es \<tau>s }" |
-"check_exprs \<Sigma> \<Gamma> _ _ = undefined" |
 
 "check_args \<Sigma> \<Gamma> kws es \<sigma>s = do {
    ensure (kws = []) KeywordArgumentsNotConstructor;
    ensure (length \<sigma>s = length es) (CallArityMismatch (length \<sigma>s) (length es));
-   check_exprs \<Sigma> \<Gamma> es \<sigma>s
+   all_sum (map2 (check_expr \<Sigma> \<Gamma>) es \<sigma>s)
  }" |
 
 "quals \<Sigma> \<Gamma> [] = Inr fmempty" |
@@ -308,9 +306,8 @@ by (relation "measures [\<lambda>x. case x of
    | Inl (Inr (Inr (_, _, _, kws, es))) \<Rightarrow> size_list size es + size_list (\<lambda>p. Suc (size (snd p))) kws
    | Inr (Inl (Inl (_, _, e, _))) \<Rightarrow> size e
    | Inr (Inl (Inr (_, _, e, _))) \<Rightarrow> size e
-   | Inr (Inr (Inl (_, _, es, _))) \<Rightarrow> size_list size es
-   | Inr (Inr (Inr (Inl (_, _, kws, es, _)))) \<Rightarrow> size_list size es + size_list (\<lambda>p. Suc (size (snd p))) kws
-   | Inr (Inr (Inr (Inr (_, _, gs)))) \<Rightarrow> size_list size gs,
+   | Inr (Inr (Inl (_, _, kws, es, _))) \<Rightarrow> size_list size es + size_list (\<lambda>p. Suc (size (snd p))) kws
+   | Inr (Inr (Inr (_, _, gs))) \<Rightarrow> size_list size gs,
    \<lambda>x. case x of
      Inl (Inl (Inl _)) \<Rightarrow> 0
    | Inl (Inl (Inr _)) \<Rightarrow> 1
@@ -318,11 +315,10 @@ by (relation "measures [\<lambda>x. case x of
    | Inl (Inr (Inr _)) \<Rightarrow> 4
    | Inr (Inl (Inl _)) \<Rightarrow> 2
    | Inr (Inl (Inr _)) \<Rightarrow> 1
-   | Inr (Inr (Inl _)) \<Rightarrow> 2
-   | Inr (Inr (Inr (Inl _))) \<Rightarrow> 3
-   | Inr (Inr (Inr (Inr _))) \<Rightarrow> 0,
+   | Inr (Inr (Inl _)) \<Rightarrow> 3
+   | Inr (Inr (Inr _)) \<Rightarrow> 0,
    \<lambda>x. case x of Inl (Inr (Inr (_, _, \<tau>, _, _))) \<Rightarrow> size \<tau> | _ \<Rightarrow> 0]")
-   (auto dest!: nth_mem constructor_args_elem set_zip_rightD lambda_of_size
+   (auto dest!: nth_mem constructor_args_elem lambda_of_size elim!: in_set_zipE
      dest: size_list_snd_elem size_list_snd_elem' size_list_elem[where f = size]
      intro: size_list_estimation' size_list_elem
      simp: less_Suc_eq_le size_list_fst size_list_snd)
@@ -359,8 +355,7 @@ where
      Some x \<Rightarrow> Inl (UndeclaredAssignment x)
    | None \<Rightarrow> Inr ())"
 
-fun check_stmt :: "class_table \<Rightarrow> cxt \<Rightarrow> ty option \<Rightarrow> stmt \<Rightarrow> reason + static_outcome"
-and check_defs :: "class_table \<Rightarrow> cxt \<Rightarrow> func list \<Rightarrow> ty_scheme list \<Rightarrow> reason + unit"
+function (sequential) check_stmt :: "class_table \<Rightarrow> cxt \<Rightarrow> ty option \<Rightarrow> stmt \<Rightarrow> reason + static_outcome"
 and check_def :: "class_table \<Rightarrow> cxt \<Rightarrow> func \<Rightarrow> ty_scheme \<Rightarrow> reason + unit"
 where
 "check_stmt \<Sigma> \<Gamma> \<zeta> StmtPass = Inr (Assigns\<^sub>R fmempty)" |
@@ -407,14 +402,11 @@ where
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtMutualRegion ds) = do {
    \<pi>s \<leftarrow> those_sum (map (def_signature \<Sigma> \<Gamma>) ds);
    let \<Delta> = fmap_of_list (zip (map def_name ds) (map signature_entry \<pi>s));
-   check_defs \<Sigma> (\<Gamma> \<otimes> \<Delta>) ds \<pi>s;
+   all_sum (map2 (check_def \<Sigma> (\<Gamma> \<otimes> \<Delta>)) ds \<pi>s);
    Inr (Assigns\<^sub>R \<Delta>)
  }" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtMatch e bs) = undefined" |
 
-"check_defs \<Sigma> \<Gamma> [] [] = Inr ()" |
-"check_defs \<Sigma> \<Gamma> (d # ds) (\<pi> # \<pi>s) = do { check_def \<Sigma> \<Gamma> d \<pi>; check_defs \<Sigma> \<Gamma> ds \<pi>s }" |
-"check_defs \<Sigma> \<Gamma> _ _ = undefined" |
 
 "check_def \<Sigma> \<Gamma> (Def f \<alpha>s xps \<psi> s) (TyScheme \<alpha>s' (TyCallable \<sigma>s \<tau>)) =
   (let xs = map fst xps in do {
@@ -428,6 +420,11 @@ where
      else Inl undefined
    })" |
 "check_def \<Sigma> \<Gamma> _ _ = undefined"
+by pat_completeness auto
+
+termination
+by (relation "measure (\<lambda>x. case x of Inl (_, _, _, s) \<Rightarrow> size s | Inr (_, _, d, _) \<Rightarrow> size d)")
+   (auto elim!: in_set_zipE dest: size_list_snd_elem size_list_elem[where f = size])
 
 fun check_type_def :: "class_table \<Rightarrow> cxt \<Rightarrow> type_def \<Rightarrow> reason + unit"
 where

@@ -85,6 +85,12 @@ where
 
 adhoc_overloading Monad_Syntax.bind \<rightleftharpoons> bind_sum
 
+(* First failure in the list, otherwise success *)
+fun all_sum :: "('e + unit) list \<Rightarrow> 'e + unit"
+where
+"all_sum [] = Inr ()" |
+"all_sum (m # ms) = do { m; all_sum ms }"
+
 lemma bind_sum_simps [simp]: "bind_sum (Inl e) f = Inl e" "bind_sum (Inr x) f = f x"
   by (simp_all add: bind_sum_def)
 
