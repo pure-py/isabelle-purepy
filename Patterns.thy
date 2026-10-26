@@ -91,7 +91,8 @@ where
         case instance_at \<Sigma> C \<tau> of
           Instance \<sigma>s \<Rightarrow>
             if \<Sigma> \<turnstile> \<tau> <: TyClass C \<sigma>s
-               \<and> (\<forall>(p', \<sigma>) \<in> set (zip (field_patterns \<Sigma> C a) (field_types \<Sigma> C \<sigma>s)). remaining \<Sigma> \<Gamma> \<sigma> p' = TyPrim Never)
+               \<and> (\<forall>(p', \<sigma>) \<in> set (zip (field_patterns \<Sigma> C a) (field_types \<Sigma> C \<sigma>s)).
+                    remaining \<Sigma> \<Gamma> \<sigma> p' = TyPrim Never)
             then TyPrim Never
             else \<tau>
         | _ \<Rightarrow> \<tau>)
@@ -106,14 +107,19 @@ definition check_unbound :: "cxt \<Rightarrow> var \<Rightarrow> reason + unit"
 where
 "check_unbound \<Gamma> x = ensure (fmlookup \<Gamma> x = Some Unbound) (Redeclaration x)"
 
-(* Bindings of pattern p at a type, from its bindings at each disjunct, of which None for a disjunct that p can't
-   match binds the variables of p at Never *)
+(* Bindings of pattern p at a type, from its bindings at each disjunct; None for a disjunct that p can't match
+   binds the variables of p at Never *)
 definition bindings_at :: "class_table \<Rightarrow> pat \<Rightarrow> (reason + (var, ty) fmap) option list \<Rightarrow> reason + (var, ty) fmap"
 where
 "bindings_at \<Sigma> p ms = do {
    \<Delta>s \<leftarrow> those_sum (map (\<lambda>m. case m of Some m' \<Rightarrow> m' | None \<Rightarrow> Inr (fmconst (binds p) (TyPrim Never))) ms);
    Inr (fmmap_keys (\<lambda>x _. joins \<Sigma> (map (\<lambda>\<Delta>. the (fmlookup \<Delta> x)) \<Delta>s)) (hd \<Delta>s))
  }"
+
+(* Disjoint union of the bindings of sub-patterns *)
+definition pattern_bindings :: "(reason + (var, ty) fmap) list \<Rightarrow> reason + (var, ty) fmap"
+where
+"pattern_bindings ms = do { \<Delta>s \<leftarrow> those_sum ms; Inr (fold (\<otimes>) \<Delta>s fmempty) }"
 
 function check_pat :: "class_table \<Rightarrow> cxt \<Rightarrow> pat \<Rightarrow> ty \<Rightarrow> reason + (var, ty) fmap"
 where
@@ -132,7 +138,7 @@ where
          (map (\<lambda>\<sigma>. case \<sigma> of
                      TyTuple \<sigma>s \<Rightarrow>
                        if length \<sigma>s = length ps
-                       then Some (do { \<Delta>s \<leftarrow> those_sum (map2 (check_pat \<Sigma> \<Gamma>) ps \<sigma>s); Inr (fold (\<otimes>) \<Delta>s fmempty) })
+                       then Some (pattern_bindings (map2 (check_pat \<Sigma> \<Gamma>) ps \<sigma>s))
                        else None
                    | _ \<Rightarrow> None)
            (disjuncts \<tau>))
@@ -142,18 +148,14 @@ where
        ensure (\<not> has_range_values \<Sigma> \<tau>) (SequenceKindMismatch ListKind \<tau> RangeKind);
        bindings_at \<Sigma> p
          (map (\<lambda>\<sigma>. case \<sigma> of
-                     TyList \<sigma>' \<Rightarrow>
-                       Some (do { \<Delta>s \<leftarrow> those_sum (map (\<lambda>p'. check_pat \<Sigma> \<Gamma> p' \<sigma>') ps); Inr (fold (\<otimes>) \<Delta>s fmempty) })
+                     TyList \<sigma>' \<Rightarrow> Some (pattern_bindings (map (\<lambda>p'. check_pat \<Sigma> \<Gamma> p' \<sigma>') ps))
                    | _ \<Rightarrow> None)
            (disjuncts \<tau>))
      }
    | PatDict kps \<Rightarrow>
        bindings_at \<Sigma> p
          (map (\<lambda>\<sigma>. case \<sigma> of
-                     TyDict \<sigma>' \<Rightarrow>
-                       Some (do {
-                         \<Delta>s \<leftarrow> those_sum (map (\<lambda>p'. check_pat \<Sigma> \<Gamma> p' \<sigma>') (map snd kps)); Inr (fold (\<otimes>) \<Delta>s fmempty)
-                       })
+                     TyDict \<sigma>' \<Rightarrow> Some (pattern_bindings (map (\<lambda>p'. check_pat \<Sigma> \<Gamma> p' \<sigma>') (map snd kps)))
                    | _ \<Rightarrow> None)
            (disjuncts \<tau>))
    | PatConstr q (ps, kps) \<Rightarrow> do {
@@ -163,10 +165,8 @@ where
        bindings_at \<Sigma> p
          (map (\<lambda>\<sigma>. case instance_at \<Sigma> C \<sigma> of
                      Instance \<sigma>s \<Rightarrow>
-                       Some (do {
-                         \<Delta>s \<leftarrow> those_sum (map2 (check_pat \<Sigma> \<Gamma>) (field_patterns \<Sigma> C (ps, kps)) (field_types \<Sigma> C \<sigma>s));
-                         Inr (fold (\<otimes>) \<Delta>s fmempty)
-                       })
+                       Some (pattern_bindings
+                         (map2 (check_pat \<Sigma> \<Gamma>) (field_patterns \<Sigma> C (ps, kps)) (field_types \<Sigma> C \<sigma>s)))
                    | NoInstance \<Rightarrow> None
                    | Undetermined \<Rightarrow> Some (Inl (PatternClassUndetermined (short_name C) \<sigma>)))
            (disjuncts \<tau>))
@@ -175,6 +175,7 @@ by pat_completeness auto
 
 termination
 by (relation "measure (\<lambda>(_, _, p, _). size p)")
-   (auto elim!: in_set_zipE dest!: field_patterns_elem dest: size_list_elem[where f = size] size_list_snd_elem')
+   (auto elim!: in_set_zipE dest!: field_patterns_elem
+     dest: size_list_elem[where f = size] size_list_snd_elem size_list_snd_elem')
 
 end
