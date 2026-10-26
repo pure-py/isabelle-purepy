@@ -13,8 +13,8 @@ datatype shape =
 
 fun head_typed :: "class_table \<Rightarrow> head \<Rightarrow> ty \<Rightarrow> bool"
 where
-"head_typed \<Sigma> (HeadLiteral (LitFloat _)) \<tau> = \<Sigma> \<turnstile> TyPrim float <: \<tau>" |
-"head_typed \<Sigma> (HeadLiteral l) \<tau> = \<Sigma> \<turnstile> TyLiteral l <: \<tau>" |
+"head_typed \<Sigma> (HeadLiteral (LitFloat _)) \<tau> = (\<Sigma> \<turnstile> TyPrim float <: \<tau>)" |
+"head_typed \<Sigma> (HeadLiteral l) \<tau> = (\<Sigma> \<turnstile> TyLiteral l <: \<tau>)" |
 "head_typed \<Sigma> (HeadClass C) (TyUnion \<sigma> \<tau>) = (head_typed \<Sigma> (HeadClass C) \<sigma> \<or> head_typed \<Sigma> (HeadClass C) \<tau>)" |
 "head_typed \<Sigma> (HeadClass C) (TyPrim Sized) = (C = range_class)" |
 "head_typed \<Sigma> (HeadClass C) \<tau> = (instance_below \<Sigma> C \<tau> \<noteq> NoInstance)" |
