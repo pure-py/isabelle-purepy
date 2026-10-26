@@ -376,19 +376,6 @@ where
 "assign_targets_top (TopSeq t t') = assign_targets_top t @ assign_targets_top t'" |
 "assign_targets_top (TypeDefs _) = []"
 
-(* Whether a synthesis rule applies to the expression *)
-fun synthesises :: "expr \<Rightarrow> bool"
-where
-"synthesises (ExprLambda _ _) = False" |
-"synthesises (ExprCond e\<^sub>1 _ e\<^sub>2) = (synthesises e\<^sub>1 \<or> synthesises e\<^sub>2)" |
-"synthesises (ExprList es) = list_ex synthesises es" |
-"synthesises (ExprDict kvs) = list_ex (synthesises \<circ> snd) kvs" |
-"synthesises (ExprTuple es) = list_all synthesises es" |
-"synthesises (ExprListComp e _) = synthesises e" |
-"synthesises (ExprDictComp _ e _) = synthesises e" |
-"synthesises (ExprCall (ExprLambda _ e) (es, _)) = (synthesises e \<and> list_all synthesises es)" |
-"synthesises _ = True"
-
 definition prim_of_name :: "var \<Rightarrow> prim_ty option"
 where
 "prim_of_name x = find (\<lambda>\<nu>. prim_name \<nu> = x) [object, Never, NoneType, bool, int, float, str, Sized]"

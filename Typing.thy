@@ -100,6 +100,14 @@ where
      })
    | None \<Rightarrow> None)"
 
+definition inferred_type_args :: "class_table \<Rightarrow> var list \<Rightarrow> ty list \<Rightarrow> (reason + ty) list \<Rightarrow> reason + ty list"
+where
+"inferred_type_args \<Sigma> \<alpha>s \<sigma>s ms =
+  (let \<sigma>\<tau>s = filter (Not \<circ> isl \<circ> snd) (zip \<sigma>s ms) in
+   case type_arguments (type_args_seq \<Sigma> \<alpha>s (map fst \<sigma>\<tau>s) (map (projr \<circ> snd) \<sigma>\<tau>s)) \<alpha>s of
+     Inl r \<Rightarrow> Inl (let r' = synth_failure ms in if r' = NotSynthesised then r else r')
+   | Inr \<tau>s \<Rightarrow> Inr \<tau>s)"
+
 function (sequential)
   synth_expr :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> reason + ty" and
   synth_exprs :: "class_table \<Rightarrow> cxt \<Rightarrow> expr list \<Rightarrow> (reason + ty) list" and
@@ -132,9 +140,7 @@ where
                   Inr (TyClass C \<tau>s)
                 }
               | None \<Rightarrow> do {
-                  let synthesising = filter (synthesises \<circ> snd) \<sigma>es;
-                  \<tau>s' \<leftarrow> those_sum (map (synth_expr \<Sigma> \<Gamma> \<circ> snd) synthesising);
-                  \<tau>s \<leftarrow> type_arguments (type_args_seq \<Sigma> \<alpha>s (map fst synthesising) \<tau>s') \<alpha>s;
+                  \<tau>s \<leftarrow> inferred_type_args \<Sigma> \<alpha>s (map fst \<sigma>es) (map (synth_expr \<Sigma> \<Gamma> \<circ> snd) \<sigma>es);
                   those_sum (map (\<lambda>(\<sigma>, e'). check_expr \<Sigma> \<Gamma> e' (subst \<tau>s \<alpha>s \<sigma>)) \<sigma>es);
                   Inr (TyClass C \<tau>s)
                 }
@@ -203,12 +209,10 @@ where
 
 "callee \<Sigma> \<Gamma> e es =
   (case scheme_of_name \<Gamma> e of
-     Some (TyScheme \<alpha>s (TyCallable \<sigma>s \<sigma>)) \<Rightarrow>
-       (let synthesising = filter (synthesises \<circ> snd) (zip \<sigma>s es) in do {
-          \<tau>s \<leftarrow> those_sum (map (synth_expr \<Sigma> \<Gamma> \<circ> snd) synthesising);
-          \<tau>s' \<leftarrow> type_arguments (type_args_seq \<Sigma> \<alpha>s (map fst synthesising) \<tau>s) \<alpha>s;
-          Inr (TyCallable (map (subst \<tau>s' \<alpha>s) \<sigma>s) (subst \<tau>s' \<alpha>s \<sigma>))
-        })
+     Some (TyScheme \<alpha>s (TyCallable \<sigma>s \<sigma>)) \<Rightarrow> do {
+       \<tau>s \<leftarrow> inferred_type_args \<Sigma> \<alpha>s \<sigma>s (synth_exprs \<Sigma> \<Gamma> es);
+       Inr (TyCallable (map (subst \<tau>s \<alpha>s) \<sigma>s) (subst \<tau>s \<alpha>s \<sigma>))
+     }
    | Some _ \<Rightarrow> undefined
    | None \<Rightarrow> synth_expr \<Sigma> \<Gamma> e)" |
 
