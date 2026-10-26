@@ -407,7 +407,6 @@ where
  }" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtMatch e bs) = undefined" |
 
-
 "check_def \<Sigma> \<Gamma> (Def f \<alpha>s xps \<psi> s) (TyScheme \<alpha>s' (TyCallable \<sigma>s \<tau>)) =
   (let xs = map fst xps in do {
      check_assignments_declared (set xs) (assign_targets s) (declares s) (binds s);
