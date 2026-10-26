@@ -1,5 +1,5 @@
 theory Typing
-  imports Operators
+  imports Operators Matching
 begin
 
 (* Type at which a variable is bound or declared *)
@@ -354,6 +354,19 @@ where
      Some x \<Rightarrow> Inl (UndeclaredAssignment x)
    | None \<Rightarrow> Inr ())"
 
+(* Bindings of the patterns ps of the cases of a match at remaining type \<tau> and residual L, with the final
+   remaining type and residual *)
+fun match_cases ::
+  "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow> shape list \<Rightarrow> pat list \<Rightarrow> reason + (var, ty) fmap list \<times> ty \<times> shape list"
+where
+"match_cases \<Sigma> \<Gamma> \<tau> L [] = Inr ([], \<tau>, L)" |
+"match_cases \<Sigma> \<Gamma> \<tau> L (p # ps) = do {
+   \<Delta> \<leftarrow> check_pat \<Sigma> \<Gamma> p \<tau>;
+   (_, L') \<leftarrow> (case match_shapes \<Sigma> \<Gamma> L p of Some r \<Rightarrow> Inr r | None \<Rightarrow> Inl (UnreachableCase p));
+   (\<Delta>s, \<tau>', L'') \<leftarrow> match_cases \<Sigma> \<Gamma> (remaining \<Sigma> \<Gamma> \<tau> p) L' ps;
+   Inr (\<Delta> # \<Delta>s, \<tau>', L'')
+ }"
+
 function (sequential) check_stmt :: "class_table \<Rightarrow> cxt \<Rightarrow> ty option \<Rightarrow> stmt \<Rightarrow> reason + static_outcome"
 and check_def :: "class_table \<Rightarrow> cxt \<Rightarrow> func \<Rightarrow> ty_scheme \<Rightarrow> reason + unit"
 where
@@ -404,7 +417,13 @@ where
    all_sum (map2 (check_def \<Sigma> (\<Gamma> \<otimes> \<Delta>)) ds \<pi>s);
    Inr (Assigns\<^sub>R \<Delta>)
  }" |
-"check_stmt \<Sigma> \<Gamma> \<zeta> (StmtMatch e bs) = undefined" |
+"check_stmt \<Sigma> \<Gamma> \<zeta> (StmtMatch e bs) = do {
+   \<sigma> \<leftarrow> synth_expr \<Sigma> \<Gamma> e;
+   (\<Delta>s, \<tau>, _) \<leftarrow> match_cases \<Sigma> \<Gamma> \<sigma> (shapes \<Sigma> \<sigma> {}) (map fst bs);
+   merges \<Sigma>
+     (map2 (\<lambda>\<Delta> (_, s). do { R \<leftarrow> check_stmt \<Sigma> (\<Gamma> \<otimes> fmmap Ty \<Delta>) \<zeta> s; Inr (Assigns\<^sub>R (fmmap Ty \<Delta>) \<otimes>\<^sub>R R) }) \<Delta>s bs
+      @ (if \<tau> = TyPrim Never then [] else [Inr (Assigns\<^sub>R fmempty)]))
+ }" |
 
 "check_def \<Sigma> \<Gamma> (Def f \<alpha>s xps \<psi> s) (TyScheme \<alpha>s' (TyCallable \<sigma>s \<tau>)) =
   (let xs = map fst xps in do {

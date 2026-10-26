@@ -26,6 +26,7 @@ datatype reason =
   | RangePattern
   | PatternClassUndetermined var ty
   | SequenceKindMismatch sequence_kind ty sequence_kind
+  | UnreachableCase pat
   | NotPredefinedName var
   | NotClass name
   | ClassArityMismatch name nat nat
