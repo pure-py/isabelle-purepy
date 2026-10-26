@@ -41,6 +41,9 @@ lemma size_prod_pair [simp]: "size_prod f g p = f (fst p) + g (snd p) + Suc 0"
 lemma size_list_elem: "x \<in> set xs \<Longrightarrow> f x < size_list f xs"
   by (induction xs) auto
 
+lemma size_list_zip_elem: "(x, y) \<in> set (zip xs ys) \<Longrightarrow> f x + g y < size_list f xs + size_list g ys"
+  by (metis add_strict_mono set_zip_leftD set_zip_rightD size_list_elem)
+
 lemma size_list_snd_elem: "(a, b) \<in> set xs \<Longrightarrow> size b < size_list (\<lambda>x. Suc (size (snd x))) xs"
   by (induction xs) auto
 

@@ -43,8 +43,7 @@ definition joins :: "class_table \<Rightarrow> ty list \<Rightarrow> ty"
 where
 "joins \<Sigma> \<tau>s = foldr (\<lambda>\<sigma> \<tau>. \<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>) \<tau>s (TyPrim Never)"
 
-fun meet :: "class_table \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> ty"
-and meets :: "class_table \<Rightarrow> ty list \<Rightarrow> ty list \<Rightarrow> ty list"
+function (sequential) meet :: "class_table \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> ty"
 where
 "meet \<Sigma> (TyUnion \<sigma>\<^sub>1 \<sigma>\<^sub>2) \<tau> =
   (if \<Sigma> \<turnstile> TyUnion \<sigma>\<^sub>1 \<sigma>\<^sub>2 <: \<tau> then TyUnion \<sigma>\<^sub>1 \<sigma>\<^sub>2 else if \<Sigma> \<turnstile> \<tau> <: TyUnion \<sigma>\<^sub>1 \<sigma>\<^sub>2 then \<tau>
@@ -60,11 +59,13 @@ where
    else TyPrim Never)" |
 "meet \<Sigma> (TyTuple \<sigma>s) (TyTuple \<tau>s) =
   (if \<Sigma> \<turnstile> TyTuple \<sigma>s <: TyTuple \<tau>s then TyTuple \<sigma>s else if \<Sigma> \<turnstile> TyTuple \<tau>s <: TyTuple \<sigma>s then TyTuple \<tau>s
-   else if length \<sigma>s = length \<tau>s then TyTuple (meets \<Sigma> \<sigma>s \<tau>s) else TyPrim Never)" |
-"meet \<Sigma> \<sigma> \<tau> = (if \<Sigma> \<turnstile> \<sigma> <: \<tau> then \<sigma> else if \<Sigma> \<turnstile> \<tau> <: \<sigma> then \<tau> else TyPrim Never)" |
+   else if length \<sigma>s = length \<tau>s then TyTuple (map2 (meet \<Sigma>) \<sigma>s \<tau>s) else TyPrim Never)" |
+"meet \<Sigma> \<sigma> \<tau> = (if \<Sigma> \<turnstile> \<sigma> <: \<tau> then \<sigma> else if \<Sigma> \<turnstile> \<tau> <: \<sigma> then \<tau> else TyPrim Never)"
+by pat_completeness auto
 
-"meets \<Sigma> (\<sigma> # \<sigma>s) (\<tau> # \<tau>s) = meet \<Sigma> \<sigma> \<tau> # meets \<Sigma> \<sigma>s \<tau>s" |
-"meets _ _ _ = []"
+termination
+by (relation "measure (\<lambda>(_, \<sigma>, \<tau>). size \<sigma> + size \<tau>)")
+   (auto dest: size_list_zip_elem[where f = size and g = size])
 
 fun elem_type :: "class_table \<Rightarrow> ty \<Rightarrow> ty option"
 where
@@ -161,15 +162,15 @@ where
    else join_cxt \<Sigma> (type_args \<Sigma> \<alpha>s \<sigma> \<tau>) (type_args \<Sigma> \<alpha>s \<sigma>' \<tau>))" |
 "type_args \<Sigma> \<alpha>s _ _ = fmempty" |
 
-"type_args_seq \<Sigma> \<alpha>s (\<sigma> # \<sigma>s) (\<tau> # \<tau>s) = join_cxt \<Sigma> (type_args \<Sigma> \<alpha>s \<sigma> \<tau>) (type_args_seq \<Sigma> \<alpha>s \<sigma>s \<tau>s)" |
-"type_args_seq \<Sigma> \<alpha>s _ _ = fmempty"
+"type_args_seq \<Sigma> \<alpha>s \<sigma>s \<tau>s = foldr (join_cxt \<Sigma>) (map2 (type_args \<Sigma> \<alpha>s) \<sigma>s \<tau>s) fmempty"
 by pat_completeness auto
 
 termination
 by (relation "measures [
      \<lambda>x. case x of Inl (_, _, \<sigma>, _) \<Rightarrow> size \<sigma> | Inr (_, _, \<sigma>s, _) \<Rightarrow> size_list size \<sigma>s,
      \<lambda>x. case x of Inl _ \<Rightarrow> 1 | Inr _ \<Rightarrow> 0,
-     \<lambda>x. case x of Inl (_, _, _, \<tau>) \<Rightarrow> size \<tau> | Inr _ \<Rightarrow> 0]") auto
+     \<lambda>x. case x of Inl (_, _, _, \<tau>) \<Rightarrow> size \<tau> | Inr _ \<Rightarrow> 0]")
+   (auto dest: set_zip_leftD size_list_elem[where f = size])
 
 (* Types bound to \<alpha>s by \<gamma>; failure if \<gamma> doesn't bind one of them *)
 definition type_arguments :: "(var, ty) fmap \<Rightarrow> var list \<Rightarrow> reason + ty list"
