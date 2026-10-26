@@ -1,5 +1,5 @@
 session "isabelle-purepy" = HOL +
-  options [timeout = 600]
+  options [timeout = 1200]
   sessions
     "HOL-Library"
   theories
@@ -7,11 +7,17 @@ session "isabelle-purepy" = HOL +
     Syntax
     Semantics
     Correctness
+    Contexts
+    Reasons
+    Types
+    Subtyping
+    Operators
     Typing
+    Programs
     Examples
 
 session "isabelle-purepy-python" in "python" = "isabelle-purepy" +
-  options [timeout = 600]
+  options [timeout = 1200]
   sessions
     Python
   theories

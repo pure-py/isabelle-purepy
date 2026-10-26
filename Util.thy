@@ -2,6 +2,8 @@ theory Util
   imports "HOL-Library.Finite_Map" "HOL-Library.Monad_Syntax"
 begin
 
+notation fmadd (infixl "\<otimes>" 100)
+
 type_synonym 'a nonempty = "'a \<times> 'a list"
 
 fun snoc :: "'a nonempty \<Rightarrow> 'a \<Rightarrow> 'a nonempty"
@@ -35,6 +37,18 @@ lemma fmconst_code [code]: "fmconst (set xs) u = fold (\<lambda>x. fmupd x u) xs
 (* Termination through lists of pairs and finite maps *)
 lemma size_prod_pair [simp]: "size_prod f g p = f (fst p) + g (snd p) + Suc 0"
   by (cases p) simp
+
+lemma size_list_elem: "x \<in> set xs \<Longrightarrow> f x < size_list f xs"
+  by (induction xs) auto
+
+lemma size_list_zip_elem: "(x, y) \<in> set (zip xs ys) \<Longrightarrow> f x + g y < size_list f xs + size_list g ys"
+  by (metis add_strict_mono set_zip_leftD set_zip_rightD size_list_elem)
+
+lemma size_list_snd_elem: "(a, b) \<in> set xs \<Longrightarrow> size b < size_list (\<lambda>x. Suc (size (snd x))) xs"
+  by (induction xs) auto
+
+lemma size_list_snd_elem': "b \<in> set (map snd xs) \<Longrightarrow> size b < size_list (\<lambda>x. Suc (size (snd x))) xs"
+  by (auto dest: size_list_snd_elem)
 
 lemma size_list_fst: "size_list (size \<circ> fst) kvs \<le> size_list (\<lambda>x. Suc (size (fst x) + size (snd x))) kvs"
   by (rule size_list_pointwise) simp
@@ -70,6 +84,12 @@ where
 "bind_sum m f = (case m of Inl e \<Rightarrow> Inl e | Inr x \<Rightarrow> f x)"
 
 adhoc_overloading Monad_Syntax.bind \<rightleftharpoons> bind_sum
+
+(* First failure in the list, otherwise success *)
+fun all_sum :: "('e + unit) list \<Rightarrow> 'e + unit"
+where
+"all_sum [] = Inr ()" |
+"all_sum (m # ms) = do { m; all_sum ms }"
 
 lemma bind_sum_simps [simp]: "bind_sum (Inl e) f = Inl e" "bind_sum (Inr x) f = f x"
   by (simp_all add: bind_sum_def)
