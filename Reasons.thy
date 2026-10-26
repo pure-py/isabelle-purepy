@@ -2,7 +2,7 @@ theory Reasons
   imports Contexts
 begin
 
-(* Reasons for ill-formedness, refining the single failure of the typing rules *)
+(* Reasons for ill-formedness *)
 datatype reason =
     DuplicateField var var
   | InheritedField var var var
