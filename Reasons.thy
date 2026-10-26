@@ -62,7 +62,7 @@ definition not_type_name :: "cxt \<Rightarrow> name \<Rightarrow> reason"
 where
 "not_type_name \<Gamma> q = (case lookup \<Gamma> q of Some Unbound \<Rightarrow> UnboundName (fst q) | _ \<Rightarrow> NotClass q)"
 
-(* Failure for variable x, which isn't bound at a type, by its context entry *)
+(* Failure for variable x, which isn't bound at a type, by context entry *)
 fun var_reason :: "var \<Rightarrow> cxt_entry option \<Rightarrow> reason"
 where
 "var_reason x (Some (ModStub _)) = ModuleAsValue (x, [])" |
