@@ -41,8 +41,8 @@ function (sequential)
   check_imports ::
     "program \<Rightarrow> name list \<Rightarrow> class_table \<Rightarrow> name \<Rightarrow> import list \<Rightarrow> (name \<times> reason) + cxt \<times> class_table" and
   submodules ::
-    "program \<Rightarrow> name list \<Rightarrow> class_table \<Rightarrow> name \<Rightarrow> cxt_entry \<Rightarrow> var list
-     \<Rightarrow> (name \<times> reason) + cxt_entry \<times> class_table" and
+    "program \<Rightarrow> name list \<Rightarrow> class_table \<Rightarrow> name \<Rightarrow> name \<Rightarrow> cxt \<Rightarrow> var list
+     \<Rightarrow> (name \<times> reason) + cxt \<times> class_table" and
   imports_entry ::
     "program \<Rightarrow> name list \<Rightarrow> class_table \<Rightarrow> name \<Rightarrow> name \<Rightarrow> cxt \<Rightarrow> var
      \<Rightarrow> (name \<times> reason) + cxt_entry \<times> class_table" and
@@ -79,9 +79,9 @@ where
 "check_imports M V \<Sigma> q (Import (x, xs) # \<iota>s) = do {
    ensure (\<not> q \<prec> (x, xs)) (q, ImportOfContainedModule (x, xs) q);
    (\<Delta>, \<Sigma>\<^sub>1) \<leftarrow> check_module M V \<Sigma> q (x, []);
-   (\<theta>, \<Sigma>\<^sub>2) \<leftarrow> submodules M V \<Sigma>\<^sub>1 q (ModChecked (x, []) \<Delta>) xs;
+   (\<Delta>', \<Sigma>\<^sub>2) \<leftarrow> submodules M V \<Sigma>\<^sub>1 q (x, []) \<Delta> xs;
    (\<Gamma>, \<Sigma>') \<leftarrow> check_imports M V \<Sigma>\<^sub>2 q \<iota>s;
-   Inr (fmupd x \<theta> fmempty \<uplus> \<Gamma>, \<Sigma>')
+   Inr (fmupd x (ModChecked (x, []) \<Delta>') fmempty \<uplus> \<Gamma>, \<Sigma>')
  }" |
 "check_imports M V \<Sigma> q (FromImport q' xs # \<iota>s) = do {
    (\<Delta>, \<Sigma>\<^sub>1) \<leftarrow> check_module M V \<Sigma> q q';
@@ -91,13 +91,12 @@ where
    (\<Gamma>, \<Sigma>') \<leftarrow> check_imports M V \<Sigma>\<^sub>3 q \<iota>s;
    Inr (fmap_of_list (zip xs \<theta>s) \<uplus> \<Gamma>, \<Sigma>')
  }" |
-"submodules M V \<Sigma> q \<theta> [] = Inr (\<theta>, \<Sigma>)" |
-"submodules M V \<Sigma> q (ModChecked q' \<Gamma>) (x # xs) = do {
-   (\<Gamma>', \<Sigma>\<^sub>1) \<leftarrow> check_module M V \<Sigma> q (snoc q' x);
-   (\<theta>', \<Sigma>') \<leftarrow> submodules M V \<Sigma>\<^sub>1 q (ModChecked (snoc q' x) \<Gamma>') xs;
-   Inr (ModChecked q' (\<Gamma> \<uplus> fmupd x \<theta>' fmempty), \<Sigma>')
+"submodules M V \<Sigma> q q' \<Gamma> [] = Inr (\<Gamma>, \<Sigma>)" |
+"submodules M V \<Sigma> q q' \<Gamma> (x # xs) = do {
+   (\<Delta>, \<Sigma>\<^sub>1) \<leftarrow> check_module M V \<Sigma> q (snoc q' x);
+   (\<Delta>', \<Sigma>') \<leftarrow> submodules M V \<Sigma>\<^sub>1 q (snoc q' x) \<Delta> xs;
+   Inr (\<Gamma> \<uplus> fmupd x (ModChecked (snoc q' x) \<Delta>') fmempty, \<Sigma>')
  }" |
-"submodules M V \<Sigma> q _ _ = undefined" |
 "imports_entry M V \<Sigma> q q' \<Gamma> x =
   (case fmlookup \<Gamma> x of
      Some (ModStub q'') \<Rightarrow> do { (\<Gamma>', \<Sigma>') \<leftarrow> check_module M V \<Sigma> q q''; Inr (ModChecked q'' \<Gamma>', \<Sigma>') }
@@ -135,7 +134,7 @@ by (relation "measures [
      \<lambda>x. case x of
        Inl (Inl _) \<Rightarrow> 0
      | Inl (Inr (Inl (_, _, _, _, \<iota>s))) \<Rightarrow> length \<iota>s
-     | Inl (Inr (Inr (_, _, _, _, _, xs))) \<Rightarrow> length xs
+     | Inl (Inr (Inr (_, _, _, _, _, _, xs))) \<Rightarrow> length xs
      | Inr (Inl _) \<Rightarrow> 0
      | Inr (Inr (Inl (_, _, _, _, _, _, xs))) \<Rightarrow> length xs
      | Inr (Inr (Inr (_, _, _, _, qs))) \<Rightarrow> length qs]")
