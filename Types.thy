@@ -64,7 +64,8 @@ where
      TypeStmt _ \<alpha>s _ \<Rightarrow> \<Gamma> \<otimes> entries [0..<length \<chi>s] \<otimes> fmconst (set \<alpha>s) TypeVar
    | Dataclass _ \<alpha>s _ _ \<Rightarrow> \<Gamma> \<otimes> entries [0..<i] \<otimes> fmconst (set \<alpha>s) TypeVar)"
 
-(* A holds the aliases being resolved; n bounds the aliases resolved along a path *)
+(* A holds the aliases being resolved, so that a cyclic alias is rejected; n bounds the aliases resolved
+   along a path, which are distinct, by the alias definitions reachable from the context *)
 fun resolve_type' :: "class_table \<Rightarrow> cxt \<Rightarrow> (name \<times> var) list \<Rightarrow> nat \<Rightarrow> ty_expr \<Rightarrow> reason + ty"
 where
 "resolve_type' \<Sigma> \<Gamma> A n (TyExprPrim \<nu>) = do { check_predefined \<Gamma> (prim_name \<nu>); Inr (TyPrim \<nu>) }" |
@@ -130,7 +131,8 @@ fun instantiate :: "field_scheme \<Rightarrow> ty list \<Rightarrow> (var \<time
 where
 "instantiate (FieldScheme \<alpha>s x\<sigma>s) \<tau>s = map (\<lambda>(x, \<sigma>). (x, subst \<tau>s \<alpha>s \<sigma>)) x\<sigma>s"
 
-(* Fields of class C, through at most n base classes *)
+(* Fields of class C, through at most n base classes; the base-class relation is acyclic, so the number of
+   classes in \<Sigma> suffices *)
 fun fields_upto :: "nat \<Rightarrow> class_table \<Rightarrow> name \<Rightarrow> field_scheme"
 where
 "fields_upto 0 \<Sigma> C = undefined" |

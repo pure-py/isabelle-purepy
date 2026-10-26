@@ -37,7 +37,7 @@ definition known_module :: "program \<Rightarrow> name \<Rightarrow> bool"
 where
 "known_module M q = (q |\<in>| fmdom M \<or> q |\<in>| fmdom predefined)"
 
-(* V holds the modules being checked, in order, so that an import cycle is rejected; a failure is paired
+(* V holds the modules being checked, in order, so that an import cycle is rejected; failure paired
    with the module in which it occurs *)
 function (sequential)
   check_module :: "program \<Rightarrow> name list \<Rightarrow> class_table \<Rightarrow> name \<Rightarrow> (name \<times> reason) + cxt \<times> class_table" and
