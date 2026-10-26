@@ -79,7 +79,7 @@ where
 "var_reason x (Some (Ty _)) = undefined" |
 "var_reason x None = UndefinedVariable x"
 
-(* Failure for an assignment to x, by its context entry, which isn't a declaration *)
+(* Failure for an assignment to x, by context entry, when x isn't definitely unassigned *)
 fun assign_reason :: "var \<Rightarrow> cxt_entry option \<Rightarrow> reason"
 where
 "assign_reason x None = UndeclaredAssignment x" |
