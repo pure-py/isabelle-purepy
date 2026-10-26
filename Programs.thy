@@ -33,14 +33,11 @@ proof (rule fmap_ext)
     by (simp add: submods.rep_eq fmlookup_of_list)
 qed
 
-definition known_module :: "program \<Rightarrow> name \<Rightarrow> bool"
-where
-"known_module M q = (q |\<in>| fmdom M \<or> q |\<in>| fmdom predefined)"
-
 (* V holds the modules being checked, in order, so that an import cycle is rejected; failure paired
    with the module in which it occurs *)
 function (sequential)
-  check_module :: "program \<Rightarrow> name list \<Rightarrow> class_table \<Rightarrow> name \<Rightarrow> (name \<times> reason) + cxt \<times> class_table" and
+  check_module ::
+    "program \<Rightarrow> name list \<Rightarrow> class_table \<Rightarrow> name \<Rightarrow> name \<Rightarrow> (name \<times> reason) + cxt \<times> class_table" and
   check_imports ::
     "program \<Rightarrow> name list \<Rightarrow> class_table \<Rightarrow> name \<Rightarrow> import list \<Rightarrow> (name \<times> reason) + cxt \<times> class_table" and
   submodules ::
@@ -52,15 +49,16 @@ function (sequential)
   imports_entries ::
     "program \<Rightarrow> name list \<Rightarrow> class_table \<Rightarrow> name \<Rightarrow> name \<Rightarrow> cxt \<Rightarrow> var list
      \<Rightarrow> (name \<times> reason) + cxt_entry list \<times> class_table" and
-  check_modules :: "program \<Rightarrow> name list \<Rightarrow> class_table \<Rightarrow> name list \<Rightarrow> (name \<times> reason) + class_table"
+  check_modules ::
+    "program \<Rightarrow> name list \<Rightarrow> class_table \<Rightarrow> name \<Rightarrow> name list \<Rightarrow> (name \<times> reason) + class_table"
 where
-"check_module M V \<Sigma> q =
+"check_module M V \<Sigma> q' q =
   (case fmlookup predefined q of
      Some \<Gamma> \<Rightarrow> Inr (\<Gamma>, \<Sigma>)
    | None \<Rightarrow>
-     if q \<in> set V then Inl (q, ImportCycle (dropWhile (\<lambda>q'. q' \<noteq> q) V @ [q]))
+     if q \<in> set V then Inl (q, ImportCycle (dropWhile (\<lambda>q''. q'' \<noteq> q) V @ [q]))
      else case fmlookup M q of
-       None \<Rightarrow> undefined
+       None \<Rightarrow> Inl (q', UnknownModule q)
      | Some (ModuleBody \<iota>s t) \<Rightarrow> do {
          (\<Gamma>', \<Sigma>') \<leftarrow> check_imports M (V @ [q]) \<Sigma> q \<iota>s;
          map_sum (Pair q) id (do {
@@ -80,16 +78,14 @@ where
 "check_imports M V \<Sigma> q [] = Inr (fmempty, \<Sigma>)" |
 "check_imports M V \<Sigma> q (Import (x, xs) # \<iota>s) = do {
    ensure (\<not> q \<prec> (x, xs)) (q, ImportOfContainedModule (x, xs) q);
-   ensure (known_module M (x, [])) (q, UnknownModule (x, []));
-   (\<Delta>, \<Sigma>\<^sub>1) \<leftarrow> check_module M V \<Sigma> (x, []);
+   (\<Delta>, \<Sigma>\<^sub>1) \<leftarrow> check_module M V \<Sigma> q (x, []);
    (\<theta>, \<Sigma>\<^sub>2) \<leftarrow> submodules M V \<Sigma>\<^sub>1 q (ModChecked (x, []) \<Delta>) xs;
    (\<Gamma>, \<Sigma>') \<leftarrow> check_imports M V \<Sigma>\<^sub>2 q \<iota>s;
    Inr (fmupd x \<theta> fmempty \<uplus> \<Gamma>, \<Sigma>')
  }" |
 "check_imports M V \<Sigma> q (FromImport q' xs # \<iota>s) = do {
-   ensure (known_module M q') (q, UnknownModule q');
-   (\<Delta>, \<Sigma>\<^sub>1) \<leftarrow> check_module M V \<Sigma> q';
-   \<Sigma>\<^sub>2 \<leftarrow> check_modules M V \<Sigma>\<^sub>1 (unique_to q' q);
+   (\<Delta>, \<Sigma>\<^sub>1) \<leftarrow> check_module M V \<Sigma> q q';
+   \<Sigma>\<^sub>2 \<leftarrow> check_modules M V \<Sigma>\<^sub>1 q (unique_to q' q);
    (case redeclared {} xs of Some x \<Rightarrow> Inl (q, DuplicateImportedName x) | None \<Rightarrow> Inr ());
    (\<theta>s, \<Sigma>\<^sub>3) \<leftarrow> imports_entries M V \<Sigma>\<^sub>2 q q' \<Delta> xs;
    (\<Gamma>, \<Sigma>') \<leftarrow> check_imports M V \<Sigma>\<^sub>3 q \<iota>s;
@@ -97,15 +93,14 @@ where
  }" |
 "submodules M V \<Sigma> q \<theta> [] = Inr (\<theta>, \<Sigma>)" |
 "submodules M V \<Sigma> q (ModChecked q' \<Gamma>) (x # xs) = do {
-   ensure (known_module M (snoc q' x)) (q, UnknownModule (snoc q' x));
-   (\<Gamma>', \<Sigma>\<^sub>1) \<leftarrow> check_module M V \<Sigma> (snoc q' x);
+   (\<Gamma>', \<Sigma>\<^sub>1) \<leftarrow> check_module M V \<Sigma> q (snoc q' x);
    (\<theta>', \<Sigma>') \<leftarrow> submodules M V \<Sigma>\<^sub>1 q (ModChecked (snoc q' x) \<Gamma>') xs;
    Inr (ModChecked q' (\<Gamma> \<uplus> fmupd x \<theta>' fmempty), \<Sigma>')
  }" |
 "submodules M V \<Sigma> q _ _ = undefined" |
 "imports_entry M V \<Sigma> q q' \<Gamma> x =
   (case fmlookup \<Gamma> x of
-     Some (ModStub q'') \<Rightarrow> do { (\<Gamma>', \<Sigma>') \<leftarrow> check_module M V \<Sigma> q''; Inr (ModChecked q'' \<Gamma>', \<Sigma>') }
+     Some (ModStub q'') \<Rightarrow> do { (\<Gamma>', \<Sigma>') \<leftarrow> check_module M V \<Sigma> q q''; Inr (ModChecked q'' \<Gamma>', \<Sigma>') }
    | \<theta> \<Rightarrow>
        (case resolve_name \<Gamma> (x, []) of
           Some \<theta>' \<Rightarrow> Inr (\<theta>', \<Sigma>)
@@ -116,8 +111,8 @@ where
    (\<theta>s, \<Sigma>') \<leftarrow> imports_entries M V \<Sigma>\<^sub>1 q q' \<Gamma> xs;
    Inr (\<theta> # \<theta>s, \<Sigma>')
  }" |
-"check_modules M V \<Sigma> [] = Inr \<Sigma>" |
-"check_modules M V \<Sigma> (q # qs) = do { (_, \<Sigma>\<^sub>1) \<leftarrow> check_module M V \<Sigma> q; check_modules M V \<Sigma>\<^sub>1 qs }"
+"check_modules M V \<Sigma> q [] = Inr \<Sigma>" |
+"check_modules M V \<Sigma> q (q' # qs) = do { (_, \<Sigma>\<^sub>1) \<leftarrow> check_module M V \<Sigma> q q'; check_modules M V \<Sigma>\<^sub>1 q qs }"
 by pat_completeness auto
 (* Measures: count of modules of M not in V; then a topological rank of the call graph, which is acyclic
    if we remove the call from the module rule to its imports; then the length of the list argument *)
@@ -143,12 +138,12 @@ by (relation "measures [
      | Inl (Inr (Inr (_, _, _, _, _, xs))) \<Rightarrow> length xs
      | Inr (Inl _) \<Rightarrow> 0
      | Inr (Inr (Inl (_, _, _, _, _, _, xs))) \<Rightarrow> length xs
-     | Inr (Inr (Inr (_, _, _, qs))) \<Rightarrow> length qs]")
+     | Inr (Inr (Inr (_, _, _, _, qs))) \<Rightarrow> length qs]")
    (auto simp: card_fmdom_insert)
 
 definition check_program :: "program \<Rightarrow> (name \<times> reason) option"
 where
 "check_program M =
-  (case check_module M [] predefined_classes main of Inl f \<Rightarrow> Some f | Inr _ \<Rightarrow> None)"
+  (case check_module M [] predefined_classes main main of Inl f \<Rightarrow> Some f | Inr _ \<Rightarrow> None)"
 
 end
