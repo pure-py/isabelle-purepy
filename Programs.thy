@@ -69,7 +69,7 @@ where
            check_assignments_declared {} (assign_targets t) (declares t) (binds t);
            (R, \<Sigma>'') \<leftarrow> check_top_stmt \<Sigma>' q (the (fmlookup predefined builtins) \<otimes> \<Gamma>' \<otimes> \<Gamma>\<^sub>s) t;
            case R of
-             Assigns\<^sub>R \<Delta> \<Rightarrow>
+             Assigns\<^sub>R \<Delta> _ \<Rightarrow>
                let S = submods M q; X = (fmdom \<Gamma>' |\<union>| fmdom \<Delta>) |\<inter>| fmdom S in
                if X = {||} then Inr (S \<otimes> \<Delta>, \<Sigma>'') else Inl (DuplicateMember (Min (fset X)) q)
            | Returns\<^sub>R \<Rightarrow> Inl TopLevelAssertFalse
