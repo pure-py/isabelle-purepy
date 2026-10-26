@@ -380,34 +380,34 @@ definition prim_of_name :: "var \<Rightarrow> prim_ty option"
 where
 "prim_of_name x = find (\<lambda>\<nu>. prim_name \<nu> = x) [object, Never, NoneType, bool, int, float, str, Sized]"
 
-(* Type expression denoted by an expression, as in an annotation *)
-fun parse_annotation :: "expr \<Rightarrow> ty_expr option"
+(* Type expression denoted by an expression *)
+fun type_expr_of :: "expr \<Rightarrow> ty_expr option"
 where
-"parse_annotation (ExprLiteral LitNone) = Some (TyExprPrim NoneType)" |
-"parse_annotation (ExprVar x) =
+"type_expr_of (ExprLiteral LitNone) = Some (TyExprPrim NoneType)" |
+"type_expr_of (ExprVar x) =
   Some (case prim_of_name x of Some \<nu> \<Rightarrow> TyExprPrim \<nu> | None \<Rightarrow> TyExprName (x, []) [])" |
-"parse_annotation (ExprAttribute e x) = map_option (\<lambda>q. TyExprName q []) (dotted_name (ExprAttribute e x))" |
-"parse_annotation (ExprBinOp BOpBitOr e e') = do {
-   \<psi> \<leftarrow> parse_annotation e; \<psi>' \<leftarrow> parse_annotation e'; Some (TyExprUnion \<psi> \<psi>')
+"type_expr_of (ExprAttribute e x) = map_option (\<lambda>q. TyExprName q []) (dotted_name (ExprAttribute e x))" |
+"type_expr_of (ExprBinOp BOpBitOr e e') = do {
+   \<psi> \<leftarrow> type_expr_of e; \<psi>' \<leftarrow> type_expr_of e'; Some (TyExprUnion \<psi> \<psi>')
  }" |
-"parse_annotation (ExprSubscript e e') =
+"type_expr_of (ExprSubscript e e') =
   (let head = (case e of ExprVar x \<Rightarrow> Some x | _ \<Rightarrow> None) in
    if head = Some ''Literal'' then
      (case e' of ExprLiteral (LitFloat _) \<Rightarrow> None | ExprLiteral l \<Rightarrow> Some (TyExprLiteral l) | _ \<Rightarrow> None)
    else if head = Some ''Callable'' then
      (case e' of
         ExprTuple [ExprList es, e''] \<Rightarrow> do {
-          \<psi>s \<leftarrow> those (map parse_annotation es); \<psi> \<leftarrow> parse_annotation e''; Some (TyExprCallable \<psi>s \<psi>)
+          \<psi>s \<leftarrow> those (map type_expr_of es); \<psi> \<leftarrow> type_expr_of e''; Some (TyExprCallable \<psi>s \<psi>)
         }
       | _ \<Rightarrow> None)
    else do {
-     \<psi>s \<leftarrow> those (case e' of ExprTuple es \<Rightarrow> map parse_annotation es | _ \<Rightarrow> [parse_annotation e']);
+     \<psi>s \<leftarrow> those (case e' of ExprTuple es \<Rightarrow> map type_expr_of es | _ \<Rightarrow> [type_expr_of e']);
      if head = Some ''list'' then (case \<psi>s of [\<psi>] \<Rightarrow> Some (TyExprList \<psi>) | _ \<Rightarrow> None)
      else if head = Some ''tuple'' then Some (TyExprTuple \<psi>s)
      else if head = Some ''dict'' then (case \<psi>s of [TyExprPrim str, \<psi>] \<Rightarrow> Some (TyExprDict \<psi>) | _ \<Rightarrow> None)
      else map_option (\<lambda>q. TyExprName q \<psi>s) (dotted_name e)
    })" |
-"parse_annotation _ = None"
+"type_expr_of _ = None"
 
 consts
   binds :: "'a \<Rightarrow> var set"

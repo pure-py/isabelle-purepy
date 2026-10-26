@@ -79,9 +79,9 @@ where
 "captured X \<Delta> =
   (let Y = X \<inter> fset (fmdom \<Delta>) in if Y = {} then Inr () else Inl (CapturedGeneratorVariable (Min Y)))"
 
-definition lambda_arguments :: "var list \<Rightarrow> (var \<times> expr) list \<Rightarrow> expr list \<Rightarrow> (reason + ty) list \<Rightarrow> reason + cxt"
+definition lambda_args :: "var list \<Rightarrow> (var \<times> expr) list \<Rightarrow> expr list \<Rightarrow> (reason + ty) list \<Rightarrow> reason + cxt"
 where
-"lambda_arguments xs kws es \<sigma>s = do {
+"lambda_args xs kws es \<sigma>s = do {
    ensure (kws = []) KeywordArgumentsNotConstructor;
    ensure (length xs = length es) (CallArityMismatch (length xs) (length es));
    \<tau>s \<leftarrow> those_sum \<sigma>s;
@@ -94,7 +94,7 @@ where
 "var_scheme \<Sigma> \<Gamma> e \<tau> =
   (case scheme_of_name \<Gamma> e of
      Some (TyScheme \<alpha>s \<sigma>) \<Rightarrow> Some (do {
-       \<tau>s \<leftarrow> type_arguments (type_args \<Sigma> \<alpha>s \<sigma> \<tau>) \<alpha>s;
+       \<tau>s \<leftarrow> type_args_of (type_args \<Sigma> \<alpha>s \<sigma> \<tau>) \<alpha>s;
        let \<sigma>' = subst \<tau>s \<alpha>s \<sigma>;
        ensure (\<Sigma> \<turnstile> \<sigma>' <: \<tau>) (TypeMismatch \<tau> \<sigma>')
      })
@@ -106,7 +106,7 @@ definition inferred_type_args :: "class_table \<Rightarrow> var list \<Rightarro
 where
 "inferred_type_args \<Sigma> \<alpha>s \<sigma>s ms =
   (let \<sigma>\<tau>s = filter (Not \<circ> isl \<circ> snd) (zip \<sigma>s ms) in
-   case type_arguments (type_args_seq \<Sigma> \<alpha>s (map fst \<sigma>\<tau>s) (map (projr \<circ> snd) \<sigma>\<tau>s)) \<alpha>s of
+   case type_args_of (type_args_seq \<Sigma> \<alpha>s (map fst \<sigma>\<tau>s) (map (projr \<circ> snd) \<sigma>\<tau>s)) \<alpha>s of
      Inl r \<Rightarrow> Inl (let r' = synth_failure ms in if r' = NotSynthesised then r else r')
    | Inr \<tau>s \<Rightarrow> Inr \<tau>s)"
 
@@ -125,7 +125,7 @@ where
 "synth_expr \<Sigma> \<Gamma> (ExprCall e (es, kws)) =
   (case lambda_of e of
      Some (xs, e') \<Rightarrow> do {
-       \<Delta> \<leftarrow> lambda_arguments xs kws es (map (synth_expr \<Sigma> \<Gamma>) es); synth_expr \<Sigma> (\<Gamma> \<otimes> \<Delta>) e'
+       \<Delta> \<leftarrow> lambda_args xs kws es (map (synth_expr \<Sigma> \<Gamma>) es); synth_expr \<Sigma> (\<Gamma> \<otimes> \<Delta>) e'
      }
    | None \<Rightarrow>
      (case constructor_class \<Sigma> \<Gamma> e of
@@ -245,7 +245,7 @@ where
 "check_expr' \<Sigma> \<Gamma> (ExprCall e (es, kws)) \<tau> =
   (case e of
      ExprLambda xs e' \<Rightarrow> Some (do {
-       \<Delta> \<leftarrow> lambda_arguments xs kws es (map (synth_expr \<Sigma> \<Gamma>) es); check_expr \<Sigma> (\<Gamma> \<otimes> \<Delta>) e' \<tau>
+       \<Delta> \<leftarrow> lambda_args xs kws es (map (synth_expr \<Sigma> \<Gamma>) es); check_expr \<Sigma> (\<Gamma> \<otimes> \<Delta>) e' \<tau>
      })
    | _ \<Rightarrow> None)" |
 "check_expr' \<Sigma> \<Gamma> (ExprList es) \<tau> =

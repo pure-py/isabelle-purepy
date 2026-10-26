@@ -211,7 +211,7 @@ where
    | (None, ExprSubscript e' _) \<Rightarrow>
        if class_of_name \<Gamma> e' = None then None
        else
-         (case parse_annotation e of
+         (case type_expr_of e of
             Some \<psi> \<Rightarrow>
               Some (do { \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; case \<tau> of TyClass C \<tau>s \<Rightarrow> Inr (C, Some \<tau>s) | _ \<Rightarrow> undefined })
           | None \<Rightarrow> undefined)

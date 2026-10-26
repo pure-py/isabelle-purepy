@@ -173,9 +173,9 @@ by (relation "measures [
    (auto dest: set_zip_leftD size_list_elem[where f = size])
 
 (* Types bound to \<alpha>s by \<gamma>; failure if \<gamma> doesn't bind one of them *)
-definition type_arguments :: "(var, ty) fmap \<Rightarrow> var list \<Rightarrow> reason + ty list"
+definition type_args_of :: "(var, ty) fmap \<Rightarrow> var list \<Rightarrow> reason + ty list"
 where
-"type_arguments \<gamma> \<alpha>s =
+"type_args_of \<gamma> \<alpha>s =
   those_sum (map (\<lambda>\<alpha>. case fmlookup \<gamma> \<alpha> of Some \<tau> \<Rightarrow> Inr \<tau> | None \<Rightarrow> Inl (NoTypeArgument \<alpha>)) \<alpha>s)"
 
 (* Type of attribute x of a value of type \<sigma>, which isn't a module *)
