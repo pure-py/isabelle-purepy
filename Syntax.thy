@@ -260,6 +260,17 @@ where
 "fv_quals (Guard e # gs) = fv_expr e \<union> fv_quals gs" |
 "fv_quals (Generator x e # gs) = fv_expr e \<union> (fv_quals gs - {x})"
 
+fun fv_ty :: "ty \<Rightarrow> var set"
+where
+"fv_ty (TyVar \<alpha>) = {\<alpha>}" |
+"fv_ty (TyList \<tau>) = fv_ty \<tau>" |
+"fv_ty (TyDict \<tau>) = fv_ty \<tau>" |
+"fv_ty (TyTuple \<tau>s) = \<Union> (set (map fv_ty \<tau>s))" |
+"fv_ty (TyCallable \<sigma>s \<tau>) = \<Union> (set (map fv_ty \<sigma>s)) \<union> fv_ty \<tau>" |
+"fv_ty (TyClass _ \<tau>s) = \<Union> (set (map fv_ty \<tau>s))" |
+"fv_ty (TyUnion \<sigma> \<tau>) = fv_ty \<sigma> \<union> fv_ty \<tau>" |
+"fv_ty _ = {}"
+
 fun captures_expr :: "expr \<Rightarrow> var set" and captures_quals :: "qualifier list \<Rightarrow> var set"
 where
 "captures_expr (ExprVar _) = {}" |
@@ -320,6 +331,10 @@ where
 "numeric_literal (ExprLiteral (LitFloat _)) = True" |
 "numeric_literal _ = False"
 
+fun short_name :: "name \<Rightarrow> var"
+where
+"short_name (x, xs) = (if xs = [] then x else last xs)"
+
 fun dotted_name :: "expr \<Rightarrow> name option"
 where
 "dotted_name (ExprVar x) = Some (x, [])" |
@@ -342,17 +357,6 @@ where
 "assign_targets_top (Stmt s) = assign_targets_stmt s" |
 "assign_targets_top (TopSeq t t') = assign_targets_top t @ assign_targets_top t'" |
 "assign_targets_top (TypeDefs _) = []"
-
-fun fv_ty :: "ty \<Rightarrow> var set"
-where
-"fv_ty (TyVar \<alpha>) = {\<alpha>}" |
-"fv_ty (TyList \<tau>) = fv_ty \<tau>" |
-"fv_ty (TyDict \<tau>) = fv_ty \<tau>" |
-"fv_ty (TyTuple \<tau>s) = \<Union> (set (map fv_ty \<tau>s))" |
-"fv_ty (TyCallable \<sigma>s \<tau>) = \<Union> (set (map fv_ty \<sigma>s)) \<union> fv_ty \<tau>" |
-"fv_ty (TyClass _ \<tau>s) = \<Union> (set (map fv_ty \<tau>s))" |
-"fv_ty (TyUnion \<sigma> \<tau>) = fv_ty \<sigma> \<union> fv_ty \<tau>" |
-"fv_ty _ = {}"
 
 (* Whether a synthesis rule applies to the expression *)
 fun synthesises :: "expr \<Rightarrow> bool"

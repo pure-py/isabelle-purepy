@@ -177,7 +177,7 @@ where
 
 definition field_names :: "class_table \<Rightarrow> name \<Rightarrow> var list"
 where
-"field_names \<Sigma> C = (case fields \<Sigma> C of FieldScheme _ x\<tau>s \<Rightarrow> map fst x\<tau>s)"
+"field_names \<Sigma> C = (case fields \<Sigma> C of FieldScheme _ x\<sigma>s \<Rightarrow> map fst x\<sigma>s)"
 
 definition class_table :: "cxt \<Rightarrow> name \<Rightarrow> type_def list \<Rightarrow> nat \<Rightarrow> class_table"
 where
@@ -203,6 +203,20 @@ where
      check_field_map C (map fst x\<sigma>s) (length es) (map fst kws);
      Inr (zip (map snd (take (length es) x\<sigma>s)) es @ map (\<lambda>(y, e). (the (map_of x\<sigma>s y), e)) kws)
    })"
+
+definition constructor_class :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> (reason + name \<times> ty list option) option"
+where
+"constructor_class \<Sigma> \<Gamma> e =
+  (case (class_of_name \<Gamma> e, e) of
+     (Some C, _) \<Rightarrow> Some (Inr (C, None))
+   | (None, ExprSubscript e' _) \<Rightarrow>
+       if class_of_name \<Gamma> e' = None then None
+       else
+         (case parse_annotation e of
+            Some \<psi> \<Rightarrow>
+              Some (do { \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; case \<tau> of TyClass C \<tau>s \<Rightarrow> Inr (C, Some \<tau>s) | _ \<Rightarrow> undefined })
+          | None \<Rightarrow> undefined)
+   | _ \<Rightarrow> None)"
 
 lemma constructor_args_elem:
   "\<lbrakk> constructor_args C \<pi> es kws = Inr \<sigma>es ; (\<sigma>, e) \<in> set \<sigma>es \<rbrakk> \<Longrightarrow> e \<in> set es \<or> e \<in> set (map snd kws)"

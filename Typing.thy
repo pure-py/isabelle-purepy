@@ -120,34 +120,27 @@ where
        \<Delta> \<leftarrow> lambda_arguments xs kws es (synth_exprs \<Sigma> \<Gamma> es); synth_expr \<Sigma> (\<Gamma> \<otimes> \<Delta>) e'
      }
    | _ \<Rightarrow>
-     (case class_of_name \<Gamma> e of
-        Some C \<Rightarrow>
-          (case fields \<Sigma> C of
-             FieldScheme \<alpha>s x\<sigma>s \<Rightarrow> do {
-               \<sigma>es \<leftarrow> constructor_args C (FieldScheme \<alpha>s x\<sigma>s) es kws;
-               let synthesising = filter (synthesises \<circ> snd) \<sigma>es;
-               \<tau>s \<leftarrow> those_sum (map (synth_expr \<Sigma> \<Gamma> \<circ> snd) synthesising);
-               \<tau>s' \<leftarrow> type_arguments (type_args_seq \<Sigma> \<alpha>s (map fst synthesising) \<tau>s) \<alpha>s;
-               those_sum (map (\<lambda>(\<sigma>, e'). check_expr \<Sigma> \<Gamma> e' (subst \<tau>s' \<alpha>s \<sigma>)) \<sigma>es);
-               Inr (TyClass C \<tau>s')
-             })
-      | None \<Rightarrow>
-          if (case e of ExprSubscript e' _ \<Rightarrow> class_of_name \<Gamma> e' \<noteq> None | _ \<Rightarrow> False) then
-            (case parse_annotation e of
-               Some \<psi> \<Rightarrow> do {
-                 \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>;
-                 case \<tau> of
-                   TyClass C \<tau>s \<Rightarrow>
-                     (case fields \<Sigma> C of
-                        FieldScheme \<alpha>s x\<sigma>s \<Rightarrow> do {
-                          \<sigma>es \<leftarrow> constructor_args C (FieldScheme \<alpha>s x\<sigma>s) es kws;
-                          those_sum (map (\<lambda>(\<sigma>, e'). check_expr \<Sigma> \<Gamma> e' (subst \<tau>s \<alpha>s \<sigma>)) \<sigma>es);
-                          Inr \<tau>
-                        })
-                 | _ \<Rightarrow> undefined
-               }
-             | None \<Rightarrow> undefined)
-          else do { \<sigma> \<leftarrow> callee \<Sigma> \<Gamma> e es; call_at \<Sigma> \<Gamma> \<sigma> kws es }))" |
+     (case constructor_class \<Sigma> \<Gamma> e of
+        Some m \<Rightarrow> do {
+          (C, explicit) \<leftarrow> m;
+          case fields \<Sigma> C of
+            FieldScheme \<alpha>s x\<sigma>s \<Rightarrow> do {
+              \<sigma>es \<leftarrow> constructor_args C (FieldScheme \<alpha>s x\<sigma>s) es kws;
+              case explicit of
+                Some \<tau>s \<Rightarrow> do {
+                  those_sum (map (\<lambda>(\<sigma>, e'). check_expr \<Sigma> \<Gamma> e' (subst \<tau>s \<alpha>s \<sigma>)) \<sigma>es);
+                  Inr (TyClass C \<tau>s)
+                }
+              | None \<Rightarrow> do {
+                  let synthesising = filter (synthesises \<circ> snd) \<sigma>es;
+                  \<tau>s' \<leftarrow> those_sum (map (synth_expr \<Sigma> \<Gamma> \<circ> snd) synthesising);
+                  \<tau>s \<leftarrow> type_arguments (type_args_seq \<Sigma> \<alpha>s (map fst synthesising) \<tau>s') \<alpha>s;
+                  those_sum (map (\<lambda>(\<sigma>, e'). check_expr \<Sigma> \<Gamma> e' (subst \<tau>s \<alpha>s \<sigma>)) \<sigma>es);
+                  Inr (TyClass C \<tau>s)
+                }
+            }
+        }
+      | None \<Rightarrow> do { \<sigma> \<leftarrow> callee \<Sigma> \<Gamma> e es; call_at \<Sigma> \<Gamma> \<sigma> kws es }))" |
 "synth_expr \<Sigma> \<Gamma> (ExprBinOp op e e') = do {
    \<sigma> \<leftarrow> synth_expr \<Sigma> \<Gamma> e;
    \<sigma>' \<leftarrow> synth_expr \<Sigma> \<Gamma> e';
@@ -475,11 +468,11 @@ where
    | Returns\<^sub>R \<Rightarrow> Inl TopLevelAssertFalse
  }" |
 "check_top_stmt \<Sigma> q \<Gamma> (TypeDefs \<chi>s) =
-  (let is = [0..<length \<chi>s];
-       \<Delta> = fmap_of_list (map (\<lambda>i. (type_def_name (\<chi>s ! i), type_entry \<Gamma> q \<chi>s i)) is);
-       \<Sigma>' = fold (\<lambda>i \<Sigma>''. \<Sigma>'' \<otimes> class_table \<Gamma> q \<chi>s i) is \<Sigma> in
+  (let js = [0..<length \<chi>s];
+       \<Delta> = fmap_of_list (map (\<lambda>j. (type_def_name (\<chi>s ! j), type_entry \<Gamma> q \<chi>s j)) js);
+       \<Sigma>' = fold (\<lambda>j \<Sigma>''. \<Sigma>'' \<otimes> class_table \<Gamma> q \<chi>s j) js \<Sigma> in
    do {
-     those_sum (map (\<lambda>i. check_type_def \<Sigma>' (type_context \<Gamma> q \<chi>s i) (\<chi>s ! i)) is);
+     those_sum (map (\<lambda>j. check_type_def \<Sigma>' (type_context \<Gamma> q \<chi>s j) (\<chi>s ! j)) js);
      Inr (Assigns\<^sub>R \<Delta>, \<Sigma>')
    })"
 

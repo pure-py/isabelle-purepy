@@ -58,10 +58,6 @@ datatype reason =
   | ImportCycle "name list"
   | MypyCompatibility reason
 
-fun short_name :: "name \<Rightarrow> var"
-where
-"short_name (x, xs) = (if xs = [] then x else last xs)"
-
 definition not_type_name :: "cxt \<Rightarrow> name \<Rightarrow> reason"
 where
 "not_type_name \<Gamma> q = (case lookup \<Gamma> q of Some Unbound \<Rightarrow> UnboundName (fst q) | _ \<Rightarrow> NotClass q)"

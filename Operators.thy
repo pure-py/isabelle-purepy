@@ -18,8 +18,8 @@ where
 "equality_type \<Sigma> V \<alpha>s (TyClass C \<sigma>s) =
   (equality_class \<Sigma> V C \<and>
    (case fields \<Sigma> C of
-      FieldScheme \<beta>s x\<tau>s \<Rightarrow>
-        list_all (\<lambda>(\<beta>, \<sigma>). \<beta> \<notin> \<Union> (set (map (fv \<circ> snd) x\<tau>s)) \<or> equality_type \<Sigma> V \<alpha>s \<sigma>) (zip \<beta>s \<sigma>s)))" |
+      FieldScheme \<beta>s x\<sigma>s \<Rightarrow>
+        list_all (\<lambda>(\<beta>, \<sigma>). \<beta> \<notin> \<Union> (set (map (fv \<circ> snd) x\<sigma>s)) \<or> equality_type \<Sigma> V \<alpha>s \<sigma>) (zip \<beta>s \<sigma>s)))" |
 "equality_type \<Sigma> V \<alpha>s _ = False" |
 
 "equality_class \<Sigma> V C =
@@ -27,7 +27,7 @@ where
    else case fmlookup \<Sigma> C of
      Some _ \<Rightarrow>
        (case fields \<Sigma> C of
-          FieldScheme \<alpha>s x\<tau>s \<Rightarrow> list_all (equality_type \<Sigma> (C # V) \<alpha>s \<circ> snd) x\<tau>s)
+          FieldScheme \<alpha>s x\<sigma>s \<Rightarrow> list_all (equality_type \<Sigma> (C # V) \<alpha>s \<circ> snd) x\<sigma>s)
    | None \<Rightarrow> False)"
 by pat_completeness auto
 

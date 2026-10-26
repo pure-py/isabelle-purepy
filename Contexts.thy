@@ -72,11 +72,11 @@ where
 "extend_entry _ \<theta>' = \<theta>'" |
 "\<Gamma> \<uplus> \<Gamma>' =
    \<Gamma> ++\<^sub>f fmmap_keys (\<lambda>x \<theta>'. case fmlookup \<Gamma> x of None \<Rightarrow> \<theta>' | Some \<theta> \<Rightarrow> extend_entry \<theta> \<theta>') \<Gamma>'"
-  by pat_completeness auto
+by pat_completeness auto
 
 termination
-  by (relation "measure (\<lambda>p. case p of Inl (\<theta>, _) \<Rightarrow> size \<theta> | Inr (\<Gamma>, _) \<Rightarrow> size_fmap (\<lambda>_. 0) size \<Gamma>)")
-     (simp_all add: size_fmap_lookup del: size_fmap_def)
+by (relation "measure (\<lambda>p. case p of Inl (\<theta>, _) \<Rightarrow> size \<theta> | Inr (\<Gamma>, _) \<Rightarrow> size_fmap (\<lambda>_. 0) size \<Gamma>)")
+   (simp_all add: size_fmap_lookup del: size_fmap_def)
 
 definition predefined_classes :: class_table
 where
@@ -100,16 +100,19 @@ where
 by pat_completeness auto
 
 termination
-  by (relation "measure (\<lambda>p. case p of Inl \<theta> \<Rightarrow> size \<theta> | Inr \<Gamma> \<Rightarrow> size_fmap (\<lambda>_. 0) size \<Gamma>)")
-     (auto dest!: sorted_list_of_fmap_lookup simp: size_fmap_lookup simp del: size_fmap_def)
+by (relation "measure (\<lambda>p. case p of Inl \<theta> \<Rightarrow> size \<theta> | Inr \<Gamma> \<Rightarrow> size_fmap (\<lambda>_. 0) size \<Gamma>)")
+   (auto dest!: sorted_list_of_fmap_lookup simp: size_fmap_lookup simp del: size_fmap_def)
+
+definition entry_of :: "cxt \<Rightarrow> expr \<Rightarrow> cxt_entry option"
+where
+"entry_of \<Gamma> e = Option.bind (dotted_name e) (resolve_name \<Gamma>)"
 
 definition class_of_name :: "cxt \<Rightarrow> expr \<Rightarrow> name option"
 where
-"class_of_name \<Gamma> e = (case Option.bind (dotted_name e) (resolve_name \<Gamma>) of Some (Type C) \<Rightarrow> Some C | _ \<Rightarrow> None)"
+"class_of_name \<Gamma> e = (case entry_of \<Gamma> e of Some (Type C) \<Rightarrow> Some C | _ \<Rightarrow> None)"
 
 definition scheme_of_name :: "cxt \<Rightarrow> expr \<Rightarrow> ty_scheme option"
 where
-"scheme_of_name \<Gamma> e =
-  (case Option.bind (dotted_name e) (resolve_name \<Gamma>) of Some (Scheme \<pi>) \<Rightarrow> Some \<pi> | _ \<Rightarrow> None)"
+"scheme_of_name \<Gamma> e = (case entry_of \<Gamma> e of Some (Scheme \<pi>) \<Rightarrow> Some \<pi> | _ \<Rightarrow> None)"
 
 end
