@@ -5,11 +5,11 @@ begin
 datatype head = HeadLiteral lit | HeadClass name | HeadList nat
 
 datatype shape =
-    ShapeRest ty "head list"
-  | ShapeConstr name "ty list" "shape list" "head list"
+    ShapeRest ty "head set"
+  | ShapeConstr name "ty list" "shape list" "head set"
   | ShapeTuple "shape list"
   | ShapeList ty "shape list"
-  | ShapeDict ty "(string \<times> shape) list" "string list"
+  | ShapeDict ty "(string \<times> shape) list" "string set"
 
 fun head_typed :: "class_table \<Rightarrow> head \<Rightarrow> ty \<Rightarrow> bool"
 where
@@ -25,18 +25,18 @@ inductive shape_typed :: "class_table \<Rightarrow> shape \<Rightarrow> ty \<Rig
 for \<Sigma> :: class_table
 where
 ShapeRest:
-  "\<lbrakk> \<forall>h \<in> set H. head_typed \<Sigma> h \<tau> ; case \<tau> of TyUnion _ _ \<Rightarrow> False | TyDict _ \<Rightarrow> False | _ \<Rightarrow> True \<rbrakk>
+  "\<lbrakk> \<forall>h \<in> H. head_typed \<Sigma> h \<tau> ; case \<tau> of TyUnion _ _ \<Rightarrow> False | TyDict _ \<Rightarrow> False | _ \<Rightarrow> True \<rbrakk>
   \<Longrightarrow> shape_typed \<Sigma> (ShapeRest \<tau> H) \<tau>" |
 ShapeConstr:
-  "\<lbrakk> \<forall>h \<in> set H. head_typed \<Sigma> h (TyClass C \<tau>s) ;
+  "\<lbrakk> \<forall>h \<in> H. head_typed \<Sigma> h (TyClass C \<tau>s) ;
      list_all2 (shape_typed \<Sigma>) ks (map snd (instantiate (fields \<Sigma> C) \<tau>s)) \<rbrakk>
   \<Longrightarrow> shape_typed \<Sigma> (ShapeConstr C \<tau>s ks H) (TyClass C \<tau>s)" |
 ShapeTuple: "list_all2 (shape_typed \<Sigma>) ks \<tau>s \<Longrightarrow> shape_typed \<Sigma> (ShapeTuple ks) (TyTuple \<tau>s)" |
 ShapeList: "\<forall>k \<in> set ks. shape_typed \<Sigma> k \<tau> \<Longrightarrow> shape_typed \<Sigma> (ShapeList \<tau> ks) (TyList \<tau>)" |
 ShapeSub: "\<lbrakk> shape_typed \<Sigma> k \<sigma> ; \<Sigma> \<turnstile> \<sigma> <: \<tau> \<rbrakk> \<Longrightarrow> shape_typed \<Sigma> k \<tau>" |
 ShapeDict:
-  "\<lbrakk> \<forall>w \<in> set W. head_typed \<Sigma> (HeadLiteral (LitString w)) (TyPrim str) ; \<forall>(w, k) \<in> set \<beta>. shape_typed \<Sigma> k \<tau> ;
-     fst ` set \<beta> \<inter> set W = {} \<rbrakk>
+  "\<lbrakk> \<forall>w \<in> W. head_typed \<Sigma> (HeadLiteral (LitString w)) (TyPrim str) ; \<forall>(w, k) \<in> set \<beta>. shape_typed \<Sigma> k \<tau> ;
+     fst ` set \<beta> \<inter> W = {} \<rbrakk>
   \<Longrightarrow> shape_typed \<Sigma> (ShapeDict \<tau> \<beta> W) (TyDict \<tau>)"
 
 fun shape_type :: "shape \<Rightarrow> ty"
@@ -47,25 +47,32 @@ where
 "shape_type (ShapeList \<tau> _) = TyList \<tau>" |
 "shape_type (ShapeDict \<tau> _ _) = TyDict \<tau>"
 
-fun exhausts :: "class_table \<Rightarrow> head list \<Rightarrow> ty \<Rightarrow> bool"
+definition below_excluded :: "class_table \<Rightarrow> name \<Rightarrow> head set \<Rightarrow> bool"
 where
-"exhausts \<Sigma> H (TyLiteral l) = (HeadLiteral l \<in> set H)" |
-"exhausts \<Sigma> H (TyPrim bool) = (HeadLiteral (LitBool True) \<in> set H \<and> HeadLiteral (LitBool False) \<in> set H)" |
-"exhausts \<Sigma> H (TyPrim NoneType) = (HeadLiteral LitNone \<in> set H)" |
-"exhausts \<Sigma> H (TyClass C _) = (\<exists>D \<in> set (ancestors \<Sigma> C). HeadClass D \<in> set H)" |
+"below_excluded \<Sigma> C H = (\<exists>D \<in> set (ancestors \<Sigma> C). HeadClass D \<in> H)"
+
+fun exhausts :: "class_table \<Rightarrow> head set \<Rightarrow> ty \<Rightarrow> bool"
+where
+"exhausts \<Sigma> H (TyLiteral l) = (HeadLiteral l \<in> H)" |
+"exhausts \<Sigma> H (TyPrim bool) = (HeadLiteral (LitBool True) \<in> H \<and> HeadLiteral (LitBool False) \<in> H)" |
+"exhausts \<Sigma> H (TyPrim NoneType) = (HeadLiteral LitNone \<in> H)" |
+"exhausts \<Sigma> H (TyClass C _) = below_excluded \<Sigma> C H" |
 "exhausts \<Sigma> H (TyPrim Never) = True" |
 "exhausts \<Sigma> H _ = False"
 
-fun shapes :: "class_table \<Rightarrow> ty \<Rightarrow> head list \<Rightarrow> shape list"
+definition typed_heads :: "class_table \<Rightarrow> head set \<Rightarrow> ty \<Rightarrow> head set"
+where
+"typed_heads \<Sigma> H \<tau> = Set.filter (\<lambda>h. head_typed \<Sigma> h \<tau>) H"
+
+fun shapes :: "class_table \<Rightarrow> ty \<Rightarrow> head set \<Rightarrow> shape list"
 where
 "shapes \<Sigma> (TyUnion \<sigma> \<tau>) H =
-  (let K = shapes \<Sigma> \<sigma> (filter (\<lambda>h. head_typed \<Sigma> h \<sigma>) H) in
-   K @ filter (\<lambda>k. k \<notin> set K) (shapes \<Sigma> \<tau> (filter (\<lambda>h. head_typed \<Sigma> h \<tau>) H)))" |
-"shapes \<Sigma> (TyDict \<tau>) H = [ShapeDict \<tau> [] []]" |
+  (let K = shapes \<Sigma> \<sigma> (typed_heads \<Sigma> H \<sigma>) in K @ filter (\<lambda>k. k \<notin> set K) (shapes \<Sigma> \<tau> (typed_heads \<Sigma> H \<tau>)))" |
+"shapes \<Sigma> (TyDict \<tau>) H = [ShapeDict \<tau> [] {}]" |
 "shapes \<Sigma> \<tau> H = (if exhausts \<Sigma> H \<tau> then [] else [ShapeRest \<tau> H])"
 
 definition shapes_seq :: "class_table \<Rightarrow> ty list \<Rightarrow> shape list list"
 where
-"shapes_seq \<Sigma> \<tau>s = product_lists (map (\<lambda>\<tau>. shapes \<Sigma> \<tau> []) \<tau>s)"
+"shapes_seq \<Sigma> \<tau>s = product_lists (map (\<lambda>\<tau>. shapes \<Sigma> \<tau> {}) \<tau>s)"
 
 end

@@ -12,6 +12,7 @@ session "isabelle-purepy" = HOL +
     Types
     Subtyping
     Shapes
+    Matching
     Operators
     Typing
     Programs
