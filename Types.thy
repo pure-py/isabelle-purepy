@@ -64,8 +64,8 @@ where
      TypeStmt _ \<alpha>s _ \<Rightarrow> \<Gamma> \<otimes> entries [0..<length \<chi>s] \<otimes> fmconst (set \<alpha>s) TypeVar
    | Dataclass _ \<alpha>s _ _ \<Rightarrow> \<Gamma> \<otimes> entries [0..<i] \<otimes> fmconst (set \<alpha>s) TypeVar)"
 
-(* A holds the aliases being resolved, so that a cyclic alias is rejected; n bounds the aliases resolved
-   along a path, which are distinct, by the alias definitions reachable from the context *)
+(* A holds the aliases being resolved, so that a cyclic alias is rejected; n bounds the nesting of alias
+   resolution, and the number of alias definitions reachable from the context suffices, since A has no repeats *)
 fun resolve_type' :: "class_table \<Rightarrow> cxt \<Rightarrow> (name \<times> var) list \<Rightarrow> nat \<Rightarrow> ty_expr \<Rightarrow> reason + ty"
 where
 "resolve_type' \<Sigma> \<Gamma> A n (TyExprPrim \<nu>) = do { check_predefined \<Gamma> (prim_name \<nu>); Inr (TyPrim \<nu>) }" |
