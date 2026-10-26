@@ -280,7 +280,6 @@ where
 "check_expr' \<Sigma> \<Gamma> (ExprAttribute e x) \<tau> = var_scheme \<Sigma> \<Gamma> (ExprAttribute e x) \<tau>" |
 "check_expr' \<Sigma> \<Gamma> _ _ = None" |
 
-
 "check_args \<Sigma> \<Gamma> kws es \<sigma>s = do {
    ensure (kws = []) KeywordArgumentsNotConstructor;
    ensure (length \<sigma>s = length es) (CallArityMismatch (length \<sigma>s) (length es));
