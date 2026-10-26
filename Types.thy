@@ -131,49 +131,47 @@ fun instantiate :: "field_scheme \<Rightarrow> ty list \<Rightarrow> (var \<time
 where
 "instantiate (FieldScheme \<alpha>s x\<sigma>s) \<tau>s = map (\<lambda>(x, \<sigma>). (x, subst \<tau>s \<alpha>s \<sigma>)) x\<sigma>s"
 
-(* Fields of class C, through at most n base classes; the base-class relation is acyclic, so the number of
-   classes in \<Sigma> suffices *)
-fun fields_upto :: "nat \<Rightarrow> class_table \<Rightarrow> name \<Rightarrow> field_scheme"
+(* Ancestors of class C at type arguments \<tau>s, each with its type arguments, through at most n base classes;
+   the base-class relation is acyclic, so the number of classes in \<Sigma> suffices *)
+fun instantiated_ancestors_upto :: "nat \<Rightarrow> class_table \<Rightarrow> name \<Rightarrow> ty list \<Rightarrow> (name \<times> ty list) list"
 where
-"fields_upto 0 \<Sigma> C = undefined" |
-"fields_upto (Suc n) \<Sigma> C =
+"instantiated_ancestors_upto 0 \<Sigma> C \<tau>s = undefined" |
+"instantiated_ancestors_upto (Suc n) \<Sigma> C \<tau>s =
+  (C, \<tau>s) # (case base \<Sigma> C of
+                 None \<Rightarrow> []
+               | Some (D, \<sigma>s) \<Rightarrow> instantiated_ancestors_upto n \<Sigma> D (map (subst \<tau>s (type_params \<Sigma> C)) \<sigma>s))"
+
+definition instantiated_ancestors :: "class_table \<Rightarrow> name \<Rightarrow> ty list \<Rightarrow> (name \<times> ty list) list"
+where
+"instantiated_ancestors \<Sigma> C \<tau>s = instantiated_ancestors_upto (fcard (fmdom \<Sigma>)) \<Sigma> C \<tau>s"
+
+definition ancestors :: "class_table \<Rightarrow> name \<Rightarrow> name list"
+where
+"ancestors \<Sigma> C = map fst (instantiated_ancestors \<Sigma> C (map TyVar (type_params \<Sigma> C)))"
+
+(* Type arguments of ancestor D of class C at type arguments \<tau>s *)
+definition instantiated_ancestor :: "class_table \<Rightarrow> name \<Rightarrow> ty list \<Rightarrow> name \<Rightarrow> ty list"
+where
+"instantiated_ancestor \<Sigma> C \<tau>s D = the (map_of (instantiated_ancestors \<Sigma> C \<tau>s) D)"
+
+(* Fields declared by class C itself, at type arguments \<tau>s *)
+definition declared_fields :: "class_table \<Rightarrow> name \<Rightarrow> ty list \<Rightarrow> (var \<times> ty) list"
+where
+"declared_fields \<Sigma> C \<tau>s =
   (case fmlookup \<Sigma> C of
      Some (ClassDef \<Gamma> q \<chi>s i) \<Rightarrow>
        (case \<chi>s ! i of
           Dataclass _ \<alpha>s _ \<phi> \<Rightarrow>
-            let own = map (\<lambda>(x, \<psi>). (x, projr (resolve_type \<Sigma> (type_context \<Gamma> q \<chi>s i) \<psi>))) \<phi> in
-            FieldScheme \<alpha>s
-              (case base \<Sigma> C of None \<Rightarrow> own | Some (D, \<sigma>s) \<Rightarrow> instantiate (fields_upto n \<Sigma> D) \<sigma>s @ own)
+            map (\<lambda>(x, \<psi>). (x, subst \<tau>s \<alpha>s (projr (resolve_type \<Sigma> (type_context \<Gamma> q \<chi>s i) \<psi>)))) \<phi>
         | TypeStmt _ _ _ \<Rightarrow> undefined)
    | None \<Rightarrow> undefined)"
 
 definition fields :: "class_table \<Rightarrow> name \<Rightarrow> field_scheme"
 where
-"fields \<Sigma> C = fields_upto (fcard (fmdom \<Sigma>)) \<Sigma> C"
-
-(* Class C and its base classes, through at most n of them *)
-fun ancestors_upto :: "nat \<Rightarrow> class_table \<Rightarrow> name \<Rightarrow> name list"
-where
-"ancestors_upto 0 \<Sigma> C = undefined" |
-"ancestors_upto (Suc n) \<Sigma> C = C # (case base \<Sigma> C of None \<Rightarrow> [] | Some (D, _) \<Rightarrow> ancestors_upto n \<Sigma> D)"
-
-definition ancestors :: "class_table \<Rightarrow> name \<Rightarrow> name list"
-where
-"ancestors \<Sigma> C = ancestors_upto (fcard (fmdom \<Sigma>)) \<Sigma> C"
-
-(* Type arguments of ancestor D of class C at type arguments \<tau>s, through at most n base classes *)
-fun instantiated_ancestor_upto :: "nat \<Rightarrow> class_table \<Rightarrow> name \<Rightarrow> ty list \<Rightarrow> name \<Rightarrow> ty list"
-where
-"instantiated_ancestor_upto 0 \<Sigma> C \<tau>s D = undefined" |
-"instantiated_ancestor_upto (Suc n) \<Sigma> C \<tau>s D =
-  (if C = D then \<tau>s
-   else case base \<Sigma> C of
-     Some (D', \<sigma>s) \<Rightarrow> instantiated_ancestor_upto n \<Sigma> D' (map (subst \<tau>s (type_params \<Sigma> C)) \<sigma>s) D
-   | None \<Rightarrow> undefined)"
-
-definition instantiated_ancestor :: "class_table \<Rightarrow> name \<Rightarrow> ty list \<Rightarrow> name \<Rightarrow> ty list"
-where
-"instantiated_ancestor \<Sigma> C \<tau>s D = instantiated_ancestor_upto (fcard (fmdom \<Sigma>)) \<Sigma> C \<tau>s D"
+"fields \<Sigma> C =
+  (let \<alpha>s = type_params \<Sigma> C in
+   FieldScheme \<alpha>s
+     (concat (rev (map (\<lambda>(D, \<sigma>s). declared_fields \<Sigma> D \<sigma>s) (instantiated_ancestors \<Sigma> C (map TyVar \<alpha>s))))))"
 
 definition field_names :: "class_table \<Rightarrow> name \<Rightarrow> var list"
 where
