@@ -380,7 +380,7 @@ definition prim_of_name :: "var \<Rightarrow> prim_ty option"
 where
 "prim_of_name x = find (\<lambda>\<nu>. prim_name \<nu> = x) [object, Never, NoneType, bool, int, float, str, Sized]"
 
-(* Type expression denoted by an expression, as in an annotation; None if it denotes none *)
+(* Type expression denoted by an expression, as in an annotation *)
 function (sequential)
   parse_annotation :: "expr \<Rightarrow> ty_expr option" and
   parse_annotations :: "expr list \<Rightarrow> ty_expr list option"
