@@ -102,8 +102,6 @@ where
 
 datatype instances = Instance "ty list" | Undetermined | NoInstance
 
-(* Instance of C at \<tau>, by instance-above and otherwise instance-below; the instance below a generic class
-   isn't mechanised *)
 definition instance_above :: "class_table \<Rightarrow> name \<Rightarrow> ty \<Rightarrow> instances"
 where
 "instance_above \<Sigma> C \<tau> =
@@ -112,6 +110,7 @@ where
    | TyPrim Never \<Rightarrow> if type_params \<Sigma> C = [] then Instance [] else Undetermined
    | _ \<Rightarrow> NoInstance)"
 
+(* Undefined for generic C, since type arguments at which C is a subtype of \<tau> aren't computed *)
 definition instance_below :: "class_table \<Rightarrow> name \<Rightarrow> ty \<Rightarrow> instances"
 where
 "instance_below \<Sigma> C \<tau> =
