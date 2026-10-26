@@ -63,17 +63,19 @@ where
        None \<Rightarrow> undefined
      | Some (ModuleBody \<iota>s t) \<Rightarrow> do {
          (\<Gamma>', \<Sigma>') \<leftarrow> check_imports M (V @ [q]) \<Sigma> q \<iota>s;
-         \<Gamma>\<^sub>s \<leftarrow> map_sum (Pair q) id
-           (case scope Unbound (declares \<iota>s) t of
-              Some \<Gamma>\<^sub>s \<Rightarrow> Inr \<Gamma>\<^sub>s
-            | None \<Rightarrow> Inl (scope_reason (declares \<iota>s) (declares t) (binds t)));
-         map_sum (Pair q) id (check_assignments_declared {} (assign_targets t) (declares t) (binds t));
-         (R, \<Sigma>'') \<leftarrow> map_sum (Pair q) id (check_top_stmt \<Sigma>' q (the (fmlookup predefined builtins) \<otimes> \<Gamma>' \<otimes> \<Gamma>\<^sub>s) t);
-         case R of
-           Assigns\<^sub>R \<Delta> \<Rightarrow>
-             let S = submods M q; X = (fmdom \<Gamma>' |\<union>| fmdom \<Delta>) |\<inter>| fmdom S in
-             if X = {||} then Inr (S \<otimes> \<Delta>, \<Sigma>'') else Inl (q, DuplicateMember (Min (fset X)) q)
-         | Returns\<^sub>R \<Rightarrow> Inl (q, TopLevelAssertFalse)
+         map_sum (Pair q) id (do {
+           \<Gamma>\<^sub>s \<leftarrow>
+             (case scope Unbound (declares \<iota>s) t of
+                Some \<Gamma>\<^sub>s \<Rightarrow> Inr \<Gamma>\<^sub>s
+              | None \<Rightarrow> Inl (scope_reason (declares \<iota>s) (declares t) (binds t)));
+           check_assignments_declared {} (assign_targets t) (declares t) (binds t);
+           (R, \<Sigma>'') \<leftarrow> check_top_stmt \<Sigma>' q (the (fmlookup predefined builtins) \<otimes> \<Gamma>' \<otimes> \<Gamma>\<^sub>s) t;
+           case R of
+             Assigns\<^sub>R \<Delta> \<Rightarrow>
+               let S = submods M q; X = (fmdom \<Gamma>' |\<union>| fmdom \<Delta>) |\<inter>| fmdom S in
+               if X = {||} then Inr (S \<otimes> \<Delta>, \<Sigma>'') else Inl (DuplicateMember (Min (fset X)) q)
+           | Returns\<^sub>R \<Rightarrow> Inl TopLevelAssertFalse
+         })
        })" |
 "check_imports M V \<Sigma> q [] = Inr (fmempty, \<Sigma>)" |
 "check_imports M V \<Sigma> q (Import (x, xs) # \<iota>s) = do {
