@@ -204,7 +204,7 @@ where
      Inr (zip (map snd (take (length es) x\<sigma>s)) es @ map (\<lambda>(y, e). (the (map_of x\<sigma>s y), e)) kws)
    })"
 
-(* Class of constructor callee e, with its type arguments if explicit; None if e isn't a constructor callee *)
+(* Class of constructor callee e, with its type arguments if explicit *)
 definition constructor_class :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> (reason + name \<times> ty list option) option"
 where
 "constructor_class \<Sigma> \<Gamma> e =
