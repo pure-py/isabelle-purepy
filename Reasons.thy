@@ -113,8 +113,8 @@ where
           Some x \<Rightarrow> Redeclaration x
         | None \<Rightarrow> Redeclaration (Min (set ys \<inter> X))))"
 
-(* Reason why none of the elements of a list or dictionary synthesises a type: the first failure of an
-   element with a synthesis rule *)
+(* Reason why none of the expressions synthesises a type: the first failure of an expression with a synthesis
+   rule *)
 fun synth_failure :: "(reason + 'a) list \<Rightarrow> reason"
 where
 "synth_failure [] = NotSynthesised" |

@@ -88,7 +88,7 @@ where
    if distinct xs then Inr (fmap_of_list (zip xs (map Ty \<tau>s))) else Inl undefined
  }"
 
-(* Name bound at a type scheme checked against \<tau>, by var-scheme; None for other expressions *)
+(* Check of a name bound at a type scheme against \<tau>; None for other expressions *)
 definition var_scheme :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> (reason + unit) option"
 where
 "var_scheme \<Sigma> \<Gamma> e \<tau> =
@@ -342,7 +342,7 @@ where
       Inr (TyScheme \<alpha>s (TyCallable \<sigma>s \<tau>))
     })"
 
-(* Call statement at callee type \<sigma>, by call-stmt and call-stmt-union *)
+(* Call statement at callee type \<sigma> *)
 fun call_stmt_at :: "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow> (var \<times> expr) list \<Rightarrow> expr list \<Rightarrow> reason + unit"
 where
 "call_stmt_at \<Sigma> \<Gamma> (TyUnion \<sigma> \<sigma>') kws es = do { call_stmt_at \<Sigma> \<Gamma> \<sigma> kws es; call_stmt_at \<Sigma> \<Gamma> \<sigma>' kws es }" |

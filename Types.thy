@@ -64,8 +64,7 @@ where
      TypeStmt _ \<alpha>s _ \<Rightarrow> \<Gamma> \<otimes> entries [0..<length \<chi>s] \<otimes> fmconst (set \<alpha>s) TypeVar
    | Dataclass _ \<alpha>s _ _ \<Rightarrow> \<Gamma> \<otimes> entries [0..<i] \<otimes> fmconst (set \<alpha>s) TypeVar)"
 
-(* A holds the aliases being resolved, so that a cyclic alias is rejected; n bounds the aliases resolved
-   along a path, which are distinct, by the alias definitions reachable from the context *)
+(* A holds the aliases being resolved; n bounds the aliases resolved along a path *)
 fun resolve_type' :: "class_table \<Rightarrow> cxt \<Rightarrow> (name \<times> var) list \<Rightarrow> nat \<Rightarrow> ty_expr \<Rightarrow> reason + ty"
 where
 "resolve_type' \<Sigma> \<Gamma> A n (TyExprPrim \<nu>) = do { check_predefined \<Gamma> (prim_name \<nu>); Inr (TyPrim \<nu>) }" |
@@ -131,8 +130,7 @@ fun instantiate :: "field_scheme \<Rightarrow> ty list \<Rightarrow> (var \<time
 where
 "instantiate (FieldScheme \<alpha>s x\<sigma>s) \<tau>s = map (\<lambda>(x, \<sigma>). (x, subst \<tau>s \<alpha>s \<sigma>)) x\<sigma>s"
 
-(* Fields of class C, through at most n base classes; the base-class relation is acyclic, so the number of
-   classes in \<Sigma> suffices *)
+(* Fields of class C, through at most n base classes *)
 fun fields_upto :: "nat \<Rightarrow> class_table \<Rightarrow> name \<Rightarrow> field_scheme"
 where
 "fields_upto 0 \<Sigma> C = undefined" |
@@ -161,7 +159,7 @@ definition ancestors :: "class_table \<Rightarrow> name \<Rightarrow> name list"
 where
 "ancestors \<Sigma> C = ancestors_upto (fcard (fmdom \<Sigma>)) \<Sigma> C"
 
-(* Supertype of C[\<tau>s] with class D, an ancestor of C, through at most n base classes *)
+(* Type arguments of ancestor D of class C at type arguments \<tau>s, through at most n base classes *)
 fun instantiated_ancestor_upto :: "nat \<Rightarrow> class_table \<Rightarrow> name \<Rightarrow> ty list \<Rightarrow> name \<Rightarrow> ty list"
 where
 "instantiated_ancestor_upto 0 \<Sigma> C \<tau>s D = undefined" |
@@ -194,7 +192,7 @@ where
    then Inl (UnknownConstructorKeyword (short_name C) (sorted_list_of_set (set (drop n xs))))
    else Inr ())"
 
-(* Field of C supplied by each argument, in order, paired by field-map *)
+(* Type of the field of C supplied by each argument, in order *)
 definition constructor_args ::
   "name \<Rightarrow> field_scheme \<Rightarrow> expr list \<Rightarrow> (var \<times> expr) list \<Rightarrow> reason + (ty \<times> expr) list"
 where
@@ -204,6 +202,7 @@ where
      Inr (zip (map snd (take (length es) x\<sigma>s)) es @ map (\<lambda>(y, e). (the (map_of x\<sigma>s y), e)) kws)
    })"
 
+(* Class of constructor callee e, with its type arguments if explicit; None if e isn't a constructor callee *)
 definition constructor_class :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> (reason + name \<times> ty list option) option"
 where
 "constructor_class \<Sigma> \<Gamma> e =

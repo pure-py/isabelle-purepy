@@ -163,7 +163,7 @@ by (relation "measures [
      \<lambda>x. case x of Inl _ \<Rightarrow> 1 | Inr _ \<Rightarrow> 0,
      \<lambda>x. case x of Inl (_, _, _, \<tau>) \<Rightarrow> size \<tau> | Inr _ \<Rightarrow> 0]") auto
 
-(* Type arguments for \<alpha>s from the context \<gamma> found by type_args *)
+(* Types bound to \<alpha>s by \<gamma>; failure if \<gamma> doesn't bind one of them *)
 definition type_arguments :: "(var, ty) fmap \<Rightarrow> var list \<Rightarrow> reason + ty list"
 where
 "type_arguments \<gamma> \<alpha>s =
