@@ -39,61 +39,56 @@ where
 "has_range_values \<Sigma> \<tau> =
   (\<exists>\<sigma> \<in> set (disjuncts \<tau>). case \<sigma> of TyVar _ \<Rightarrow> True | _ \<Rightarrow> \<Sigma> \<turnstile> TyClass range_class [] <: \<sigma>)"
 
-function matched_as :: "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow> pat \<Rightarrow> ty"
+function (sequential) matched_as :: "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow> pat \<Rightarrow> ty"
 where
-"matched_as \<Sigma> \<Gamma> \<tau> p =
-  (case (\<tau>, p) of
-     (TyUnion \<sigma> \<sigma>', _) \<Rightarrow> matched_as \<Sigma> \<Gamma> \<sigma> p \<squnion>\<^bsub>\<Sigma>\<^esub> matched_as \<Sigma> \<Gamma> \<sigma>' p
-   | (_, PatVar _) \<Rightarrow> \<tau>
-   | (_, PatWildcard) \<Rightarrow> \<tau>
-   | (_, PatAs p' _) \<Rightarrow> matched_as \<Sigma> \<Gamma> \<tau> p'
-   | (_, PatLiteral (LitFloat _)) \<Rightarrow> meet \<Sigma> (TyPrim float) \<tau>
-   | (_, PatLiteral l) \<Rightarrow> meet \<Sigma> (TyLiteral l) \<tau>
-   | (TyTuple \<tau>s, PatTuple ps) \<Rightarrow>
-       if length \<tau>s = length ps then TyTuple (map2 (matched_as \<Sigma> \<Gamma>) \<tau>s ps) else TyPrim Never
-   | (TyList _, PatList _) \<Rightarrow> \<tau>
-   | (TyDict _, PatDict _) \<Rightarrow> \<tau>
-   | (_, PatConstr q _) \<Rightarrow>
-       (let C = projr (pattern_class \<Gamma> q) in
-        case instance_at \<Sigma> C \<tau> of Instance \<sigma>s \<Rightarrow> meet \<Sigma> \<tau> (TyClass C \<sigma>s) | _ \<Rightarrow> TyPrim Never)
-   | _ \<Rightarrow> TyPrim Never)"
+"matched_as \<Sigma> \<Gamma> (TyUnion \<sigma> \<tau>) p = matched_as \<Sigma> \<Gamma> \<sigma> p \<squnion>\<^bsub>\<Sigma>\<^esub> matched_as \<Sigma> \<Gamma> \<tau> p" |
+"matched_as \<Sigma> \<Gamma> \<tau> (PatVar _) = \<tau>" |
+"matched_as \<Sigma> \<Gamma> \<tau> PatWildcard = \<tau>" |
+"matched_as \<Sigma> \<Gamma> \<tau> (PatAs p _) = matched_as \<Sigma> \<Gamma> \<tau> p" |
+"matched_as \<Sigma> \<Gamma> \<tau> (PatLiteral (LitFloat _)) = meet \<Sigma> (TyPrim float) \<tau>" |
+"matched_as \<Sigma> \<Gamma> \<tau> (PatLiteral l) = meet \<Sigma> (TyLiteral l) \<tau>" |
+"matched_as \<Sigma> \<Gamma> (TyTuple \<tau>s) (PatTuple ps) =
+  (if length \<tau>s = length ps then TyTuple (map2 (matched_as \<Sigma> \<Gamma>) \<tau>s ps) else TyPrim Never)" |
+"matched_as \<Sigma> \<Gamma> (TyList \<tau>) (PatList _) = TyList \<tau>" |
+"matched_as \<Sigma> \<Gamma> (TyDict \<tau>) (PatDict _) = TyDict \<tau>" |
+"matched_as \<Sigma> \<Gamma> \<tau> (PatConstr q _) =
+  (let C = projr (pattern_class \<Gamma> q) in
+   case instance_at \<Sigma> C \<tau> of Instance \<sigma>s \<Rightarrow> meet \<Sigma> \<tau> (TyClass C \<sigma>s) | _ \<Rightarrow> TyPrim Never)" |
+"matched_as \<Sigma> \<Gamma> _ _ = TyPrim Never"
 by pat_completeness auto
 
 termination
 by (relation "measures [\<lambda>(_, _, _, p). size p, \<lambda>(_, _, \<tau>, _). size \<tau>]")
    (auto elim!: in_set_zipE dest: size_list_elem[where f = size])
 
-function remaining :: "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow> pat \<Rightarrow> ty"
+function (sequential) remaining :: "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow> pat \<Rightarrow> ty"
 where
-"remaining \<Sigma> \<Gamma> \<tau> p =
-  (case (\<tau>, p) of
-     (TyUnion \<sigma> \<sigma>', _) \<Rightarrow> remaining \<Sigma> \<Gamma> \<sigma> p \<squnion>\<^bsub>\<Sigma>\<^esub> remaining \<Sigma> \<Gamma> \<sigma>' p
-   | (_, PatVar _) \<Rightarrow> TyPrim Never
-   | (_, PatWildcard) \<Rightarrow> TyPrim Never
-   | (_, PatAs p' _) \<Rightarrow> remaining \<Sigma> \<Gamma> \<tau> p'
-   | (_, PatLiteral l) \<Rightarrow>
-       if \<tau> = TyLiteral l \<or> (\<tau> = TyPrim NoneType \<and> l = LitNone) then TyPrim Never
-       else (case (\<tau>, l) of (TyPrim bool, LitBool b) \<Rightarrow> TyLiteral (LitBool (\<not> b)) | _ \<Rightarrow> \<tau>)
-   | (TyTuple \<tau>s, PatTuple ps) \<Rightarrow>
-       if length \<tau>s = length ps then
-         (let \<rho>s = map2 (remaining \<Sigma> \<Gamma>) \<tau>s ps in
-          case filter (\<lambda>i. \<rho>s ! i \<noteq> TyPrim Never) [0..<length \<rho>s] of
-            [] \<Rightarrow> TyPrim Never
-          | [i] \<Rightarrow> TyTuple (\<tau>s[i := \<rho>s ! i])
-          | _ \<Rightarrow> \<tau>)
+"remaining \<Sigma> \<Gamma> (TyUnion \<sigma> \<tau>) p = remaining \<Sigma> \<Gamma> \<sigma> p \<squnion>\<^bsub>\<Sigma>\<^esub> remaining \<Sigma> \<Gamma> \<tau> p" |
+"remaining \<Sigma> \<Gamma> \<tau> (PatVar _) = TyPrim Never" |
+"remaining \<Sigma> \<Gamma> \<tau> PatWildcard = TyPrim Never" |
+"remaining \<Sigma> \<Gamma> \<tau> (PatAs p _) = remaining \<Sigma> \<Gamma> \<tau> p" |
+"remaining \<Sigma> \<Gamma> (TyLiteral l') (PatLiteral l) = (if l' = l then TyPrim Never else TyLiteral l')" |
+"remaining \<Sigma> \<Gamma> (TyPrim bool) (PatLiteral (LitBool b)) = TyLiteral (LitBool (\<not> b))" |
+"remaining \<Sigma> \<Gamma> (TyPrim NoneType) (PatLiteral LitNone) = TyPrim Never" |
+"remaining \<Sigma> \<Gamma> (TyTuple \<tau>s) (PatTuple ps) =
+  (if length \<tau>s = length ps then
+     (let \<rho>s = map2 (remaining \<Sigma> \<Gamma>) \<tau>s ps in
+      case filter (\<lambda>i. \<rho>s ! i \<noteq> TyPrim Never) [0..<length \<rho>s] of
+        [] \<Rightarrow> TyPrim Never
+      | [i] \<Rightarrow> TyTuple (\<tau>s[i := \<rho>s ! i])
+      | _ \<Rightarrow> TyTuple \<tau>s)
+   else TyTuple \<tau>s)" |
+"remaining \<Sigma> \<Gamma> (TyDict _) (PatDict []) = TyPrim Never" |
+"remaining \<Sigma> \<Gamma> \<tau> (PatConstr q a) =
+  (let C = projr (pattern_class \<Gamma> q) in
+   case instance_at \<Sigma> C \<tau> of
+     Instance \<sigma>s \<Rightarrow>
+       if \<Sigma> \<turnstile> \<tau> <: TyClass C \<sigma>s
+          \<and> (\<forall>(p, \<sigma>) \<in> set (zip (field_patterns \<Sigma> C a) (field_types \<Sigma> C \<sigma>s)). remaining \<Sigma> \<Gamma> \<sigma> p = TyPrim Never)
+       then TyPrim Never
        else \<tau>
-   | (TyDict _, PatDict []) \<Rightarrow> TyPrim Never
-   | (_, PatConstr q a) \<Rightarrow>
-       (let C = projr (pattern_class \<Gamma> q) in
-        case instance_at \<Sigma> C \<tau> of
-          Instance \<sigma>s \<Rightarrow>
-            if \<Sigma> \<turnstile> \<tau> <: TyClass C \<sigma>s
-               \<and> (\<forall>(p', \<sigma>) \<in> set (zip (field_patterns \<Sigma> C a) (field_types \<Sigma> C \<sigma>s)).
-                    remaining \<Sigma> \<Gamma> \<sigma> p' = TyPrim Never)
-            then TyPrim Never
-            else \<tau>
-        | _ \<Rightarrow> \<tau>)
-   | _ \<Rightarrow> \<tau>)"
+   | _ \<Rightarrow> \<tau>)" |
+"remaining \<Sigma> \<Gamma> \<tau> _ = \<tau>"
 by pat_completeness auto
 
 termination
