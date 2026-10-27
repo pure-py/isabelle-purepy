@@ -66,7 +66,8 @@ where
    | Dataclass _ \<alpha>s _ _ \<Rightarrow> \<Gamma> \<otimes> entries [0..<i] \<otimes> fmconst (set \<alpha>s) TypeVar)"
 
 (* A holds the aliases being resolved, so that a cyclic alias is rejected; n bounds the nesting of alias
-   resolution, and the number of alias definitions reachable from the context suffices, since A has no repeats *)
+   resolution, and the number of alias definitions reachable from the context suffices, since the aliases in A
+   are distinct *)
 fun resolve_type' :: "class_table \<Rightarrow> cxt \<Rightarrow> (name \<times> var) list \<Rightarrow> nat \<Rightarrow> ty_expr \<Rightarrow> reason + ty"
 where
 "resolve_type' \<Sigma> \<Gamma> A n (TyExprPrim \<nu>) = do { check_predefined \<Gamma> (prim_name \<nu>); Inr (TyPrim \<nu>) }" |
@@ -210,7 +211,7 @@ where
      Inr (zip (map snd (take (length es) x\<sigma>s)) es @ map (\<lambda>(y, e). (the (map_of x\<sigma>s y), e)) kws)
    })"
 
-(* Class of constructor callee e, with its type arguments if explicit *)
+(* Class of constructor callee e, with the type arguments supplied by e, if any *)
 definition constructor_class :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> (reason + name \<times> ty list option) option"
 where
 "constructor_class \<Sigma> \<Gamma> e =
