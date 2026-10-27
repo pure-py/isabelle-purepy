@@ -2,17 +2,27 @@ theory Matching
   imports Shapes Patterns
 begin
 
-(* Dictionary shape k with keys ws bound to shapes ks *)
-definition with_keys :: "shape \<Rightarrow> string list \<Rightarrow> shape list \<Rightarrow> shape"
+fun split :: "class_table \<Rightarrow> cxt \<Rightarrow> shape \<Rightarrow> pat \<Rightarrow> (shape list \<times> shape list) option"
 where
-"with_keys k ws ks =
-  (case k of
-     ShapeDict \<tau> \<beta> W \<Rightarrow> ShapeDict \<tau> (sort_key fst (zip ws ks @ filter (\<lambda>(w, _). w \<notin> set ws) \<beta>)) W
-   | _ \<Rightarrow> undefined)"
-
-definition split_class :: "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow> head set \<Rightarrow> name \<Rightarrow> (shape list \<times> shape list) option"
-where
-"split_class \<Sigma> \<Gamma> \<tau> H q =
+"split \<Sigma> \<Gamma> (ShapeRest \<tau> H) (PatLiteral (LitFloat _)) = None" |
+"split \<Sigma> \<Gamma> (ShapeRest \<tau> H) (PatLiteral l) =
+  (if HeadLiteral l \<notin> H \<and> \<Sigma> \<turnstile> TyLiteral l <: \<tau> \<and> \<not> literal_type \<tau>
+   then Some ([ShapeRest (TyLiteral l) {}], shapes \<Sigma> \<tau> (insert (HeadLiteral l) H))
+   else None)" |
+"split \<Sigma> \<Gamma> (ShapeRest (TyTuple \<tau>s) _) (PatTuple ps) =
+  (if length \<tau>s = length ps then Some (map ShapeTuple (shapes_seq \<Sigma> \<tau>s), []) else None)" |
+"split \<Sigma> \<Gamma> (ShapeRest (TyList \<tau>) H) (PatList ps) =
+  (if HeadList (length ps) \<in> H then None
+   else
+     Some (map (ShapeList \<tau>) (shapes_seq \<Sigma> (replicate (length ps) \<tau>)),
+           shapes \<Sigma> (TyList \<tau>) (insert (HeadList (length ps)) H)))" |
+"split \<Sigma> \<Gamma> (ShapeDict \<tau> \<beta> W) (PatDict kps) =
+  (case find (\<lambda>w. w \<notin> fst ` set \<beta>) (map fst kps) of
+     Some w \<Rightarrow>
+       if w \<in> W then None
+       else Some (map (\<lambda>k. ShapeDict \<tau> (with_keys \<beta> [w] [k]) W) (shapes \<Sigma> \<tau> {}), [ShapeDict \<tau> \<beta> (insert w W)])
+   | None \<Rightarrow> None)" |
+"split \<Sigma> \<Gamma> (ShapeRest \<tau> H) (PatConstr q _) =
   (let C = projr (pattern_class \<Gamma> q) in
    if below_excluded \<Sigma> C H then None
    else case instance_at \<Sigma> C \<tau> of
@@ -24,12 +34,8 @@ where
                   shapes \<Sigma> \<tau> (insert (HeadClass C) H))
         | _ \<Rightarrow> undefined)
    | NoInstance \<Rightarrow> None
-   | Undetermined \<Rightarrow> undefined)"
-
-definition split_subclass ::
-  "class_table \<Rightarrow> cxt \<Rightarrow> name \<Rightarrow> ty list \<Rightarrow> shape list \<Rightarrow> head set \<Rightarrow> name \<Rightarrow> (shape list \<times> shape list) option"
-where
-"split_subclass \<Sigma> \<Gamma> C \<tau>s ks H q =
+   | Undetermined \<Rightarrow> undefined)" |
+"split \<Sigma> \<Gamma> (ShapeConstr C \<tau>s ks H) (PatConstr q _) =
   (let D = projr (pattern_class \<Gamma> q) in
    case instance_at \<Sigma> D (TyClass C \<tau>s) of
      Instance \<sigma>s \<Rightarrow>
@@ -39,33 +45,8 @@ where
                  (shapes_seq \<Sigma> (drop (length ks) (field_types \<Sigma> D \<sigma>s))),
                [ShapeConstr C \<tau>s ks (insert (HeadClass D) H)])
    | NoInstance \<Rightarrow> None
-   | Undetermined \<Rightarrow> undefined)"
-
-definition split :: "class_table \<Rightarrow> cxt \<Rightarrow> shape \<Rightarrow> pat \<Rightarrow> (shape list \<times> shape list) option"
-where
-"split \<Sigma> \<Gamma> k p =
-  (case (k, p) of
-     (ShapeRest \<tau> H, PatLiteral (LitFloat _)) \<Rightarrow> None
-   | (ShapeRest \<tau> H, PatLiteral l) \<Rightarrow>
-       if HeadLiteral l \<notin> H \<and> \<Sigma> \<turnstile> TyLiteral l <: \<tau> \<and> \<not> literal_type \<tau>
-       then Some ([ShapeRest (TyLiteral l) {}], shapes \<Sigma> \<tau> (insert (HeadLiteral l) H))
-       else None
-   | (ShapeRest (TyTuple \<tau>s) _, PatTuple ps) \<Rightarrow>
-       if length \<tau>s = length ps then Some (map ShapeTuple (shapes_seq \<Sigma> \<tau>s), []) else None
-   | (ShapeRest (TyList \<tau>) H, PatList ps) \<Rightarrow>
-       if HeadList (length ps) \<in> H then None
-       else
-         Some (map (ShapeList \<tau>) (shapes_seq \<Sigma> (replicate (length ps) \<tau>)),
-               shapes \<Sigma> (TyList \<tau>) (insert (HeadList (length ps)) H))
-   | (ShapeDict \<tau> \<beta> W, PatDict kps) \<Rightarrow>
-       (case find (\<lambda>w. w \<notin> fst ` set \<beta>) (map fst kps) of
-          Some w \<Rightarrow>
-            if w \<in> W then None
-            else Some (map (\<lambda>k'. with_keys k [w] [k']) (shapes \<Sigma> \<tau> {}), [ShapeDict \<tau> \<beta> (insert w W)])
-        | None \<Rightarrow> None)
-   | (ShapeRest \<tau> H, PatConstr q _) \<Rightarrow> split_class \<Sigma> \<Gamma> \<tau> H q
-   | (ShapeConstr C \<tau>s ks H, PatConstr q _) \<Rightarrow> split_subclass \<Sigma> \<Gamma> C \<tau>s ks H q
-   | _ \<Rightarrow> None)"
+   | Undetermined \<Rightarrow> undefined)" |
+"split \<Sigma> \<Gamma> _ _ = None"
 
 (* Matched shapes and residual of patterns matching shapes ks position by position, as shapes of form f, from
    the match at each position *)
@@ -128,7 +109,8 @@ where
 "match_directly \<Sigma> \<Gamma> (ShapeDict \<tau> \<beta> W) (PatDict kps) =
   (if \<forall>w \<in> set (map fst kps). w \<in> fst ` set \<beta> then
      (let ks = map (the \<circ> map_of \<beta> \<circ> fst) kps in
-      seq_result (with_keys (ShapeDict \<tau> \<beta> W) (map fst kps)) ks (map2 (match_shape \<Sigma> \<Gamma>) ks (map snd kps)))
+      seq_result (\<lambda>ks'. ShapeDict \<tau> (with_keys \<beta> (map fst kps) ks') W) ks
+        (map2 (match_shape \<Sigma> \<Gamma>) ks (map snd kps)))
    else None)" |
 "match_directly \<Sigma> \<Gamma> (ShapeConstr C \<tau>s ks H) (PatConstr q a) =
   (let D = projr (pattern_class \<Gamma> q); ps = field_patterns \<Sigma> D a; m = length ps in

@@ -47,6 +47,11 @@ where
 "shape_type (ShapeList \<tau> _) = TyList \<tau>" |
 "shape_type (ShapeDict \<tau> _ _) = TyDict \<tau>"
 
+(* \<beta> with keys ws bound to shapes ks *)
+definition with_keys :: "(string \<times> shape) list \<Rightarrow> string list \<Rightarrow> shape list \<Rightarrow> (string \<times> shape) list"
+where
+"with_keys \<beta> ws ks = sort_key fst (zip ws ks @ filter (\<lambda>(w, _). w \<notin> set ws) \<beta>)"
+
 definition below_excluded :: "class_table \<Rightarrow> name \<Rightarrow> head set \<Rightarrow> bool"
 where
 "below_excluded \<Sigma> C H = (\<exists>D \<in> set (ancestors \<Sigma> C). HeadClass D \<in> H)"
