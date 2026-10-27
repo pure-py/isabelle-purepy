@@ -3,7 +3,7 @@ theory Patterns
   imports Subtyping
 begin
 
-definition check_pattern_class :: "cxt \<Rightarrow> name \<Rightarrow> reason + name"
+definition check_pattern_class :: "cxt \<Rightarrow> name \<Rightarrow> name may_fail"
 where
 "check_pattern_class \<Gamma> q =
   (case resolve_name \<Gamma> q of
@@ -94,13 +94,13 @@ termination
 by (relation "measures [\<lambda>(_, _, _, p). size p, \<lambda>(_, _, \<tau>, _). size \<tau>]")
    (auto elim!: in_set_zipE dest!: field_patterns_elem dest: size_list_elem[where f = size] size_list_snd_elem')
 
-definition check_unbound :: "cxt \<Rightarrow> var \<Rightarrow> reason + unit"
+definition check_unbound :: "cxt \<Rightarrow> var \<Rightarrow> unit may_fail"
 where
 "check_unbound \<Gamma> x = ensure (fmlookup \<Gamma> x = Some Unbound) (Redeclaration x)"
 
 (* Bindings of pattern p at a type, joined from ms, the bindings at each disjunct. An entry None in ms means
    that p can't match that disjunct, and binds each variable of p at Never. *)
-definition bindings_at :: "class_table \<Rightarrow> pat \<Rightarrow> (reason + (var, ty) fmap) option list \<Rightarrow> reason + (var, ty) fmap"
+definition bindings_at :: "class_table \<Rightarrow> pat \<Rightarrow> (var, ty) fmap may_fail option list \<Rightarrow> (var, ty) fmap may_fail"
 where
 "bindings_at \<Sigma> p ms = do {
    \<Delta>s \<leftarrow> those_sum (map (\<lambda>m. case m of Some m' \<Rightarrow> m' | None \<Rightarrow> Ok (fmconst (binds p) (TyPrim Never))) ms);
@@ -108,11 +108,11 @@ where
  }"
 
 (* Disjoint union of the bindings of sub-patterns *)
-definition pattern_bindings :: "(reason + (var, ty) fmap) list \<Rightarrow> reason + (var, ty) fmap"
+definition pattern_bindings :: "(var, ty) fmap may_fail list \<Rightarrow> (var, ty) fmap may_fail"
 where
 "pattern_bindings ms = do { \<Delta>s \<leftarrow> those_sum ms; Ok (fold (\<otimes>) \<Delta>s fmempty) }"
 
-function check_pat :: "class_table \<Rightarrow> cxt \<Rightarrow> pat \<Rightarrow> ty \<Rightarrow> reason + (var, ty) fmap"
+function check_pat :: "class_table \<Rightarrow> cxt \<Rightarrow> pat \<Rightarrow> ty \<Rightarrow> (var, ty) fmap may_fail"
 where
 "check_pat \<Sigma> \<Gamma> PatWildcard \<tau> = Ok fmempty" |
 "check_pat \<Sigma> \<Gamma> (PatVar x) \<tau> = do { check_unbound \<Gamma> x; Ok (fmupd x \<tau> fmempty) }" |

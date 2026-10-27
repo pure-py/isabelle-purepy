@@ -82,7 +82,7 @@ where
 
 (* Type of a subscript, by the type of the subscripted value, the checks of the index against int and str,
    and the type synthesised by the index *)
-fun subscript_type :: "class_table \<Rightarrow> ty \<Rightarrow> reason + unit \<Rightarrow> reason + unit \<Rightarrow> reason + ty \<Rightarrow> reason + ty"
+fun subscript_type :: "class_table \<Rightarrow> ty \<Rightarrow> unit may_fail \<Rightarrow> unit may_fail \<Rightarrow> ty may_fail \<Rightarrow> ty may_fail"
 where
 "subscript_type \<Sigma> (TyUnion \<sigma> \<sigma>') int_ok str_ok idx = do {
    \<tau> \<leftarrow> subscript_type \<Sigma> \<sigma> int_ok str_ok idx; \<tau>' \<leftarrow> subscript_type \<Sigma> \<sigma>' int_ok str_ok idx; Ok (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>')
@@ -174,13 +174,13 @@ by (relation "measures [
    (auto dest: set_zip_leftD size_list_elem[where f = size])
 
 (* Types bound to \<alpha>s by \<gamma>; failure if \<gamma> doesn't bind one of them *)
-definition type_args_of :: "(var, ty) fmap \<Rightarrow> var list \<Rightarrow> reason + ty list"
+definition type_args_of :: "(var, ty) fmap \<Rightarrow> var list \<Rightarrow> ty list may_fail"
 where
 "type_args_of \<gamma> \<alpha>s =
   those_sum (map (\<lambda>\<alpha>. or_else (NoTypeArgument \<alpha>) (fmlookup \<gamma> \<alpha>)) \<alpha>s)"
 
 (* Type of attribute x of a value of type \<sigma>, which isn't a module *)
-fun attribute_type :: "class_table \<Rightarrow> ty \<Rightarrow> var \<Rightarrow> reason + ty"
+fun attribute_type :: "class_table \<Rightarrow> ty \<Rightarrow> var \<Rightarrow> ty may_fail"
 where
 "attribute_type \<Sigma> (TyUnion \<sigma> \<sigma>') x =
   do { \<tau> \<leftarrow> attribute_type \<Sigma> \<sigma> x; \<tau>' \<leftarrow> attribute_type \<Sigma> \<sigma>' x; Ok (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>') }" |

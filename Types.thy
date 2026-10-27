@@ -41,7 +41,7 @@ where
 "subst \<tau>s \<alpha>s (TyUnion \<sigma> \<sigma>') = TyUnion (subst \<tau>s \<alpha>s \<sigma>) (subst \<tau>s \<alpha>s \<sigma>')" |
 "subst \<tau>s \<alpha>s \<sigma> = \<sigma>"
 
-definition check_predefined :: "cxt \<Rightarrow> var \<Rightarrow> reason + unit"
+definition check_predefined :: "cxt \<Rightarrow> var \<Rightarrow> unit may_fail"
 where
 "check_predefined \<Gamma> x = ensure (fmlookup \<Gamma> x = Some PredefName) (NotPredefinedName x)"
 
@@ -68,7 +68,7 @@ where
 (* A holds the aliases being resolved, so that a cyclic alias is rejected; n bounds the nesting of alias
    resolution, and the number of alias definitions reachable from the context suffices, since the aliases in A
    are distinct *)
-fun resolve_type' :: "class_table \<Rightarrow> cxt \<Rightarrow> (name \<times> var) list \<Rightarrow> nat \<Rightarrow> ty_expr \<Rightarrow> reason + ty"
+fun resolve_type' :: "class_table \<Rightarrow> cxt \<Rightarrow> (name \<times> var) list \<Rightarrow> nat \<Rightarrow> ty_expr \<Rightarrow> ty may_fail"
 where
 "resolve_type' \<Sigma> \<Gamma> A n (TyExprPrim \<nu>) = do { check_predefined \<Gamma> (prim_name \<nu>); Ok (TyPrim \<nu>) }" |
 "resolve_type' \<Sigma> \<Gamma> A n (TyExprName q \<psi>s) =
@@ -111,7 +111,7 @@ where
    \<sigma> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>; \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>'; Ok (TyUnion \<sigma> \<tau>)
  }"
 
-definition resolve_type :: "class_table \<Rightarrow> cxt \<Rightarrow> ty_expr \<Rightarrow> reason + ty"
+definition resolve_type :: "class_table \<Rightarrow> cxt \<Rightarrow> ty_expr \<Rightarrow> ty may_fail"
 where
 "resolve_type \<Sigma> \<Gamma> \<psi> = resolve_type' \<Sigma> \<Gamma> [] (aliases \<Gamma>) \<psi>"
 
@@ -193,7 +193,7 @@ where
 (* Failure unless n positional arguments and keywords ys supply exactly the fields xs, with arity and unknown as
    helpers for building failure reasons *)
 definition check_field_map ::
-  "(nat \<Rightarrow> nat \<Rightarrow> reason) \<Rightarrow> (var list \<Rightarrow> reason) \<Rightarrow> var list \<Rightarrow> nat \<Rightarrow> var list \<Rightarrow> reason + unit"
+  "(nat \<Rightarrow> nat \<Rightarrow> reason) \<Rightarrow> (var list \<Rightarrow> reason) \<Rightarrow> var list \<Rightarrow> nat \<Rightarrow> var list \<Rightarrow> unit may_fail"
 where
 "check_field_map arity unknown xs n ys =
   (if n + length ys \<noteq> length xs then Fail (arity (length xs) (n + length ys))
@@ -202,7 +202,7 @@ where
 
 (* Type of the field of C supplied by each argument, in order *)
 definition constructor_args ::
-  "name \<Rightarrow> field_scheme \<Rightarrow> expr list \<Rightarrow> (var \<times> expr) list \<Rightarrow> reason + (ty \<times> expr) list"
+  "name \<Rightarrow> field_scheme \<Rightarrow> expr list \<Rightarrow> (var \<times> expr) list \<Rightarrow> (ty \<times> expr) list may_fail"
 where
 "constructor_args C \<pi> es kws =
   (case \<pi> of FieldScheme _ x\<sigma>s \<Rightarrow> do {
@@ -212,7 +212,7 @@ where
    })"
 
 (* Class of constructor callee e, with the type arguments supplied by e, if any *)
-definition constructor_class :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> (reason + name \<times> ty list option) option"
+definition constructor_class :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> (name \<times> ty list option) may_fail option"
 where
 "constructor_class \<Sigma> \<Gamma> e =
   (case (class_of_name \<Gamma> e, e) of

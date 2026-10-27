@@ -49,7 +49,7 @@ where
 "merge_outcome \<Sigma> R Returns\<^sub>R = R" |
 "merge_outcome \<Sigma> Returns\<^sub>R R = R"
 
-fun merges :: "class_table \<Rightarrow> (reason + static_outcome) list \<Rightarrow> reason + static_outcome"
+fun merges :: "class_table \<Rightarrow> static_outcome may_fail list \<Rightarrow> static_outcome may_fail"
 where
 "merges \<Sigma> [] = Ok Returns\<^sub>R" |
 "merges \<Sigma> (m # ms) = do { R \<leftarrow> m; R' \<leftarrow> merges \<Sigma> ms; Ok (merge_outcome \<Sigma> R R') }"
@@ -59,7 +59,7 @@ where
 "Assigns\<^sub>R \<Delta> r \<otimes>\<^sub>R Assigns\<^sub>R \<Delta>' r' = Assigns\<^sub>R (\<Delta> \<otimes> \<Delta>') (if r = None then r' else None)" |
 "_ \<otimes>\<^sub>R _ = Returns\<^sub>R"
 
-definition attr_module :: "name \<Rightarrow> cxt \<Rightarrow> var \<Rightarrow> name \<Rightarrow> reason + ty"
+definition attr_module :: "name \<Rightarrow> cxt \<Rightarrow> var \<Rightarrow> name \<Rightarrow> ty may_fail"
 where
 "attr_module q \<Gamma> x q' =
   (case fmlookup \<Gamma> x of
@@ -76,12 +76,12 @@ where
 
 (* Failure if one of the variables bound by qualifiers with bindings \<Delta> is in X, the variables captured by
    lambdas *)
-definition captured :: "var set \<Rightarrow> cxt \<Rightarrow> reason + unit"
+definition captured :: "var set \<Rightarrow> cxt \<Rightarrow> unit may_fail"
 where
 "captured X \<Delta> =
   (let Y = X \<inter> fset (fmdom \<Delta>) in if Y = {} then Ok () else Fail (CapturedGeneratorVariable (Min Y)))"
 
-definition lambda_args :: "var list \<Rightarrow> (var \<times> expr) list \<Rightarrow> expr list \<Rightarrow> (reason + ty) list \<Rightarrow> reason + cxt"
+definition lambda_args :: "var list \<Rightarrow> (var \<times> expr) list \<Rightarrow> expr list \<Rightarrow> ty may_fail list \<Rightarrow> cxt may_fail"
 where
 "lambda_args xs kws es \<sigma>s = do {
    ensure (kws = []) KeywordArgumentsNotConstructor;
@@ -91,7 +91,7 @@ where
  }"
 
 (* Check of a name bound at a type scheme against \<tau>; None for other expressions *)
-definition var_scheme :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> (reason + unit) option"
+definition var_scheme :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> unit may_fail option"
 where
 "var_scheme \<Sigma> \<Gamma> e \<tau> =
   (case scheme_of_name \<Gamma> e of
@@ -104,7 +104,7 @@ where
 
 (* Type arguments for \<alpha>s inferred from the arguments that synthesise; failing that, the first failure
    of an argument with a synthesis rule *)
-definition inferred_type_args :: "class_table \<Rightarrow> var list \<Rightarrow> ty list \<Rightarrow> (reason + ty) list \<Rightarrow> reason + ty list"
+definition inferred_type_args :: "class_table \<Rightarrow> var list \<Rightarrow> ty list \<Rightarrow> ty may_fail list \<Rightarrow> ty list may_fail"
 where
 "inferred_type_args \<Sigma> \<alpha>s \<sigma>s ms =
   (let \<sigma>\<tau>s = filter (Not \<circ> isl \<circ> snd) (zip \<sigma>s ms) in
@@ -113,14 +113,14 @@ where
    | Ok \<tau>s \<Rightarrow> Ok \<tau>s)"
 
 function (sequential)
-  synth_expr :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> reason + ty" and
-  elements_join :: "class_table \<Rightarrow> cxt \<Rightarrow> expr list \<Rightarrow> reason + ty" and
-  callee :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> expr list \<Rightarrow> reason + ty" and
-  call_at :: "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow> (var \<times> expr) list \<Rightarrow> expr list \<Rightarrow> reason + ty" and
-  check_expr :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> reason + unit" and
-  check_expr' :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> (reason + unit) option" and
-  check_args :: "class_table \<Rightarrow> cxt \<Rightarrow> (var \<times> expr) list \<Rightarrow> expr list \<Rightarrow> ty list \<Rightarrow> reason + unit" and
-  quals :: "class_table \<Rightarrow> cxt \<Rightarrow> qualifier list \<Rightarrow> reason + cxt"
+  synth_expr :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty may_fail" and
+  elements_join :: "class_table \<Rightarrow> cxt \<Rightarrow> expr list \<Rightarrow> ty may_fail" and
+  callee :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> expr list \<Rightarrow> ty may_fail" and
+  call_at :: "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow> (var \<times> expr) list \<Rightarrow> expr list \<Rightarrow> ty may_fail" and
+  check_expr :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> unit may_fail" and
+  check_expr' :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> unit may_fail option" and
+  check_args :: "class_table \<Rightarrow> cxt \<Rightarrow> (var \<times> expr) list \<Rightarrow> expr list \<Rightarrow> ty list \<Rightarrow> unit may_fail" and
+  quals :: "class_table \<Rightarrow> cxt \<Rightarrow> qualifier list \<Rightarrow> cxt may_fail"
 where
 "synth_expr \<Sigma> \<Gamma> (ExprVar x) = (case fmlookup \<Gamma> x of Some (Ty \<tau>) \<Rightarrow> Ok \<tau> | \<theta> \<Rightarrow> Fail (var_reason x \<theta>))" |
 "synth_expr \<Sigma> \<Gamma> (ExprLiteral l) = Ok (case l of LitFloat _ \<Rightarrow> TyPrim float | _ \<Rightarrow> TyLiteral l)" |
@@ -330,7 +330,7 @@ where
 "signature_entry (TyScheme [] \<tau>) = Ty \<tau>" |
 "signature_entry \<pi> = Scheme \<pi>"
 
-fun def_signature :: "class_table \<Rightarrow> cxt \<Rightarrow> func \<Rightarrow> reason + ty_scheme"
+fun def_signature :: "class_table \<Rightarrow> cxt \<Rightarrow> func \<Rightarrow> ty_scheme may_fail"
 where
 "def_signature \<Sigma> \<Gamma> (Def f \<alpha>s xps \<psi> s) =
    (let \<Gamma>' = \<Gamma> \<otimes> fmconst (set \<alpha>s) TypeVar in do {
@@ -340,7 +340,7 @@ where
     })"
 
 (* Call statement at callee type \<sigma> *)
-fun call_stmt_at :: "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow> (var \<times> expr) list \<Rightarrow> expr list \<Rightarrow> reason + unit"
+fun call_stmt_at :: "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow> (var \<times> expr) list \<Rightarrow> expr list \<Rightarrow> unit may_fail"
 where
 "call_stmt_at \<Sigma> \<Gamma> (TyUnion \<sigma> \<sigma>') kws es = do { call_stmt_at \<Sigma> \<Gamma> \<sigma> kws es; call_stmt_at \<Sigma> \<Gamma> \<sigma>' kws es }" |
 "call_stmt_at \<Sigma> \<Gamma> (TyCallable \<sigma>s (TyPrim NoneType)) kws es = check_args \<Sigma> \<Gamma> kws es \<sigma>s" |
@@ -349,7 +349,7 @@ where
 abbreviation false_lit :: expr where "false_lit \<equiv> ExprLiteral (LitBool False)"
 
 (* Failure for the first assignment target of xs which isn't in X, declared or a pattern variable of Y *)
-definition check_assignments_declared :: "var set \<Rightarrow> var list \<Rightarrow> var list \<Rightarrow> var set \<Rightarrow> reason + unit"
+definition check_assignments_declared :: "var set \<Rightarrow> var list \<Rightarrow> var list \<Rightarrow> var set \<Rightarrow> unit may_fail"
 where
 "check_assignments_declared X xs ys Y =
   (case find (\<lambda>x. x \<notin> X \<and> x \<notin> set ys \<and> x \<notin> Y) xs of
@@ -359,7 +359,7 @@ where
 (* Bindings of the patterns ps of the cases of a match at remaining type \<tau> and residual L, with the final
    remaining type and residual *)
 fun match_cases ::
-  "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow> shape list \<Rightarrow> pat list \<Rightarrow> reason + cxt list \<times> ty \<times> shape list"
+  "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow> shape list \<Rightarrow> pat list \<Rightarrow> (cxt list \<times> ty \<times> shape list) may_fail"
 where
 "match_cases \<Sigma> \<Gamma> \<tau> L [] = Ok ([], \<tau>, L)" |
 "match_cases \<Sigma> \<Gamma> \<tau> L (p # ps) = do {
@@ -369,8 +369,8 @@ where
    Ok (fmmap Ty \<Delta> # \<Delta>s, \<tau>', L'')
  }"
 
-function (sequential) check_stmt :: "class_table \<Rightarrow> cxt \<Rightarrow> ty option \<Rightarrow> stmt \<Rightarrow> reason + static_outcome"
-and check_def :: "class_table \<Rightarrow> cxt \<Rightarrow> func \<Rightarrow> ty_scheme \<Rightarrow> reason + unit"
+function (sequential) check_stmt :: "class_table \<Rightarrow> cxt \<Rightarrow> ty option \<Rightarrow> stmt \<Rightarrow> static_outcome may_fail"
+and check_def :: "class_table \<Rightarrow> cxt \<Rightarrow> func \<Rightarrow> ty_scheme \<Rightarrow> unit may_fail"
 where
 "check_stmt \<Sigma> \<Gamma> \<zeta> StmtPass = Ok (Assigns\<^sub>R fmempty None)" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtDeclare x \<psi>) =
@@ -455,7 +455,7 @@ termination
 by (relation "measure (\<lambda>x. case x of Inl (_, _, _, s) \<Rightarrow> size s | Inr (_, _, d, _) \<Rightarrow> size d)")
    (auto elim!: in_set_zipE dest: size_list_snd_elem size_list_elem[where f = size])
 
-fun check_type_def :: "class_table \<Rightarrow> cxt \<Rightarrow> type_def \<Rightarrow> reason + unit"
+fun check_type_def :: "class_table \<Rightarrow> cxt \<Rightarrow> type_def \<Rightarrow> unit may_fail"
 where
 "check_type_def \<Sigma> \<Gamma> (Dataclass c \<alpha>s b \<phi>) = do {
    check_predefined \<Gamma> ''dataclass'';
@@ -477,7 +477,7 @@ where
  }" |
 "check_type_def \<Sigma> \<Gamma> (TypeStmt x \<alpha>s \<psi>) = do { resolve_type \<Sigma> \<Gamma> \<psi>; Ok () }"
 
-fun check_top_stmt :: "class_table \<Rightarrow> name \<Rightarrow> cxt \<Rightarrow> top_stmt \<Rightarrow> reason + static_outcome \<times> class_table"
+fun check_top_stmt :: "class_table \<Rightarrow> name \<Rightarrow> cxt \<Rightarrow> top_stmt \<Rightarrow> (static_outcome \<times> class_table) may_fail"
 where
 "check_top_stmt \<Sigma> q \<Gamma> (Stmt s) = do { R \<leftarrow> check_stmt \<Sigma> \<Gamma> None s; Ok (R, \<Sigma>) }" |
 "check_top_stmt \<Sigma> q \<Gamma> (TopSeq t t') = do {

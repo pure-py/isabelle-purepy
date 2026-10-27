@@ -67,6 +67,8 @@ datatype reason =
   | ImportCycle "name list"
   | MypyCompatibility reason
 
+type_synonym 'a may_fail = "reason + 'a"
+
 definition not_type_name :: "cxt \<Rightarrow> name \<Rightarrow> reason"
 where
 "not_type_name \<Gamma> q = (case lookup \<Gamma> q of Some Unbound \<Rightarrow> UnboundName (fst q) | _ \<Rightarrow> NotClass q)"
@@ -124,7 +126,7 @@ where
 
 (* Reason why none of the expressions synthesises a type: the first failure of an expression with a synthesis
    rule *)
-fun synth_failure :: "(reason + 'a) list \<Rightarrow> reason"
+fun synth_failure :: "'a may_fail list \<Rightarrow> reason"
 where
 "synth_failure [] = NotSynthesised" |
 "synth_failure (Fail NotSynthesised # ms) = synth_failure ms" |
