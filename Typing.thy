@@ -40,7 +40,9 @@ where
 syntax "_merge" :: "cxt \<Rightarrow> class_table \<Rightarrow> cxt \<Rightarrow> cxt" ("_ \<oplus>\<^bsub>_\<^esub> _" [65, 0, 66] 65)
 translations "\<Gamma> \<oplus>\<^bsub>\<Sigma>\<^esub> \<Gamma>'" \<rightleftharpoons> "CONST merge \<Sigma> \<Gamma> \<Gamma>'"
 
-(* r in Assigns\<^sub>R \<Delta> r is the reason, if any, why falling through is permitted only for compatibility with mypy *)
+(* Assigns\<^sub>R \<Delta> r: the statement can complete normally, adding bindings \<Delta>. For a statement such as a match covering
+   every value but not recognised by mypy as exhaustive, r is the error reported when a function body ends with
+   that statement. *)
 datatype static_outcome = Assigns\<^sub>R cxt "reason option" | Returns\<^sub>R
 
 fun merge_outcome :: "class_table \<Rightarrow> static_outcome \<Rightarrow> static_outcome \<Rightarrow> static_outcome"
