@@ -127,8 +127,8 @@ where
 fun synth_failure :: "(reason + 'a) list \<Rightarrow> reason"
 where
 "synth_failure [] = NotSynthesised" |
-"synth_failure (Inl NotSynthesised # ms) = synth_failure ms" |
-"synth_failure (Inl r # ms) = r" |
-"synth_failure (Inr _ # ms) = synth_failure ms"
+"synth_failure (Fail NotSynthesised # ms) = synth_failure ms" |
+"synth_failure (Fail r # ms) = r" |
+"synth_failure (Ok _ # ms) = synth_failure ms"
 
 end

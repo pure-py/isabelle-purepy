@@ -85,22 +85,22 @@ where
 fun subscript_type :: "class_table \<Rightarrow> ty \<Rightarrow> reason + unit \<Rightarrow> reason + unit \<Rightarrow> reason + ty \<Rightarrow> reason + ty"
 where
 "subscript_type \<Sigma> (TyUnion \<sigma> \<sigma>') int_ok str_ok idx = do {
-   \<tau> \<leftarrow> subscript_type \<Sigma> \<sigma> int_ok str_ok idx; \<tau>' \<leftarrow> subscript_type \<Sigma> \<sigma>' int_ok str_ok idx; Inr (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>')
+   \<tau> \<leftarrow> subscript_type \<Sigma> \<sigma> int_ok str_ok idx; \<tau>' \<leftarrow> subscript_type \<Sigma> \<sigma>' int_ok str_ok idx; Ok (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>')
  }" |
-"subscript_type \<Sigma> (TyList \<tau>) int_ok _ _ = do { int_ok; Inr \<tau> }" |
-"subscript_type \<Sigma> (TyDict \<tau>) _ str_ok _ = do { str_ok; Inr \<tau> }" |
+"subscript_type \<Sigma> (TyList \<tau>) int_ok _ _ = do { int_ok; Ok \<tau> }" |
+"subscript_type \<Sigma> (TyDict \<tau>) _ str_ok _ = do { str_ok; Ok \<tau> }" |
 "subscript_type \<Sigma> (TyTuple \<tau>s) _ _ idx = do {
    \<iota> \<leftarrow> idx;
    case \<iota> of
      TyLiteral (LitInt n) \<Rightarrow>
-       if 0 \<le> n \<and> n < of_nat (length \<tau>s) then Inr (\<tau>s ! nat n)
-       else if n < 0 \<and> 0 \<le> of_nat (length \<tau>s) + n then Inr (\<tau>s ! nat (of_nat (length \<tau>s) + n))
-       else Inl (TupleIndexOutOfRange n (length \<tau>s))
-   | TyPrim int \<Rightarrow> Inr (joins \<Sigma> \<tau>s)
-   | _ \<Rightarrow> Inl (TypeMismatch (TyPrim int) \<iota>)
+       if 0 \<le> n \<and> n < of_nat (length \<tau>s) then Ok (\<tau>s ! nat n)
+       else if n < 0 \<and> 0 \<le> of_nat (length \<tau>s) + n then Ok (\<tau>s ! nat (of_nat (length \<tau>s) + n))
+       else Fail (TupleIndexOutOfRange n (length \<tau>s))
+   | TyPrim int \<Rightarrow> Ok (joins \<Sigma> \<tau>s)
+   | _ \<Rightarrow> Fail (TypeMismatch (TyPrim int) \<iota>)
  }" |
 "subscript_type \<Sigma> \<sigma> int_ok _ _ =
-  (if base_type \<sigma> = TyPrim str then do { int_ok; Inr (TyPrim str) } else Inl (NotSubscriptable \<sigma>))"
+  (if base_type \<sigma> = TyPrim str then do { int_ok; Ok (TyPrim str) } else Fail (NotSubscriptable \<sigma>))"
 
 datatype instances = Instance "ty list" | Undetermined | NoInstance
 
@@ -183,9 +183,9 @@ where
 fun attribute_type :: "class_table \<Rightarrow> ty \<Rightarrow> var \<Rightarrow> reason + ty"
 where
 "attribute_type \<Sigma> (TyUnion \<sigma> \<sigma>') x =
-  do { \<tau> \<leftarrow> attribute_type \<Sigma> \<sigma> x; \<tau>' \<leftarrow> attribute_type \<Sigma> \<sigma>' x; Inr (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>') }" |
+  do { \<tau> \<leftarrow> attribute_type \<Sigma> \<sigma> x; \<tau>' \<leftarrow> attribute_type \<Sigma> \<sigma>' x; Ok (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>') }" |
 "attribute_type \<Sigma> (TyClass C \<sigma>s) x =
   or_else (UnknownField (short_name C) x) (map_of (instantiate (fields \<Sigma> C) \<sigma>s) x)" |
-"attribute_type \<Sigma> \<sigma> _ = Inl (NoAttributes \<sigma>)"
+"attribute_type \<Sigma> \<sigma> _ = Fail (NoAttributes \<sigma>)"
 
 end

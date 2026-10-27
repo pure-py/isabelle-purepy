@@ -70,14 +70,14 @@ where
    are distinct *)
 fun resolve_type' :: "class_table \<Rightarrow> cxt \<Rightarrow> (name \<times> var) list \<Rightarrow> nat \<Rightarrow> ty_expr \<Rightarrow> reason + ty"
 where
-"resolve_type' \<Sigma> \<Gamma> A n (TyExprPrim \<nu>) = do { check_predefined \<Gamma> (prim_name \<nu>); Inr (TyPrim \<nu>) }" |
+"resolve_type' \<Sigma> \<Gamma> A n (TyExprPrim \<nu>) = do { check_predefined \<Gamma> (prim_name \<nu>); Ok (TyPrim \<nu>) }" |
 "resolve_type' \<Sigma> \<Gamma> A n (TyExprName q \<psi>s) =
-  (if snd q = [] \<and> \<psi>s = [] \<and> fmlookup \<Gamma> (fst q) = Some TypeVar then Inr (TyVar (fst q))
+  (if snd q = [] \<and> \<psi>s = [] \<and> fmlookup \<Gamma> (fst q) = Some TypeVar then Ok (TyVar (fst q))
    else case resolve_name \<Gamma> q of
      Some (Type C) \<Rightarrow> do {
        \<tau>s \<leftarrow> those_sum (map (resolve_type' \<Sigma> \<Gamma> A n) \<psi>s);
        let m = length (type_params \<Sigma> C);
-       if length \<tau>s = m then Inr (TyClass C \<tau>s) else Inl (ClassArityMismatch q m (length \<tau>s))
+       if length \<tau>s = m then Ok (TyClass C \<tau>s) else Fail (ClassArityMismatch q m (length \<tau>s))
      }
    | Some (TypeAlias \<Gamma>' q' \<chi>s i) \<Rightarrow>
        (case \<chi>s ! i of
@@ -88,27 +88,27 @@ where
             \<tau> \<leftarrow> (case n of
                    Suc n' \<Rightarrow> resolve_type' \<Sigma> (type_context \<Gamma>' q' \<chi>s i) ((q', x) # A) n' \<psi>
                  | 0 \<Rightarrow> undefined);
-            Inr (subst \<sigma>s \<alpha>s \<tau>)
+            Ok (subst \<sigma>s \<alpha>s \<tau>)
           }
         | _ \<Rightarrow> undefined)
-   | _ \<Rightarrow> Inl (not_type_name \<Gamma> q))" |
-"resolve_type' \<Sigma> \<Gamma> A n (TyExprLiteral l) = do { check_predefined \<Gamma> ''Literal''; Inr (TyLiteral l) }" |
+   | _ \<Rightarrow> Fail (not_type_name \<Gamma> q))" |
+"resolve_type' \<Sigma> \<Gamma> A n (TyExprLiteral l) = do { check_predefined \<Gamma> ''Literal''; Ok (TyLiteral l) }" |
 "resolve_type' \<Sigma> \<Gamma> A n (TyExprList \<psi>) =
-  do { check_predefined \<Gamma> ''list''; \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>; Inr (TyList \<tau>) }" |
+  do { check_predefined \<Gamma> ''list''; \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>; Ok (TyList \<tau>) }" |
 "resolve_type' \<Sigma> \<Gamma> A n (TyExprDict \<psi>) = do {
-   check_predefined \<Gamma> ''dict''; check_predefined \<Gamma> ''str''; \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>; Inr (TyDict \<tau>)
+   check_predefined \<Gamma> ''dict''; check_predefined \<Gamma> ''str''; \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>; Ok (TyDict \<tau>)
  }" |
 "resolve_type' \<Sigma> \<Gamma> A n (TyExprTuple \<psi>s) = do {
-   check_predefined \<Gamma> ''tuple''; \<tau>s \<leftarrow> those_sum (map (resolve_type' \<Sigma> \<Gamma> A n) \<psi>s); Inr (TyTuple \<tau>s)
+   check_predefined \<Gamma> ''tuple''; \<tau>s \<leftarrow> those_sum (map (resolve_type' \<Sigma> \<Gamma> A n) \<psi>s); Ok (TyTuple \<tau>s)
  }" |
 "resolve_type' \<Sigma> \<Gamma> A n (TyExprCallable \<psi>s \<psi>) = do {
    check_predefined \<Gamma> ''Callable'';
    \<sigma>s \<leftarrow> those_sum (map (resolve_type' \<Sigma> \<Gamma> A n) \<psi>s);
    \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>;
-   Inr (TyCallable \<sigma>s \<tau>)
+   Ok (TyCallable \<sigma>s \<tau>)
  }" |
 "resolve_type' \<Sigma> \<Gamma> A n (TyExprUnion \<psi> \<psi>') = do {
-   \<sigma> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>; \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>'; Inr (TyUnion \<sigma> \<tau>)
+   \<sigma> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>; \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>'; Ok (TyUnion \<sigma> \<tau>)
  }"
 
 definition resolve_type :: "class_table \<Rightarrow> cxt \<Rightarrow> ty_expr \<Rightarrow> reason + ty"
@@ -124,7 +124,7 @@ where
           Dataclass _ _ None _ \<Rightarrow> None
         | Dataclass _ _ (Some (q', \<psi>s)) _ \<Rightarrow>
             (case resolve_type \<Sigma> (type_context \<Gamma> q \<chi>s i) (TyExprName q' \<psi>s) of
-               Inr (TyClass D \<sigma>s) \<Rightarrow> Some (D, \<sigma>s)
+               Ok (TyClass D \<sigma>s) \<Rightarrow> Some (D, \<sigma>s)
              | _ \<Rightarrow> undefined)
         | TypeStmt _ _ _ \<Rightarrow> undefined)
    | None \<Rightarrow> undefined)"
@@ -196,9 +196,9 @@ definition check_field_map ::
   "(nat \<Rightarrow> nat \<Rightarrow> reason) \<Rightarrow> (var list \<Rightarrow> reason) \<Rightarrow> var list \<Rightarrow> nat \<Rightarrow> var list \<Rightarrow> reason + unit"
 where
 "check_field_map arity unknown xs n ys =
-  (if n + length ys \<noteq> length xs then Inl (arity (length xs) (n + length ys))
-   else if set ys \<noteq> set (drop n xs) then Inl (unknown (sorted_list_of_set (set (drop n xs))))
-   else Inr ())"
+  (if n + length ys \<noteq> length xs then Fail (arity (length xs) (n + length ys))
+   else if set ys \<noteq> set (drop n xs) then Fail (unknown (sorted_list_of_set (set (drop n xs))))
+   else Ok ())"
 
 (* Type of the field of C supplied by each argument, in order *)
 definition constructor_args ::
@@ -208,7 +208,7 @@ where
   (case \<pi> of FieldScheme _ x\<sigma>s \<Rightarrow> do {
      check_field_map (ConstructorArityMismatch (short_name C)) (UnknownConstructorKeyword (short_name C))
        (map fst x\<sigma>s) (length es) (map fst kws);
-     Inr (zip (map snd (take (length es) x\<sigma>s)) es @ map (\<lambda>(y, e). (the (map_of x\<sigma>s y), e)) kws)
+     Ok (zip (map snd (take (length es) x\<sigma>s)) es @ map (\<lambda>(y, e). (the (map_of x\<sigma>s y), e)) kws)
    })"
 
 (* Class of constructor callee e, with the type arguments supplied by e, if any *)
@@ -216,18 +216,18 @@ definition constructor_class :: "class_table \<Rightarrow> cxt \<Rightarrow> exp
 where
 "constructor_class \<Sigma> \<Gamma> e =
   (case (class_of_name \<Gamma> e, e) of
-     (Some C, _) \<Rightarrow> Some (Inr (C, None))
+     (Some C, _) \<Rightarrow> Some (Ok (C, None))
    | (None, ExprSubscript e' _) \<Rightarrow>
        if class_of_name \<Gamma> e' = None then None
        else
          (case type_expr_of e of
             Some \<psi> \<Rightarrow>
-              Some (do { \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; case \<tau> of TyClass C \<tau>s \<Rightarrow> Inr (C, Some \<tau>s) | _ \<Rightarrow> undefined })
+              Some (do { \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; case \<tau> of TyClass C \<tau>s \<Rightarrow> Ok (C, Some \<tau>s) | _ \<Rightarrow> undefined })
           | None \<Rightarrow> undefined)
    | _ \<Rightarrow> None)"
 
 lemma constructor_args_elem:
-  "\<lbrakk> constructor_args C \<pi> es kws = Inr \<sigma>es ; (\<sigma>, e) \<in> set \<sigma>es \<rbrakk> \<Longrightarrow> e \<in> set es \<or> e \<in> set (map snd kws)"
+  "\<lbrakk> constructor_args C \<pi> es kws = Ok \<sigma>es ; (\<sigma>, e) \<in> set \<sigma>es \<rbrakk> \<Longrightarrow> e \<in> set es \<or> e \<in> set (map snd kws)"
   unfolding constructor_args_def
   by (cases \<pi>) (fastforce simp: bind_sum_def image_iff split: sum.splits dest!: set_zip_rightD)
 

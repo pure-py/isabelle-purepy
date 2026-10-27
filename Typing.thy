@@ -51,8 +51,8 @@ where
 
 fun merges :: "class_table \<Rightarrow> (reason + static_outcome) list \<Rightarrow> reason + static_outcome"
 where
-"merges \<Sigma> [] = Inr Returns\<^sub>R" |
-"merges \<Sigma> (m # ms) = do { R \<leftarrow> m; R' \<leftarrow> merges \<Sigma> ms; Inr (merge_outcome \<Sigma> R R') }"
+"merges \<Sigma> [] = Ok Returns\<^sub>R" |
+"merges \<Sigma> (m # ms) = do { R \<leftarrow> m; R' \<leftarrow> merges \<Sigma> ms; Ok (merge_outcome \<Sigma> R R') }"
 
 fun override_outcome :: "static_outcome \<Rightarrow> static_outcome \<Rightarrow> static_outcome" (infixl "\<otimes>\<^sub>R" 100)
 where
@@ -63,23 +63,23 @@ definition attr_module :: "name \<Rightarrow> cxt \<Rightarrow> var \<Rightarrow
 where
 "attr_module q \<Gamma> x q' =
   (case fmlookup \<Gamma> x of
-     None \<Rightarrow> Inl (UnknownMember x q)
-   | Some (Ty \<tau>) \<Rightarrow> Inr \<tau>
-   | Some (ModStub q'') \<Rightarrow> Inl (SubmoduleNotImported q'')
-   | Some (ModChecked _ _) \<Rightarrow> Inl (ModuleAsValue q')
-   | Some (Type _) \<Rightarrow> Inl (ClassAsValue q')
-   | Some (TypeAlias _ _ _ _) \<Rightarrow> Inl (TypeAliasAsValue q')
-   | Some PredefName \<Rightarrow> Inl (PredefinedNameAsValue q')
-   | Some (Scheme _) \<Rightarrow> Inl (TypeSchemeAsValue q')
+     None \<Rightarrow> Fail (UnknownMember x q)
+   | Some (Ty \<tau>) \<Rightarrow> Ok \<tau>
+   | Some (ModStub q'') \<Rightarrow> Fail (SubmoduleNotImported q'')
+   | Some (ModChecked _ _) \<Rightarrow> Fail (ModuleAsValue q')
+   | Some (Type _) \<Rightarrow> Fail (ClassAsValue q')
+   | Some (TypeAlias _ _ _ _) \<Rightarrow> Fail (TypeAliasAsValue q')
+   | Some PredefName \<Rightarrow> Fail (PredefinedNameAsValue q')
+   | Some (Scheme _) \<Rightarrow> Fail (TypeSchemeAsValue q')
    | Some TypeVar \<Rightarrow> undefined
-   | Some _ \<Rightarrow> Inl (UnassignedMember x q))"
+   | Some _ \<Rightarrow> Fail (UnassignedMember x q))"
 
 (* Failure if one of the variables bound by qualifiers with bindings \<Delta> is in X, the variables captured by
    lambdas *)
 definition captured :: "var set \<Rightarrow> cxt \<Rightarrow> reason + unit"
 where
 "captured X \<Delta> =
-  (let Y = X \<inter> fset (fmdom \<Delta>) in if Y = {} then Inr () else Inl (CapturedGeneratorVariable (Min Y)))"
+  (let Y = X \<inter> fset (fmdom \<Delta>) in if Y = {} then Ok () else Fail (CapturedGeneratorVariable (Min Y)))"
 
 definition lambda_args :: "var list \<Rightarrow> (var \<times> expr) list \<Rightarrow> expr list \<Rightarrow> (reason + ty) list \<Rightarrow> reason + cxt"
 where
@@ -87,7 +87,7 @@ where
    ensure (kws = []) KeywordArgumentsNotConstructor;
    ensure (length xs = length es) (CallArityMismatch (length xs) (length es));
    \<tau>s \<leftarrow> those_sum \<sigma>s;
-   if distinct xs then Inr (fmap_of_list (zip xs (map Ty \<tau>s))) else Inl undefined
+   if distinct xs then Ok (fmap_of_list (zip xs (map Ty \<tau>s))) else Fail undefined
  }"
 
 (* Check of a name bound at a type scheme against \<tau>; None for other expressions *)
@@ -109,8 +109,8 @@ where
 "inferred_type_args \<Sigma> \<alpha>s \<sigma>s ms =
   (let \<sigma>\<tau>s = filter (Not \<circ> isl \<circ> snd) (zip \<sigma>s ms) in
    case type_args_of (type_args_seq \<Sigma> \<alpha>s (map fst \<sigma>\<tau>s) (map (projr \<circ> snd) \<sigma>\<tau>s)) \<alpha>s of
-     Inl r \<Rightarrow> Inl (let r' = synth_failure ms in if r' = NotSynthesised then r else r')
-   | Inr \<tau>s \<Rightarrow> Inr \<tau>s)"
+     Fail r \<Rightarrow> Fail (let r' = synth_failure ms in if r' = NotSynthesised then r else r')
+   | Ok \<tau>s \<Rightarrow> Ok \<tau>s)"
 
 function (sequential)
   synth_expr :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> reason + ty" and
@@ -122,8 +122,8 @@ function (sequential)
   check_args :: "class_table \<Rightarrow> cxt \<Rightarrow> (var \<times> expr) list \<Rightarrow> expr list \<Rightarrow> ty list \<Rightarrow> reason + unit" and
   quals :: "class_table \<Rightarrow> cxt \<Rightarrow> qualifier list \<Rightarrow> reason + cxt"
 where
-"synth_expr \<Sigma> \<Gamma> (ExprVar x) = (case fmlookup \<Gamma> x of Some (Ty \<tau>) \<Rightarrow> Inr \<tau> | \<theta> \<Rightarrow> Inl (var_reason x \<theta>))" |
-"synth_expr \<Sigma> \<Gamma> (ExprLiteral l) = Inr (case l of LitFloat _ \<Rightarrow> TyPrim float | _ \<Rightarrow> TyLiteral l)" |
+"synth_expr \<Sigma> \<Gamma> (ExprVar x) = (case fmlookup \<Gamma> x of Some (Ty \<tau>) \<Rightarrow> Ok \<tau> | \<theta> \<Rightarrow> Fail (var_reason x \<theta>))" |
+"synth_expr \<Sigma> \<Gamma> (ExprLiteral l) = Ok (case l of LitFloat _ \<Rightarrow> TyPrim float | _ \<Rightarrow> TyLiteral l)" |
 "synth_expr \<Sigma> \<Gamma> (ExprCall e (es, kws)) =
   (case lambda_of e of
      Some (xs, e') \<Rightarrow> do {
@@ -139,12 +139,12 @@ where
               case explicit of
                 Some \<tau>s \<Rightarrow> do {
                   those_sum (map (\<lambda>(\<sigma>, e'). check_expr \<Sigma> \<Gamma> e' (subst \<tau>s \<alpha>s \<sigma>)) \<sigma>es);
-                  Inr (TyClass C \<tau>s)
+                  Ok (TyClass C \<tau>s)
                 }
               | None \<Rightarrow> do {
                   \<tau>s \<leftarrow> inferred_type_args \<Sigma> \<alpha>s (map fst \<sigma>es) (map (synth_expr \<Sigma> \<Gamma> \<circ> snd) \<sigma>es);
                   those_sum (map (\<lambda>(\<sigma>, e'). check_expr \<Sigma> \<Gamma> e' (subst \<tau>s \<alpha>s \<sigma>)) \<sigma>es);
-                  Inr (TyClass C \<tau>s)
+                  Ok (TyClass C \<tau>s)
                 }
             }
         }
@@ -155,31 +155,31 @@ where
    or_else (NoBinaryOverload op \<sigma> \<sigma>') (resolve_binop \<Sigma> op \<sigma> \<sigma>')
  }" |
 "synth_expr \<Sigma> \<Gamma> (ExprUnOp op e) =
-  (if op = UOpNeg \<and> numeric_literal e then Inl undefined
+  (if op = UOpNeg \<and> numeric_literal e then Fail undefined
    else do {
      \<sigma> \<leftarrow> synth_expr \<Sigma> \<Gamma> e;
      or_else (NoUnaryOverload op \<sigma>) (resolve_unop \<Sigma> op \<sigma>)
    })" |
 "synth_expr \<Sigma> \<Gamma> (ExprAnd e e') =
-  do { check_expr \<Sigma> \<Gamma> e (TyPrim bool); check_expr \<Sigma> \<Gamma> e' (TyPrim bool); Inr (TyPrim bool) }" |
+  do { check_expr \<Sigma> \<Gamma> e (TyPrim bool); check_expr \<Sigma> \<Gamma> e' (TyPrim bool); Ok (TyPrim bool) }" |
 "synth_expr \<Sigma> \<Gamma> (ExprOr e e') =
-  do { check_expr \<Sigma> \<Gamma> e (TyPrim bool); check_expr \<Sigma> \<Gamma> e' (TyPrim bool); Inr (TyPrim bool) }" |
+  do { check_expr \<Sigma> \<Gamma> e (TyPrim bool); check_expr \<Sigma> \<Gamma> e' (TyPrim bool); Ok (TyPrim bool) }" |
 "synth_expr \<Sigma> \<Gamma> (ExprCond e\<^sub>1 e e\<^sub>2) = do {
    check_expr \<Sigma> \<Gamma> e (TyPrim bool);
    case (synth_expr \<Sigma> \<Gamma> e\<^sub>1, synth_expr \<Sigma> \<Gamma> e\<^sub>2) of
-     (Inr \<sigma>\<^sub>1, Inr \<sigma>\<^sub>2) \<Rightarrow> Inr (\<sigma>\<^sub>1 \<squnion>\<^bsub>\<Sigma>\<^esub> \<sigma>\<^sub>2)
-   | (Inr \<sigma>\<^sub>1, Inl _) \<Rightarrow> do { check_expr \<Sigma> \<Gamma> e\<^sub>2 \<sigma>\<^sub>1; Inr \<sigma>\<^sub>1 }
-   | (Inl _, Inr \<sigma>\<^sub>2) \<Rightarrow> do { check_expr \<Sigma> \<Gamma> e\<^sub>1 \<sigma>\<^sub>2; Inr \<sigma>\<^sub>2 }
-   | (r\<^sub>1, r\<^sub>2) \<Rightarrow> Inl (synth_failure [r\<^sub>1, r\<^sub>2])
+     (Ok \<sigma>\<^sub>1, Ok \<sigma>\<^sub>2) \<Rightarrow> Ok (\<sigma>\<^sub>1 \<squnion>\<^bsub>\<Sigma>\<^esub> \<sigma>\<^sub>2)
+   | (Ok \<sigma>\<^sub>1, Fail _) \<Rightarrow> do { check_expr \<Sigma> \<Gamma> e\<^sub>2 \<sigma>\<^sub>1; Ok \<sigma>\<^sub>1 }
+   | (Fail _, Ok \<sigma>\<^sub>2) \<Rightarrow> do { check_expr \<Sigma> \<Gamma> e\<^sub>1 \<sigma>\<^sub>2; Ok \<sigma>\<^sub>2 }
+   | (r\<^sub>1, r\<^sub>2) \<Rightarrow> Fail (synth_failure [r\<^sub>1, r\<^sub>2])
  }" |
-"synth_expr \<Sigma> \<Gamma> (ExprList es) = do { \<tau> \<leftarrow> elements_join \<Sigma> \<Gamma> es; Inr (TyList \<tau>) }" |
-"synth_expr \<Sigma> \<Gamma> (ExprTuple es) = do { \<tau>s \<leftarrow> those_sum (map (synth_expr \<Sigma> \<Gamma>) es); Inr (TyTuple \<tau>s) }" |
+"synth_expr \<Sigma> \<Gamma> (ExprList es) = do { \<tau> \<leftarrow> elements_join \<Sigma> \<Gamma> es; Ok (TyList \<tau>) }" |
+"synth_expr \<Sigma> \<Gamma> (ExprTuple es) = do { \<tau>s \<leftarrow> those_sum (map (synth_expr \<Sigma> \<Gamma>) es); Ok (TyTuple \<tau>s) }" |
 "synth_expr \<Sigma> \<Gamma> (ExprAttribute e x) =
   (case dotted_name e of
      Some q \<Rightarrow>
        (case (resolve_name \<Gamma> q, lookup \<Gamma> q) of
           (Some (ModChecked q' \<Gamma>'), _) \<Rightarrow> attr_module q' \<Gamma>' x (snoc q x)
-        | (_, Some (ModStub q')) \<Rightarrow> Inl (SubmoduleNotImported q')
+        | (_, Some (ModStub q')) \<Rightarrow> Fail (SubmoduleNotImported q')
         | _ \<Rightarrow> do { \<sigma> \<leftarrow> synth_expr \<Sigma> \<Gamma> e; attribute_type \<Sigma> \<sigma> x })
    | None \<Rightarrow> do { \<sigma> \<leftarrow> synth_expr \<Sigma> \<Gamma> e; attribute_type \<Sigma> \<sigma> x })" |
 "synth_expr \<Sigma> \<Gamma> (ExprSubscript e e') = do {
@@ -189,61 +189,61 @@ where
 "synth_expr \<Sigma> \<Gamma> (ExprDict kvs) = do {
    all_sum (map (\<lambda>e. check_expr \<Sigma> \<Gamma> e (TyPrim str)) (map fst kvs));
    \<tau> \<leftarrow> elements_join \<Sigma> \<Gamma> (map snd kvs);
-   Inr (TyDict \<tau>)
+   Ok (TyDict \<tau>)
  }" |
 "synth_expr \<Sigma> \<Gamma> (ExprListComp e gs) = do {
    \<Delta> \<leftarrow> quals \<Sigma> \<Gamma> gs;
    captured (captures e) \<Delta>;
    \<tau> \<leftarrow> synth_expr \<Sigma> (\<Gamma> \<otimes> \<Delta>) e;
-   Inr (TyList (base_type \<tau>))
+   Ok (TyList (base_type \<tau>))
  }" |
 "synth_expr \<Sigma> \<Gamma> (ExprDictComp e e' gs) = do {
    \<Delta> \<leftarrow> quals \<Sigma> \<Gamma> gs;
    captured (captures e \<union> captures e') \<Delta>;
    check_expr \<Sigma> (\<Gamma> \<otimes> \<Delta>) e (TyPrim str);
    \<tau> \<leftarrow> synth_expr \<Sigma> (\<Gamma> \<otimes> \<Delta>) e';
-   Inr (TyDict (base_type \<tau>))
+   Ok (TyDict (base_type \<tau>))
  }" |
-"synth_expr \<Sigma> \<Gamma> _ = Inl NotSynthesised" |
+"synth_expr \<Sigma> \<Gamma> _ = Fail NotSynthesised" |
 
 "callee \<Sigma> \<Gamma> e es =
   (case scheme_of_name \<Gamma> e of
      Some (TyScheme \<alpha>s (TyCallable \<sigma>s \<sigma>)) \<Rightarrow> do {
        \<tau>s \<leftarrow> inferred_type_args \<Sigma> \<alpha>s \<sigma>s (map (synth_expr \<Sigma> \<Gamma>) es);
-       Inr (TyCallable (map (subst \<tau>s \<alpha>s) \<sigma>s) (subst \<tau>s \<alpha>s \<sigma>))
+       Ok (TyCallable (map (subst \<tau>s \<alpha>s) \<sigma>s) (subst \<tau>s \<alpha>s \<sigma>))
      }
    | Some _ \<Rightarrow> undefined
    | None \<Rightarrow> synth_expr \<Sigma> \<Gamma> e)" |
 
 "call_at \<Sigma> \<Gamma> (TyUnion \<sigma> \<sigma>') kws es =
-  do { \<tau> \<leftarrow> call_at \<Sigma> \<Gamma> \<sigma> kws es; \<tau>' \<leftarrow> call_at \<Sigma> \<Gamma> \<sigma>' kws es; Inr (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>') }" |
+  do { \<tau> \<leftarrow> call_at \<Sigma> \<Gamma> \<sigma> kws es; \<tau>' \<leftarrow> call_at \<Sigma> \<Gamma> \<sigma>' kws es; Ok (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>') }" |
 "call_at \<Sigma> \<Gamma> (TyCallable \<sigma>s \<tau>) kws es = do {
    check_args \<Sigma> \<Gamma> kws es \<sigma>s;
    ensure (\<tau> \<noteq> TyPrim NoneType) (MypyCompatibility NoneResult);
-   Inr \<tau>
+   Ok \<tau>
  }" |
-"call_at \<Sigma> \<Gamma> \<sigma> _ _ = Inl (NotCallable \<sigma>)" |
+"call_at \<Sigma> \<Gamma> \<sigma> _ _ = Fail (NotCallable \<sigma>)" |
 
 "elements_join \<Sigma> \<Gamma> es =
   (let \<sigma>s = map (synth_expr \<Sigma> \<Gamma>) es; \<tau> = joins \<Sigma> (map (base_type \<circ> projr) (filter (Not \<circ> isl) \<sigma>s)) in
    if \<not> list_all isl \<sigma>s then do {
      those_sum (map (\<lambda>j. check_expr \<Sigma> \<Gamma> (es ! j) \<tau>) (filter (\<lambda>j. isl (\<sigma>s ! j)) [0..<length es]));
-     Inr \<tau>
+     Ok \<tau>
    }
-   else Inl (synth_failure \<sigma>s))" |
+   else Fail (synth_failure \<sigma>s))" |
 
 "check_expr \<Sigma> \<Gamma> e \<tau> =
   (case check_expr' \<Sigma> \<Gamma> e \<tau> of
-     Some (Inr ()) \<Rightarrow> Inr ()
-   | Some (Inl r) \<Rightarrow> (case synth_expr \<Sigma> \<Gamma> e of Inr \<sigma> \<Rightarrow> if \<Sigma> \<turnstile> \<sigma> <: \<tau> then Inr () else Inl r | Inl _ \<Rightarrow> Inl r)
+     Some (Ok ()) \<Rightarrow> Ok ()
+   | Some (Fail r) \<Rightarrow> (case synth_expr \<Sigma> \<Gamma> e of Ok \<sigma> \<Rightarrow> if \<Sigma> \<turnstile> \<sigma> <: \<tau> then Ok () else Fail r | Fail _ \<Rightarrow> Fail r)
    | None \<Rightarrow> do { \<sigma> \<leftarrow> synth_expr \<Sigma> \<Gamma> e; ensure (\<Sigma> \<turnstile> \<sigma> <: \<tau>) (TypeMismatch \<tau> \<sigma>) })" |
 
 "check_expr' \<Sigma> \<Gamma> (ExprLambda xs e) \<tau> =
   Some (case \<tau> of
      TyCallable \<tau>s \<tau>' \<Rightarrow>
-       if length xs \<noteq> length \<tau>s then Inl (LambdaTypeMismatch \<tau> (Some (length xs)))
-       else if distinct xs then check_expr \<Sigma> (\<Gamma> \<otimes> fmap_of_list (zip xs (map Ty \<tau>s))) e \<tau>' else Inl undefined
-   | _ \<Rightarrow> Inl (LambdaTypeMismatch \<tau> None))" |
+       if length xs \<noteq> length \<tau>s then Fail (LambdaTypeMismatch \<tau> (Some (length xs)))
+       else if distinct xs then check_expr \<Sigma> (\<Gamma> \<otimes> fmap_of_list (zip xs (map Ty \<tau>s))) e \<tau>' else Fail undefined
+   | _ \<Rightarrow> Fail (LambdaTypeMismatch \<tau> None))" |
 "check_expr' \<Sigma> \<Gamma> (ExprCall e (es, kws)) \<tau> =
   (case e of
      ExprLambda xs e' \<Rightarrow> Some (do {
@@ -288,14 +288,14 @@ where
    all_sum (map2 (check_expr \<Sigma> \<Gamma>) es \<sigma>s)
  }" |
 
-"quals \<Sigma> \<Gamma> [] = Inr fmempty" |
+"quals \<Sigma> \<Gamma> [] = Ok fmempty" |
 "quals \<Sigma> \<Gamma> (Guard e # gs) = do { check_expr \<Sigma> \<Gamma> e (TyPrim bool); quals \<Sigma> \<Gamma> gs }" |
 "quals \<Sigma> \<Gamma> (Generator x e # gs) = do {
    \<sigma> \<leftarrow> synth_expr \<Sigma> \<Gamma> e;
    \<tau> \<leftarrow> or_else (NotIterable \<sigma>) (elem_type \<Sigma> \<sigma>);
    ensure (x \<notin> captures gs) (CapturedGeneratorVariable x);
    \<Delta> \<leftarrow> quals \<Sigma> (\<Gamma> \<otimes> fmupd x (Ty \<tau>) fmempty) gs;
-   Inr (fmupd x (Ty \<tau>) fmempty \<otimes> \<Delta>)
+   Ok (fmupd x (Ty \<tau>) fmempty \<otimes> \<Delta>)
  }"
 by pat_completeness auto
 
@@ -336,7 +336,7 @@ where
    (let \<Gamma>' = \<Gamma> \<otimes> fmconst (set \<alpha>s) TypeVar in do {
       \<sigma>s \<leftarrow> those_sum (map (resolve_type \<Sigma> \<Gamma>' \<circ> snd) xps);
       \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma>' \<psi>;
-      Inr (TyScheme \<alpha>s (TyCallable \<sigma>s \<tau>))
+      Ok (TyScheme \<alpha>s (TyCallable \<sigma>s \<tau>))
     })"
 
 (* Call statement at callee type \<sigma> *)
@@ -344,7 +344,7 @@ fun call_stmt_at :: "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow
 where
 "call_stmt_at \<Sigma> \<Gamma> (TyUnion \<sigma> \<sigma>') kws es = do { call_stmt_at \<Sigma> \<Gamma> \<sigma> kws es; call_stmt_at \<Sigma> \<Gamma> \<sigma>' kws es }" |
 "call_stmt_at \<Sigma> \<Gamma> (TyCallable \<sigma>s (TyPrim NoneType)) kws es = check_args \<Sigma> \<Gamma> kws es \<sigma>s" |
-"call_stmt_at \<Sigma> \<Gamma> \<sigma> kws es = do { call_at \<Sigma> \<Gamma> \<sigma> kws es; Inr () }"
+"call_stmt_at \<Sigma> \<Gamma> \<sigma> kws es = do { call_at \<Sigma> \<Gamma> \<sigma> kws es; Ok () }"
 
 abbreviation false_lit :: expr where "false_lit \<equiv> ExprLiteral (LitBool False)"
 
@@ -353,83 +353,83 @@ definition check_assignments_declared :: "var set \<Rightarrow> var list \<Right
 where
 "check_assignments_declared X xs ys Y =
   (case find (\<lambda>x. x \<notin> X \<and> x \<notin> set ys \<and> x \<notin> Y) xs of
-     Some x \<Rightarrow> Inl (UndeclaredAssignment x)
-   | None \<Rightarrow> Inr ())"
+     Some x \<Rightarrow> Fail (UndeclaredAssignment x)
+   | None \<Rightarrow> Ok ())"
 
 (* Bindings of the patterns ps of the cases of a match at remaining type \<tau> and residual L, with the final
    remaining type and residual *)
 fun match_cases ::
   "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow> shape list \<Rightarrow> pat list \<Rightarrow> reason + cxt list \<times> ty \<times> shape list"
 where
-"match_cases \<Sigma> \<Gamma> \<tau> L [] = Inr ([], \<tau>, L)" |
+"match_cases \<Sigma> \<Gamma> \<tau> L [] = Ok ([], \<tau>, L)" |
 "match_cases \<Sigma> \<Gamma> \<tau> L (p # ps) = do {
    \<Delta> \<leftarrow> check_pat \<Sigma> \<Gamma> p \<tau>;
    (_, L') \<leftarrow> or_else (UnreachableCase p) (match_shapes \<Sigma> \<Gamma> L p);
    (\<Delta>s, \<tau>', L'') \<leftarrow> match_cases \<Sigma> \<Gamma> (remaining \<Sigma> \<Gamma> \<tau> p) L' ps;
-   Inr (fmmap Ty \<Delta> # \<Delta>s, \<tau>', L'')
+   Ok (fmmap Ty \<Delta> # \<Delta>s, \<tau>', L'')
  }"
 
 function (sequential) check_stmt :: "class_table \<Rightarrow> cxt \<Rightarrow> ty option \<Rightarrow> stmt \<Rightarrow> reason + static_outcome"
 and check_def :: "class_table \<Rightarrow> cxt \<Rightarrow> func \<Rightarrow> ty_scheme \<Rightarrow> reason + unit"
 where
-"check_stmt \<Sigma> \<Gamma> \<zeta> StmtPass = Inr (Assigns\<^sub>R fmempty None)" |
+"check_stmt \<Sigma> \<Gamma> \<zeta> StmtPass = Ok (Assigns\<^sub>R fmempty None)" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtDeclare x \<psi>) =
-  do { \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; Inr (Assigns\<^sub>R (fmupd x (DU \<tau>) fmempty) None) }" |
+  do { \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; Ok (Assigns\<^sub>R (fmupd x (DU \<tau>) fmempty) None) }" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssign x None e) =
   (case fmlookup \<Gamma> x of
-     Some (DU \<tau>) \<Rightarrow> do { check_expr \<Sigma> \<Gamma> e \<tau>; Inr (Assigns\<^sub>R (fmupd x (Ty \<tau>) fmempty) None) }
-   | \<theta> \<Rightarrow> Inl (assign_reason x \<theta>))" |
+     Some (DU \<tau>) \<Rightarrow> do { check_expr \<Sigma> \<Gamma> e \<tau>; Ok (Assigns\<^sub>R (fmupd x (Ty \<tau>) fmempty) None) }
+   | \<theta> \<Rightarrow> Fail (assign_reason x \<theta>))" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssign x (Some \<psi>) e) = do {
-   \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; check_expr \<Sigma> \<Gamma> e \<tau>; Inr (Assigns\<^sub>R (fmupd x (Ty \<tau>) fmempty) None)
+   \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; check_expr \<Sigma> \<Gamma> e \<tau>; Ok (Assigns\<^sub>R (fmupd x (Ty \<tau>) fmempty) None)
  }" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtExpr e) =
   (case e of
      ExprCall e' (es, kws) \<Rightarrow>
        if (case e' of ExprLambda _ _ \<Rightarrow> True | _ \<Rightarrow> False) \<or> class_of_name \<Gamma> e' \<noteq> None
-       then do { synth_expr \<Sigma> \<Gamma> e; Inr (Assigns\<^sub>R fmempty None) }
-       else do { \<sigma> \<leftarrow> callee \<Sigma> \<Gamma> e' es; call_stmt_at \<Sigma> \<Gamma> \<sigma> kws es; Inr (Assigns\<^sub>R fmempty None) }
-   | _ \<Rightarrow> do { synth_expr \<Sigma> \<Gamma> e; Inr (Assigns\<^sub>R fmempty None) })" |
+       then do { synth_expr \<Sigma> \<Gamma> e; Ok (Assigns\<^sub>R fmempty None) }
+       else do { \<sigma> \<leftarrow> callee \<Sigma> \<Gamma> e' es; call_stmt_at \<Sigma> \<Gamma> \<sigma> kws es; Ok (Assigns\<^sub>R fmempty None) }
+   | _ \<Rightarrow> do { synth_expr \<Sigma> \<Gamma> e; Ok (Assigns\<^sub>R fmempty None) })" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssert e e') = do {
-   (if e = false_lit then Inr () else check_expr \<Sigma> \<Gamma> e (TyPrim bool));
-   (case e' of Some e'' \<Rightarrow> check_expr \<Sigma> \<Gamma> e'' (TyPrim str) | None \<Rightarrow> Inr ());
-   Inr (if e = false_lit then Returns\<^sub>R
+   (if e = false_lit then Ok () else check_expr \<Sigma> \<Gamma> e (TyPrim bool));
+   (case e' of Some e'' \<Rightarrow> check_expr \<Sigma> \<Gamma> e'' (TyPrim str) | None \<Rightarrow> Ok ());
+   Ok (if e = false_lit then Returns\<^sub>R
         else Assigns\<^sub>R fmempty
-          (if \<zeta> \<noteq> None \<and> synth_expr \<Sigma> \<Gamma> e = Inr (TyLiteral (LitBool False))
+          (if \<zeta> \<noteq> None \<and> synth_expr \<Sigma> \<Gamma> e = Ok (TyLiteral (LitBool False))
            then Some MissingReturnAssertion else None))
  }" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtReturn None) =
   (case \<zeta> of
      Some \<tau> \<Rightarrow>
-       if \<Sigma> \<turnstile> \<tau> \<approx> TyPrim NoneType then Inr Returns\<^sub>R
-       else Inl (mypy_only_if (\<Sigma> \<turnstile> TyPrim NoneType <: \<tau>) (BareReturn \<tau>))
+       if \<Sigma> \<turnstile> \<tau> \<approx> TyPrim NoneType then Ok Returns\<^sub>R
+       else Fail (mypy_only_if (\<Sigma> \<turnstile> TyPrim NoneType <: \<tau>) (BareReturn \<tau>))
    | None \<Rightarrow> undefined)" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtReturn (Some e)) =
-  (case \<zeta> of Some \<tau> \<Rightarrow> do { check_expr \<Sigma> \<Gamma> e \<tau>; Inr Returns\<^sub>R } | None \<Rightarrow> undefined)" |
+  (case \<zeta> of Some \<tau> \<Rightarrow> do { check_expr \<Sigma> \<Gamma> e \<tau>; Ok Returns\<^sub>R } | None \<Rightarrow> undefined)" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtIf e s elifs else') = do {
    check_expr \<Sigma> \<Gamma> e (TyPrim bool);
    merges \<Sigma> (check_stmt \<Sigma> \<Gamma> \<zeta> s
            # map (\<lambda>(e', s'). do { check_expr \<Sigma> \<Gamma> e' (TyPrim bool); check_stmt \<Sigma> \<Gamma> \<zeta> s' }) elifs
-           @ [case else' of Some s' \<Rightarrow> check_stmt \<Sigma> \<Gamma> \<zeta> s' | None \<Rightarrow> Inr (Assigns\<^sub>R fmempty None)])
+           @ [case else' of Some s' \<Rightarrow> check_stmt \<Sigma> \<Gamma> \<zeta> s' | None \<Rightarrow> Ok (Assigns\<^sub>R fmempty None)])
  }" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtSeq s s') = do {
    R \<leftarrow> check_stmt \<Sigma> \<Gamma> \<zeta> s;
    case R of
-     Assigns\<^sub>R \<Delta> r \<Rightarrow> do { R' \<leftarrow> check_stmt \<Sigma> (\<Gamma> \<otimes> \<Delta>) \<zeta> s'; Inr (Assigns\<^sub>R \<Delta> r \<otimes>\<^sub>R R') }
-   | Returns\<^sub>R \<Rightarrow> Inl UnreachableStatement
+     Assigns\<^sub>R \<Delta> r \<Rightarrow> do { R' \<leftarrow> check_stmt \<Sigma> (\<Gamma> \<otimes> \<Delta>) \<zeta> s'; Ok (Assigns\<^sub>R \<Delta> r \<otimes>\<^sub>R R') }
+   | Returns\<^sub>R \<Rightarrow> Fail UnreachableStatement
  }" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtMutualRegion ds) = do {
    \<pi>s \<leftarrow> those_sum (map (def_signature \<Sigma> \<Gamma>) ds);
    let \<Delta> = fmap_of_list (zip (map def_name ds) (map signature_entry \<pi>s));
    all_sum (map2 (check_def \<Sigma> (\<Gamma> \<otimes> \<Delta>)) ds \<pi>s);
-   Inr (Assigns\<^sub>R \<Delta> None)
+   Ok (Assigns\<^sub>R \<Delta> None)
  }" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtMatch e bs) = do {
    \<sigma> \<leftarrow> synth_expr \<Sigma> \<Gamma> e;
    (\<Delta>s, \<tau>, L) \<leftarrow> match_cases \<Sigma> \<Gamma> \<sigma> (shapes \<Sigma> \<sigma> {}) (map fst bs);
    merges \<Sigma>
-     (map2 (\<lambda>\<Delta> (_, s). do { R \<leftarrow> check_stmt \<Sigma> (\<Gamma> \<otimes> \<Delta>) \<zeta> s; Inr (Assigns\<^sub>R \<Delta> None \<otimes>\<^sub>R R) }) \<Delta>s bs
+     (map2 (\<lambda>\<Delta> (_, s). do { R \<leftarrow> check_stmt \<Sigma> (\<Gamma> \<otimes> \<Delta>) \<zeta> s; Ok (Assigns\<^sub>R \<Delta> None \<otimes>\<^sub>R R) }) \<Delta>s bs
       @ (if \<tau> = TyPrim Never then []
-         else [Inr (Assigns\<^sub>R fmempty (if L = [] then Some (MissingReturnMatchPartial \<tau>) else None))]))
+         else [Ok (Assigns\<^sub>R fmempty (if L = [] then Some (MissingReturnMatchPartial \<tau>) else None))]))
  }" |
 
 "check_def \<Sigma> \<Gamma> (Def f \<alpha>s xps \<psi> s) (TyScheme \<alpha>s' (TyCallable \<sigma>s \<tau>)) =
@@ -440,13 +440,13 @@ where
        R \<leftarrow> check_stmt \<Sigma> (\<Gamma> \<otimes> fmconst (set \<alpha>s) TypeVar \<otimes> fmap_of_list (zip xs (map Ty \<sigma>s)) \<otimes> \<Delta>) (Some \<tau>) s;
        case R of
          Assigns\<^sub>R _ r \<Rightarrow>
-           if \<Sigma> \<turnstile> \<tau> \<approx> TyPrim NoneType then Inr ()
-           else Inl (case r of
+           if \<Sigma> \<turnstile> \<tau> \<approx> TyPrim NoneType then Ok ()
+           else Fail (case r of
                        Some r' \<Rightarrow> MypyCompatibility r'
                      | None \<Rightarrow> mypy_only_if (\<Sigma> \<turnstile> TyPrim NoneType <: \<tau>) (MissingReturn f \<tau>))
-       | Returns\<^sub>R \<Rightarrow> Inr ()
+       | Returns\<^sub>R \<Rightarrow> Ok ()
      }
-     else Inl undefined
+     else Fail undefined
    })" |
 "check_def \<Sigma> \<Gamma> _ _ = undefined"
 by pat_completeness auto
@@ -462,32 +462,32 @@ where
    those_sum (map (resolve_type \<Sigma> \<Gamma> \<circ> snd) \<phi>);
    base_class \<leftarrow>
      (case b of
-        None \<Rightarrow> Inr None
+        None \<Rightarrow> Ok None
       | Some (q', \<psi>s) \<Rightarrow>
           (case resolve_name \<Gamma> q' of
-             Some (Type D) \<Rightarrow> do { resolve_type \<Sigma> \<Gamma> (TyExprName q' \<psi>s); Inr (Some D) }
-           | _ \<Rightarrow> Inl (not_type_name \<Gamma> q')));
-   (case redeclared {} (map fst \<phi>) of Some x \<Rightarrow> Inl (DuplicateField x c) | None \<Rightarrow> Inr ());
+             Some (Type D) \<Rightarrow> do { resolve_type \<Sigma> \<Gamma> (TyExprName q' \<psi>s); Ok (Some D) }
+           | _ \<Rightarrow> Fail (not_type_name \<Gamma> q')));
+   (case redeclared {} (map fst \<phi>) of Some x \<Rightarrow> Fail (DuplicateField x c) | None \<Rightarrow> Ok ());
    (case base_class of
       Some D \<Rightarrow>
         (case find (\<lambda>x. x \<in> set (field_names \<Sigma> D)) (map fst \<phi>) of
-           Some x \<Rightarrow> Inl (InheritedField x c (short_name D))
-         | None \<Rightarrow> Inr ())
-    | None \<Rightarrow> Inr ())
+           Some x \<Rightarrow> Fail (InheritedField x c (short_name D))
+         | None \<Rightarrow> Ok ())
+    | None \<Rightarrow> Ok ())
  }" |
-"check_type_def \<Sigma> \<Gamma> (TypeStmt x \<alpha>s \<psi>) = do { resolve_type \<Sigma> \<Gamma> \<psi>; Inr () }"
+"check_type_def \<Sigma> \<Gamma> (TypeStmt x \<alpha>s \<psi>) = do { resolve_type \<Sigma> \<Gamma> \<psi>; Ok () }"
 
 fun check_top_stmt :: "class_table \<Rightarrow> name \<Rightarrow> cxt \<Rightarrow> top_stmt \<Rightarrow> reason + static_outcome \<times> class_table"
 where
-"check_top_stmt \<Sigma> q \<Gamma> (Stmt s) = do { R \<leftarrow> check_stmt \<Sigma> \<Gamma> None s; Inr (R, \<Sigma>) }" |
+"check_top_stmt \<Sigma> q \<Gamma> (Stmt s) = do { R \<leftarrow> check_stmt \<Sigma> \<Gamma> None s; Ok (R, \<Sigma>) }" |
 "check_top_stmt \<Sigma> q \<Gamma> (TopSeq t t') = do {
    (R, \<Sigma>') \<leftarrow> check_top_stmt \<Sigma> q \<Gamma> t;
    case R of
      Assigns\<^sub>R \<Delta> r \<Rightarrow> do {
        (R', \<Sigma>'') \<leftarrow> check_top_stmt \<Sigma>' q (\<Gamma> \<otimes> \<Delta>) t';
-       Inr (Assigns\<^sub>R \<Delta> r \<otimes>\<^sub>R R', \<Sigma>'')
+       Ok (Assigns\<^sub>R \<Delta> r \<otimes>\<^sub>R R', \<Sigma>'')
      }
-   | Returns\<^sub>R \<Rightarrow> Inl TopLevelAssertFalse
+   | Returns\<^sub>R \<Rightarrow> Fail TopLevelAssertFalse
  }" |
 "check_top_stmt \<Sigma> q \<Gamma> (TypeDefs \<chi>s) =
   (let js = [0..<length \<chi>s];
@@ -495,7 +495,7 @@ where
        \<Sigma>' = fold (\<lambda>j \<Sigma>''. \<Sigma>'' \<otimes> class_table \<Gamma> q \<chi>s j) js \<Sigma> in
    do {
      those_sum (map (\<lambda>j. check_type_def \<Sigma>' (type_context \<Gamma> q \<chi>s j) (\<chi>s ! j)) js);
-     Inr (Assigns\<^sub>R \<Delta> None, \<Sigma>')
+     Ok (Assigns\<^sub>R \<Delta> None, \<Sigma>')
    })"
 
 end

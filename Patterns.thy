@@ -7,8 +7,8 @@ definition check_pattern_class :: "cxt \<Rightarrow> name \<Rightarrow> reason +
 where
 "check_pattern_class \<Gamma> q =
   (case resolve_name \<Gamma> q of
-     Some (Type C) \<Rightarrow> if C = range_class then Inl RangePattern else Inr C
-   | _ \<Rightarrow> Inl (NotClass q))"
+     Some (Type C) \<Rightarrow> if C = range_class then Fail RangePattern else Ok C
+   | _ \<Rightarrow> Fail (NotClass q))"
 
 definition pattern_class :: "cxt \<Rightarrow> name \<Rightarrow> name"
 where
@@ -103,22 +103,22 @@ where
 definition bindings_at :: "class_table \<Rightarrow> pat \<Rightarrow> (reason + (var, ty) fmap) option list \<Rightarrow> reason + (var, ty) fmap"
 where
 "bindings_at \<Sigma> p ms = do {
-   \<Delta>s \<leftarrow> those_sum (map (\<lambda>m. case m of Some m' \<Rightarrow> m' | None \<Rightarrow> Inr (fmconst (binds p) (TyPrim Never))) ms);
-   Inr (fmmap_keys (\<lambda>x _. joins \<Sigma> (map (\<lambda>\<Delta>. the (fmlookup \<Delta> x)) \<Delta>s)) (hd \<Delta>s))
+   \<Delta>s \<leftarrow> those_sum (map (\<lambda>m. case m of Some m' \<Rightarrow> m' | None \<Rightarrow> Ok (fmconst (binds p) (TyPrim Never))) ms);
+   Ok (fmmap_keys (\<lambda>x _. joins \<Sigma> (map (\<lambda>\<Delta>. the (fmlookup \<Delta> x)) \<Delta>s)) (hd \<Delta>s))
  }"
 
 (* Disjoint union of the bindings of sub-patterns *)
 definition pattern_bindings :: "(reason + (var, ty) fmap) list \<Rightarrow> reason + (var, ty) fmap"
 where
-"pattern_bindings ms = do { \<Delta>s \<leftarrow> those_sum ms; Inr (fold (\<otimes>) \<Delta>s fmempty) }"
+"pattern_bindings ms = do { \<Delta>s \<leftarrow> those_sum ms; Ok (fold (\<otimes>) \<Delta>s fmempty) }"
 
 function check_pat :: "class_table \<Rightarrow> cxt \<Rightarrow> pat \<Rightarrow> ty \<Rightarrow> reason + (var, ty) fmap"
 where
-"check_pat \<Sigma> \<Gamma> PatWildcard \<tau> = Inr fmempty" |
-"check_pat \<Sigma> \<Gamma> (PatVar x) \<tau> = do { check_unbound \<Gamma> x; Inr (fmupd x \<tau> fmempty) }" |
+"check_pat \<Sigma> \<Gamma> PatWildcard \<tau> = Ok fmempty" |
+"check_pat \<Sigma> \<Gamma> (PatVar x) \<tau> = do { check_unbound \<Gamma> x; Ok (fmupd x \<tau> fmempty) }" |
 "check_pat \<Sigma> \<Gamma> (PatAs p x) \<tau> =
-  do { check_unbound \<Gamma> x; \<Delta> \<leftarrow> check_pat \<Sigma> \<Gamma> p \<tau>; Inr (\<Delta> \<otimes> fmupd x (matched_as \<Sigma> \<Gamma> \<tau> p) fmempty) }" |
-"check_pat \<Sigma> \<Gamma> (PatLiteral _) \<tau> = Inr fmempty" |
+  do { check_unbound \<Gamma> x; \<Delta> \<leftarrow> check_pat \<Sigma> \<Gamma> p \<tau>; Ok (\<Delta> \<otimes> fmupd x (matched_as \<Sigma> \<Gamma> \<tau> p) fmempty) }" |
+"check_pat \<Sigma> \<Gamma> (PatLiteral _) \<tau> = Ok fmempty" |
 "check_pat \<Sigma> \<Gamma> (PatTuple ps) \<tau> = do {
    ensure (\<not> has_values \<Sigma> ListKind \<tau>) (SequenceKindMismatch TupleKind \<tau> ListKind);
    ensure (\<not> has_values \<Sigma> RangeKind \<tau>) (SequenceKindMismatch TupleKind \<tau> RangeKind);
@@ -154,7 +154,7 @@ where
                    Some (pattern_bindings
                      (map2 (check_pat \<Sigma> \<Gamma>) (field_patterns \<Sigma> C (ps, kps)) (field_types \<Sigma> C \<sigma>s)))
                | NoInstance \<Rightarrow> None
-               | Undetermined \<Rightarrow> Some (Inl (PatternClassUndetermined (short_name C) \<sigma>)))
+               | Undetermined \<Rightarrow> Some (Fail (PatternClassUndetermined (short_name C) \<sigma>)))
        (disjuncts \<tau>))
  }"
 by pat_completeness auto
