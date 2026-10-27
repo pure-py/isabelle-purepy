@@ -99,8 +99,8 @@ definition check_unbound :: "cxt \<Rightarrow> var \<Rightarrow> reason + unit"
 where
 "check_unbound \<Gamma> x = ensure (fmlookup \<Gamma> x = Some Unbound) (Redeclaration x)"
 
-(* Bindings of pattern p at a type, from its bindings at each disjunct; None for a disjunct that p can't match
-   binds the variables of p at Never *)
+(* Bindings of pattern p at a type, joined from ms, the bindings at each disjunct. An entry None in ms means
+   that p can't match that disjunct, and binds each variable of p at Never. *)
 definition bindings_at :: "class_table \<Rightarrow> pat \<Rightarrow> (reason + (var, ty) fmap) option list \<Rightarrow> reason + (var, ty) fmap"
 where
 "bindings_at \<Sigma> p ms = do {
