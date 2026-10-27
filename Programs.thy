@@ -64,9 +64,7 @@ where
          (\<Gamma>', \<Sigma>') \<leftarrow> check_imports M (V @ [q]) \<Sigma> q \<iota>s;
          map_sum (Pair q) id (do {
            \<Gamma>\<^sub>s \<leftarrow>
-             (case scope Unbound (declares \<iota>s) t of
-                Some \<Gamma>\<^sub>s \<Rightarrow> Inr \<Gamma>\<^sub>s
-              | None \<Rightarrow> Inl (scope_reason (declares \<iota>s) (declares t) (binds t)));
+             or_else (scope_reason (declares \<iota>s) (declares t) (binds t)) (scope Unbound (declares \<iota>s) t);
            check_assignments_declared {} (assign_targets t) (declares t) (binds t);
            (R, \<Sigma>'') \<leftarrow> check_top_stmt \<Sigma>' q (the (fmlookup predefined builtins) \<otimes> \<Gamma>' \<otimes> \<Gamma>\<^sub>s) t;
            case R of

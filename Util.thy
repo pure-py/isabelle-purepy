@@ -86,6 +86,11 @@ where
 
 adhoc_overloading Monad_Syntax.bind \<rightleftharpoons> bind_sum
 
+(* Failure e for None, otherwise the value *)
+definition or_else :: "'e \<Rightarrow> 'a option \<Rightarrow> 'e + 'a"
+where
+"or_else e m = (case m of Some x \<Rightarrow> Inr x | None \<Rightarrow> Inl e)"
+
 (* First failure in the list, otherwise success *)
 fun all_sum :: "('e + unit) list \<Rightarrow> 'e + unit"
 where

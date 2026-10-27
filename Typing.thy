@@ -152,13 +152,13 @@ where
 "synth_expr \<Sigma> \<Gamma> (ExprBinOp op e e') = do {
    \<sigma> \<leftarrow> synth_expr \<Sigma> \<Gamma> e;
    \<sigma>' \<leftarrow> synth_expr \<Sigma> \<Gamma> e';
-   case resolve_binop \<Sigma> op \<sigma> \<sigma>' of Some \<tau> \<Rightarrow> Inr \<tau> | None \<Rightarrow> Inl (NoBinaryOverload op \<sigma> \<sigma>')
+   or_else (NoBinaryOverload op \<sigma> \<sigma>') (resolve_binop \<Sigma> op \<sigma> \<sigma>')
  }" |
 "synth_expr \<Sigma> \<Gamma> (ExprUnOp op e) =
   (if op = UOpNeg \<and> numeric_literal e then Inl undefined
    else do {
      \<sigma> \<leftarrow> synth_expr \<Sigma> \<Gamma> e;
-     case resolve_unop \<Sigma> op \<sigma> of Some \<tau> \<Rightarrow> Inr \<tau> | None \<Rightarrow> Inl (NoUnaryOverload op \<sigma>)
+     or_else (NoUnaryOverload op \<sigma>) (resolve_unop \<Sigma> op \<sigma>)
    })" |
 "synth_expr \<Sigma> \<Gamma> (ExprAnd e e') =
   do { check_expr \<Sigma> \<Gamma> e (TyPrim bool); check_expr \<Sigma> \<Gamma> e' (TyPrim bool); Inr (TyPrim bool) }" |
@@ -292,7 +292,7 @@ where
 "quals \<Sigma> \<Gamma> (Guard e # gs) = do { check_expr \<Sigma> \<Gamma> e (TyPrim bool); quals \<Sigma> \<Gamma> gs }" |
 "quals \<Sigma> \<Gamma> (Generator x e # gs) = do {
    \<sigma> \<leftarrow> synth_expr \<Sigma> \<Gamma> e;
-   \<tau> \<leftarrow> (case elem_type \<Sigma> \<sigma> of Some \<tau> \<Rightarrow> Inr \<tau> | None \<Rightarrow> Inl (NotIterable \<sigma>));
+   \<tau> \<leftarrow> or_else (NotIterable \<sigma>) (elem_type \<Sigma> \<sigma>);
    ensure (x \<notin> captures gs) (CapturedGeneratorVariable x);
    \<Delta> \<leftarrow> quals \<Sigma> (\<Gamma> \<otimes> fmupd x (Ty \<tau>) fmempty) gs;
    Inr (fmupd x (Ty \<tau>) fmempty \<otimes> \<Delta>)
@@ -359,14 +359,14 @@ where
 (* Bindings of the patterns ps of the cases of a match at remaining type \<tau> and residual L, with the final
    remaining type and residual *)
 fun match_cases ::
-  "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow> shape list \<Rightarrow> pat list \<Rightarrow> reason + (var, ty) fmap list \<times> ty \<times> shape list"
+  "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow> shape list \<Rightarrow> pat list \<Rightarrow> reason + cxt list \<times> ty \<times> shape list"
 where
 "match_cases \<Sigma> \<Gamma> \<tau> L [] = Inr ([], \<tau>, L)" |
 "match_cases \<Sigma> \<Gamma> \<tau> L (p # ps) = do {
    \<Delta> \<leftarrow> check_pat \<Sigma> \<Gamma> p \<tau>;
-   (_, L') \<leftarrow> (case match_shapes \<Sigma> \<Gamma> L p of Some r \<Rightarrow> Inr r | None \<Rightarrow> Inl (UnreachableCase p));
+   (_, L') \<leftarrow> or_else (UnreachableCase p) (match_shapes \<Sigma> \<Gamma> L p);
    (\<Delta>s, \<tau>', L'') \<leftarrow> match_cases \<Sigma> \<Gamma> (remaining \<Sigma> \<Gamma> \<tau> p) L' ps;
-   Inr (\<Delta> # \<Delta>s, \<tau>', L'')
+   Inr (fmmap Ty \<Delta> # \<Delta>s, \<tau>', L'')
  }"
 
 function (sequential) check_stmt :: "class_table \<Rightarrow> cxt \<Rightarrow> ty option \<Rightarrow> stmt \<Rightarrow> reason + static_outcome"
@@ -427,7 +427,7 @@ where
    \<sigma> \<leftarrow> synth_expr \<Sigma> \<Gamma> e;
    (\<Delta>s, \<tau>, L) \<leftarrow> match_cases \<Sigma> \<Gamma> \<sigma> (shapes \<Sigma> \<sigma> {}) (map fst bs);
    merges \<Sigma>
-     (map2 (\<lambda>\<Delta> (_, s). do { R \<leftarrow> check_stmt \<Sigma> (\<Gamma> \<otimes> \<Delta>) \<zeta> s; Inr (Assigns\<^sub>R \<Delta> None \<otimes>\<^sub>R R) }) (map (fmmap Ty) \<Delta>s) bs
+     (map2 (\<lambda>\<Delta> (_, s). do { R \<leftarrow> check_stmt \<Sigma> (\<Gamma> \<otimes> \<Delta>) \<zeta> s; Inr (Assigns\<^sub>R \<Delta> None \<otimes>\<^sub>R R) }) \<Delta>s bs
       @ (if \<tau> = TyPrim Never then []
          else [Inr (Assigns\<^sub>R fmempty (if L = [] then Some (MissingReturnMatchPartial \<tau>) else None))]))
  }" |
@@ -435,7 +435,7 @@ where
 "check_def \<Sigma> \<Gamma> (Def f \<alpha>s xps \<psi> s) (TyScheme \<alpha>s' (TyCallable \<sigma>s \<tau>)) =
   (let xs = map fst xps in do {
      check_assignments_declared (set xs) (assign_targets s) (declares s) (binds s);
-     \<Delta> \<leftarrow> (case scope Unbound xs s of Some \<Delta> \<Rightarrow> Inr \<Delta> | None \<Rightarrow> Inl (scope_reason xs (declares s) (binds s)));
+     \<Delta> \<leftarrow> or_else (scope_reason xs (declares s) (binds s)) (scope Unbound xs s);
      if length xs = length \<sigma>s then do {
        R \<leftarrow> check_stmt \<Sigma> (\<Gamma> \<otimes> fmconst (set \<alpha>s) TypeVar \<otimes> fmap_of_list (zip xs (map Ty \<sigma>s)) \<otimes> \<Delta>) (Some \<tau>) s;
        case R of

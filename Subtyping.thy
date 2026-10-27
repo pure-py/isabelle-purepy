@@ -177,7 +177,7 @@ by (relation "measures [
 definition type_args_of :: "(var, ty) fmap \<Rightarrow> var list \<Rightarrow> reason + ty list"
 where
 "type_args_of \<gamma> \<alpha>s =
-  those_sum (map (\<lambda>\<alpha>. case fmlookup \<gamma> \<alpha> of Some \<tau> \<Rightarrow> Inr \<tau> | None \<Rightarrow> Inl (NoTypeArgument \<alpha>)) \<alpha>s)"
+  those_sum (map (\<lambda>\<alpha>. or_else (NoTypeArgument \<alpha>) (fmlookup \<gamma> \<alpha>)) \<alpha>s)"
 
 (* Type of attribute x of a value of type \<sigma>, which isn't a module *)
 fun attribute_type :: "class_table \<Rightarrow> ty \<Rightarrow> var \<Rightarrow> reason + ty"
@@ -185,9 +185,7 @@ where
 "attribute_type \<Sigma> (TyUnion \<sigma> \<sigma>') x =
   do { \<tau> \<leftarrow> attribute_type \<Sigma> \<sigma> x; \<tau>' \<leftarrow> attribute_type \<Sigma> \<sigma>' x; Inr (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>') }" |
 "attribute_type \<Sigma> (TyClass C \<sigma>s) x =
-  (case map_of (instantiate (fields \<Sigma> C) \<sigma>s) x of
-     Some \<sigma> \<Rightarrow> Inr \<sigma>
-   | None \<Rightarrow> Inl (UnknownField (short_name C) x))" |
+  or_else (UnknownField (short_name C) x) (map_of (instantiate (fields \<Sigma> C) \<sigma>s) x)" |
 "attribute_type \<Sigma> \<sigma> _ = Inl (NoAttributes \<sigma>)"
 
 end
