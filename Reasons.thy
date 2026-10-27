@@ -1,3 +1,4 @@
+(* Reasons for ill-formedness *)
 theory Reasons
   imports Contexts
 begin
@@ -19,6 +20,14 @@ datatype reason =
   | UnreachableStatement
   | ConstructorArityMismatch var nat nat
   | UnknownConstructorKeyword var "var list"
+  | PatternArityMismatch var nat nat
+  | UnknownFieldInPattern var "var list"
+  | RangePattern
+  | PatternClassUndetermined var ty
+  | SequenceKindMismatch sequence_kind ty sequence_kind
+  | UnreachableCase pat
+  | MissingReturnMatchPartial ty
+  | MissingReturnAssertion
   | NotPredefinedName var
   | NotClass name
   | ClassArityMismatch name nat nat
@@ -57,6 +66,8 @@ datatype reason =
   | MissingReturn var ty
   | ImportCycle "name list"
   | MypyCompatibility reason
+
+type_synonym 'a may_fail = "reason + 'a"
 
 definition not_type_name :: "cxt \<Rightarrow> name \<Rightarrow> reason"
 where
@@ -115,11 +126,11 @@ where
 
 (* Reason why none of the expressions synthesises a type: the first failure of an expression with a synthesis
    rule *)
-fun synth_failure :: "(reason + 'a) list \<Rightarrow> reason"
+fun synth_failure :: "'a may_fail list \<Rightarrow> reason"
 where
 "synth_failure [] = NotSynthesised" |
-"synth_failure (Inl NotSynthesised # ms) = synth_failure ms" |
-"synth_failure (Inl r # ms) = r" |
-"synth_failure (Inr _ # ms) = synth_failure ms"
+"synth_failure (Fail NotSynthesised # ms) = synth_failure ms" |
+"synth_failure (Fail r # ms) = r" |
+"synth_failure (Ok _ # ms) = synth_failure ms"
 
 end

@@ -1,3 +1,4 @@
+(* Shared utilities *)
 theory Util
   imports "HOL-Library.Finite_Map" "HOL-Library.Monad_Syntax"
 begin
@@ -78,35 +79,43 @@ proof -
   ultimately show ?thesis by (metis card_Diff1_less finite_Diff finite_fmdom')
 qed
 
-(* Error monad: failure Inl e or result Inr x *)
+(* Error monad: failure Fail e or result Ok x *)
+abbreviation Fail :: "'e \<Rightarrow> 'e + 'a" where "Fail \<equiv> Inl"
+abbreviation Ok :: "'a \<Rightarrow> 'e + 'a" where "Ok \<equiv> Inr"
+
 definition bind_sum :: "'e + 'a \<Rightarrow> ('a \<Rightarrow> 'e + 'b) \<Rightarrow> 'e + 'b"
 where
-"bind_sum m f = (case m of Inl e \<Rightarrow> Inl e | Inr x \<Rightarrow> f x)"
+"bind_sum m f = (case m of Fail e \<Rightarrow> Fail e | Ok x \<Rightarrow> f x)"
 
 adhoc_overloading Monad_Syntax.bind \<rightleftharpoons> bind_sum
+
+(* Failure e for None, otherwise the value; e is computed eagerly by generated code *)
+definition or_else :: "'e \<Rightarrow> 'a option \<Rightarrow> 'e + 'a"
+where
+"or_else e m = (case m of Some x \<Rightarrow> Ok x | None \<Rightarrow> Fail e)"
 
 (* First failure in the list, otherwise success *)
 fun all_sum :: "('e + unit) list \<Rightarrow> 'e + unit"
 where
-"all_sum [] = Inr ()" |
+"all_sum [] = Ok ()" |
 "all_sum (m # ms) = do { m; all_sum ms }"
 
-lemma bind_sum_simps [simp]: "bind_sum (Inl e) f = Inl e" "bind_sum (Inr x) f = f x"
+lemma bind_sum_simps [simp]: "bind_sum (Fail e) f = Fail e" "bind_sum (Ok x) f = f x"
   by (simp_all add: bind_sum_def)
 
 lemma bind_sum_cong [fundef_cong]:
-  "\<lbrakk> m = m' ; \<And>x. m' = Inr x \<Longrightarrow> f x = f' x \<rbrakk> \<Longrightarrow> bind_sum m f = bind_sum m' f'"
+  "\<lbrakk> m = m' ; \<And>x. m' = Ok x \<Longrightarrow> f x = f' x \<rbrakk> \<Longrightarrow> bind_sum m f = bind_sum m' f'"
   by (cases m') simp_all
 
 (* Failure e unless b; e is computed eagerly by generated code *)
 definition ensure :: "bool \<Rightarrow> 'e \<Rightarrow> 'e + unit"
 where
-"ensure b e = (if b then Inr () else Inl e)"
+"ensure b e = (if b then Ok () else Fail e)"
 
 (* First failure in the list, otherwise the list of results *)
 fun those_sum :: "('e + 'a) list \<Rightarrow> 'e + 'a list"
 where
-"those_sum [] = Inr []" |
-"those_sum (m # ms) = do { x \<leftarrow> m; xs \<leftarrow> those_sum ms; Inr (x # xs) }"
+"those_sum [] = Ok []" |
+"those_sum (m # ms) = do { x \<leftarrow> m; xs \<leftarrow> those_sum ms; Ok (x # xs) }"
 
 end

@@ -1,3 +1,4 @@
+(* Abstract syntax and its analyses *)
 theory Syntax
   imports Complex_Main Util
 begin
@@ -96,6 +97,8 @@ datatype ty =
   | TyVar var
   | TyClass name "ty list"
   | TyUnion ty ty
+
+datatype sequence_kind = TupleKind | ListKind | RangeKind
 
 datatype ty_scheme = TyScheme "var list" ty
 

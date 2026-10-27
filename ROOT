@@ -11,6 +11,9 @@ session "isabelle-purepy" = HOL +
     Reasons
     Types
     Subtyping
+    Shapes
+    Patterns
+    Matching
     Operators
     Typing
     Programs

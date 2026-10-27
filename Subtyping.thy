@@ -1,3 +1,4 @@
+(* Subtyping, join and meet; element, subscript and attribute types *)
 theory Subtyping
   imports Types
 begin
@@ -43,28 +44,25 @@ definition joins :: "class_table \<Rightarrow> ty list \<Rightarrow> ty"
 where
 "joins \<Sigma> \<tau>s = foldr (\<lambda>\<sigma> \<tau>. \<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>) \<tau>s (TyPrim Never)"
 
-function (sequential) meet :: "class_table \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> ty"
+function (sequential)
+  meet :: "class_table \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> ty" and
+  meet_incomparable :: "class_table \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> ty"
 where
-"meet \<Sigma> (TyUnion \<sigma>\<^sub>1 \<sigma>\<^sub>2) \<tau> =
-  (if \<Sigma> \<turnstile> TyUnion \<sigma>\<^sub>1 \<sigma>\<^sub>2 <: \<tau> then TyUnion \<sigma>\<^sub>1 \<sigma>\<^sub>2 else if \<Sigma> \<turnstile> \<tau> <: TyUnion \<sigma>\<^sub>1 \<sigma>\<^sub>2 then \<tau>
-   else (meet \<Sigma> \<sigma>\<^sub>1 \<tau>) \<squnion>\<^bsub>\<Sigma>\<^esub> (meet \<Sigma> \<sigma>\<^sub>2 \<tau>))" |
-"meet \<Sigma> \<sigma> (TyUnion \<tau>\<^sub>1 \<tau>\<^sub>2) =
-  (if \<Sigma> \<turnstile> \<sigma> <: TyUnion \<tau>\<^sub>1 \<tau>\<^sub>2 then \<sigma> else if \<Sigma> \<turnstile> TyUnion \<tau>\<^sub>1 \<tau>\<^sub>2 <: \<sigma> then TyUnion \<tau>\<^sub>1 \<tau>\<^sub>2
-   else (meet \<Sigma> \<sigma> \<tau>\<^sub>1) \<squnion>\<^bsub>\<Sigma>\<^esub> (meet \<Sigma> \<sigma> \<tau>\<^sub>2))" |
-"meet \<Sigma> (TyCallable \<sigma>s \<sigma>) (TyCallable \<tau>s \<tau>) =
-  (if \<Sigma> \<turnstile> TyCallable \<sigma>s \<sigma> <: TyCallable \<tau>s \<tau> then TyCallable \<sigma>s \<sigma>
-   else if \<Sigma> \<turnstile> TyCallable \<tau>s \<tau> <: TyCallable \<sigma>s \<sigma> then TyCallable \<tau>s \<tau>
-   else if length \<sigma>s = length \<tau>s
-   then TyCallable (map2 (\<lambda>\<sigma>' \<tau>'. \<sigma>' \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>') \<sigma>s \<tau>s) (meet \<Sigma> \<sigma> \<tau>)
-   else TyPrim Never)" |
-"meet \<Sigma> (TyTuple \<sigma>s) (TyTuple \<tau>s) =
-  (if \<Sigma> \<turnstile> TyTuple \<sigma>s <: TyTuple \<tau>s then TyTuple \<sigma>s else if \<Sigma> \<turnstile> TyTuple \<tau>s <: TyTuple \<sigma>s then TyTuple \<tau>s
-   else if length \<sigma>s = length \<tau>s then TyTuple (map2 (meet \<Sigma>) \<sigma>s \<tau>s) else TyPrim Never)" |
-"meet \<Sigma> \<sigma> \<tau> = (if \<Sigma> \<turnstile> \<sigma> <: \<tau> then \<sigma> else if \<Sigma> \<turnstile> \<tau> <: \<sigma> then \<tau> else TyPrim Never)"
+"meet \<Sigma> \<sigma> \<tau> = (if \<Sigma> \<turnstile> \<sigma> <: \<tau> then \<sigma> else if \<Sigma> \<turnstile> \<tau> <: \<sigma> then \<tau> else meet_incomparable \<Sigma> \<sigma> \<tau>)" |
+
+"meet_incomparable \<Sigma> (TyUnion \<sigma> \<sigma>') \<tau> = meet \<Sigma> \<sigma> \<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> meet \<Sigma> \<sigma>' \<tau>" |
+"meet_incomparable \<Sigma> \<sigma> (TyUnion \<tau> \<tau>') = meet \<Sigma> \<sigma> \<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> meet \<Sigma> \<sigma> \<tau>'" |
+"meet_incomparable \<Sigma> (TyCallable \<sigma>s \<sigma>) (TyCallable \<tau>s \<tau>) =
+  (if length \<sigma>s = length \<tau>s then TyCallable (map2 (\<lambda>\<sigma>' \<tau>'. \<sigma>' \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>') \<sigma>s \<tau>s) (meet \<Sigma> \<sigma> \<tau>) else TyPrim Never)" |
+"meet_incomparable \<Sigma> (TyTuple \<sigma>s) (TyTuple \<tau>s) =
+  (if length \<sigma>s = length \<tau>s then TyTuple (map2 (meet \<Sigma>) \<sigma>s \<tau>s) else TyPrim Never)" |
+"meet_incomparable \<Sigma> _ _ = TyPrim Never"
 by pat_completeness auto
 
 termination
-by (relation "measure (\<lambda>(_, \<sigma>, \<tau>). size \<sigma> + size \<tau>)")
+by (relation "measures [
+     \<lambda>x. case x of Inl (_, \<sigma>, \<tau>) \<Rightarrow> size \<sigma> + size \<tau> | Inr (_, \<sigma>, \<tau>) \<Rightarrow> size \<sigma> + size \<tau>,
+     \<lambda>x. case x of Inl _ \<Rightarrow> 1 | Inr _ \<Rightarrow> 0]")
    (auto dest: size_list_zip_elem[where f = size and g = size])
 
 fun elem_type :: "class_table \<Rightarrow> ty \<Rightarrow> ty option"
@@ -81,35 +79,33 @@ where
 
 (* Type of a subscript, by the type of the subscripted value, the checks of the index against int and str,
    and the type synthesised by the index *)
-fun subscript_type :: "class_table \<Rightarrow> ty \<Rightarrow> reason + unit \<Rightarrow> reason + unit \<Rightarrow> reason + ty \<Rightarrow> reason + ty"
+fun subscript_type :: "class_table \<Rightarrow> ty \<Rightarrow> unit may_fail \<Rightarrow> unit may_fail \<Rightarrow> ty may_fail \<Rightarrow> ty may_fail"
 where
 "subscript_type \<Sigma> (TyUnion \<sigma> \<sigma>') int_ok str_ok idx = do {
-   \<tau> \<leftarrow> subscript_type \<Sigma> \<sigma> int_ok str_ok idx; \<tau>' \<leftarrow> subscript_type \<Sigma> \<sigma>' int_ok str_ok idx; Inr (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>')
+   \<tau> \<leftarrow> subscript_type \<Sigma> \<sigma> int_ok str_ok idx; \<tau>' \<leftarrow> subscript_type \<Sigma> \<sigma>' int_ok str_ok idx; Ok (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>')
  }" |
-"subscript_type \<Sigma> (TyList \<tau>) int_ok _ _ = do { int_ok; Inr \<tau> }" |
-"subscript_type \<Sigma> (TyDict \<tau>) _ str_ok _ = do { str_ok; Inr \<tau> }" |
+"subscript_type \<Sigma> (TyList \<tau>) int_ok _ _ = do { int_ok; Ok \<tau> }" |
+"subscript_type \<Sigma> (TyDict \<tau>) _ str_ok _ = do { str_ok; Ok \<tau> }" |
 "subscript_type \<Sigma> (TyTuple \<tau>s) _ _ idx = do {
    \<iota> \<leftarrow> idx;
    case \<iota> of
      TyLiteral (LitInt n) \<Rightarrow>
-       if 0 \<le> n \<and> n < of_nat (length \<tau>s) then Inr (\<tau>s ! nat n)
-       else if n < 0 \<and> 0 \<le> of_nat (length \<tau>s) + n then Inr (\<tau>s ! nat (of_nat (length \<tau>s) + n))
-       else Inl (TupleIndexOutOfRange n (length \<tau>s))
-   | TyPrim int \<Rightarrow> Inr (joins \<Sigma> \<tau>s)
-   | _ \<Rightarrow> Inl (TypeMismatch (TyPrim int) \<iota>)
+       let i = (if n < 0 then of_nat (length \<tau>s) + n else n)
+       in if 0 \<le> i \<and> i < of_nat (length \<tau>s) then Ok (\<tau>s ! nat i) else Fail (TupleIndexOutOfRange n (length \<tau>s))
+   | TyPrim int \<Rightarrow> Ok (joins \<Sigma> \<tau>s)
+   | _ \<Rightarrow> Fail (TypeMismatch (TyPrim int) \<iota>)
  }" |
 "subscript_type \<Sigma> \<sigma> int_ok _ _ =
-  (if base_type \<sigma> = TyPrim str then do { int_ok; Inr (TyPrim str) } else Inl (NotSubscriptable \<sigma>))"
+  (if base_type \<sigma> = TyPrim str then do { int_ok; Ok (TyPrim str) } else Fail (NotSubscriptable \<sigma>))"
 
 datatype instances = Instance "ty list" | Undetermined | NoInstance
 
-definition instance_above :: "class_table \<Rightarrow> name \<Rightarrow> ty \<Rightarrow> instances"
+fun instance_above :: "class_table \<Rightarrow> name \<Rightarrow> ty \<Rightarrow> instances"
 where
-"instance_above \<Sigma> C \<tau> =
-  (case \<tau> of
-     TyClass D \<sigma>s \<Rightarrow> if C \<in> set (ancestors \<Sigma> D) then Instance (instantiated_ancestor \<Sigma> D \<sigma>s C) else NoInstance
-   | TyPrim Never \<Rightarrow> if type_params \<Sigma> C = [] then Instance [] else Undetermined
-   | _ \<Rightarrow> NoInstance)"
+"instance_above \<Sigma> C (TyClass D \<sigma>s) =
+  (if C \<in> set (ancestors \<Sigma> D) then Instance (instantiated_ancestor \<Sigma> D \<sigma>s C) else NoInstance)" |
+"instance_above \<Sigma> C (TyPrim Never) = (if type_params \<Sigma> C = [] then Instance [] else Undetermined)" |
+"instance_above \<Sigma> C _ = NoInstance"
 
 definition instantiation_candidates :: "class_table \<Rightarrow> name \<Rightarrow> ty list \<Rightarrow> ty list list"
 where
@@ -118,21 +114,19 @@ where
     (replicate (length (type_params \<Sigma> C))
       (map (joins \<Sigma>) (subseqs (remdups (concat (map subterms \<sigma>s) @ [TyPrim object])))))"
 
-definition instance_below :: "class_table \<Rightarrow> name \<Rightarrow> ty \<Rightarrow> instances"
+fun instance_below :: "class_table \<Rightarrow> name \<Rightarrow> ty \<Rightarrow> instances"
 where
-"instance_below \<Sigma> C \<tau> =
-  (case \<tau> of
-     TyClass D \<sigma>s \<Rightarrow>
-       if D \<in> set (ancestors \<Sigma> C) then
-         (case
-            filter (\<lambda>\<tau>s. list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (instantiated_ancestor \<Sigma> C \<tau>s D) \<sigma>s)
-              (instantiation_candidates \<Sigma> C \<sigma>s) of
-            [] \<Rightarrow> NoInstance
-          | \<tau>s # \<tau>ss \<Rightarrow>
-              if list_all (list_all2 (\<lambda>\<tau> \<tau>'. \<Sigma> \<turnstile> \<tau> \<approx> \<tau>') \<tau>s) \<tau>ss then Instance \<tau>s else Undetermined)
-       else NoInstance
-   | TyPrim object \<Rightarrow> if type_params \<Sigma> C = [] then Instance [] else Undetermined
-   | _ \<Rightarrow> NoInstance)"
+"instance_below \<Sigma> C (TyClass D \<sigma>s) =
+  (if D \<in> set (ancestors \<Sigma> C) then
+     (case
+        filter (\<lambda>\<tau>s. list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (instantiated_ancestor \<Sigma> C \<tau>s D) \<sigma>s)
+          (instantiation_candidates \<Sigma> C \<sigma>s) of
+        [] \<Rightarrow> NoInstance
+      | \<tau>s # \<tau>ss \<Rightarrow>
+          if list_all (list_all2 (\<lambda>\<tau> \<tau>'. \<Sigma> \<turnstile> \<tau> \<approx> \<tau>') \<tau>s) \<tau>ss then Instance \<tau>s else Undetermined)
+   else NoInstance)" |
+"instance_below \<Sigma> C (TyPrim object) = (if type_params \<Sigma> C = [] then Instance [] else Undetermined)" |
+"instance_below \<Sigma> C _ = NoInstance"
 
 definition instance_at :: "class_table \<Rightarrow> name \<Rightarrow> ty \<Rightarrow> instances"
 where
@@ -173,20 +167,18 @@ by (relation "measures [
    (auto dest: set_zip_leftD size_list_elem[where f = size])
 
 (* Types bound to \<alpha>s by \<gamma>; failure if \<gamma> doesn't bind one of them *)
-definition type_args_of :: "(var, ty) fmap \<Rightarrow> var list \<Rightarrow> reason + ty list"
+definition type_args_of :: "(var, ty) fmap \<Rightarrow> var list \<Rightarrow> ty list may_fail"
 where
 "type_args_of \<gamma> \<alpha>s =
-  those_sum (map (\<lambda>\<alpha>. case fmlookup \<gamma> \<alpha> of Some \<tau> \<Rightarrow> Inr \<tau> | None \<Rightarrow> Inl (NoTypeArgument \<alpha>)) \<alpha>s)"
+  those_sum (map (\<lambda>\<alpha>. or_else (NoTypeArgument \<alpha>) (fmlookup \<gamma> \<alpha>)) \<alpha>s)"
 
 (* Type of attribute x of a value of type \<sigma>, which isn't a module *)
-fun attribute_type :: "class_table \<Rightarrow> ty \<Rightarrow> var \<Rightarrow> reason + ty"
+fun attribute_type :: "class_table \<Rightarrow> ty \<Rightarrow> var \<Rightarrow> ty may_fail"
 where
 "attribute_type \<Sigma> (TyUnion \<sigma> \<sigma>') x =
-  do { \<tau> \<leftarrow> attribute_type \<Sigma> \<sigma> x; \<tau>' \<leftarrow> attribute_type \<Sigma> \<sigma>' x; Inr (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>') }" |
+  do { \<tau> \<leftarrow> attribute_type \<Sigma> \<sigma> x; \<tau>' \<leftarrow> attribute_type \<Sigma> \<sigma>' x; Ok (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>') }" |
 "attribute_type \<Sigma> (TyClass C \<sigma>s) x =
-  (case map_of (instantiate (fields \<Sigma> C) \<sigma>s) x of
-     Some \<sigma> \<Rightarrow> Inr \<sigma>
-   | None \<Rightarrow> Inl (UnknownField (short_name C) x))" |
-"attribute_type \<Sigma> \<sigma> _ = Inl (NoAttributes \<sigma>)"
+  or_else (UnknownField (short_name C) x) (map_of (instantiate (fields \<Sigma> C) \<sigma>s) x)" |
+"attribute_type \<Sigma> \<sigma> _ = Fail (NoAttributes \<sigma>)"
 
 end

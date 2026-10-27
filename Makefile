@@ -17,6 +17,7 @@ codegen:
 	@test -e $(CODEGEN)/Python.thy -a ! -e $(CODEGEN)/.git || ./fetch-codegen.sh
 
 build: check-version codegen
+	$(PYTHON) theories.py --check
 	rm -rf python/python_out
 	$(ISABELLE) build -v -e -d $(CODEGEN) -D .
 	$(PYTHON) -m py_compile $$(find $(CODE) -name '*.py')

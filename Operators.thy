@@ -1,3 +1,4 @@
+(* Equality types and operator overloads *)
 theory Operators
   imports Subtyping
 begin

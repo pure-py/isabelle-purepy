@@ -1,3 +1,4 @@
+(* Values, results and evaluation judgements *)
 theory Semantics
     imports Syntax "HOL-Library.Finite_Map"
 begin
