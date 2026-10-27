@@ -51,10 +51,9 @@ where
 "merge_outcome \<Sigma> R Returns\<^sub>R = R" |
 "merge_outcome \<Sigma> Returns\<^sub>R R = R"
 
-fun merges :: "class_table \<Rightarrow> static_outcome may_fail list \<Rightarrow> static_outcome may_fail"
+definition merges :: "class_table \<Rightarrow> static_outcome may_fail list \<Rightarrow> static_outcome may_fail"
 where
-"merges \<Sigma> [] = Ok Returns\<^sub>R" |
-"merges \<Sigma> (m # ms) = do { R \<leftarrow> m; R' \<leftarrow> merges \<Sigma> ms; Ok (merge_outcome \<Sigma> R R') }"
+"merges \<Sigma> ms = do { Rs \<leftarrow> those_sum ms; Ok (foldr (merge_outcome \<Sigma>) Rs Returns\<^sub>R) }"
 
 fun override_outcome :: "static_outcome \<Rightarrow> static_outcome \<Rightarrow> static_outcome" (infixl "\<otimes>\<^sub>R" 100)
 where
@@ -76,6 +75,22 @@ where
    | Some TypeVar \<Rightarrow> undefined
    | Some _ \<Rightarrow> Fail (UnassignedMember x q))"
 
+(* Type of attribute x of e when e is a dotted name resolving to a module; None otherwise *)
+definition module_attribute :: "cxt \<Rightarrow> expr \<Rightarrow> var \<Rightarrow> ty may_fail option"
+where
+"module_attribute \<Gamma> e x = do {
+   q \<leftarrow> dotted_name e;
+   case lookup \<Gamma> q of
+     Some (ModChecked q' \<Gamma>') \<Rightarrow> Some (attr_module q' \<Gamma>' x (snoc q x))
+   | Some (ModStub q') \<Rightarrow> Some (Fail (SubmoduleNotImported q'))
+   | _ \<Rightarrow> None
+ }"
+
+(* Context binding parameters xs at \<tau>s *)
+definition params_cxt :: "var list \<Rightarrow> ty list \<Rightarrow> cxt may_fail"
+where
+"params_cxt xs \<tau>s = (if distinct xs then Ok (fmap_of_list (zip xs (map Ty \<tau>s))) else Fail undefined)"
+
 (* Failure if one of the variables bound by qualifiers with bindings \<Delta> is in X, the variables captured by
    lambdas *)
 definition captured :: "var set \<Rightarrow> cxt \<Rightarrow> unit may_fail"
@@ -89,7 +104,7 @@ where
    ensure (kws = []) KeywordArgumentsNotConstructor;
    ensure (length xs = length es) (CallArityMismatch (length xs) (length es));
    \<tau>s \<leftarrow> those_sum \<sigma>s;
-   if distinct xs then Ok (fmap_of_list (zip xs (map Ty \<tau>s))) else Fail undefined
+   params_cxt xs \<tau>s
  }"
 
 (* Check of a name bound at a type scheme against \<tau>; None for other expressions *)
@@ -110,9 +125,8 @@ definition inferred_type_args :: "class_table \<Rightarrow> var list \<Rightarro
 where
 "inferred_type_args \<Sigma> \<alpha>s \<sigma>s ms =
   (let \<sigma>\<tau>s = filter (Not \<circ> isl \<circ> snd) (zip \<sigma>s ms) in
-   case type_args_of (type_args_seq \<Sigma> \<alpha>s (map fst \<sigma>\<tau>s) (map (projr \<circ> snd) \<sigma>\<tau>s)) \<alpha>s of
-     Fail r \<Rightarrow> Fail (let r' = synth_failure ms in if r' = NotSynthesised then r else r')
-   | Ok \<tau>s \<Rightarrow> Ok \<tau>s)"
+   map_sum (\<lambda>r. let r' = synth_failure ms in if r' = NotSynthesised then r else r') id
+     (type_args_of (type_args_seq \<Sigma> \<alpha>s (map fst \<sigma>\<tau>s) (map (projr \<circ> snd) \<sigma>\<tau>s)) \<alpha>s))"
 
 function (sequential)
   synth_expr :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty may_fail" and
@@ -177,12 +191,8 @@ where
 "synth_expr \<Sigma> \<Gamma> (ExprList es) = do { \<tau> \<leftarrow> elements_join \<Sigma> \<Gamma> es; Ok (TyList \<tau>) }" |
 "synth_expr \<Sigma> \<Gamma> (ExprTuple es) = do { \<tau>s \<leftarrow> those_sum (map (synth_expr \<Sigma> \<Gamma>) es); Ok (TyTuple \<tau>s) }" |
 "synth_expr \<Sigma> \<Gamma> (ExprAttribute e x) =
-  (case dotted_name e of
-     Some q \<Rightarrow>
-       (case (resolve_name \<Gamma> q, lookup \<Gamma> q) of
-          (Some (ModChecked q' \<Gamma>'), _) \<Rightarrow> attr_module q' \<Gamma>' x (snoc q x)
-        | (_, Some (ModStub q')) \<Rightarrow> Fail (SubmoduleNotImported q')
-        | _ \<Rightarrow> do { \<sigma> \<leftarrow> synth_expr \<Sigma> \<Gamma> e; attribute_type \<Sigma> \<sigma> x })
+  (case module_attribute \<Gamma> e x of
+     Some m \<Rightarrow> m
    | None \<Rightarrow> do { \<sigma> \<leftarrow> synth_expr \<Sigma> \<Gamma> e; attribute_type \<Sigma> \<sigma> x })" |
 "synth_expr \<Sigma> \<Gamma> (ExprSubscript e e') = do {
    \<sigma> \<leftarrow> synth_expr \<Sigma> \<Gamma> e;
@@ -229,7 +239,7 @@ where
 "elements_join \<Sigma> \<Gamma> es =
   (let \<sigma>s = map (synth_expr \<Sigma> \<Gamma>) es; \<tau> = joins \<Sigma> (map (base_type \<circ> projr) (filter (Not \<circ> isl) \<sigma>s)) in
    if \<not> list_all isl \<sigma>s then do {
-     those_sum (map (\<lambda>j. check_expr \<Sigma> \<Gamma> (es ! j) \<tau>) (filter (\<lambda>j. isl (\<sigma>s ! j)) [0..<length es]));
+     all_sum (map (\<lambda>(e, _). check_expr \<Sigma> \<Gamma> e \<tau>) (filter (isl \<circ> snd) (zip es \<sigma>s)));
      Ok \<tau>
    }
    else Fail (synth_failure \<sigma>s))" |
@@ -244,14 +254,14 @@ where
   Some (case \<tau> of
      TyCallable \<tau>s \<tau>' \<Rightarrow>
        if length xs \<noteq> length \<tau>s then Fail (LambdaTypeMismatch \<tau> (Some (length xs)))
-       else if distinct xs then check_expr \<Sigma> (\<Gamma> \<otimes> fmap_of_list (zip xs (map Ty \<tau>s))) e \<tau>' else Fail undefined
+       else do { \<Delta> \<leftarrow> params_cxt xs \<tau>s; check_expr \<Sigma> (\<Gamma> \<otimes> \<Delta>) e \<tau>' }
    | _ \<Rightarrow> Fail (LambdaTypeMismatch \<tau> None))" |
 "check_expr' \<Sigma> \<Gamma> (ExprCall e (es, kws)) \<tau> =
-  (case e of
-     ExprLambda xs e' \<Rightarrow> Some (do {
+  (case lambda_of e of
+     Some (xs, e') \<Rightarrow> Some (do {
        \<Delta> \<leftarrow> lambda_args xs kws es (map (synth_expr \<Sigma> \<Gamma>) es); check_expr \<Sigma> (\<Gamma> \<otimes> \<Delta>) e' \<tau>
      })
-   | _ \<Rightarrow> None)" |
+   | None \<Rightarrow> None)" |
 "check_expr' \<Sigma> \<Gamma> (ExprList es) \<tau> =
   (case \<tau> of TyList \<tau>' \<Rightarrow> Some (all_sum (map (\<lambda>e. check_expr \<Sigma> \<Gamma> e \<tau>') es)) | _ \<Rightarrow> None)" |
 "check_expr' \<Sigma> \<Gamma> (ExprTuple es) \<tau> =
@@ -280,9 +290,7 @@ where
        check_expr \<Sigma> (\<Gamma> \<otimes> \<Delta>) e' \<tau>'
      })
    | _ \<Rightarrow> None)" |
-"check_expr' \<Sigma> \<Gamma> (ExprVar x) \<tau> = var_scheme \<Sigma> \<Gamma> (ExprVar x) \<tau>" |
-"check_expr' \<Sigma> \<Gamma> (ExprAttribute e x) \<tau> = var_scheme \<Sigma> \<Gamma> (ExprAttribute e x) \<tau>" |
-"check_expr' \<Sigma> \<Gamma> _ _ = None" |
+"check_expr' \<Sigma> \<Gamma> e \<tau> = var_scheme \<Sigma> \<Gamma> e \<tau>" |
 
 "check_args \<Sigma> \<Gamma> kws es \<sigma>s = do {
    ensure (kws = []) KeywordArgumentsNotConstructor;
@@ -384,13 +392,15 @@ where
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssign x (Some \<psi>) e) = do {
    \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; check_expr \<Sigma> \<Gamma> e \<tau>; Ok (Assigns\<^sub>R (fmupd x (Ty \<tau>) fmempty) None)
  }" |
-"check_stmt \<Sigma> \<Gamma> \<zeta> (StmtExpr e) =
-  (case e of
-     ExprCall e' (es, kws) \<Rightarrow>
-       if (case e' of ExprLambda _ _ \<Rightarrow> True | _ \<Rightarrow> False) \<or> class_of_name \<Gamma> e' \<noteq> None
-       then do { synth_expr \<Sigma> \<Gamma> e; Ok (Assigns\<^sub>R fmempty None) }
-       else do { \<sigma> \<leftarrow> callee \<Sigma> \<Gamma> e' es; call_stmt_at \<Sigma> \<Gamma> \<sigma> kws es; Ok (Assigns\<^sub>R fmempty None) }
-   | _ \<Rightarrow> do { synth_expr \<Sigma> \<Gamma> e; Ok (Assigns\<^sub>R fmempty None) })" |
+"check_stmt \<Sigma> \<Gamma> \<zeta> (StmtExpr e) = do {
+   (case e of
+      ExprCall e' (es, kws) \<Rightarrow>
+        if lambda_of e' = None \<and> class_of_name \<Gamma> e' = None
+        then do { \<sigma> \<leftarrow> callee \<Sigma> \<Gamma> e' es; call_stmt_at \<Sigma> \<Gamma> \<sigma> kws es }
+        else do { synth_expr \<Sigma> \<Gamma> e; Ok () }
+    | _ \<Rightarrow> do { synth_expr \<Sigma> \<Gamma> e; Ok () });
+   Ok (Assigns\<^sub>R fmempty None)
+ }" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssert e e') = do {
    (if e = false_lit then Ok () else check_expr \<Sigma> \<Gamma> e (TyPrim bool));
    (case e' of Some e'' \<Rightarrow> check_expr \<Sigma> \<Gamma> e'' (TyPrim str) | None \<Rightarrow> Ok ());
@@ -439,7 +449,8 @@ where
      check_assignments_declared (set xs) (assign_targets s) (declares s) (binds s);
      \<Delta> \<leftarrow> (case scope Unbound xs s of Some \<Delta> \<Rightarrow> Ok \<Delta> | None \<Rightarrow> Fail (scope_reason xs (declares s) (binds s)));
      if length xs = length \<sigma>s then do {
-       R \<leftarrow> check_stmt \<Sigma> (\<Gamma> \<otimes> fmconst (set \<alpha>s) TypeVar \<otimes> fmap_of_list (zip xs (map Ty \<sigma>s)) \<otimes> \<Delta>) (Some \<tau>) s;
+       \<Delta>' \<leftarrow> params_cxt xs \<sigma>s;
+       R \<leftarrow> check_stmt \<Sigma> (\<Gamma> \<otimes> fmconst (set \<alpha>s) TypeVar \<otimes> \<Delta>' \<otimes> \<Delta>) (Some \<tau>) s;
        case R of
          Assigns\<^sub>R _ r \<Rightarrow>
            if \<Sigma> \<turnstile> \<tau> \<approx> TyPrim NoneType then Ok ()
