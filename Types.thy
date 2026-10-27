@@ -189,8 +189,8 @@ where
      Dataclass c _ _ _ \<Rightarrow> fmupd (snoc q c) (ClassDef \<Gamma> q \<chi>s i) fmempty
    | TypeStmt _ _ _ \<Rightarrow> fmempty)"
 
-(* Failure unless n positional arguments and keywords ys supply fields xs, by the reasons for a mismatch of
-   arity and for unknown keywords *)
+(* Failure unless n positional arguments and keywords ys supply exactly the fields xs, with arity and unknown as
+   helpers for building failure reasons *)
 definition check_field_map ::
   "(nat \<Rightarrow> nat \<Rightarrow> reason) \<Rightarrow> (var list \<Rightarrow> reason) \<Rightarrow> var list \<Rightarrow> nat \<Rightarrow> var list \<Rightarrow> reason + unit"
 where
