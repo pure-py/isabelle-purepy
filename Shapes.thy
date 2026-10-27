@@ -29,7 +29,7 @@ ShapeRest:
   \<Longrightarrow> shape_typed \<Sigma> (ShapeRest \<tau> H) \<tau>" |
 ShapeConstr:
   "\<lbrakk> \<forall>h \<in> H. head_typed \<Sigma> h (TyClass C \<tau>s) ;
-     list_all2 (shape_typed \<Sigma>) ks (map snd (instantiate (fields \<Sigma> C) \<tau>s)) \<rbrakk>
+     list_all2 (shape_typed \<Sigma>) ks (field_types \<Sigma> C \<tau>s) \<rbrakk>
   \<Longrightarrow> shape_typed \<Sigma> (ShapeConstr C \<tau>s ks H) (TyClass C \<tau>s)" |
 ShapeTuple: "list_all2 (shape_typed \<Sigma>) ks \<tau>s \<Longrightarrow> shape_typed \<Sigma> (ShapeTuple ks) (TyTuple \<tau>s)" |
 ShapeList: "\<forall>k \<in> set ks. shape_typed \<Sigma> k \<tau> \<Longrightarrow> shape_typed \<Sigma> (ShapeList \<tau> ks) (TyList \<tau>)" |

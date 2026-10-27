@@ -426,8 +426,7 @@ where
    \<sigma> \<leftarrow> synth_expr \<Sigma> \<Gamma> e;
    (\<Delta>s, \<tau>, L) \<leftarrow> match_cases \<Sigma> \<Gamma> \<sigma> (shapes \<Sigma> \<sigma> {}) (map fst bs);
    merges \<Sigma>
-     (map2 (\<lambda>\<Delta> (_, s). do { R \<leftarrow> check_stmt \<Sigma> (\<Gamma> \<otimes> fmmap Ty \<Delta>) \<zeta> s; Inr (Assigns\<^sub>R (fmmap Ty \<Delta>) None \<otimes>\<^sub>R R) })
-        \<Delta>s bs
+     (map2 (\<lambda>\<Delta> (_, s). do { R \<leftarrow> check_stmt \<Sigma> (\<Gamma> \<otimes> \<Delta>) \<zeta> s; Inr (Assigns\<^sub>R \<Delta> None \<otimes>\<^sub>R R) }) (map (fmmap Ty) \<Delta>s) bs
       @ (if \<tau> = TyPrim Never then []
          else [Inr (Assigns\<^sub>R fmempty (if L = [] then Some (MissingReturnMatchPartial \<tau>) else None))]))
  }" |

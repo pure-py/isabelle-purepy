@@ -20,7 +20,7 @@ where
        (case meet \<Sigma> \<tau> (TyClass C \<tau>s) of
           TyClass D \<sigma>s \<Rightarrow>
             Some (map (\<lambda>ks. ShapeConstr D \<sigma>s ks (typed_heads \<Sigma> H (TyClass D \<sigma>s)))
-                    (shapes_seq \<Sigma> (map snd (instantiate (fields \<Sigma> D) \<sigma>s))),
+                    (shapes_seq \<Sigma> (field_types \<Sigma> D \<sigma>s)),
                   shapes \<Sigma> \<tau> (insert (HeadClass C) H))
         | _ \<Rightarrow> undefined)
    | NoInstance \<Rightarrow> None
@@ -36,7 +36,7 @@ where
        if D = C \<or> \<not> \<Sigma> \<turnstile> TyClass D \<sigma>s <: TyClass C \<tau>s \<or> below_excluded \<Sigma> D H then None
        else
          Some (map (\<lambda>ks'. ShapeConstr D \<sigma>s (ks @ ks') (typed_heads \<Sigma> H (TyClass D \<sigma>s)))
-                 (shapes_seq \<Sigma> (drop (length ks) (map snd (instantiate (fields \<Sigma> D) \<sigma>s)))),
+                 (shapes_seq \<Sigma> (drop (length ks) (field_types \<Sigma> D \<sigma>s))),
                [ShapeConstr C \<tau>s ks (insert (HeadClass D) H)])
    | NoInstance \<Rightarrow> None
    | Undetermined \<Rightarrow> undefined)"

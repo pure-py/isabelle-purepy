@@ -18,10 +18,6 @@ where
 lemma field_patterns_elem: "p \<in> set (field_patterns \<Sigma> C (ps, kps)) \<Longrightarrow> p \<in> set ps \<or> p \<in> set (map snd kps)"
   unfolding field_patterns_def by (auto simp: image_iff) (metis snd_conv)
 
-definition field_types :: "class_table \<Rightarrow> name \<Rightarrow> ty list \<Rightarrow> ty list"
-where
-"field_types \<Sigma> C \<sigma>s = map snd (instantiate (fields \<Sigma> C) \<sigma>s)"
-
 fun disjuncts :: "ty \<Rightarrow> ty list"
 where
 "disjuncts (TyUnion \<sigma> \<tau>) = disjuncts \<sigma> @ disjuncts \<tau>" |
