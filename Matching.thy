@@ -74,17 +74,18 @@ where
 "splits (PatDict kps) = length kps" |
 "splits _ = 1"
 
-(* Matched shape sequences and residual of patterns matching shapes ks position by position, from the match
-   at each position *)
+(* Matched shapes and residual of patterns matching shapes ks position by position, as shapes of form f, from
+   the match at each position *)
 definition seq_result ::
-  "shape list \<Rightarrow> (shape list \<times> shape list) option list \<Rightarrow> (shape list list \<times> shape list list) option"
+  "(shape list \<Rightarrow> shape) \<Rightarrow> shape list \<Rightarrow> (shape list \<times> shape list) option list
+   \<Rightarrow> (shape list \<times> shape list) option"
 where
-"seq_result ks ms = do {
+"seq_result f ks ms = do {
    rs \<leftarrow> those ms;
    let Ks = map fst rs;
-   Some (product_lists Ks,
-         concat (map (\<lambda>i. [ks' @ [l] @ drop (Suc i) ks. ks' \<leftarrow> product_lists (take i Ks), l \<leftarrow> snd (rs ! i)])
-                     [0..<length rs]))
+   Some (map f (product_lists Ks),
+         map f (concat (map (\<lambda>i. [ks' @ [l] @ drop (Suc i) ks. ks' \<leftarrow> product_lists (take i Ks), l \<leftarrow> snd (rs ! i)])
+                            [0..<length rs])))
  }"
 
 (* Matched shapes and residual of a pattern matching shapes L, from the match at each shape of L *)
@@ -95,19 +96,15 @@ where
   (let rs = [r. Some r \<leftarrow> ms] in
    if rs = [] then None else Some (concat (map fst rs), concat (map snd rs) @ [k. (k, None) \<leftarrow> zip L ms]))"
 
-definition map_result :: "('a \<Rightarrow> shape) \<Rightarrow> ('a list \<times> 'a list) option \<Rightarrow> (shape list \<times> shape list) option"
+(* Match of pattern p against shape k, through at most n splits of k *)
+function match_shape_upto :: "nat \<Rightarrow> class_table \<Rightarrow> cxt \<Rightarrow> shape \<Rightarrow> pat \<Rightarrow> (shape list \<times> shape list) option"
 where
-"map_result f m = map_option (\<lambda>(K, L). (map f K, map f L)) m"
-
-(* n bounds the splits of k that matching against p may make *)
-function match_shape :: "class_table \<Rightarrow> cxt \<Rightarrow> nat \<Rightarrow> shape \<Rightarrow> pat \<Rightarrow> (shape list \<times> shape list) option"
-where
-"match_shape \<Sigma> \<Gamma> n k p =
+"match_shape_upto n \<Sigma> \<Gamma> k p =
   (case
      (case p of
         PatVar _ \<Rightarrow> Some ([k], [])
       | PatWildcard \<Rightarrow> Some ([k], [])
-      | PatAs p' _ \<Rightarrow> match_shape \<Sigma> \<Gamma> (splits p') k p'
+      | PatAs p' _ \<Rightarrow> match_shape_upto (splits p') \<Sigma> \<Gamma> k p'
       | PatLiteral l \<Rightarrow>
           (case (k, l) of
              (ShapeRest \<tau> H, LitFloat _) \<Rightarrow>
@@ -120,16 +117,16 @@ where
           (case k of
              ShapeTuple ks \<Rightarrow>
                if length ks = length ps
-               then map_result ShapeTuple
-                      (seq_result ks (map2 (\<lambda>k' p'. match_shape \<Sigma> \<Gamma> (splits p') k' p') ks ps))
+               then seq_result ShapeTuple ks
+                      (map2 (\<lambda>k' p'. match_shape_upto (splits p') \<Sigma> \<Gamma> k' p') ks ps)
                else None
            | _ \<Rightarrow> None)
       | PatList ps \<Rightarrow>
           (case k of
              ShapeList \<tau> ks \<Rightarrow>
                if length ks = length ps
-               then map_result (ShapeList \<tau>)
-                      (seq_result ks (map2 (\<lambda>k' p'. match_shape \<Sigma> \<Gamma> (splits p') k' p') ks ps))
+               then seq_result (ShapeList \<tau>) ks
+                      (map2 (\<lambda>k' p'. match_shape_upto (splits p') \<Sigma> \<Gamma> k' p') ks ps)
                else None
            | _ \<Rightarrow> None)
       | PatDict kps \<Rightarrow>
@@ -137,8 +134,8 @@ where
              ShapeDict \<tau> \<beta> W \<Rightarrow>
                if \<forall>w \<in> set (map fst kps). w \<in> fst ` set \<beta> then
                  (let ks = map (the \<circ> map_of \<beta> \<circ> fst) kps in
-                  map_result (with_keys k (map fst kps))
-                    (seq_result ks (map2 (\<lambda>k' p'. match_shape \<Sigma> \<Gamma> (splits p') k' p') ks (map snd kps))))
+                  seq_result (with_keys k (map fst kps)) ks
+                    (map2 (\<lambda>k' p'. match_shape_upto (splits p') \<Sigma> \<Gamma> k' p') ks (map snd kps)))
                else None
            | _ \<Rightarrow> None)
       | PatConstr q a \<Rightarrow>
@@ -146,8 +143,8 @@ where
              ShapeConstr C \<tau>s ks H \<Rightarrow>
                (let D = projr (pattern_class \<Gamma> q); ps = field_patterns \<Sigma> D a; m = length ps in
                 if D \<in> set (ancestors \<Sigma> C) then
-                  map_result (\<lambda>ks'. ShapeConstr C \<tau>s (ks' @ drop m ks) H)
-                    (seq_result (take m ks) (map2 (\<lambda>k' p'. match_shape \<Sigma> \<Gamma> (splits p') k' p') (take m ks) ps))
+                  seq_result (\<lambda>ks'. ShapeConstr C \<tau>s (ks' @ drop m ks) H) (take m ks)
+                    (map2 (\<lambda>k' p'. match_shape_upto (splits p') \<Sigma> \<Gamma> k' p') (take m ks) ps)
                 else None)
            | _ \<Rightarrow> None))
    of
@@ -155,16 +152,20 @@ where
    | None \<Rightarrow>
        (case (split \<Sigma> \<Gamma> k p, n) of
           (Some (K, L), Suc n') \<Rightarrow>
-            map_option (\<lambda>(K', L'). (K', L @ L')) (shapes_result K (map (\<lambda>k'. match_shape \<Sigma> \<Gamma> n' k' p) K))
+            map_option (\<lambda>(K', L'). (K', L @ L')) (shapes_result K (map (\<lambda>k'. match_shape_upto n' \<Sigma> \<Gamma> k' p) K))
         | _ \<Rightarrow> None))"
 by pat_completeness auto
 
 termination
-by (relation "measures [\<lambda>(_, _, _, _, p). size p, \<lambda>(_, _, n, _, _). n]")
+by (relation "measures [\<lambda>(_, _, _, _, p). size p, \<lambda>(n, _, _, _, _). n]")
    (auto elim!: in_set_zipE dest!: field_patterns_elem dest: size_list_elem[where f = size] size_list_snd_elem')
+
+definition match_shape :: "class_table \<Rightarrow> cxt \<Rightarrow> shape \<Rightarrow> pat \<Rightarrow> (shape list \<times> shape list) option"
+where
+"match_shape \<Sigma> \<Gamma> k p = match_shape_upto (splits p) \<Sigma> \<Gamma> k p"
 
 definition match_shapes :: "class_table \<Rightarrow> cxt \<Rightarrow> shape list \<Rightarrow> pat \<Rightarrow> (shape list \<times> shape list) option"
 where
-"match_shapes \<Sigma> \<Gamma> L p = shapes_result L (map (\<lambda>k. match_shape \<Sigma> \<Gamma> (splits p) k p) L)"
+"match_shapes \<Sigma> \<Gamma> L p = shapes_result L (map (\<lambda>k. match_shape \<Sigma> \<Gamma> k p) L)"
 
 end
