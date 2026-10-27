@@ -98,6 +98,8 @@ datatype ty =
   | TyClass name "ty list"
   | TyUnion ty ty
 
+datatype sequence_kind = TupleKind | ListKind | RangeKind
+
 datatype ty_scheme = TyScheme "var list" ty
 
 datatype field_scheme = FieldScheme "var list" "(var \<times> ty) list"

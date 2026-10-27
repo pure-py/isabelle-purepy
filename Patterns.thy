@@ -3,12 +3,16 @@ theory Patterns
   imports Subtyping
 begin
 
-definition pattern_class :: "cxt \<Rightarrow> name \<Rightarrow> reason + name"
+definition check_pattern_class :: "cxt \<Rightarrow> name \<Rightarrow> reason + name"
 where
-"pattern_class \<Gamma> q =
+"check_pattern_class \<Gamma> q =
   (case resolve_name \<Gamma> q of
      Some (Type C) \<Rightarrow> if C = range_class then Inl RangePattern else Inr C
    | _ \<Rightarrow> Inl (NotClass q))"
+
+definition pattern_class :: "cxt \<Rightarrow> name \<Rightarrow> name"
+where
+"pattern_class \<Gamma> q = (case resolve_name \<Gamma> q of Some (Type C) \<Rightarrow> C | _ \<Rightarrow> undefined)"
 
 (* Sub-patterns of a constructor pattern for class C with arguments a, in the order of the fields of C *)
 fun field_patterns :: "class_table \<Rightarrow> name \<Rightarrow> pat args \<Rightarrow> pat list"
@@ -24,20 +28,15 @@ where
 "disjuncts (TyUnion \<sigma> \<tau>) = disjuncts \<sigma> @ disjuncts \<tau>" |
 "disjuncts \<tau> = [\<tau>]"
 
-definition has_list_values :: "class_table \<Rightarrow> ty \<Rightarrow> bool"
+fun has_values :: "class_table \<Rightarrow> sequence_kind \<Rightarrow> ty \<Rightarrow> bool"
 where
-"has_list_values \<Sigma> \<tau> =
-  (\<exists>\<sigma> \<in> set (disjuncts \<tau>). case \<sigma> of TyList _ \<Rightarrow> True | TyVar _ \<Rightarrow> True | _ \<Rightarrow> \<Sigma> \<turnstile> TyList (TyPrim object) <: \<sigma>)"
-
-definition has_tuple_values :: "class_table \<Rightarrow> ty \<Rightarrow> bool"
-where
-"has_tuple_values \<Sigma> \<tau> =
-  (\<exists>\<sigma> \<in> set (disjuncts \<tau>). case \<sigma> of TyTuple _ \<Rightarrow> True | TyVar _ \<Rightarrow> True | _ \<Rightarrow> \<Sigma> \<turnstile> TyTuple [] <: \<sigma>)"
-
-definition has_range_values :: "class_table \<Rightarrow> ty \<Rightarrow> bool"
-where
-"has_range_values \<Sigma> \<tau> =
-  (\<exists>\<sigma> \<in> set (disjuncts \<tau>). case \<sigma> of TyVar _ \<Rightarrow> True | _ \<Rightarrow> \<Sigma> \<turnstile> TyClass range_class [] <: \<sigma>)"
+"has_values \<Sigma> k (TyUnion \<sigma> \<tau>) = (has_values \<Sigma> k \<sigma> \<or> has_values \<Sigma> k \<tau>)" |
+"has_values \<Sigma> k (TyVar _) = True" |
+"has_values \<Sigma> TupleKind (TyTuple _) = True" |
+"has_values \<Sigma> ListKind (TyList _) = True" |
+"has_values \<Sigma> TupleKind \<tau> = (\<Sigma> \<turnstile> TyTuple [] <: \<tau>)" |
+"has_values \<Sigma> ListKind \<tau> = (\<Sigma> \<turnstile> TyList (TyPrim object) <: \<tau>)" |
+"has_values \<Sigma> RangeKind \<tau> = (\<Sigma> \<turnstile> TyClass range_class [] <: \<tau>)"
 
 function (sequential) matched_as :: "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow> pat \<Rightarrow> ty"
 where
@@ -52,7 +51,7 @@ where
 "matched_as \<Sigma> \<Gamma> (TyList \<tau>) (PatList _) = TyList \<tau>" |
 "matched_as \<Sigma> \<Gamma> (TyDict \<tau>) (PatDict _) = TyDict \<tau>" |
 "matched_as \<Sigma> \<Gamma> \<tau> (PatConstr q _) =
-  (let C = projr (pattern_class \<Gamma> q) in
+  (let C = pattern_class \<Gamma> q in
    case instance_at \<Sigma> C \<tau> of Instance \<sigma>s \<Rightarrow> meet \<Sigma> \<tau> (TyClass C \<sigma>s) | _ \<Rightarrow> TyPrim Never)" |
 "matched_as \<Sigma> \<Gamma> _ _ = TyPrim Never"
 by pat_completeness auto
@@ -80,7 +79,7 @@ where
    else TyTuple \<tau>s)" |
 "remaining \<Sigma> \<Gamma> (TyDict _) (PatDict []) = TyPrim Never" |
 "remaining \<Sigma> \<Gamma> \<tau> (PatConstr q a) =
-  (let C = projr (pattern_class \<Gamma> q) in
+  (let C = pattern_class \<Gamma> q in
    case instance_at \<Sigma> C \<tau> of
      Instance \<sigma>s \<Rightarrow>
        if \<Sigma> \<turnstile> \<tau> <: TyClass C \<sigma>s
@@ -115,54 +114,49 @@ where
 
 function check_pat :: "class_table \<Rightarrow> cxt \<Rightarrow> pat \<Rightarrow> ty \<Rightarrow> reason + (var, ty) fmap"
 where
-"check_pat \<Sigma> \<Gamma> p \<tau> =
-  (case p of
-     PatWildcard \<Rightarrow> Inr fmempty
-   | PatVar x \<Rightarrow> do { check_unbound \<Gamma> x; Inr (fmupd x \<tau> fmempty) }
-   | PatAs p' x \<Rightarrow> do {
-       check_unbound \<Gamma> x; \<Delta> \<leftarrow> check_pat \<Sigma> \<Gamma> p' \<tau>; Inr (\<Delta> \<otimes> fmupd x (matched_as \<Sigma> \<Gamma> \<tau> p') fmempty)
-     }
-   | PatLiteral _ \<Rightarrow> Inr fmempty
-   | PatTuple ps \<Rightarrow> do {
-       ensure (\<not> has_list_values \<Sigma> \<tau>) (SequenceKindMismatch TupleKind \<tau> ListKind);
-       ensure (\<not> has_range_values \<Sigma> \<tau>) (SequenceKindMismatch TupleKind \<tau> RangeKind);
-       bindings_at \<Sigma> p
-         (map (\<lambda>\<sigma>. case \<sigma> of
-                     TyTuple \<sigma>s \<Rightarrow>
-                       if length \<sigma>s = length ps
-                       then Some (pattern_bindings (map2 (check_pat \<Sigma> \<Gamma>) ps \<sigma>s))
-                       else None
-                   | _ \<Rightarrow> None)
-           (disjuncts \<tau>))
-     }
-   | PatList ps \<Rightarrow> do {
-       ensure (\<not> has_tuple_values \<Sigma> \<tau>) (SequenceKindMismatch ListKind \<tau> TupleKind);
-       ensure (\<not> has_range_values \<Sigma> \<tau>) (SequenceKindMismatch ListKind \<tau> RangeKind);
-       bindings_at \<Sigma> p
-         (map (\<lambda>\<sigma>. case \<sigma> of
-                     TyList \<sigma>' \<Rightarrow> Some (pattern_bindings (map (\<lambda>p'. check_pat \<Sigma> \<Gamma> p' \<sigma>') ps))
-                   | _ \<Rightarrow> None)
-           (disjuncts \<tau>))
-     }
-   | PatDict kps \<Rightarrow>
-       bindings_at \<Sigma> p
-         (map (\<lambda>\<sigma>. case \<sigma> of
-                     TyDict \<sigma>' \<Rightarrow> Some (pattern_bindings (map (\<lambda>p'. check_pat \<Sigma> \<Gamma> p' \<sigma>') (map snd kps)))
-                   | _ \<Rightarrow> None)
-           (disjuncts \<tau>))
-   | PatConstr q (ps, kps) \<Rightarrow> do {
-       C \<leftarrow> pattern_class \<Gamma> q;
-       check_field_map (PatternArityMismatch (short_name C)) (UnknownFieldInPattern (short_name C))
-         (field_names \<Sigma> C) (length ps) (map fst kps);
-       bindings_at \<Sigma> p
-         (map (\<lambda>\<sigma>. case instance_at \<Sigma> C \<sigma> of
-                     Instance \<sigma>s \<Rightarrow>
-                       Some (pattern_bindings
-                         (map2 (check_pat \<Sigma> \<Gamma>) (field_patterns \<Sigma> C (ps, kps)) (field_types \<Sigma> C \<sigma>s)))
-                   | NoInstance \<Rightarrow> None
-                   | Undetermined \<Rightarrow> Some (Inl (PatternClassUndetermined (short_name C) \<sigma>)))
-           (disjuncts \<tau>))
-     })"
+"check_pat \<Sigma> \<Gamma> PatWildcard \<tau> = Inr fmempty" |
+"check_pat \<Sigma> \<Gamma> (PatVar x) \<tau> = do { check_unbound \<Gamma> x; Inr (fmupd x \<tau> fmempty) }" |
+"check_pat \<Sigma> \<Gamma> (PatAs p x) \<tau> =
+  do { check_unbound \<Gamma> x; \<Delta> \<leftarrow> check_pat \<Sigma> \<Gamma> p \<tau>; Inr (\<Delta> \<otimes> fmupd x (matched_as \<Sigma> \<Gamma> \<tau> p) fmempty) }" |
+"check_pat \<Sigma> \<Gamma> (PatLiteral _) \<tau> = Inr fmempty" |
+"check_pat \<Sigma> \<Gamma> (PatTuple ps) \<tau> = do {
+   ensure (\<not> has_values \<Sigma> ListKind \<tau>) (SequenceKindMismatch TupleKind \<tau> ListKind);
+   ensure (\<not> has_values \<Sigma> RangeKind \<tau>) (SequenceKindMismatch TupleKind \<tau> RangeKind);
+   bindings_at \<Sigma> (PatTuple ps)
+     (map (\<lambda>\<sigma>. case \<sigma> of
+                 TyTuple \<sigma>s \<Rightarrow>
+                   if length \<sigma>s = length ps then Some (pattern_bindings (map2 (check_pat \<Sigma> \<Gamma>) ps \<sigma>s)) else None
+               | _ \<Rightarrow> None)
+       (disjuncts \<tau>))
+ }" |
+"check_pat \<Sigma> \<Gamma> (PatList ps) \<tau> = do {
+   ensure (\<not> has_values \<Sigma> TupleKind \<tau>) (SequenceKindMismatch ListKind \<tau> TupleKind);
+   ensure (\<not> has_values \<Sigma> RangeKind \<tau>) (SequenceKindMismatch ListKind \<tau> RangeKind);
+   bindings_at \<Sigma> (PatList ps)
+     (map (\<lambda>\<sigma>. case \<sigma> of
+                 TyList \<sigma>' \<Rightarrow> Some (pattern_bindings (map (\<lambda>p. check_pat \<Sigma> \<Gamma> p \<sigma>') ps))
+               | _ \<Rightarrow> None)
+       (disjuncts \<tau>))
+ }" |
+"check_pat \<Sigma> \<Gamma> (PatDict kps) \<tau> =
+  bindings_at \<Sigma> (PatDict kps)
+    (map (\<lambda>\<sigma>. case \<sigma> of
+                TyDict \<sigma>' \<Rightarrow> Some (pattern_bindings (map (\<lambda>p. check_pat \<Sigma> \<Gamma> p \<sigma>') (map snd kps)))
+              | _ \<Rightarrow> None)
+      (disjuncts \<tau>))" |
+"check_pat \<Sigma> \<Gamma> (PatConstr q (ps, kps)) \<tau> = do {
+   C \<leftarrow> check_pattern_class \<Gamma> q;
+   check_field_map (PatternArityMismatch (short_name C)) (UnknownFieldInPattern (short_name C))
+     (field_names \<Sigma> C) (length ps) (map fst kps);
+   bindings_at \<Sigma> (PatConstr q (ps, kps))
+     (map (\<lambda>\<sigma>. case instance_at \<Sigma> C \<sigma> of
+                 Instance \<sigma>s \<Rightarrow>
+                   Some (pattern_bindings
+                     (map2 (check_pat \<Sigma> \<Gamma>) (field_patterns \<Sigma> C (ps, kps)) (field_types \<Sigma> C \<sigma>s)))
+               | NoInstance \<Rightarrow> None
+               | Undetermined \<Rightarrow> Some (Inl (PatternClassUndetermined (short_name C) \<sigma>)))
+       (disjuncts \<tau>))
+ }"
 by pat_completeness auto
 
 termination

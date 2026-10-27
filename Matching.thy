@@ -24,7 +24,7 @@ where
        else Some (map (\<lambda>k. ShapeDict \<tau> (with_keys \<beta> [w] [k]) W) (shapes \<Sigma> \<tau> {}), [ShapeDict \<tau> \<beta> (insert w W)])
    | None \<Rightarrow> None)" |
 "split \<Sigma> \<Gamma> (ShapeRest \<tau> H) (PatConstr q _) =
-  (let C = projr (pattern_class \<Gamma> q) in
+  (let C = pattern_class \<Gamma> q in
    if below_excluded \<Sigma> C H then None
    else case instance_at \<Sigma> C \<tau> of
      Instance \<tau>s \<Rightarrow>
@@ -37,7 +37,7 @@ where
    | NoInstance \<Rightarrow> None
    | Undetermined \<Rightarrow> undefined)" |
 "split \<Sigma> \<Gamma> (ShapeConstr C \<tau>s ks H) (PatConstr q _) =
-  (let D = projr (pattern_class \<Gamma> q) in
+  (let D = pattern_class \<Gamma> q in
    case instance_at \<Sigma> D (TyClass C \<tau>s) of
      Instance \<sigma>s \<Rightarrow>
        if D = C \<or> \<not> \<Sigma> \<turnstile> TyClass D \<sigma>s <: TyClass C \<tau>s \<or> below_excluded \<Sigma> D H then None
@@ -113,7 +113,7 @@ where
         (map2 (match_shape \<Sigma> \<Gamma>) ks (map snd kps)))
    else None)" |
 "match_directly \<Sigma> \<Gamma> (ShapeConstr C \<tau>s ks H) (PatConstr q a) =
-  (let D = projr (pattern_class \<Gamma> q); ps = field_patterns \<Sigma> D a; m = length ps in
+  (let D = pattern_class \<Gamma> q; ps = field_patterns \<Sigma> D a; m = length ps in
    if D \<in> set (ancestors \<Sigma> C)
    then
      seq_result (\<lambda>ks'. ShapeConstr C \<tau>s (ks' @ drop m ks) H) (take m ks) (map2 (match_shape \<Sigma> \<Gamma>) (take m ks) ps)

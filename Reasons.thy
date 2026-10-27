@@ -3,8 +3,6 @@ theory Reasons
   imports Contexts
 begin
 
-datatype sequence_kind = TupleKind | ListKind | RangeKind
-
 (* Reasons for ill-formedness *)
 datatype reason =
     DuplicateField var var
