@@ -162,6 +162,6 @@ by pat_completeness auto
 termination
 by (relation "measure (\<lambda>(_, _, p, _). size p)")
    (auto elim!: in_set_zipE dest!: field_patterns_elem
-     dest: size_list_elem[where f = size] size_list_snd_elem size_list_snd_elem')
+     dest: size_list_elem[where f = size] size_list_snd_elem size_list_snd_elem' simp del: field_patterns.simps)
 
 end
