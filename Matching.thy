@@ -71,14 +71,13 @@ where
   (let rs = [r. Some r \<leftarrow> ms] in
    if rs = [] then None else Some (concat (map fst rs), concat (map snd rs) @ [k. (k, None) \<leftarrow> zip L ms]))"
 
-(* Splits of a shape that matching against p may need: one for each key of a dictionary pattern, otherwise
-   one *)
+(* Splits of a shape needed for matching against p: one for each key of a dictionary pattern, otherwise one *)
 fun splits :: "pat \<Rightarrow> nat"
 where
 "splits (PatDict kps) = length kps" |
 "splits _ = 1"
 
-(* n bounds the splits of k that matching against p may make *)
+(* n bounds the splits of k made by matching against p *)
 function (sequential)
   match_shape :: "class_table \<Rightarrow> cxt \<Rightarrow> shape \<Rightarrow> pat \<Rightarrow> (shape list \<times> shape list) option" and
   match_shape_upto :: "nat \<Rightarrow> class_table \<Rightarrow> cxt \<Rightarrow> shape \<Rightarrow> pat \<Rightarrow> (shape list \<times> shape list) option" and
