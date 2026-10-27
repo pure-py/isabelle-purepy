@@ -11,13 +11,13 @@ where
    | _ \<Rightarrow> Inl (NotClass q))"
 
 (* Sub-patterns of a constructor pattern for class C with arguments a, in the order of the fields of C *)
-definition field_patterns :: "class_table \<Rightarrow> name \<Rightarrow> pat args \<Rightarrow> pat list"
+fun field_patterns :: "class_table \<Rightarrow> name \<Rightarrow> pat args \<Rightarrow> pat list"
 where
-"field_patterns \<Sigma> C a =
-  (case a of (ps, kps) \<Rightarrow> ps @ concat (map (\<lambda>x. [p. (y, p) \<leftarrow> kps, y = x]) (drop (length ps) (field_names \<Sigma> C))))"
+"field_patterns \<Sigma> C (ps, kps) =
+  ps @ concat (map (\<lambda>x. [p. (y, p) \<leftarrow> kps, y = x]) (drop (length ps) (field_names \<Sigma> C)))"
 
 lemma field_patterns_elem: "p \<in> set (field_patterns \<Sigma> C (ps, kps)) \<Longrightarrow> p \<in> set ps \<or> p \<in> set (map snd kps)"
-  unfolding field_patterns_def by (auto simp: image_iff) (metis snd_conv)
+  by (auto simp: image_iff) (metis snd_conv)
 
 fun disjuncts :: "ty \<Rightarrow> ty list"
 where
