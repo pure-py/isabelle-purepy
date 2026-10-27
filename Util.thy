@@ -1,3 +1,4 @@
+(* Shared utilities *)
 theory Util
   imports "HOL-Library.Finite_Map" "HOL-Library.Monad_Syntax"
 begin

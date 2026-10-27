@@ -1,3 +1,4 @@
+(* Heads and shapes for pattern matching; head and shape typing; shapes of a type *)
 theory Shapes
   imports Subtyping
 begin

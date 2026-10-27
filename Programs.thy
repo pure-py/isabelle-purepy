@@ -1,3 +1,4 @@
+(* Typing of imports, modules and programs *)
 theory Programs
   imports Typing
 begin

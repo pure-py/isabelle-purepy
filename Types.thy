@@ -1,3 +1,4 @@
+(* Type resolution, substitution and class definitions *)
 theory Types
   imports Reasons
 begin

@@ -1,3 +1,4 @@
+(* Operator resolution and subtyping in executable form; Python generation *)
 theory Codegen
   imports "isabelle-purepy.Programs" "Python.Python_Setup"
 begin

@@ -1,3 +1,4 @@
+(* Reasons for ill-formedness *)
 theory Reasons
   imports Contexts
 begin

@@ -1,3 +1,4 @@
+(* Abstract syntax and its analyses *)
 theory Syntax
   imports Complex_Main Util
 begin

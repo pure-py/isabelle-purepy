@@ -1,3 +1,4 @@
+(* Subtyping, join and meet; element, subscript and attribute types *)
 theory Subtyping
   imports Types
 begin

@@ -21,6 +21,7 @@ To browse the theories with the prover running, open the session directory in th
 
 ## Theories
 
+<!-- theories -->
 | File                 | Content                                                                        |
 |----------------------|--------------------------------------------------------------------------------|
 | `Util.thy`           | Shared utilities                                                               |
@@ -32,8 +33,11 @@ To browse the theories with the prover running, open the session directory in th
 | `Types.thy`          | Type resolution, substitution and class definitions                            |
 | `Subtyping.thy`      | Subtyping, join and meet; element, subscript and attribute types               |
 | `Shapes.thy`         | Heads and shapes for pattern matching; head and shape typing; shapes of a type |
+| `Patterns.thy`       | Pattern checking; matched and remaining types of patterns                      |
+| `Matching.thy`       | Splitting of shapes; matching of patterns against shapes                       |
 | `Operators.thy`      | Equality types and operator overloads                                          |
 | `Typing.thy`         | Static outcomes; typing of expressions, statements and type definitions        |
 | `Programs.thy`       | Typing of imports, modules and programs                                        |
 | `Examples.thy`       | Example evaluations                                                            |
 | `python/Codegen.thy` | Operator resolution and subtyping in executable form; Python generation        |
+<!-- /theories -->

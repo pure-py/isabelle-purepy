@@ -1,3 +1,4 @@
+(* Context entries, class tables, name resolution, predefined modules *)
 theory Contexts
   imports Syntax "HOL-Library.List_Lexorder" "HOL-Library.Char_ord"
 begin

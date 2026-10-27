@@ -1,3 +1,4 @@
+(* Pattern checking; matched and remaining types of patterns *)
 theory Patterns
   imports Subtyping
 begin

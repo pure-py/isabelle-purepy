@@ -1,3 +1,4 @@
+(* Splitting of shapes; matching of patterns against shapes *)
 theory Matching
   imports Shapes Patterns
 begin

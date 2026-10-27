@@ -1,3 +1,4 @@
+(* Static outcomes; typing of expressions, statements and type definitions *)
 theory Typing
   imports Operators Matching
 begin
