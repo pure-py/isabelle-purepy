@@ -435,7 +435,7 @@ where
 "check_def \<Sigma> \<Gamma> (Def f \<alpha>s xps \<psi> s) (TyScheme \<alpha>s' (TyCallable \<sigma>s \<tau>)) =
   (let xs = map fst xps in do {
      check_assignments_declared (set xs) (assign_targets s) (declares s) (binds s);
-     \<Delta> \<leftarrow> or_else (scope_reason xs (declares s) (binds s)) (scope Unbound xs s);
+     \<Delta> \<leftarrow> (case scope Unbound xs s of Some \<Delta> \<Rightarrow> Ok \<Delta> | None \<Rightarrow> Fail (scope_reason xs (declares s) (binds s)));
      if length xs = length \<sigma>s then do {
        R \<leftarrow> check_stmt \<Sigma> (\<Gamma> \<otimes> fmconst (set \<alpha>s) TypeVar \<otimes> fmap_of_list (zip xs (map Ty \<sigma>s)) \<otimes> \<Delta>) (Some \<tau>) s;
        case R of

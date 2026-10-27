@@ -89,7 +89,7 @@ where
 
 adhoc_overloading Monad_Syntax.bind \<rightleftharpoons> bind_sum
 
-(* Failure e for None, otherwise the value *)
+(* Failure e for None, otherwise the value; e is computed eagerly by generated code *)
 definition or_else :: "'e \<Rightarrow> 'a option \<Rightarrow> 'e + 'a"
 where
 "or_else e m = (case m of Some x \<Rightarrow> Ok x | None \<Rightarrow> Fail e)"
