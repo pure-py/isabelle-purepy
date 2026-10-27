@@ -1,6 +1,6 @@
 (* Abstract syntax and its analyses *)
 theory Syntax
-  imports Complex_Main Util
+  imports Complex_Main Util Floats
 begin
 
 type_alias var = string
@@ -9,7 +9,7 @@ type_synonym name = "var nonempty"
 
 datatype lit =
     LitInt int
-  | LitFloat real  (* reals, so nan is not modelled *)
+  | LitFloat float
   | LitString string
   | LitBool bool
   | LitNone

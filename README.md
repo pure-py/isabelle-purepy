@@ -25,6 +25,7 @@ To browse the theories with the prover running, open the session directory in th
 | File                 | Content                                                                        |
 |----------------------|--------------------------------------------------------------------------------|
 | `Util.thy`           | Shared utilities                                                               |
+| `Floats.thy`         | Floats as an abstract type with uninterpreted arithmetic                       |
 | `Syntax.thy`         | Abstract syntax and its analyses                                               |
 | `Semantics.thy`      | Values, results and evaluation judgements                                      |
 | `Correctness.thy`    | Inversion lemmas and determinism of evaluation                                 |
