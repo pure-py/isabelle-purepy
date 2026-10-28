@@ -17,6 +17,14 @@ code_printing
   | constant "(<) :: str \<Rightarrow> str \<Rightarrow> bool" \<rightharpoonup> (Python) "(_ < _)"
   | constant substring \<rightharpoonup> (Python) "(_ in _)"
 
+(* Identifiers as Python's str *)
+code_printing
+    type_constructor var \<rightharpoonup> (Python) "str"
+  | constant "HOL.equal :: var \<Rightarrow> var \<Rightarrow> bool" \<rightharpoonup> (Python) "(_ == _)"
+  | constant "(\<le>) :: var \<Rightarrow> var \<Rightarrow> bool" \<rightharpoonup> (Python) "(_ <= _)"
+  | constant "(<) :: var \<Rightarrow> var \<Rightarrow> bool" \<rightharpoonup> (Python) "(_ < _)"
+  | constant var_of_string \<rightharpoonup> (Python) "\"\".join'(_')"
+
 code_pred subty .
 code_pred binop_overload .
 code_pred unop_overload .

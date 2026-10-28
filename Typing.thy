@@ -471,7 +471,7 @@ by (relation "measure (\<lambda>x. case x of Inl (_, _, _, s) \<Rightarrow> size
 fun check_type_def :: "class_table \<Rightarrow> cxt \<Rightarrow> type_def \<Rightarrow> unit may_fail"
 where
 "check_type_def \<Sigma> \<Gamma> (Dataclass c \<alpha>s b \<phi>) = do {
-   check_predefined \<Gamma> ''dataclass'';
+   check_predefined \<Gamma> (var_of_string ''dataclass'');
    those_sum (map (resolve_type \<Sigma> \<Gamma> \<circ> snd) \<phi>);
    base_class \<leftarrow>
      (case b of
