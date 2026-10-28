@@ -72,14 +72,15 @@ where
            \<Gamma>\<^sub>s \<leftarrow>
              (case scope Unbound (declares \<iota>s) t of
                 Some \<Gamma>\<^sub>s \<Rightarrow> Ok \<Gamma>\<^sub>s
-              | None \<Rightarrow> Fail (scope_reason (declares \<iota>s) (declares t) (binds t)));
+              | None \<Rightarrow> Fail (scope_reason (declarations \<iota>s) (declarations t) (pattern_bound t)));
            check_assignments_declared {} (assign_targets t) (declares t) (binds t);
            (R, \<Sigma>'') \<leftarrow> check_top_stmt \<Sigma>' q (the (fmlookup predefined builtins) \<otimes> \<Gamma>' \<otimes> \<Gamma>\<^sub>s) t;
            case R of
              Assigns\<^sub>R \<Delta> _ \<Rightarrow>
                let S = submods M q; X = (fmdom \<Gamma>' |\<union>| fmdom \<Delta>) |\<inter>| fmdom S in
-               if X = {||} then Ok (S \<otimes> \<Delta>, \<Sigma>'') else Fail (DuplicateMember (Min (fset X)) q)
-           | Returns\<^sub>R \<Rightarrow> Fail TopLevelAssertFalse
+               if X = {||} then Ok (S \<otimes> \<Delta>, \<Sigma>'')
+               else let x = Min (fset X) in Fail (Located (binder_pos \<iota>s t x) (DuplicateMember x q))
+           | Returns\<^sub>R \<Rightarrow> Fail (Located (last_pos t) TopLevelAssertFalse)
          })
        })" |
 "check_imports M V \<Sigma> q [] = Ok (fmempty, \<Sigma>)" |
@@ -93,7 +94,7 @@ where
 "check_imports M V \<Sigma> q (At p (FromImport q' xs) # \<iota>s) = locate_in q p (do {
    (\<Delta>, \<Sigma>\<^sub>1) \<leftarrow> check_module M V \<Sigma> q q';
    \<Sigma>\<^sub>2 \<leftarrow> check_modules M V \<Sigma>\<^sub>1 q (unique_to q' q);
-   (case redeclared {} xs of Some x \<Rightarrow> Fail (q, DuplicateImportedName x) | None \<Rightarrow> Ok ());
+   (case redeclared id {} xs of Some x \<Rightarrow> Fail (q, DuplicateImportedName x) | None \<Rightarrow> Ok ());
    (\<theta>s, \<Sigma>\<^sub>3) \<leftarrow> imports_entries M V \<Sigma>\<^sub>2 q q' \<Delta> xs;
    (\<Gamma>, \<Sigma>') \<leftarrow> check_imports M V \<Sigma>\<^sub>3 q \<iota>s;
    Ok (fmap_of_list (zip xs \<theta>s) \<uplus> \<Gamma>, \<Sigma>')

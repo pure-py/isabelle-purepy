@@ -125,22 +125,25 @@ definition mypy_only_if :: "bool \<Rightarrow> reason \<Rightarrow> reason"
 where
 "mypy_only_if b r = (if b then MypyCompatibility r else r)"
 
-(* First of xs in X or occurring earlier in xs *)
-fun redeclared :: "var set \<Rightarrow> var list \<Rightarrow> var option"
+(* First of xs whose name, by f, is in X or is that of an earlier element *)
+fun redeclared :: "('a \<Rightarrow> var) \<Rightarrow> var set \<Rightarrow> 'a list \<Rightarrow> 'a option"
 where
-"redeclared X [] = None" |
-"redeclared X (x # xs) = (if x \<in> X then Some x else redeclared (insert x X) xs)"
+"redeclared f X [] = None" |
+"redeclared f X (x # xs) = (if f x \<in> X then Some x else redeclared f (insert (f x) X) xs)"
 
-(* Failure of the scope with bound names ys, declared names xs and pattern variables X *)
-definition scope_reason :: "var list \<Rightarrow> var list \<Rightarrow> var set \<Rightarrow> reason"
+(* Failure of the scope with bound names ys, declared names xs and pattern variables zs, each at the position of
+   the statement binding it, located at the offending binding *)
+definition scope_reason :: "var located list \<Rightarrow> var located list \<Rightarrow> var located list \<Rightarrow> reason"
 where
-"scope_reason ys xs X =
-  (case redeclared {} ys of
-     Some y \<Rightarrow> DuplicateImportedName y
+"scope_reason ys xs zs =
+  (case redeclared node {} ys of
+     Some y \<Rightarrow> Located (pos_of y) (DuplicateImportedName (node y))
    | None \<Rightarrow>
-       (case redeclared (set ys \<union> X) xs of
-          Some x \<Rightarrow> Redeclaration x
-        | None \<Rightarrow> Redeclaration (Min (set ys \<inter> X))))"
+       (case redeclared node (set (map node ys) \<union> set (map node zs)) xs of
+          Some x \<Rightarrow> Located (pos_of x) (Redeclaration (node x))
+        | None \<Rightarrow>
+            let z = Min (set (map node ys) \<inter> set (map node zs))
+            in Located (pos_of (the (find (\<lambda>z'. node z' = z) zs))) (Redeclaration z)))"
 
 (* Reason why none of the expressions synthesises a type: the first failure of an expression with a synthesis
    rule *)

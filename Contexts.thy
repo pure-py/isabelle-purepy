@@ -89,7 +89,7 @@ where
   fmupd range_class
     (ClassDef (the (fmlookup predefined builtins)) builtins
       [At no_position (Dataclass (var ''range'') [] None
-        [(var ''start'', At no_position (TyExprPrim int)), (var ''stop'', At no_position (TyExprPrim int))])] 0)
+        [(var ''start'', TyExprPrim int), (var ''stop'', TyExprPrim int)])] 0)
     fmempty"
 
 lemma sorted_list_of_fmap_lookup: "(k, v) \<in> set (sorted_list_of_fmap m) \<Longrightarrow> fmlookup m k = Some v"

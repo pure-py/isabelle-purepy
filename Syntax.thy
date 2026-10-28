@@ -103,8 +103,8 @@ datatype expr =
   | ExprCond "expr located" "expr located" "expr located"
   | ExprList "expr located list"
   | ExprTuple "expr located list"
-  | ExprListComp "expr located" "qualifier list"
-  | ExprDictComp "expr located" "expr located" "qualifier list"
+  | ExprListComp "expr located" "qualifier located list"
+  | ExprDictComp "expr located" "expr located" "qualifier located list"
   | ExprLambda "var list" "expr located"
 and qualifier =
     Guard "expr located"
@@ -122,13 +122,13 @@ datatype prim_ty =
 
 datatype ty_expr =
     TyExprPrim prim_ty
-  | TyExprList "ty_expr located"
-  | TyExprTuple "ty_expr located list"
-  | TyExprDict "ty_expr located"
-  | TyExprCallable "ty_expr located list" "ty_expr located"
+  | TyExprList ty_expr
+  | TyExprTuple "ty_expr list"
+  | TyExprDict ty_expr
+  | TyExprCallable "ty_expr list" ty_expr
   | TyExprLiteral lit
-  | TyExprName name "ty_expr located list"
-  | TyExprUnion "ty_expr located" "ty_expr located"
+  | TyExprName name "ty_expr list"
+  | TyExprUnion ty_expr ty_expr
 
 datatype ty =
     TyPrim prim_ty
@@ -156,21 +156,21 @@ datatype import =
 datatype stmt =
     StmtPass
   | StmtSeq "stmt located" "stmt located"
-  | StmtDeclare var "ty_expr located"
-  | StmtAssign var "ty_expr located option" "expr located"
+  | StmtDeclare var ty_expr
+  | StmtAssign var "ty_expr option" "expr located"
   | StmtExpr "expr located"
   | StmtAssert "expr located" "expr located option"
   | StmtReturn "expr located option"
   | StmtIf "expr located" "stmt located" "(expr located \<times> stmt located) list" "stmt located option"
   | StmtMatch "expr located" "(pat located \<times> stmt located) list"
   | StmtMutualRegion "func located list"
-and func = Def var "var list" "(var \<times> ty_expr located) list" "ty_expr located" "stmt located"
+and func = Def var "var list" "(var \<times> ty_expr) list" ty_expr "stmt located"
 
-type_synonym fields = "(var \<times> ty_expr located) list"
+type_synonym fields = "(var \<times> ty_expr) list"
 
 datatype type_def =
-    Dataclass var "var list" "(name \<times> ty_expr located list) option" fields
-  | TypeStmt var "var list" "ty_expr located"
+    Dataclass var "var list" "(name \<times> ty_expr list) option" fields
+  | TypeStmt var "var list" ty_expr
 
 datatype top_stmt =
     Stmt "stmt located"
@@ -219,27 +219,37 @@ where
 "binds_pat (PatDict kps) = \<Union> (set (map (binds_pat \<circ> node \<circ> snd) kps))" |
 "binds_pat _ = {}"
 
-fun binds_stmt :: "stmt \<Rightarrow> var set"
+(* Variables bound by the patterns of the match statements, each at the position of its match statement, in
+   order and with repeats *)
+fun pattern_bound_stmt :: "stmt located \<Rightarrow> var located list"
 where
-"binds_stmt (StmtSeq s s') = binds_stmt (node s) \<union> binds_stmt (node s')" |
-"binds_stmt (StmtIf _ s elifs else') =
-  binds_stmt (node s) \<union> \<Union> (set (map (\<lambda>(_, s'). binds_stmt (node s')) elifs))
-  \<union> (case else' of None \<Rightarrow> {} | Some s' \<Rightarrow> binds_stmt (node s'))" |
-"binds_stmt (StmtMatch _ cases) =
-  \<Union> (set (map (\<lambda>(p, s). binds_pat (node p) \<union> binds_stmt (node s)) cases))" |
-"binds_stmt _ = {}"
+"pattern_bound_stmt (At _ (StmtSeq s s')) = pattern_bound_stmt s @ pattern_bound_stmt s'" |
+"pattern_bound_stmt (At _ (StmtIf _ s elifs else')) =
+  pattern_bound_stmt s @ concat (map (\<lambda>(_, s'). pattern_bound_stmt s') elifs)
+  @ (case else' of None \<Rightarrow> [] | Some s' \<Rightarrow> pattern_bound_stmt s')" |
+"pattern_bound_stmt (At p (StmtMatch _ cases)) =
+  concat (map (\<lambda>(q, s). map (At p) (sorted_list_of_set (binds_pat (node q))) @ pattern_bound_stmt s) cases)" |
+"pattern_bound_stmt _ = []"
 
-fun binds_quals :: "qualifier list \<Rightarrow> var set"
+definition binds_stmt :: "stmt located \<Rightarrow> var set"
+where
+"binds_stmt s = set (map node (pattern_bound_stmt s))"
+
+fun binds_quals :: "qualifier located list \<Rightarrow> var set"
 where
 "binds_quals [] = {}" |
-"binds_quals (Guard _ # gs) = binds_quals gs" |
-"binds_quals (Generator x _ # gs) = {x} \<union> binds_quals gs"
+"binds_quals (At _ (Guard _) # gs) = binds_quals gs" |
+"binds_quals (At _ (Generator x _) # gs) = {x} \<union> binds_quals gs"
 
-fun binds_top :: "top_stmt \<Rightarrow> var set"
+fun pattern_bound_top :: "top_stmt \<Rightarrow> var located list"
 where
-"binds_top (Stmt s) = binds_stmt (node s)" |
-"binds_top (TopSeq t t') = binds_top t \<union> binds_top t'" |
-"binds_top (TypeDefs \<chi>s) = {}"
+"pattern_bound_top (Stmt s) = pattern_bound_stmt s" |
+"pattern_bound_top (TopSeq t t') = pattern_bound_top t @ pattern_bound_top t'" |
+"pattern_bound_top (TypeDefs \<chi>s) = []"
+
+definition binds_top :: "top_stmt \<Rightarrow> var set"
+where
+"binds_top t = set (map node (pattern_bound_top t))"
 
 fun assigns_stmt :: "stmt \<Rightarrow> var set"
 where
@@ -260,33 +270,54 @@ where
 "assigns_top (TopSeq t t') = assigns_top t \<union> assigns_top t'" |
 "assigns_top (TypeDefs \<chi>s) = set (map (type_def_name \<circ> node) \<chi>s)"
 
-fun declares_stmt :: "stmt \<Rightarrow> var list"
+(* Names declared, each at the position of its declaring statement, in order and with repeats *)
+fun declarations_stmt :: "stmt located \<Rightarrow> var located list"
 where
-"declares_stmt (StmtDeclare x _) = [x]" |
-"declares_stmt (StmtAssign x (Some _) _) = [x]" |
-"declares_stmt (StmtSeq s s') = declares_stmt (node s) @ declares_stmt (node s')" |
-"declares_stmt (StmtMutualRegion ds) = map (def_name \<circ> node) ds" |
-"declares_stmt (StmtIf _ s elifs else') =
-  declares_stmt (node s) @ concat (map (\<lambda>(_, s'). declares_stmt (node s')) elifs)
-  @ (case else' of None \<Rightarrow> [] | Some s' \<Rightarrow> declares_stmt (node s'))" |
-"declares_stmt (StmtMatch _ cases) = concat (map (\<lambda>(_, s). declares_stmt (node s)) cases)" |
-"declares_stmt _ = []"
+"declarations_stmt (At p (StmtDeclare x _)) = [At p x]" |
+"declarations_stmt (At p (StmtAssign x (Some _) _)) = [At p x]" |
+"declarations_stmt (At _ (StmtSeq s s')) = declarations_stmt s @ declarations_stmt s'" |
+"declarations_stmt (At _ (StmtMutualRegion ds)) = map (\<lambda>d. At (pos_of d) (def_name (node d))) ds" |
+"declarations_stmt (At _ (StmtIf _ s elifs else')) =
+  declarations_stmt s @ concat (map (\<lambda>(_, s'). declarations_stmt s') elifs)
+  @ (case else' of None \<Rightarrow> [] | Some s' \<Rightarrow> declarations_stmt s')" |
+"declarations_stmt (At _ (StmtMatch _ cases)) = concat (map (\<lambda>(_, s). declarations_stmt s) cases)" |
+"declarations_stmt _ = []"
 
-fun declares_imports :: "import located list \<Rightarrow> var list"
+definition declares_stmt :: "stmt located \<Rightarrow> var list"
 where
-"declares_imports [] = []" |
-"declares_imports (At _ (Import (x, xs)) # \<iota>s) =
-  (if list_ex (\<lambda>\<iota>. case node \<iota> of Import (x', _) \<Rightarrow> x' = x | _ \<Rightarrow> False) \<iota>s then declares_imports \<iota>s
-   else x # declares_imports \<iota>s)" |
-"declares_imports (At _ (FromImport q xs) # \<iota>s) = xs @ declares_imports \<iota>s"
+"declares_stmt s = map node (declarations_stmt s)"
 
-fun declares_top :: "top_stmt \<Rightarrow> var list"
+(* Names bound by imports, each at the position of its import, the root of a plain import listed once *)
+fun declarations_imports :: "import located list \<Rightarrow> var located list"
 where
-"declares_top (Stmt s) = declares_stmt (node s)" |
-"declares_top (TopSeq t t') = declares_top t @ declares_top t'" |
-"declares_top (TypeDefs \<chi>s) = map (type_def_name \<circ> node) \<chi>s"
+"declarations_imports [] = []" |
+"declarations_imports (At p (Import (x, xs)) # \<iota>s) =
+  (if list_ex (\<lambda>\<iota>. case node \<iota> of Import (x', _) \<Rightarrow> x' = x | _ \<Rightarrow> False) \<iota>s then declarations_imports \<iota>s
+   else At p x # declarations_imports \<iota>s)" |
+"declarations_imports (At p (FromImport q xs) # \<iota>s) = map (At p) xs @ declarations_imports \<iota>s"
 
-fun fv_expr :: "expr \<Rightarrow> var set" and fv_quals :: "qualifier list \<Rightarrow> var set"
+definition declares_imports :: "import located list \<Rightarrow> var list"
+where
+"declares_imports \<iota>s = map node (declarations_imports \<iota>s)"
+
+fun declarations_top :: "top_stmt \<Rightarrow> var located list"
+where
+"declarations_top (Stmt s) = declarations_stmt s" |
+"declarations_top (TopSeq t t') = declarations_top t @ declarations_top t'" |
+"declarations_top (TypeDefs \<chi>s) = map (\<lambda>\<chi>. At (pos_of \<chi>) (type_def_name (node \<chi>))) \<chi>s"
+
+definition declares_top :: "top_stmt \<Rightarrow> var list"
+where
+"declares_top t = map node (declarations_top t)"
+
+(* Position of the last statement *)
+fun last_pos :: "top_stmt \<Rightarrow> pos"
+where
+"last_pos (Stmt s) = pos_of s" |
+"last_pos (TopSeq _ t) = last_pos t" |
+"last_pos (TypeDefs \<chi>s) = pos_of (last \<chi>s)"
+
+fun fv_expr :: "expr \<Rightarrow> var set" and fv_quals :: "qualifier located list \<Rightarrow> var set"
 where
 "fv_expr (ExprVar x) = {x}" |
 "fv_expr (ExprLiteral _) = {}" |
@@ -308,8 +339,8 @@ where
 "fv_expr (ExprLambda xs e) = fv_expr (node e) - set xs" |
 
 "fv_quals [] = {}" |
-"fv_quals (Guard e # gs) = fv_expr (node e) \<union> fv_quals gs" |
-"fv_quals (Generator x e # gs) = fv_expr (node e) \<union> (fv_quals gs - {x})"
+"fv_quals (At _ (Guard e) # gs) = fv_expr (node e) \<union> fv_quals gs" |
+"fv_quals (At _ (Generator x e) # gs) = fv_expr (node e) \<union> (fv_quals gs - {x})"
 
 fun fv_ty :: "ty \<Rightarrow> var set"
 where
@@ -332,7 +363,7 @@ where
 "subterms (TyClass C \<tau>s) = TyClass C \<tau>s # concat (map subterms \<tau>s)" |
 "subterms \<tau> = [\<tau>]"
 
-fun captures_expr :: "expr \<Rightarrow> var set" and captures_quals :: "qualifier list \<Rightarrow> var set"
+fun captures_expr :: "expr \<Rightarrow> var set" and captures_quals :: "qualifier located list \<Rightarrow> var set"
 where
 "captures_expr (ExprVar _) = {}" |
 "captures_expr (ExprLiteral _) = {}" |
@@ -357,16 +388,16 @@ where
 "captures_expr (ExprLambda xs e) = fv_expr (node e) - set xs" |
 
 "captures_quals [] = {}" |
-"captures_quals (Guard e # gs) = captures_expr (node e) \<union> captures_quals gs" |
-"captures_quals (Generator x e # gs) = captures_expr (node e) \<union> (captures_quals gs - {x})"
+"captures_quals (At _ (Guard e) # gs) = captures_expr (node e) \<union> captures_quals gs" |
+"captures_quals (At _ (Generator x e) # gs) = captures_expr (node e) \<union> (captures_quals gs - {x})"
 
 (* u marks a variable unbound: the value or the context entry *)
-definition scope_stmt :: "'a \<Rightarrow> var list \<Rightarrow> stmt \<Rightarrow> (var, 'a) fmap option"
+definition scope_stmt :: "'a \<Rightarrow> var list \<Rightarrow> stmt located \<Rightarrow> (var, 'a) fmap option"
 where
 "scope_stmt u ys s =
   (if distinct ys \<and> distinct (declares_stmt s) \<and> set ys \<inter> set (declares_stmt s) = {}
       \<and> set ys \<inter> binds_stmt s = {} \<and> set (declares_stmt s) \<inter> binds_stmt s = {}
-   then Some (fmconst (assigns_stmt s - set ys) u)
+   then Some (fmconst (assigns_stmt (node s) - set ys) u)
    else None)"
 
 definition scope_top :: "'a \<Rightarrow> var list \<Rightarrow> top_stmt \<Rightarrow> (var, 'a) fmap option"
@@ -412,22 +443,41 @@ where
 "dotted_name (ExprAttribute e x) = map_option (\<lambda>q. snoc q x) (dotted_name (node e))" |
 "dotted_name _ = None"
 
-(* Targets of plain assignments, in order *)
-fun assign_targets_stmt :: "stmt \<Rightarrow> var list"
+(* Targets of plain assignments, each at the position of its assignment, in order *)
+fun assign_targets_stmt :: "stmt located \<Rightarrow> var located list"
 where
-"assign_targets_stmt (StmtAssign x None _) = [x]" |
-"assign_targets_stmt (StmtSeq s s') = assign_targets_stmt (node s) @ assign_targets_stmt (node s')" |
-"assign_targets_stmt (StmtIf _ s elifs else') =
-  assign_targets_stmt (node s) @ concat (map (\<lambda>(_, s'). assign_targets_stmt (node s')) elifs)
-  @ (case else' of None \<Rightarrow> [] | Some s' \<Rightarrow> assign_targets_stmt (node s'))" |
-"assign_targets_stmt (StmtMatch _ cases) = concat (map (\<lambda>(_, s). assign_targets_stmt (node s)) cases)" |
+"assign_targets_stmt (At p (StmtAssign x None _)) = [At p x]" |
+"assign_targets_stmt (At _ (StmtSeq s s')) = assign_targets_stmt s @ assign_targets_stmt s'" |
+"assign_targets_stmt (At _ (StmtIf _ s elifs else')) =
+  assign_targets_stmt s @ concat (map (\<lambda>(_, s'). assign_targets_stmt s') elifs)
+  @ (case else' of None \<Rightarrow> [] | Some s' \<Rightarrow> assign_targets_stmt s')" |
+"assign_targets_stmt (At _ (StmtMatch _ cases)) = concat (map (\<lambda>(_, s). assign_targets_stmt s) cases)" |
 "assign_targets_stmt _ = []"
 
-fun assign_targets_top :: "top_stmt \<Rightarrow> var list"
+fun assign_targets_top :: "top_stmt \<Rightarrow> var located list"
 where
-"assign_targets_top (Stmt s) = assign_targets_stmt (node s)" |
+"assign_targets_top (Stmt s) = assign_targets_stmt s" |
 "assign_targets_top (TopSeq t t') = assign_targets_top t @ assign_targets_top t'" |
 "assign_targets_top (TypeDefs _) = []"
+
+(* Names bound by imports, each at the position of its import, in order and with repeats *)
+fun binders_imports :: "import located list \<Rightarrow> var located list"
+where
+"binders_imports [] = []" |
+"binders_imports (At p (Import (x, _)) # \<iota>s) = At p x # binders_imports \<iota>s" |
+"binders_imports (At p (FromImport _ xs) # \<iota>s) = map (At p) xs @ binders_imports \<iota>s"
+
+(* Names assigned by top-level statements, each at the position of its statement, in order and with repeats *)
+fun binders_top :: "top_stmt \<Rightarrow> var located list"
+where
+"binders_top (Stmt s) = map (At (pos_of s)) (sorted_list_of_set (assigns_stmt (node s)))" |
+"binders_top (TopSeq t t') = binders_top t @ binders_top t'" |
+"binders_top (TypeDefs \<chi>s) = map (\<lambda>\<chi>. At (pos_of \<chi>) (type_def_name (node \<chi>))) \<chi>s"
+
+(* Position of the first import or top-level statement binding x *)
+definition binder_pos :: "import located list \<Rightarrow> top_stmt \<Rightarrow> var \<Rightarrow> pos"
+where
+"binder_pos \<iota>s t x = pos_of (the (find (\<lambda>y. node y = x) (binders_imports \<iota>s @ binders_top t)))"
 
 definition prim_of_name :: "var \<Rightarrow> prim_ty option"
 where
@@ -439,37 +489,36 @@ where
 "subscript_args (At _ (ExprTuple es)) = es" |
 "subscript_args e = [e]"
 
-(* Type expression denoted by an expression, at the same positions *)
-fun type_expr_of :: "expr located \<Rightarrow> ty_expr located option"
+(* Type expression denoted by an expression *)
+fun type_expr_of :: "expr located \<Rightarrow> ty_expr option"
 where
-"type_expr_of (At p (ExprLiteral LitNone)) = Some (At p (TyExprPrim NoneType))" |
-"type_expr_of (At p (ExprVar x)) =
-  Some (At p (case prim_of_name x of Some \<nu> \<Rightarrow> TyExprPrim \<nu> | None \<Rightarrow> TyExprName (x, []) []))" |
-"type_expr_of (At p (ExprAttribute e x)) =
-  map_option (\<lambda>q. At p (TyExprName q [])) (dotted_name (ExprAttribute e x))" |
-"type_expr_of (At p (ExprBinOp BOpBitOr e e')) = do {
-   \<psi> \<leftarrow> type_expr_of e; \<psi>' \<leftarrow> type_expr_of e'; Some (At p (TyExprUnion \<psi> \<psi>'))
+"type_expr_of (At _ (ExprLiteral LitNone)) = Some (TyExprPrim NoneType)" |
+"type_expr_of (At _ (ExprVar x)) =
+  Some (case prim_of_name x of Some \<nu> \<Rightarrow> TyExprPrim \<nu> | None \<Rightarrow> TyExprName (x, []) [])" |
+"type_expr_of (At _ (ExprAttribute e x)) = map_option (\<lambda>q. TyExprName q []) (dotted_name (ExprAttribute e x))" |
+"type_expr_of (At _ (ExprBinOp BOpBitOr e e')) = do {
+   \<psi> \<leftarrow> type_expr_of e; \<psi>' \<leftarrow> type_expr_of e'; Some (TyExprUnion \<psi> \<psi>')
  }" |
-"type_expr_of (At p (ExprSubscript e e')) =
+"type_expr_of (At _ (ExprSubscript e e')) =
   (let head = (case node e of ExprVar x \<Rightarrow> Some x | _ \<Rightarrow> None) in
    if head = Some (var ''Literal'') then
      (case node e' of
         ExprLiteral (LitFloat _) \<Rightarrow> None
-      | ExprLiteral l \<Rightarrow> Some (At p (TyExprLiteral l))
+      | ExprLiteral l \<Rightarrow> Some (TyExprLiteral l)
       | _ \<Rightarrow> None)
    else if head = Some (var ''Callable'') then
      (case e' of
         At _ (ExprTuple [At _ (ExprList es), e'']) \<Rightarrow> do {
-          \<psi>s \<leftarrow> those (map type_expr_of es); \<psi> \<leftarrow> type_expr_of e''; Some (At p (TyExprCallable \<psi>s \<psi>))
+          \<psi>s \<leftarrow> those (map type_expr_of es); \<psi> \<leftarrow> type_expr_of e''; Some (TyExprCallable \<psi>s \<psi>)
         }
       | _ \<Rightarrow> None)
    else do {
      \<psi>s \<leftarrow> those (case e' of At _ (ExprTuple es) \<Rightarrow> map type_expr_of es | _ \<Rightarrow> [type_expr_of e']);
-     if head = Some (var ''list'') then (case \<psi>s of [\<psi>] \<Rightarrow> Some (At p (TyExprList \<psi>)) | _ \<Rightarrow> None)
-     else if head = Some (var ''tuple'') then Some (At p (TyExprTuple \<psi>s))
+     if head = Some (var ''list'') then (case \<psi>s of [\<psi>] \<Rightarrow> Some (TyExprList \<psi>) | _ \<Rightarrow> None)
+     else if head = Some (var ''tuple'') then Some (TyExprTuple \<psi>s)
      else if head = Some (var ''dict'')
-     then (case \<psi>s of [At _ (TyExprPrim str), \<psi>] \<Rightarrow> Some (At p (TyExprDict \<psi>)) | _ \<Rightarrow> None)
-     else map_option (\<lambda>q. At p (TyExprName q \<psi>s)) (dotted_name (node e))
+     then (case \<psi>s of [TyExprPrim str, \<psi>] \<Rightarrow> Some (TyExprDict \<psi>) | _ \<Rightarrow> None)
+     else map_option (\<lambda>q. TyExprName q \<psi>s) (dotted_name (node e))
    })" |
 "type_expr_of _ = None"
 
@@ -477,14 +526,18 @@ consts
   binds :: "'a \<Rightarrow> var set"
   assigns :: "'a \<Rightarrow> var set"
   declares :: "'a \<Rightarrow> var list"
+  declarations :: "'a \<Rightarrow> var located list"
+  pattern_bound :: "'a \<Rightarrow> var located list"
   fv :: "'a \<Rightarrow> var set"
   captures :: "'a \<Rightarrow> var set"
-  assign_targets :: "'a \<Rightarrow> var list"
+  assign_targets :: "'a \<Rightarrow> var located list"
   scope :: "'u \<Rightarrow> 'y \<Rightarrow> 'a \<Rightarrow> (var, 'u) fmap option"
 
 adhoc_overloading binds \<rightleftharpoons> binds_pat binds_stmt binds_quals binds_top
 adhoc_overloading assigns \<rightleftharpoons> assigns_stmt assigns_top
 adhoc_overloading declares \<rightleftharpoons> declares_stmt declares_top declares_imports
+adhoc_overloading declarations \<rightleftharpoons> declarations_stmt declarations_top declarations_imports
+adhoc_overloading pattern_bound \<rightleftharpoons> pattern_bound_stmt pattern_bound_top
 adhoc_overloading fv \<rightleftharpoons> fv_expr fv_quals fv_ty
 adhoc_overloading captures \<rightleftharpoons> captures_expr captures_quals
 adhoc_overloading assign_targets \<rightleftharpoons> assign_targets_stmt assign_targets_top

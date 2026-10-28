@@ -68,11 +68,10 @@ where
 (* A holds the aliases being resolved, so that a cyclic alias is rejected; n bounds the nesting of alias
    resolution, and the number of alias definitions reachable from the context suffices, since the aliases in A
    are distinct *)
-fun resolve_type' :: "class_table \<Rightarrow> cxt \<Rightarrow> (name \<times> var) list \<Rightarrow> nat \<Rightarrow> ty_expr located \<Rightarrow> ty may_fail"
+fun resolve_type' :: "class_table \<Rightarrow> cxt \<Rightarrow> (name \<times> var) list \<Rightarrow> nat \<Rightarrow> ty_expr \<Rightarrow> ty may_fail"
 where
-"resolve_type' \<Sigma> \<Gamma> A n (At p (TyExprPrim \<nu>)) =
-  locate p (do { check_predefined \<Gamma> (prim_name \<nu>); Ok (TyPrim \<nu>) })" |
-"resolve_type' \<Sigma> \<Gamma> A n (At p (TyExprName q \<psi>s)) = locate p
+"resolve_type' \<Sigma> \<Gamma> A n (TyExprPrim \<nu>) = do { check_predefined \<Gamma> (prim_name \<nu>); Ok (TyPrim \<nu>) }" |
+"resolve_type' \<Sigma> \<Gamma> A n (TyExprName q \<psi>s) =
   (if snd q = [] \<and> \<psi>s = [] \<and> fmlookup \<Gamma> (fst q) = Some TypeVar then Ok (TyVar (fst q))
    else case resolve_name \<Gamma> q of
      Some (Type C) \<Rightarrow> do {
@@ -93,29 +92,28 @@ where
           }
         | _ \<Rightarrow> undefined)
    | _ \<Rightarrow> Fail (not_type_name \<Gamma> q))" |
-"resolve_type' \<Sigma> \<Gamma> A n (At p (TyExprLiteral l)) =
-  locate p (do { check_predefined \<Gamma> (var ''Literal''); Ok (TyLiteral l) })" |
-"resolve_type' \<Sigma> \<Gamma> A n (At p (TyExprList \<psi>)) =
-  locate p (do { check_predefined \<Gamma> (var ''list''); \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>; Ok (TyList \<tau>) })" |
-"resolve_type' \<Sigma> \<Gamma> A n (At p (TyExprDict \<psi>)) = locate p (do {
+"resolve_type' \<Sigma> \<Gamma> A n (TyExprLiteral l) = do { check_predefined \<Gamma> (var ''Literal''); Ok (TyLiteral l) }" |
+"resolve_type' \<Sigma> \<Gamma> A n (TyExprList \<psi>) =
+  do { check_predefined \<Gamma> (var ''list''); \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>; Ok (TyList \<tau>) }" |
+"resolve_type' \<Sigma> \<Gamma> A n (TyExprDict \<psi>) = do {
    check_predefined \<Gamma> (var ''dict''); check_predefined \<Gamma> (var ''str'');
    \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>; Ok (TyDict \<tau>)
- })" |
-"resolve_type' \<Sigma> \<Gamma> A n (At p (TyExprTuple \<psi>s)) = locate p (do {
+ }" |
+"resolve_type' \<Sigma> \<Gamma> A n (TyExprTuple \<psi>s) = do {
    check_predefined \<Gamma> (var ''tuple'');
    \<tau>s \<leftarrow> those_sum (map (resolve_type' \<Sigma> \<Gamma> A n) \<psi>s); Ok (TyTuple \<tau>s)
- })" |
-"resolve_type' \<Sigma> \<Gamma> A n (At p (TyExprCallable \<psi>s \<psi>)) = locate p (do {
+ }" |
+"resolve_type' \<Sigma> \<Gamma> A n (TyExprCallable \<psi>s \<psi>) = do {
    check_predefined \<Gamma> (var ''Callable'');
    \<sigma>s \<leftarrow> those_sum (map (resolve_type' \<Sigma> \<Gamma> A n) \<psi>s);
    \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>;
    Ok (TyCallable \<sigma>s \<tau>)
- })" |
-"resolve_type' \<Sigma> \<Gamma> A n (At p (TyExprUnion \<psi> \<psi>')) = do {
+ }" |
+"resolve_type' \<Sigma> \<Gamma> A n (TyExprUnion \<psi> \<psi>') = do {
    \<sigma> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>; \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>'; Ok (TyUnion \<sigma> \<tau>)
  }"
 
-definition resolve_type :: "class_table \<Rightarrow> cxt \<Rightarrow> ty_expr located \<Rightarrow> ty may_fail"
+definition resolve_type :: "class_table \<Rightarrow> cxt \<Rightarrow> ty_expr \<Rightarrow> ty may_fail"
 where
 "resolve_type \<Sigma> \<Gamma> \<psi> = resolve_type' \<Sigma> \<Gamma> [] (aliases \<Gamma>) \<psi>"
 
@@ -127,7 +125,7 @@ where
        (case node (\<chi>s ! i) of
           Dataclass _ _ None _ \<Rightarrow> None
         | Dataclass _ _ (Some (q', \<psi>s)) _ \<Rightarrow>
-            (case resolve_type \<Sigma> (type_context \<Gamma> q \<chi>s i) (At (pos_of (\<chi>s ! i)) (TyExprName q' \<psi>s)) of
+            (case resolve_type \<Sigma> (type_context \<Gamma> q \<chi>s i) (TyExprName q' \<psi>s) of
                Ok (TyClass D \<sigma>s) \<Rightarrow> Some (D, \<sigma>s)
              | _ \<Rightarrow> undefined)
         | TypeStmt _ _ _ \<Rightarrow> undefined)

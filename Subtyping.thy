@@ -78,24 +78,27 @@ where
 "elem_type \<Sigma> _ = None"
 
 (* Type of a subscript, by the type of the subscripted value, the checks of the index against int and str,
-   and the type synthesised by the index *)
-fun subscript_type :: "class_table \<Rightarrow> ty \<Rightarrow> unit may_fail \<Rightarrow> unit may_fail \<Rightarrow> ty may_fail \<Rightarrow> ty may_fail"
+   and the position and type synthesised by the index *)
+fun subscript_type ::
+  "class_table \<Rightarrow> ty \<Rightarrow> unit may_fail \<Rightarrow> unit may_fail \<Rightarrow> pos \<Rightarrow> ty may_fail \<Rightarrow> ty may_fail"
 where
-"subscript_type \<Sigma> (TyUnion \<sigma> \<sigma>') int_ok str_ok idx = do {
-   \<tau> \<leftarrow> subscript_type \<Sigma> \<sigma> int_ok str_ok idx; \<tau>' \<leftarrow> subscript_type \<Sigma> \<sigma>' int_ok str_ok idx; Ok (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>')
+"subscript_type \<Sigma> (TyUnion \<sigma> \<sigma>') int_ok str_ok p idx = do {
+   \<tau> \<leftarrow> subscript_type \<Sigma> \<sigma> int_ok str_ok p idx; \<tau>' \<leftarrow> subscript_type \<Sigma> \<sigma>' int_ok str_ok p idx;
+   Ok (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>')
  }" |
-"subscript_type \<Sigma> (TyList \<tau>) int_ok _ _ = do { int_ok; Ok \<tau> }" |
-"subscript_type \<Sigma> (TyDict \<tau>) _ str_ok _ = do { str_ok; Ok \<tau> }" |
-"subscript_type \<Sigma> (TyTuple \<tau>s) _ _ idx = do {
+"subscript_type \<Sigma> (TyList \<tau>) int_ok _ _ _ = do { int_ok; Ok \<tau> }" |
+"subscript_type \<Sigma> (TyDict \<tau>) _ str_ok _ _ = do { str_ok; Ok \<tau> }" |
+"subscript_type \<Sigma> (TyTuple \<tau>s) _ _ p idx = do {
    \<iota> \<leftarrow> idx;
    case \<iota> of
      TyLiteral (LitInt n) \<Rightarrow>
        let i = (if n < 0 then of_nat (length \<tau>s) + n else n)
-       in if 0 \<le> i \<and> i < of_nat (length \<tau>s) then Ok (\<tau>s ! nat i) else Fail (TupleIndexOutOfRange n (length \<tau>s))
+       in if 0 \<le> i \<and> i < of_nat (length \<tau>s) then Ok (\<tau>s ! nat i)
+          else Fail (Located p (TupleIndexOutOfRange n (length \<tau>s)))
    | TyPrim int \<Rightarrow> Ok (joins \<Sigma> \<tau>s)
-   | _ \<Rightarrow> Fail (TypeMismatch (TyPrim int) \<iota>)
+   | _ \<Rightarrow> Fail (Located p (TypeMismatch (TyPrim int) \<iota>))
  }" |
-"subscript_type \<Sigma> \<sigma> int_ok _ _ =
+"subscript_type \<Sigma> \<sigma> int_ok _ _ _ =
   (if base_type \<sigma> = TyPrim str then do { int_ok; Ok (TyPrim str) } else Fail (NotSubscriptable \<sigma>))"
 
 datatype instances = Instance "ty list" | Undetermined | NoInstance
