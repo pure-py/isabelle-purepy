@@ -24,7 +24,7 @@ datatype termination_kind =
   | OverflowError
   | ValueError
   | ZeroDivisionError
-  | AssertionError "string option"
+  | AssertionError "str option"
   | AttributeError
   | NameError
   | SystemExit int
@@ -71,9 +71,10 @@ where
 fun eq :: "val \<Rightarrow> val \<Rightarrow> bool result" and eq_elems :: "val list \<Rightarrow> val list \<Rightarrow> bool result"
 where
 "eq (VLit (LitInt n)) (VLit (LitInt n')) = Val (n = n')" |
-"eq (VLit (LitInt n)) (VLit (LitFloat x')) = Val (real_of_int n = x')" |
-"eq (VLit (LitFloat x)) (VLit (LitInt n')) = Val (x = real_of_int n')" |
-"eq (VLit (LitFloat x)) (VLit (LitFloat x')) = Val (x = x')" |
+"eq (VLit (LitInt n)) (VLit (LitFloat x')) = Val (float_value x' = Some (ereal (real_of_int n)))" |
+"eq (VLit (LitFloat x)) (VLit (LitInt n')) = Val (float_value x = Some (ereal (real_of_int n')))" |
+"eq (VLit (LitFloat x)) (VLit (LitFloat x')) =
+  (if is_nan x \<and> is_nan x' then Aborts Undef else Val (float_value x = float_value x'))" |
 "eq (VLit (LitString w)) (VLit (LitString w')) = Val (w = w')" |
 "eq (VLit (LitBool b)) (VLit (LitBool b')) = Val (b = b')" |
 "eq (VLit LitNone) (VLit LitNone) = Val True" |
@@ -99,7 +100,7 @@ fun contains :: "val \<Rightarrow> val \<Rightarrow> bool result" and contains_e
 where
 "contains (VList vs) v = contains_elems vs v" |
 "contains (VTuple vs) v = contains_elems vs v" |
-"contains (VLit (LitString w')) (VLit (LitString w)) = Val (\<exists>w1 w2. w' = w1 @ w @ w2)" |
+"contains (VLit (LitString w')) (VLit (LitString w)) = Val (substring w w')" |
 "contains _ _ = Aborts TypeError" |
 
 "contains_elems [] v = Val False" |
@@ -110,62 +111,79 @@ where
 "is_bool (VLit (LitBool _)) = True" |
 "is_bool _ = False"
 
-(* Numeric value as a real; None for a non-number *)
-fun as_real :: "val \<Rightarrow> real option"
+fun is_nan_val :: "val \<Rightarrow> bool"
 where
-"as_real (VLit (LitInt n)) = Some (real_of_int n)" |
-"as_real (VLit (LitFloat x)) = Some x" |
-"as_real _ = None"
+"is_nan_val (VLit (LitFloat x)) = is_nan x" |
+"is_nan_val _ = False"
 
-(* Apply g to two numbers as reals; Excluded for a Boolean operand *)
-fun real_op :: "(real \<Rightarrow> real \<Rightarrow> val result) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
+(* Float of an int or float value; None otherwise *)
+fun as_float :: "val \<Rightarrow> float option"
 where
-"real_op g v v' =
+"as_float (VLit (LitInt n)) = Some (float_of_int n)" |
+"as_float (VLit (LitFloat x)) = Some x" |
+"as_float _ = None"
+
+(* Value of a number as an extended real; None for nan and for a non-number *)
+fun number_value :: "val \<Rightarrow> ereal option"
+where
+"number_value (VLit (LitInt n)) = Some (ereal (real_of_int n))" |
+"number_value (VLit (LitFloat x)) = float_value x" |
+"number_value _ = None"
+
+(* Apply g to two numbers as floats; Excluded for a Boolean operand *)
+fun number_op :: "(float \<Rightarrow> float \<Rightarrow> val result) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
+where
+"number_op g v v' =
   (if is_bool v \<or> is_bool v' then Aborts Excluded
-   else case (as_real v, as_real v') of
+   else case (as_float v, as_float v') of
      (Some x, Some x') \<Rightarrow> g x x'
    | _ \<Rightarrow> Aborts TypeError)"
 
 (* Apply f to two integers, g to two numbers otherwise *)
-fun arith :: "(int \<Rightarrow> int \<Rightarrow> int) \<Rightarrow> (real \<Rightarrow> real \<Rightarrow> real) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
+fun arith :: "(int \<Rightarrow> int \<Rightarrow> int) \<Rightarrow> (float \<Rightarrow> float \<Rightarrow> float) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
 where
 "arith f g (VLit (LitInt n)) (VLit (LitInt n')) = Val (VLit (LitInt (f n n')))" |
-"arith f g v v' = real_op (\<lambda>x x'. Val (VLit (LitFloat (g x x')))) v v'"
+"arith f g v v' = number_op (\<lambda>x x'. Val (VLit (LitFloat (g x x')))) v v'"
 
-(* Compare two numbers as reals *)
-fun compare :: "(real \<Rightarrow> real \<Rightarrow> bool) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
+(* Compare two numbers by value; false if either is nan *)
+fun compare :: "(ereal \<Rightarrow> ereal \<Rightarrow> bool) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
 where
-"compare f v v' = real_op (\<lambda>x x'. Val (VLit (LitBool (f x x')))) v v'"
+"compare f v v' =
+  number_op (\<lambda>_ _. Val (VLit (LitBool (case (number_value v, number_value v') of
+    (Some y, Some y') \<Rightarrow> f y y'
+  | _ \<Rightarrow> False)))) v v'"
 
 fun binop_meaning :: "bop \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
 where
-"binop_meaning BOpEq v v' = mlet (eq v v') (\<lambda>b. Val (VLit (LitBool b)))" |
-"binop_meaning BOpNeq v v' = mlet (eq v v') (\<lambda>b. Val (VLit (LitBool (\<not> b))))" |
+"binop_meaning BOpEq v v' =
+  (if is_nan_val v \<and> is_nan_val v' then Val (VLit (LitBool False))
+   else mlet (eq v v') (\<lambda>b. Val (VLit (LitBool b))))" |
+"binop_meaning BOpNeq v v' =
+  (if is_nan_val v \<and> is_nan_val v' then Val (VLit (LitBool True))
+   else mlet (eq v v') (\<lambda>b. Val (VLit (LitBool (\<not> b)))))" |
 "binop_meaning BOpIn v v' = mlet (contains v' v) (\<lambda>b. Val (VLit (LitBool b)))" |
 "binop_meaning BOpNotIn v v' = mlet (contains v' v) (\<lambda>b. Val (VLit (LitBool (\<not> b))))" |
 "binop_meaning BOpLt v v' = compare (<) v v'" |
 "binop_meaning BOpLeq v v' = compare (\<le>) v v'" |
 "binop_meaning BOpGt v v' = compare (>) v v'" |
 "binop_meaning BOpGeq v v' = compare (\<ge>) v v'" |
-"binop_meaning BOpAdd v v' = arith (+) (+) v v'" |
-"binop_meaning BOpSub v v' = arith (-) (-) v v'" |
-"binop_meaning BOpMul v v' = arith (*) (*) v v'" |
+"binop_meaning BOpAdd v v' = arith (+) float_add v v'" |
+"binop_meaning BOpSub v v' = arith (-) float_sub v v'" |
+"binop_meaning BOpMul v v' = arith (*) float_mul v v'" |
 "binop_meaning BOpDiv v v' =
-  (if as_real v' = Some 0 then Aborts ZeroDivisionError
-   else real_op (\<lambda>x x'. Val (VLit (LitFloat (x / x')))) v v')" |
+  (if number_value v' = Some 0 then Aborts ZeroDivisionError
+   else number_op (\<lambda>x x'. Val (VLit (LitFloat (float_div x x')))) v v')" |
 "binop_meaning BOpFloorDiv v v' =
-  (if as_real v' = Some 0 then Aborts ZeroDivisionError
-   else arith (div) (\<lambda>x x'. real_of_int \<lfloor>x / x'\<rfloor>) v v')" |
+  (if number_value v' = Some 0 then Aborts ZeroDivisionError else arith (div) float_floordiv v v')" |
 "binop_meaning BOpMod v v' =
-  (if as_real v' = Some 0 then Aborts ZeroDivisionError
-   else arith (mod) (\<lambda>x x'. x - x' * real_of_int \<lfloor>x / x'\<rfloor>) v v')" |
+  (if number_value v' = Some 0 then Aborts ZeroDivisionError else arith (mod) float_mod v v')" |
 "binop_meaning BOpPow (VLit (LitInt n)) (VLit (LitInt n')) =
   (if n' \<ge> 0 then Val (VLit (LitInt (n ^ nat n')))
    else if n = 0 then Aborts ZeroDivisionError
-   else Val (VLit (LitFloat (inverse (real_of_int n ^ nat (- n'))))))" |
+   else Val (VLit (LitFloat (float_pow (float_of_int n) (float_of_int n')))))" |
 "binop_meaning BOpPow v v' =
-  real_op (\<lambda>x x'.
-    if x = 0 \<and> x' < 0 then Aborts ZeroDivisionError else Val (VLit (LitFloat (x powr x')))) v v'" |
+  (if number_value v = Some 0 \<and> (\<exists>y. number_value v' = Some y \<and> y < 0) then Aborts ZeroDivisionError
+   else number_op (\<lambda>x x'. Val (VLit (LitFloat (float_pow x x')))) v v')" |
 "binop_meaning _ _ _ = Aborts TypeError"
 
 fun unop_meaning :: "uop \<Rightarrow> val \<Rightarrow> val result"
@@ -174,7 +192,7 @@ where
 "unop_meaning UOpPos (VLit (LitInt n)) = Val (VLit (LitInt n))" |
 "unop_meaning UOpPos (VLit (LitFloat x)) = Val (VLit (LitFloat x))" |
 "unop_meaning UOpNeg (VLit (LitInt n)) = Val (VLit (LitInt (- n)))" |
-"unop_meaning UOpNeg (VLit (LitFloat x)) = Val (VLit (LitFloat (- x)))" |
+"unop_meaning UOpNeg (VLit (LitFloat x)) = Val (VLit (LitFloat (float_neg x)))" |
 "unop_meaning UOpNot _ = Aborts Excluded" |
 "unop_meaning _ (VLit (LitBool _)) = Aborts Excluded" |
 "unop_meaning _ _ = Aborts TypeError"

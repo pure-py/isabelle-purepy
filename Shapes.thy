@@ -10,7 +10,7 @@ datatype shape =
   | ShapeConstr name "ty list" "shape list" "head set"
   | ShapeTuple "shape list"
   | ShapeList ty "shape list"
-  | ShapeDict ty "(string \<times> shape) list" "string set"
+  | ShapeDict ty "(str \<times> shape) list" "str set"
 
 fun head_typed :: "class_table \<Rightarrow> head \<Rightarrow> ty \<Rightarrow> bool"
 where
@@ -49,7 +49,7 @@ where
 "shape_type (ShapeDict \<tau> _ _) = TyDict \<tau>"
 
 (* \<beta> with keys ws bound to shapes ks *)
-definition with_keys :: "(string \<times> shape) list \<Rightarrow> string list \<Rightarrow> shape list \<Rightarrow> (string \<times> shape) list"
+definition with_keys :: "(str \<times> shape) list \<Rightarrow> str list \<Rightarrow> shape list \<Rightarrow> (str \<times> shape) list"
 where
 "with_keys \<beta> ws ks = sort_key fst (zip ws ks @ filter (\<lambda>(w, _). w \<notin> set ws) \<beta>)"
 

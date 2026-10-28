@@ -4,6 +4,8 @@ session "isabelle-purepy" = HOL +
     "HOL-Library"
   theories
     Util
+    Floats
+    Strings
     Syntax
     Semantics
     Correctness

@@ -1,16 +1,14 @@
 (* Abstract syntax and its analyses *)
 theory Syntax
-  imports Complex_Main Util
+  imports Complex_Main Util Floats Strings
 begin
-
-type_alias var = string
 
 type_synonym name = "var nonempty"
 
 datatype lit =
     LitInt int
-  | LitFloat real  (* reals, so nan is not modelled *)
-  | LitString string
+  | LitFloat float
+  | LitString str
   | LitBool bool
   | LitNone
 
@@ -23,7 +21,7 @@ datatype pat =
   | PatList "pat list"
   | PatTuple "pat list"
   | PatConstr name "pat args"
-  | PatDict "(string \<times> pat) list"
+  | PatDict "(str \<times> pat) list"
   | PatAs pat var
 
 datatype bop =
@@ -153,8 +151,8 @@ definition unique_to :: "name \<Rightarrow> name \<Rightarrow> name list"
 where
 "unique_to q' q = filter (\<lambda>p. \<not> p \<preceq> q) (proper_prefixes q')"
 
-definition builtins :: name where "builtins = (''builtins'', [])"
-definition main :: name where "main = (''__main__'', [])"
+definition builtins :: name where "builtins = (var ''builtins'', [])"
+definition main :: name where "main = (var ''__main__'', [])"
 
 fun def_name :: "func \<Rightarrow> var"
 where
@@ -329,14 +327,14 @@ where
 
 fun prim_name :: "prim_ty \<Rightarrow> var"
 where
-"prim_name object = ''object''" |
-"prim_name Never = ''Never''" |
-"prim_name NoneType = ''None''" |
-"prim_name bool = ''bool''" |
-"prim_name int = ''int''" |
-"prim_name float = ''float''" |
-"prim_name str = ''str''" |
-"prim_name Sized = ''Sized''"
+"prim_name object = var ''object''" |
+"prim_name Never = var ''Never''" |
+"prim_name NoneType = var ''None''" |
+"prim_name bool = var ''bool''" |
+"prim_name int = var ''int''" |
+"prim_name float = var ''float''" |
+"prim_name str = var ''str''" |
+"prim_name Sized = var ''Sized''"
 
 fun numeric_literal :: "expr \<Rightarrow> bool"
 where
@@ -395,9 +393,9 @@ where
  }" |
 "type_expr_of (ExprSubscript e e') =
   (let head = (case e of ExprVar x \<Rightarrow> Some x | _ \<Rightarrow> None) in
-   if head = Some ''Literal'' then
+   if head = Some (var ''Literal'') then
      (case e' of ExprLiteral (LitFloat _) \<Rightarrow> None | ExprLiteral l \<Rightarrow> Some (TyExprLiteral l) | _ \<Rightarrow> None)
-   else if head = Some ''Callable'' then
+   else if head = Some (var ''Callable'') then
      (case e' of
         ExprTuple [ExprList es, e''] \<Rightarrow> do {
           \<psi>s \<leftarrow> those (map type_expr_of es); \<psi> \<leftarrow> type_expr_of e''; Some (TyExprCallable \<psi>s \<psi>)
@@ -405,9 +403,10 @@ where
       | _ \<Rightarrow> None)
    else do {
      \<psi>s \<leftarrow> those (case e' of ExprTuple es \<Rightarrow> map type_expr_of es | _ \<Rightarrow> [type_expr_of e']);
-     if head = Some ''list'' then (case \<psi>s of [\<psi>] \<Rightarrow> Some (TyExprList \<psi>) | _ \<Rightarrow> None)
-     else if head = Some ''tuple'' then Some (TyExprTuple \<psi>s)
-     else if head = Some ''dict'' then (case \<psi>s of [TyExprPrim str, \<psi>] \<Rightarrow> Some (TyExprDict \<psi>) | _ \<Rightarrow> None)
+     if head = Some (var ''list'') then (case \<psi>s of [\<psi>] \<Rightarrow> Some (TyExprList \<psi>) | _ \<Rightarrow> None)
+     else if head = Some (var ''tuple'') then Some (TyExprTuple \<psi>s)
+     else if head = Some (var ''dict'')
+     then (case \<psi>s of [TyExprPrim str, \<psi>] \<Rightarrow> Some (TyExprDict \<psi>) | _ \<Rightarrow> None)
      else map_option (\<lambda>q. TyExprName q \<psi>s) (dotted_name e)
    })" |
 "type_expr_of _ = None"

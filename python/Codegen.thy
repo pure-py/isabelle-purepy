@@ -3,6 +3,28 @@ theory Codegen
   imports "isabelle-purepy.Programs" "Python.Python_Setup"
 begin
 
+(* Floats as Python's float. Equality of representations, since HOL equality is reflexive; Python's == is given
+   by the semantics *)
+code_printing
+    type_constructor float \<rightharpoonup> (Python) "float"
+  | constant "HOL.equal :: float \<Rightarrow> float \<Rightarrow> bool" \<rightharpoonup> (Python) "(repr'(_') == repr'(_'))"
+
+(* Strings as Python's str *)
+code_printing
+    type_constructor str \<rightharpoonup> (Python) "str"
+  | constant "HOL.equal :: str \<Rightarrow> str \<Rightarrow> bool" \<rightharpoonup> (Python) "(_ == _)"
+  | constant "(\<le>) :: str \<Rightarrow> str \<Rightarrow> bool" \<rightharpoonup> (Python) "(_ <= _)"
+  | constant "(<) :: str \<Rightarrow> str \<Rightarrow> bool" \<rightharpoonup> (Python) "(_ < _)"
+  | constant substring \<rightharpoonup> (Python) "(_ in _)"
+
+(* Identifiers as Python's str *)
+code_printing
+    type_constructor var \<rightharpoonup> (Python) "str"
+  | constant "HOL.equal :: var \<Rightarrow> var \<Rightarrow> bool" \<rightharpoonup> (Python) "(_ == _)"
+  | constant "(\<le>) :: var \<Rightarrow> var \<Rightarrow> bool" \<rightharpoonup> (Python) "(_ <= _)"
+  | constant "(<) :: var \<Rightarrow> var \<Rightarrow> bool" \<rightharpoonup> (Python) "(_ < _)"
+  | constant var \<rightharpoonup> (Python) "\"\".join'(_')"
+
 code_pred subty .
 code_pred binop_overload .
 code_pred unop_overload .
