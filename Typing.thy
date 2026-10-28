@@ -261,6 +261,7 @@ where
    }
    else Fail (synth_failure \<sigma>s))" |
 
+(* Check of e against \<tau> by its checking rule, if any; otherwise (or if the rule fails) by synthesising a subtype of \<tau> *)
 "check_expr \<Sigma> \<Gamma> e \<tau> =
   (case check_expr' \<Sigma> \<Gamma> e \<tau> of
      Some (Ok ()) \<Rightarrow> Ok ()
@@ -269,6 +270,7 @@ where
 
 "check_expr_at \<Sigma> \<Gamma> (At p e) \<tau> = locate p (check_expr \<Sigma> \<Gamma> e \<tau>)" |
 
+(* Individual cases of expression checking; None for an expression without a checking rule *)
 "check_expr' \<Sigma> \<Gamma> (ExprLambda xs e) \<tau> =
   Some (case \<tau> of
      TyCallable \<tau>s \<tau>' \<Rightarrow>
