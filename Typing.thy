@@ -142,7 +142,7 @@ function (sequential)
   synth_expr :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty may_fail" and
   elements_join :: "class_table \<Rightarrow> cxt \<Rightarrow> expr located list \<Rightarrow> ty may_fail" and
   callee :: "class_table \<Rightarrow> cxt \<Rightarrow> expr located \<Rightarrow> expr located list \<Rightarrow> ty may_fail" and
-  call_at ::
+  synth_call ::
     "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow> (var \<times> expr located) list \<Rightarrow> expr located list \<Rightarrow> ty may_fail" and
   check_expr :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> unit may_fail" and
   check_expr' :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> unit may_fail option" and
@@ -178,7 +178,7 @@ where
                 }
             }
         }
-      | None \<Rightarrow> do { \<sigma> \<leftarrow> callee \<Sigma> \<Gamma> e es; call_at \<Sigma> \<Gamma> \<sigma> kws es }))" |
+      | None \<Rightarrow> do { \<sigma> \<leftarrow> callee \<Sigma> \<Gamma> e es; synth_call \<Sigma> \<Gamma> \<sigma> kws es }))" |
 "synth_expr \<Sigma> \<Gamma> (ExprBinOp op e e') = do {
    \<sigma> \<leftarrow> synth_expr_at \<Sigma> \<Gamma> e;
    \<sigma>' \<leftarrow> synth_expr_at \<Sigma> \<Gamma> e';
@@ -242,14 +242,14 @@ where
    | Some _ \<Rightarrow> undefined
    | None \<Rightarrow> synth_expr_at \<Sigma> \<Gamma> e)" |
 
-"call_at \<Sigma> \<Gamma> (TyUnion \<sigma> \<sigma>') kws es =
-  do { \<tau> \<leftarrow> call_at \<Sigma> \<Gamma> \<sigma> kws es; \<tau>' \<leftarrow> call_at \<Sigma> \<Gamma> \<sigma>' kws es; Ok (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>') }" |
-"call_at \<Sigma> \<Gamma> (TyCallable \<sigma>s \<tau>) kws es = do {
+"synth_call \<Sigma> \<Gamma> (TyUnion \<sigma> \<sigma>') kws es =
+  do { \<tau> \<leftarrow> synth_call \<Sigma> \<Gamma> \<sigma> kws es; \<tau>' \<leftarrow> synth_call \<Sigma> \<Gamma> \<sigma>' kws es; Ok (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>') }" |
+"synth_call \<Sigma> \<Gamma> (TyCallable \<sigma>s \<tau>) kws es = do {
    check_args \<Sigma> \<Gamma> kws es \<sigma>s;
    ensure (\<tau> \<noteq> TyPrim NoneType) (MypyCompatibility NoneResult);
    Ok \<tau>
  }" |
-"call_at \<Sigma> \<Gamma> \<sigma> _ _ = Fail (NotCallable \<sigma>)" |
+"synth_call \<Sigma> \<Gamma> \<sigma> _ _ = Fail (NotCallable \<sigma>)" |
 
 "elements_join \<Sigma> \<Gamma> es =
   (let \<sigma>s = map (synth_expr_at \<Sigma> \<Gamma>) es; \<tau> = joins \<Sigma> (map (base_type \<circ> projr) (filter (Not \<circ> isl) \<sigma>s)) in
@@ -380,9 +380,10 @@ where
 fun check_call_stmt ::
   "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow> (var \<times> expr located) list \<Rightarrow> expr located list \<Rightarrow> unit may_fail"
 where
-"check_call_stmt \<Sigma> \<Gamma> (TyUnion \<sigma> \<sigma>') kws es = do { check_call_stmt \<Sigma> \<Gamma> \<sigma> kws es; check_call_stmt \<Sigma> \<Gamma> \<sigma>' kws es }" |
+"check_call_stmt \<Sigma> \<Gamma> (TyUnion \<sigma> \<sigma>') kws es =
+  do { check_call_stmt \<Sigma> \<Gamma> \<sigma> kws es; check_call_stmt \<Sigma> \<Gamma> \<sigma>' kws es }" |
 "check_call_stmt \<Sigma> \<Gamma> (TyCallable \<sigma>s (TyPrim NoneType)) kws es = check_args \<Sigma> \<Gamma> kws es \<sigma>s" |
-"check_call_stmt \<Sigma> \<Gamma> \<sigma> kws es = do { call_at \<Sigma> \<Gamma> \<sigma> kws es; Ok () }"
+"check_call_stmt \<Sigma> \<Gamma> \<sigma> kws es = do { synth_call \<Sigma> \<Gamma> \<sigma> kws es; Ok () }"
 
 abbreviation false_lit :: expr where "false_lit \<equiv> ExprLiteral (LitBool False)"
 
