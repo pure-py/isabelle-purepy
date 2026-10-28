@@ -140,17 +140,17 @@ where
 
 function (sequential)
   synth_expr :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty may_fail" and
+  synth_expr_at :: "class_table \<Rightarrow> cxt \<Rightarrow> expr located \<Rightarrow> ty may_fail" and
   elements_join :: "class_table \<Rightarrow> cxt \<Rightarrow> expr located list \<Rightarrow> ty may_fail" and
   callee :: "class_table \<Rightarrow> cxt \<Rightarrow> expr located \<Rightarrow> expr located list \<Rightarrow> ty may_fail" and
   synth_call ::
     "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow> (var \<times> expr located) list \<Rightarrow> expr located list \<Rightarrow> ty may_fail" and
   check_expr :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> unit may_fail" and
+  check_expr_at :: "class_table \<Rightarrow> cxt \<Rightarrow> expr located \<Rightarrow> ty \<Rightarrow> unit may_fail" and
   check_expr' :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> unit may_fail option" and
   check_args ::
     "class_table \<Rightarrow> cxt \<Rightarrow> (var \<times> expr located) list \<Rightarrow> expr located list \<Rightarrow> ty list \<Rightarrow> unit may_fail" and
-  quals :: "class_table \<Rightarrow> cxt \<Rightarrow> qualifier located list \<Rightarrow> cxt may_fail" and
-  synth_expr_at :: "class_table \<Rightarrow> cxt \<Rightarrow> expr located \<Rightarrow> ty may_fail" and
-  check_expr_at :: "class_table \<Rightarrow> cxt \<Rightarrow> expr located \<Rightarrow> ty \<Rightarrow> unit may_fail"
+  quals :: "class_table \<Rightarrow> cxt \<Rightarrow> qualifier located list \<Rightarrow> cxt may_fail"
 where
 "synth_expr \<Sigma> \<Gamma> (ExprVar x) = (case fmlookup \<Gamma> x of Some (Ty \<tau>) \<Rightarrow> Ok \<tau> | \<theta> \<Rightarrow> Fail (var_reason x \<theta>))" |
 "synth_expr \<Sigma> \<Gamma> (ExprLiteral l) = Ok (case l of LitFloat _ \<Rightarrow> TyPrim float | _ \<Rightarrow> TyLiteral l)" |
@@ -233,6 +233,8 @@ where
  }" |
 "synth_expr \<Sigma> \<Gamma> _ = Fail NotSynthesised" |
 
+"synth_expr_at \<Sigma> \<Gamma> (At p e) = locate p (synth_expr \<Sigma> \<Gamma> e)" |
+
 "callee \<Sigma> \<Gamma> e es =
   (case scheme_of_name \<Gamma> (node e) of
      Some (TyScheme \<alpha>s (TyCallable \<sigma>s \<sigma>)) \<Rightarrow> do {
@@ -264,6 +266,8 @@ where
      Some (Ok ()) \<Rightarrow> Ok ()
    | Some (Fail r) \<Rightarrow> (case synth_expr \<Sigma> \<Gamma> e of Ok \<sigma> \<Rightarrow> if \<Sigma> \<turnstile> \<sigma> <: \<tau> then Ok () else Fail r | Fail _ \<Rightarrow> Fail r)
    | None \<Rightarrow> do { \<sigma> \<leftarrow> synth_expr \<Sigma> \<Gamma> e; ensure (\<Sigma> \<turnstile> \<sigma> <: \<tau>) (TypeMismatch \<tau> \<sigma>) })" |
+
+"check_expr_at \<Sigma> \<Gamma> (At p e) \<tau> = locate p (check_expr \<Sigma> \<Gamma> e \<tau>)" |
 
 "check_expr' \<Sigma> \<Gamma> (ExprLambda xs e) \<tau> =
   Some (case \<tau> of
@@ -324,38 +328,33 @@ where
    ensure (x \<notin> captures gs) (Located p (CapturedGeneratorVariable x));
    \<Delta> \<leftarrow> quals \<Sigma> (\<Gamma> \<otimes> fmupd x (Ty \<tau>) fmempty) gs;
    Ok (fmupd x (Ty \<tau>) fmempty \<otimes> \<Delta>)
- }" |
-
-"synth_expr_at \<Sigma> \<Gamma> (At p e) = locate p (synth_expr \<Sigma> \<Gamma> e)" |
-
-"check_expr_at \<Sigma> \<Gamma> (At p e) \<tau> = locate p (check_expr \<Sigma> \<Gamma> e \<tau>)"
+ }"
 by pat_completeness auto
 
 termination
 by (relation "measures [\<lambda>x. case x of
      Inl (Inl (Inl (_, _, e))) \<Rightarrow> size e
-   | Inl (Inl (Inr (_, _, es))) \<Rightarrow> size_list (\<lambda>e. Suc (size (node e))) es
-   | Inl (Inr (Inl (_, _, e, es))) \<Rightarrow> Suc (size (node e)) + size_list (\<lambda>e. Suc (size (node e))) es
-   | Inl (Inr (Inr (Inl (_, _, _, kws, es)))) \<Rightarrow>
+   | Inl (Inl (Inr (_, _, e))) \<Rightarrow> Suc (size (node e))
+   | Inl (Inr (Inl (_, _, es))) \<Rightarrow> size_list (\<lambda>e. Suc (size (node e))) es
+   | Inl (Inr (Inr (Inl (_, _, e, es)))) \<Rightarrow> Suc (size (node e)) + size_list (\<lambda>e. Suc (size (node e))) es
+   | Inl (Inr (Inr (Inr (_, _, _, kws, es)))) \<Rightarrow>
        size_list (\<lambda>e. Suc (size (node e))) es + size_list (\<lambda>p. Suc (Suc (size (node (snd p))))) kws
-   | Inl (Inr (Inr (Inr (_, _, e, _)))) \<Rightarrow> size e
    | Inr (Inl (Inl (_, _, e, _))) \<Rightarrow> size e
-   | Inr (Inl (Inr (_, _, kws, es, _))) \<Rightarrow>
+   | Inr (Inl (Inr (_, _, e, _))) \<Rightarrow> Suc (size (node e))
+   | Inr (Inr (Inl (_, _, e, _))) \<Rightarrow> size e
+   | Inr (Inr (Inr (Inl (_, _, kws, es, _)))) \<Rightarrow>
        size_list (\<lambda>e. Suc (size (node e))) es + size_list (\<lambda>p. Suc (Suc (size (node (snd p))))) kws
-   | Inr (Inr (Inl (_, _, gs))) \<Rightarrow> size_list (\<lambda>g. Suc (size (node g))) gs
-   | Inr (Inr (Inr (Inl (_, _, e)))) \<Rightarrow> Suc (size (node e))
-   | Inr (Inr (Inr (Inr (_, _, e, _)))) \<Rightarrow> Suc (size (node e)),
+   | Inr (Inr (Inr (Inr (_, _, gs)))) \<Rightarrow> size_list (\<lambda>g. Suc (size (node g))) gs,
    \<lambda>x. case x of
-     Inl (Inl (Inl _)) \<Rightarrow> 0
-   | Inl (Inl (Inr _)) \<Rightarrow> 1
-   | Inl (Inr (Inl _)) \<Rightarrow> 4
-   | Inl (Inr (Inr (Inl _))) \<Rightarrow> 4
-   | Inl (Inr (Inr (Inr _))) \<Rightarrow> 2
-   | Inr (Inl (Inl _)) \<Rightarrow> 1
-   | Inr (Inl (Inr _)) \<Rightarrow> 3
-   | Inr (Inr (Inl _)) \<Rightarrow> 0
-   | Inr (Inr (Inr _)) \<Rightarrow> 0,
-   \<lambda>x. case x of Inl (Inr (Inr (Inl (_, _, \<tau>, _, _)))) \<Rightarrow> size \<tau> | _ \<Rightarrow> 0]")
+     Inl (Inl _) \<Rightarrow> 0
+   | Inl (Inr (Inl _)) \<Rightarrow> 1
+   | Inl (Inr (Inr _)) \<Rightarrow> 4
+   | Inr (Inl (Inl _)) \<Rightarrow> 2
+   | Inr (Inl (Inr _)) \<Rightarrow> 0
+   | Inr (Inr (Inl _)) \<Rightarrow> 1
+   | Inr (Inr (Inr (Inl _))) \<Rightarrow> 3
+   | Inr (Inr (Inr (Inr _))) \<Rightarrow> 0,
+   \<lambda>x. case x of Inl (Inr (Inr (Inr (_, _, \<tau>, _, _)))) \<Rightarrow> size \<tau> | _ \<Rightarrow> 0]")
    (auto dest!: nth_mem constructor_args_elem lambda_of_size elim!: in_set_zipE
      dest: size_node_snd_elem size_node_snd_elem' size_node_elem size_node_pair_fst_elem size_node_pair_snd_elem
      intro: size_list_estimation' size_list_elem
@@ -417,8 +416,8 @@ where
  }"
 
 function (sequential) check_stmt :: "class_table \<Rightarrow> cxt \<Rightarrow> ty option \<Rightarrow> stmt \<Rightarrow> static_outcome may_fail"
-and check_def :: "class_table \<Rightarrow> cxt \<Rightarrow> func \<Rightarrow> ty_scheme \<Rightarrow> unit may_fail"
 and check_stmt_at :: "class_table \<Rightarrow> cxt \<Rightarrow> ty option \<Rightarrow> stmt located \<Rightarrow> static_outcome may_fail"
+and check_def :: "class_table \<Rightarrow> cxt \<Rightarrow> func \<Rightarrow> ty_scheme \<Rightarrow> unit may_fail"
 and check_def_at :: "class_table \<Rightarrow> cxt \<Rightarrow> func located \<Rightarrow> ty_scheme \<Rightarrow> unit may_fail"
 where
 "check_stmt \<Sigma> \<Gamma> \<zeta> StmtPass = Ok (Assigns\<^sub>R fmempty None)" |
@@ -484,6 +483,8 @@ where
                  (if L = [] then Some (MypyCompatibility (MissingReturnMatchPartial \<tau>)) else None))]))
  }" |
 
+"check_stmt_at \<Sigma> \<Gamma> \<zeta> (At p s) = map_sum (locate_reason p) (locate_outcome p) (check_stmt \<Sigma> \<Gamma> \<zeta> s)" |
+
 "check_def \<Sigma> \<Gamma> (Def f \<alpha>s xps \<psi> s) (TyScheme \<alpha>s' (TyCallable \<sigma>s \<tau>)) =
   (let xs = map fst xps in do {
      check_assignments_declared (set xs) (assign_targets s) (declares (node s)) (binds s);
@@ -505,16 +506,14 @@ where
    })" |
 "check_def \<Sigma> \<Gamma> _ _ = undefined" |
 
-"check_stmt_at \<Sigma> \<Gamma> \<zeta> (At p s) = map_sum (locate_reason p) (locate_outcome p) (check_stmt \<Sigma> \<Gamma> \<zeta> s)" |
-
 "check_def_at \<Sigma> \<Gamma> (At p d) \<pi> = locate p (check_def \<Sigma> \<Gamma> d \<pi>)"
 by pat_completeness auto
 
 termination
 by (relation "measure (\<lambda>x. case x of
      Inl (Inl (_, _, _, s)) \<Rightarrow> size s
-   | Inl (Inr (_, _, d, _)) \<Rightarrow> size d
-   | Inr (Inl (_, _, _, s)) \<Rightarrow> Suc (size (node s))
+   | Inl (Inr (_, _, _, s)) \<Rightarrow> Suc (size (node s))
+   | Inr (Inl (_, _, d, _)) \<Rightarrow> size d
    | Inr (Inr (_, _, d, _)) \<Rightarrow> Suc (size (node d)))")
    (auto elim!: in_set_zipE dest: size_node_snd_elem size_node_elem)
 
