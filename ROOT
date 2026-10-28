@@ -6,6 +6,7 @@ session "isabelle-purepy" = HOL +
     Util
     Floats
     Strings
+    Positions
     Syntax
     Semantics
     Correctness
