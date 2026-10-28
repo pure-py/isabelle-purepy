@@ -174,8 +174,8 @@ where
 "binds_pat (PatDict kps) = \<Union> (set (map (binds_pat \<circ> node \<circ> snd) kps))" |
 "binds_pat _ = {}"
 
-(* Variables bound by the patterns of the match statements, each at the position of its match statement, in
-   order and with repeats *)
+(* Variables bound by the patterns of the match statements in s, each at the position of its match statement,
+   in order and with repeats *)
 fun pat_bound_stmt :: "stmt located \<Rightarrow> var located list"
 where
 "pat_bound_stmt (At _ (StmtSeq s s')) = pat_bound_stmt s @ pat_bound_stmt s'" |
@@ -225,7 +225,7 @@ where
 "assigns_top (TopSeq t t') = assigns_top t \<union> assigns_top t'" |
 "assigns_top (TypeDefs \<chi>s) = set (map (type_def_name \<circ> node) \<chi>s)"
 
-(* Names declared, each at the position of its declaring statement, in order and with repeats *)
+(* Names declared in s, each at the position of its declaring statement, in order and with repeats *)
 fun declarations_stmt :: "stmt located \<Rightarrow> var located list"
 where
 "declarations_stmt (At p (StmtDeclare x _)) = [At p x]" |
@@ -398,7 +398,7 @@ where
 "dotted_name (ExprAttribute e x) = map_option (\<lambda>q. snoc q x) (dotted_name (node e))" |
 "dotted_name _ = None"
 
-(* Targets of plain assignments, each at the position of its assignment, in order *)
+(* Targets of the plain assignments in s, each at the position of its assignment, in order *)
 fun assign_targets_stmt :: "stmt located \<Rightarrow> var located list"
 where
 "assign_targets_stmt (At p (StmtAssign x None _)) = [At p x]" |
@@ -422,7 +422,8 @@ where
 "binders_imports (At p (Import (x, _)) # \<iota>s) = At p x # binders_imports \<iota>s" |
 "binders_imports (At p (FromImport _ xs) # \<iota>s) = map (At p) xs @ binders_imports \<iota>s"
 
-(* Names assigned by top-level statements, each at the position of its statement, in order and with repeats *)
+(* Names assigned by the top-level statements of t, each at the position of its statement, in order and with
+   repeats *)
 fun binders_top :: "top_stmt \<Rightarrow> var located list"
 where
 "binders_top (Stmt s) = map (At (pos_of s)) (sorted_list_of_set (assigns_stmt (node s)))" |
