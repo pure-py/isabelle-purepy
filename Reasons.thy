@@ -131,8 +131,8 @@ where
 "redeclared f X [] = None" |
 "redeclared f X (x # xs) = (if f x \<in> X then Some x else redeclared f (insert (f x) X) xs)"
 
-(* Redeclaration among bound names ys, declarations xs and pattern variables zs, the latter two at the positions of
-   their statements, located at the statement declaring or matching the name again *)
+(* Redeclaration among bound names ys, declarations xs and pattern variables zs, the latter two at the positions
+   of their statements, located at the statement declaring or matching the name again *)
 definition redeclaration :: "var list \<Rightarrow> var located list \<Rightarrow> var located list \<Rightarrow> reason"
 where
 "redeclaration ys xs zs =
