@@ -396,12 +396,6 @@ where
      Some x \<Rightarrow> Fail (Located (pos_of x) (UndeclaredAssignment (node x)))
    | None \<Rightarrow> Ok ())"
 
-(* Outcome with its reason, if any, located at p *)
-fun locate_outcome :: "pos \<Rightarrow> static_outcome \<Rightarrow> static_outcome"
-where
-"locate_outcome p (Assigns\<^sub>R \<Delta> r) = Assigns\<^sub>R \<Delta> (map_option (locate_reason p) r)" |
-"locate_outcome p Returns\<^sub>R = Returns\<^sub>R"
-
 (* Bindings of the patterns ps of the cases of a match at remaining type \<tau> and residual L, with the final
    remaining type and residual *)
 fun match_cases ::
@@ -483,7 +477,10 @@ where
                  (if L = [] then Some (MypyCompatibility (MissingReturnMatchPartial \<tau>)) else None))]))
  }" |
 
-"check_stmt_at \<Sigma> \<Gamma> \<zeta> (At p s) = map_sum (locate_reason p) (locate_outcome p) (check_stmt \<Sigma> \<Gamma> \<zeta> s)" |
+"check_stmt_at \<Sigma> \<Gamma> \<zeta> (At p s) =
+  map_sum (locate_reason p)
+    (\<lambda>R. case R of Assigns\<^sub>R \<Delta> r \<Rightarrow> Assigns\<^sub>R \<Delta> (map_option (locate_reason p) r) | Returns\<^sub>R \<Rightarrow> Returns\<^sub>R)
+    (check_stmt \<Sigma> \<Gamma> \<zeta> s)" |
 
 "check_def \<Sigma> \<Gamma> (Def f \<alpha>s xps \<psi> s) (TyScheme \<alpha>s' (TyCallable \<sigma>s \<tau>)) =
   (let xs = map fst xps in do {
