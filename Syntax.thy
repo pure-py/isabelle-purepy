@@ -238,9 +238,9 @@ where
 "declarations_stmt (At _ (StmtMatch _ cases)) = concat (map (\<lambda>(_, s). declarations_stmt s) cases)" |
 "declarations_stmt _ = []"
 
-definition declares_stmt :: "stmt located \<Rightarrow> var list"
+definition declares_stmt :: "stmt \<Rightarrow> var list"
 where
-"declares_stmt s = map node (declarations_stmt s)"
+"declares_stmt s = map node (declarations_stmt (At no_pos s))"
 
 (* Names bound by imports, each at the position of its import, the root of a plain import listed once *)
 fun declarations_imports :: "import located list \<Rightarrow> var located list"
@@ -350,8 +350,8 @@ where
 definition scope_stmt :: "'a \<Rightarrow> var list \<Rightarrow> stmt located \<Rightarrow> (var, 'a) fmap option"
 where
 "scope_stmt u ys s =
-  (if distinct ys \<and> distinct (declares_stmt s) \<and> set ys \<inter> set (declares_stmt s) = {}
-      \<and> set ys \<inter> binds_stmt s = {} \<and> set (declares_stmt s) \<inter> binds_stmt s = {}
+  (if distinct ys \<and> distinct (declares_stmt (node s)) \<and> set ys \<inter> set (declares_stmt (node s)) = {}
+      \<and> set ys \<inter> binds_stmt s = {} \<and> set (declares_stmt (node s)) \<inter> binds_stmt s = {}
    then Some (fmconst (assigns_stmt (node s) - set ys) u)
    else None)"
 

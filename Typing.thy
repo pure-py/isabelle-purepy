@@ -396,6 +396,12 @@ where
      Some x \<Rightarrow> Fail (Located (pos_of x) (UndeclaredAssignment (node x)))
    | None \<Rightarrow> Ok ())"
 
+(* Outcome with its reason, if any, located at p *)
+fun locate_outcome :: "pos \<Rightarrow> static_outcome \<Rightarrow> static_outcome"
+where
+"locate_outcome p (Assigns\<^sub>R \<Delta> r) = Assigns\<^sub>R \<Delta> (map_option (locate_reason p) r)" |
+"locate_outcome p Returns\<^sub>R = Returns\<^sub>R"
+
 (* Bindings of the patterns ps of the cases of a match at remaining type \<tau> and residual L, with the final
    remaining type and residual *)
 fun match_cases ::
@@ -409,20 +415,21 @@ where
    Ok (fmmap Ty \<Delta> # \<Delta>s, \<tau>', L'')
  }"
 
-function (sequential) check_stmt :: "class_table \<Rightarrow> cxt \<Rightarrow> ty option \<Rightarrow> stmt located \<Rightarrow> static_outcome may_fail"
+function (sequential) check_stmt :: "class_table \<Rightarrow> cxt \<Rightarrow> ty option \<Rightarrow> stmt \<Rightarrow> static_outcome may_fail"
 and check_def :: "class_table \<Rightarrow> cxt \<Rightarrow> func located \<Rightarrow> ty_scheme \<Rightarrow> unit may_fail"
+and check_stmt_at :: "class_table \<Rightarrow> cxt \<Rightarrow> ty option \<Rightarrow> stmt located \<Rightarrow> static_outcome may_fail"
 where
-"check_stmt \<Sigma> \<Gamma> \<zeta> (At _ StmtPass) = Ok (Assigns\<^sub>R fmempty None)" |
-"check_stmt \<Sigma> \<Gamma> \<zeta> (At p (StmtDeclare x \<psi>)) =
-  locate p (do { \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; Ok (Assigns\<^sub>R (fmupd x (DU \<tau>) fmempty) None) })" |
-"check_stmt \<Sigma> \<Gamma> \<zeta> (At p (StmtAssign x None e)) = locate p
+"check_stmt \<Sigma> \<Gamma> \<zeta> StmtPass = Ok (Assigns\<^sub>R fmempty None)" |
+"check_stmt \<Sigma> \<Gamma> \<zeta> (StmtDeclare x \<psi>) =
+  do { \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; Ok (Assigns\<^sub>R (fmupd x (DU \<tau>) fmempty) None) }" |
+"check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssign x None e) =
   (case fmlookup \<Gamma> x of
      Some (DU \<tau>) \<Rightarrow> do { check_expr_at \<Sigma> \<Gamma> e \<tau>; Ok (Assigns\<^sub>R (fmupd x (Ty \<tau>) fmempty) None) }
    | \<theta> \<Rightarrow> Fail (assign_reason x \<theta>))" |
-"check_stmt \<Sigma> \<Gamma> \<zeta> (At p (StmtAssign x (Some \<psi>) e)) = locate p (do {
+"check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssign x (Some \<psi>) e) = do {
    \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; check_expr_at \<Sigma> \<Gamma> e \<tau>; Ok (Assigns\<^sub>R (fmupd x (Ty \<tau>) fmempty) None)
- })" |
-"check_stmt \<Sigma> \<Gamma> \<zeta> (At p (StmtExpr e)) = locate p (do {
+ }" |
+"check_stmt \<Sigma> \<Gamma> \<zeta> (StmtExpr e) = do {
    (case node e of
       ExprCall e' (es, kws) \<Rightarrow>
         if lambda_of (node e') = None \<and> class_of_name \<Gamma> (node e') = None
@@ -430,61 +437,60 @@ where
         else do { synth_expr_at \<Sigma> \<Gamma> e; Ok () }
     | _ \<Rightarrow> do { synth_expr_at \<Sigma> \<Gamma> e; Ok () });
    Ok (Assigns\<^sub>R fmempty None)
- })" |
-"check_stmt \<Sigma> \<Gamma> \<zeta> (At p (StmtAssert e e')) = locate p (do {
+ }" |
+"check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssert e e') = do {
    (if node e = false_lit then Ok () else check_expr_at \<Sigma> \<Gamma> e (TyPrim bool));
    (case e' of Some e'' \<Rightarrow> check_expr_at \<Sigma> \<Gamma> e'' (TyPrim str) | None \<Rightarrow> Ok ());
    Ok (if node e = false_lit then Returns\<^sub>R
         else Assigns\<^sub>R fmempty
           (if \<zeta> \<noteq> None \<and> synth_expr_at \<Sigma> \<Gamma> e = Ok (TyLiteral (LitBool False))
-           then Some (Located p (MypyCompatibility MissingReturnAssertion)) else None))
- })" |
-"check_stmt \<Sigma> \<Gamma> \<zeta> (At p (StmtReturn None)) = locate p
+           then Some (MypyCompatibility MissingReturnAssertion) else None))
+ }" |
+"check_stmt \<Sigma> \<Gamma> \<zeta> (StmtReturn None) =
   (case \<zeta> of
      Some \<tau> \<Rightarrow>
        if \<Sigma> \<turnstile> \<tau> \<approx> TyPrim NoneType then Ok Returns\<^sub>R
        else Fail (mypy_only_if (\<Sigma> \<turnstile> TyPrim NoneType <: \<tau>) (BareReturn \<tau>))
    | None \<Rightarrow> undefined)" |
-"check_stmt \<Sigma> \<Gamma> \<zeta> (At p (StmtReturn (Some e))) = locate p
+"check_stmt \<Sigma> \<Gamma> \<zeta> (StmtReturn (Some e)) =
   (case \<zeta> of Some \<tau> \<Rightarrow> do { check_expr_at \<Sigma> \<Gamma> e \<tau>; Ok Returns\<^sub>R } | None \<Rightarrow> undefined)" |
-"check_stmt \<Sigma> \<Gamma> \<zeta> (At p (StmtIf e s elifs else')) = locate p (do {
+"check_stmt \<Sigma> \<Gamma> \<zeta> (StmtIf e s elifs else') = do {
    check_expr_at \<Sigma> \<Gamma> e (TyPrim bool);
-   merges \<Sigma> (set (declares (At p (StmtIf e s elifs else')))) (check_stmt \<Sigma> \<Gamma> \<zeta> s
-           # map (\<lambda>(e', s'). do { check_expr_at \<Sigma> \<Gamma> e' (TyPrim bool); check_stmt \<Sigma> \<Gamma> \<zeta> s' }) elifs
-           @ [case else' of Some s' \<Rightarrow> check_stmt \<Sigma> \<Gamma> \<zeta> s' | None \<Rightarrow> Ok (Assigns\<^sub>R fmempty None)])
- })" |
-"check_stmt \<Sigma> \<Gamma> \<zeta> (At p (StmtSeq s s')) = locate p (do {
-   R \<leftarrow> check_stmt \<Sigma> \<Gamma> \<zeta> s;
+   merges \<Sigma> (set (declares (StmtIf e s elifs else'))) (check_stmt_at \<Sigma> \<Gamma> \<zeta> s
+           # map (\<lambda>(e', s'). do { check_expr_at \<Sigma> \<Gamma> e' (TyPrim bool); check_stmt_at \<Sigma> \<Gamma> \<zeta> s' }) elifs
+           @ [case else' of Some s' \<Rightarrow> check_stmt_at \<Sigma> \<Gamma> \<zeta> s' | None \<Rightarrow> Ok (Assigns\<^sub>R fmempty None)])
+ }" |
+"check_stmt \<Sigma> \<Gamma> \<zeta> (StmtSeq s s') = do {
+   R \<leftarrow> check_stmt_at \<Sigma> \<Gamma> \<zeta> s;
    case R of
-     Assigns\<^sub>R \<Delta> r \<Rightarrow> do { R' \<leftarrow> check_stmt \<Sigma> (\<Gamma> \<otimes> \<Delta>) \<zeta> s'; Ok (Assigns\<^sub>R \<Delta> r \<otimes>\<^sub>R R') }
+     Assigns\<^sub>R \<Delta> r \<Rightarrow> do { R' \<leftarrow> check_stmt_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) \<zeta> s'; Ok (Assigns\<^sub>R \<Delta> r \<otimes>\<^sub>R R') }
    | Returns\<^sub>R \<Rightarrow> Fail (Located (pos_of s') UnreachableStatement)
- })" |
-"check_stmt \<Sigma> \<Gamma> \<zeta> (At p (StmtMutualRegion ds)) = locate p (do {
+ }" |
+"check_stmt \<Sigma> \<Gamma> \<zeta> (StmtMutualRegion ds) = do {
    \<pi>s \<leftarrow> those_sum (map (\<lambda>d. locate (pos_of d) (def_signature \<Sigma> \<Gamma> (node d))) ds);
    let \<Delta> = fmap_of_list (zip (map (def_name \<circ> node) ds) (map signature_entry \<pi>s));
    all_sum (map2 (check_def \<Sigma> (\<Gamma> \<otimes> \<Delta>)) ds \<pi>s);
    Ok (Assigns\<^sub>R \<Delta> None)
- })" |
-"check_stmt \<Sigma> \<Gamma> \<zeta> (At p (StmtMatch e bs)) = locate p (do {
+ }" |
+"check_stmt \<Sigma> \<Gamma> \<zeta> (StmtMatch e bs) = do {
    \<sigma> \<leftarrow> synth_expr_at \<Sigma> \<Gamma> e;
    (\<Delta>s, \<tau>, L) \<leftarrow> match_cases \<Sigma> \<Gamma> \<sigma> (shapes \<Sigma> \<sigma> {}) (map fst bs);
-   merges \<Sigma> (set (declares (At p (StmtMatch e bs))))
-     (map2 (\<lambda>\<Delta> (_, s). do { R \<leftarrow> check_stmt \<Sigma> (\<Gamma> \<otimes> \<Delta>) \<zeta> s; Ok (Assigns\<^sub>R \<Delta> None \<otimes>\<^sub>R R) }) \<Delta>s bs
+   merges \<Sigma> (set (declares (StmtMatch e bs)))
+     (map2 (\<lambda>\<Delta> (_, s). do { R \<leftarrow> check_stmt_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) \<zeta> s; Ok (Assigns\<^sub>R \<Delta> None \<otimes>\<^sub>R R) }) \<Delta>s bs
       @ (if \<tau> = TyPrim Never then []
          else [Ok (Assigns\<^sub>R fmempty
-                 (if L = [] then Some (Located p (MypyCompatibility (MissingReturnMatchPartial \<tau>)))
-                  else None))]))
- })" |
+                 (if L = [] then Some (MypyCompatibility (MissingReturnMatchPartial \<tau>)) else None))]))
+ }" |
 
 "check_def \<Sigma> \<Gamma> (At p (Def f \<alpha>s xps \<psi> s)) (TyScheme \<alpha>s' (TyCallable \<sigma>s \<tau>)) =
   (let xs = map fst xps in locate p (do {
-     check_assignments_declared (set xs) (assign_targets s) (declares s) (binds s);
+     check_assignments_declared (set xs) (assign_targets s) (declares (node s)) (binds s);
      \<Delta> \<leftarrow> (case scope Unbound xs s of
              Some \<Delta> \<Rightarrow> Ok \<Delta>
            | None \<Rightarrow> Fail (scope_reason (map (At p) xs) (declarations s) (pattern_bound s)));
      if length xs = length \<sigma>s then do {
        \<Delta>' \<leftarrow> params_cxt xs \<sigma>s;
-       R \<leftarrow> check_stmt \<Sigma> (\<Gamma> \<otimes> fmconst (set \<alpha>s) TypeVar \<otimes> \<Delta>' \<otimes> \<Delta>) (Some \<tau>) s;
+       R \<leftarrow> check_stmt_at \<Sigma> (\<Gamma> \<otimes> fmconst (set \<alpha>s) TypeVar \<otimes> \<Delta>' \<otimes> \<Delta>) (Some \<tau>) s;
        case R of
          Assigns\<^sub>R _ r \<Rightarrow>
            if \<Sigma> \<turnstile> \<tau> \<approx> TyPrim NoneType then Ok ()
@@ -495,13 +501,16 @@ where
      }
      else Fail undefined
    }))" |
-"check_def \<Sigma> \<Gamma> _ _ = undefined"
+"check_def \<Sigma> \<Gamma> _ _ = undefined" |
+
+"check_stmt_at \<Sigma> \<Gamma> \<zeta> (At p s) = map_sum (locate_reason p) (locate_outcome p) (check_stmt \<Sigma> \<Gamma> \<zeta> s)"
 by pat_completeness auto
 
 termination
 by (relation "measure (\<lambda>x. case x of
-     Inl (_, _, _, s) \<Rightarrow> Suc (size (node s))
-   | Inr (_, _, d, _) \<Rightarrow> Suc (size (node d)))")
+     Inl (_, _, _, s) \<Rightarrow> size s
+   | Inr (Inl (_, _, d, _)) \<Rightarrow> Suc (size (node d))
+   | Inr (Inr (_, _, _, s)) \<Rightarrow> Suc (size (node s)))")
    (auto elim!: in_set_zipE dest: size_node_snd_elem size_node_elem)
 
 fun check_type_def :: "class_table \<Rightarrow> cxt \<Rightarrow> type_def located \<Rightarrow> unit may_fail"
@@ -528,7 +537,7 @@ where
 
 fun check_top_stmt :: "class_table \<Rightarrow> name \<Rightarrow> cxt \<Rightarrow> top_stmt \<Rightarrow> (static_outcome \<times> class_table) may_fail"
 where
-"check_top_stmt \<Sigma> q \<Gamma> (Stmt s) = do { R \<leftarrow> check_stmt \<Sigma> \<Gamma> None s; Ok (R, \<Sigma>) }" |
+"check_top_stmt \<Sigma> q \<Gamma> (Stmt s) = do { R \<leftarrow> check_stmt_at \<Sigma> \<Gamma> None s; Ok (R, \<Sigma>) }" |
 "check_top_stmt \<Sigma> q \<Gamma> (TopSeq t t') = do {
    (R, \<Sigma>') \<leftarrow> check_top_stmt \<Sigma> q \<Gamma> t;
    case R of
