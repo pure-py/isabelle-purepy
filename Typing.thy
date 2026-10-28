@@ -261,7 +261,8 @@ where
    }
    else Fail (synth_failure \<sigma>s))" |
 
-(* Check of e against \<tau> by its checking rule, if any; otherwise (or if the rule fails) by synthesising a subtype of \<tau> *)
+(* Check of e against \<tau> by its checking rule, if any; otherwise (or if the rule fails) by synthesising a subtype
+   of \<tau> *)
 "check_expr \<Sigma> \<Gamma> e \<tau> =
   (case check_expr' \<Sigma> \<Gamma> e \<tau> of
      Some (Ok ()) \<Rightarrow> Ok ()
