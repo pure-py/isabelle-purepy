@@ -377,12 +377,12 @@ where
     })"
 
 (* Call statement at callee type \<sigma> *)
-fun call_stmt_at ::
+fun check_call_stmt ::
   "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow> (var \<times> expr located) list \<Rightarrow> expr located list \<Rightarrow> unit may_fail"
 where
-"call_stmt_at \<Sigma> \<Gamma> (TyUnion \<sigma> \<sigma>') kws es = do { call_stmt_at \<Sigma> \<Gamma> \<sigma> kws es; call_stmt_at \<Sigma> \<Gamma> \<sigma>' kws es }" |
-"call_stmt_at \<Sigma> \<Gamma> (TyCallable \<sigma>s (TyPrim NoneType)) kws es = check_args \<Sigma> \<Gamma> kws es \<sigma>s" |
-"call_stmt_at \<Sigma> \<Gamma> \<sigma> kws es = do { call_at \<Sigma> \<Gamma> \<sigma> kws es; Ok () }"
+"check_call_stmt \<Sigma> \<Gamma> (TyUnion \<sigma> \<sigma>') kws es = do { check_call_stmt \<Sigma> \<Gamma> \<sigma> kws es; check_call_stmt \<Sigma> \<Gamma> \<sigma>' kws es }" |
+"check_call_stmt \<Sigma> \<Gamma> (TyCallable \<sigma>s (TyPrim NoneType)) kws es = check_args \<Sigma> \<Gamma> kws es \<sigma>s" |
+"check_call_stmt \<Sigma> \<Gamma> \<sigma> kws es = do { call_at \<Sigma> \<Gamma> \<sigma> kws es; Ok () }"
 
 abbreviation false_lit :: expr where "false_lit \<equiv> ExprLiteral (LitBool False)"
 
@@ -426,7 +426,7 @@ where
    (case node e of
       ExprCall e' (es, kws) \<Rightarrow>
         if lambda_of (node e') = None \<and> class_of_name \<Gamma> (node e') = None
-        then do { \<sigma> \<leftarrow> callee \<Sigma> \<Gamma> e' es; call_stmt_at \<Sigma> \<Gamma> \<sigma> kws es }
+        then do { \<sigma> \<leftarrow> callee \<Sigma> \<Gamma> e' es; check_call_stmt \<Sigma> \<Gamma> \<sigma> kws es }
         else do { synth_expr_at \<Sigma> \<Gamma> e; Ok () }
     | _ \<Rightarrow> do { synth_expr_at \<Sigma> \<Gamma> e; Ok () });
    Ok (Assigns\<^sub>R fmempty None)
