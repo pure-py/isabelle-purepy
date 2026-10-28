@@ -116,7 +116,7 @@ where
 "is_nan_val (VLit (LitFloat x)) = is_nan x" |
 "is_nan_val _ = False"
 
-(* Number as a float, converting an integer; None for a non-number *)
+(* Float of an int or float value; None otherwise *)
 fun as_float :: "val \<Rightarrow> float option"
 where
 "as_float (VLit (LitInt n)) = Some (float_of_int n)" |

@@ -23,7 +23,7 @@ code_printing
   | constant "HOL.equal :: var \<Rightarrow> var \<Rightarrow> bool" \<rightharpoonup> (Python) "(_ == _)"
   | constant "(\<le>) :: var \<Rightarrow> var \<Rightarrow> bool" \<rightharpoonup> (Python) "(_ <= _)"
   | constant "(<) :: var \<Rightarrow> var \<Rightarrow> bool" \<rightharpoonup> (Python) "(_ < _)"
-  | constant var_of_string \<rightharpoonup> (Python) "\"\".join'(_')"
+  | constant var \<rightharpoonup> (Python) "\"\".join'(_')"
 
 code_pred subty .
 code_pred binop_overload .

@@ -151,8 +151,8 @@ definition unique_to :: "name \<Rightarrow> name \<Rightarrow> name list"
 where
 "unique_to q' q = filter (\<lambda>p. \<not> p \<preceq> q) (proper_prefixes q')"
 
-definition builtins :: name where "builtins = (var_of_string ''builtins'', [])"
-definition main :: name where "main = (var_of_string ''__main__'', [])"
+definition builtins :: name where "builtins = (var ''builtins'', [])"
+definition main :: name where "main = (var ''__main__'', [])"
 
 fun def_name :: "func \<Rightarrow> var"
 where
@@ -327,14 +327,14 @@ where
 
 fun prim_name :: "prim_ty \<Rightarrow> var"
 where
-"prim_name object = var_of_string ''object''" |
-"prim_name Never = var_of_string ''Never''" |
-"prim_name NoneType = var_of_string ''None''" |
-"prim_name bool = var_of_string ''bool''" |
-"prim_name int = var_of_string ''int''" |
-"prim_name float = var_of_string ''float''" |
-"prim_name str = var_of_string ''str''" |
-"prim_name Sized = var_of_string ''Sized''"
+"prim_name object = var ''object''" |
+"prim_name Never = var ''Never''" |
+"prim_name NoneType = var ''None''" |
+"prim_name bool = var ''bool''" |
+"prim_name int = var ''int''" |
+"prim_name float = var ''float''" |
+"prim_name str = var ''str''" |
+"prim_name Sized = var ''Sized''"
 
 fun numeric_literal :: "expr \<Rightarrow> bool"
 where
@@ -393,9 +393,9 @@ where
  }" |
 "type_expr_of (ExprSubscript e e') =
   (let head = (case e of ExprVar x \<Rightarrow> Some x | _ \<Rightarrow> None) in
-   if head = Some (var_of_string ''Literal'') then
+   if head = Some (var ''Literal'') then
      (case e' of ExprLiteral (LitFloat _) \<Rightarrow> None | ExprLiteral l \<Rightarrow> Some (TyExprLiteral l) | _ \<Rightarrow> None)
-   else if head = Some (var_of_string ''Callable'') then
+   else if head = Some (var ''Callable'') then
      (case e' of
         ExprTuple [ExprList es, e''] \<Rightarrow> do {
           \<psi>s \<leftarrow> those (map type_expr_of es); \<psi> \<leftarrow> type_expr_of e''; Some (TyExprCallable \<psi>s \<psi>)
@@ -403,9 +403,9 @@ where
       | _ \<Rightarrow> None)
    else do {
      \<psi>s \<leftarrow> those (case e' of ExprTuple es \<Rightarrow> map type_expr_of es | _ \<Rightarrow> [type_expr_of e']);
-     if head = Some (var_of_string ''list'') then (case \<psi>s of [\<psi>] \<Rightarrow> Some (TyExprList \<psi>) | _ \<Rightarrow> None)
-     else if head = Some (var_of_string ''tuple'') then Some (TyExprTuple \<psi>s)
-     else if head = Some (var_of_string ''dict'')
+     if head = Some (var ''list'') then (case \<psi>s of [\<psi>] \<Rightarrow> Some (TyExprList \<psi>) | _ \<Rightarrow> None)
+     else if head = Some (var ''tuple'') then Some (TyExprTuple \<psi>s)
+     else if head = Some (var ''dict'')
      then (case \<psi>s of [TyExprPrim str, \<psi>] \<Rightarrow> Some (TyExprDict \<psi>) | _ \<Rightarrow> None)
      else map_option (\<lambda>q. TyExprName q \<psi>s) (dotted_name e)
    })" |

@@ -16,21 +16,21 @@ qed
 definition ex_lambda :: expr
 where "ex_lambda =
     ExprCall
-        (ExprLambda [var_of_string ''x'']
-          (ExprBinOp BOpAdd (ExprVar (var_of_string ''x'')) (ExprLiteral (LitInt 1))))
+        (ExprLambda [var ''x'']
+          (ExprBinOp BOpAdd (ExprVar (var ''x'')) (ExprLiteral (LitInt 1))))
         ([ExprLiteral (LitInt 2)], [])"
 
 lemma ex_lambda_eval: "\<epsilon>, ex_lambda \<Rightarrow>\<^sub>e Val (VLit (LitInt 3))"
 proof -
   have args: "\<epsilon>, [ExprLiteral (LitInt 2)] \<Rightarrow>\<^sub>e\<^sub>s Val [VLit (LitInt 2)]"
     using EvalExprsCons[OF EvalLiteral EvalExprsNil] by simp
-  let ?\<rho> = "\<epsilon> \<otimes> fmap_of_list (zip [var_of_string ''x''] [VLit (LitInt 2)])"
-  have "?\<rho>, ExprVar (var_of_string ''x'') \<Rightarrow>\<^sub>e Val (VLit (LitInt 2))" by (rule EvalVar) simp_all
-  then have "?\<rho>, ExprBinOp BOpAdd (ExprVar (var_of_string ''x'')) (ExprLiteral (LitInt 1))
+  let ?\<rho> = "\<epsilon> \<otimes> fmap_of_list (zip [var ''x''] [VLit (LitInt 2)])"
+  have "?\<rho>, ExprVar (var ''x'') \<Rightarrow>\<^sub>e Val (VLit (LitInt 2))" by (rule EvalVar) simp_all
+  then have "?\<rho>, ExprBinOp BOpAdd (ExprVar (var ''x'')) (ExprLiteral (LitInt 1))
     \<Rightarrow>\<^sub>e mlet (Val (VLit (LitInt 1))) (binop_meaning BOpAdd (VLit (LitInt 2)))"
     by (rule EvalBinOp[OF _ EvalLiteral])
   then have body:
-    "?\<rho>, ExprBinOp BOpAdd (ExprVar (var_of_string ''x'')) (ExprLiteral (LitInt 1)) \<Rightarrow>\<^sub>e Val (VLit (LitInt 3))"
+    "?\<rho>, ExprBinOp BOpAdd (ExprVar (var ''x'')) (ExprLiteral (LitInt 1)) \<Rightarrow>\<^sub>e Val (VLit (LitInt 3))"
     by simp
   show ?thesis
     unfolding ex_lambda_def by (rule EvalCallLambda[OF EvalLambda args _ body]) simp

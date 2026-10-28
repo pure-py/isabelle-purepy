@@ -26,11 +26,11 @@ lift_definition substring :: "str \<Rightarrow> str \<Rightarrow> bool"
   is "\<lambda>ns ns'. \<exists>ms ms'. ns' = ms @ ns @ ms'" .
 
 (* Identifier written in a theory *)
-lift_definition var_of_string :: "string \<Rightarrow> var"
+lift_definition var :: "string \<Rightarrow> var"
   is "map of_char"
   by (rule code_point_lists_of_string)
 
-lemma var_of_string_inject [simp]: "var_of_string s = var_of_string s' \<longleftrightarrow> s = s'"
+lemma var_inject [simp]: "var s = var s' \<longleftrightarrow> s = s'"
   by transfer (simp add: inj_map_eq_map inj_def of_char_eq_iff)
 
 instantiation str :: equal

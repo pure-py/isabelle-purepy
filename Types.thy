@@ -93,19 +93,19 @@ where
         | _ \<Rightarrow> undefined)
    | _ \<Rightarrow> Fail (not_type_name \<Gamma> q))" |
 "resolve_type' \<Sigma> \<Gamma> A n (TyExprLiteral l) =
-  do { check_predefined \<Gamma> (var_of_string ''Literal''); Ok (TyLiteral l) }" |
+  do { check_predefined \<Gamma> (var ''Literal''); Ok (TyLiteral l) }" |
 "resolve_type' \<Sigma> \<Gamma> A n (TyExprList \<psi>) =
-  do { check_predefined \<Gamma> (var_of_string ''list''); \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>; Ok (TyList \<tau>) }" |
+  do { check_predefined \<Gamma> (var ''list''); \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>; Ok (TyList \<tau>) }" |
 "resolve_type' \<Sigma> \<Gamma> A n (TyExprDict \<psi>) = do {
-   check_predefined \<Gamma> (var_of_string ''dict''); check_predefined \<Gamma> (var_of_string ''str'');
+   check_predefined \<Gamma> (var ''dict''); check_predefined \<Gamma> (var ''str'');
    \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>; Ok (TyDict \<tau>)
  }" |
 "resolve_type' \<Sigma> \<Gamma> A n (TyExprTuple \<psi>s) = do {
-   check_predefined \<Gamma> (var_of_string ''tuple'');
+   check_predefined \<Gamma> (var ''tuple'');
    \<tau>s \<leftarrow> those_sum (map (resolve_type' \<Sigma> \<Gamma> A n) \<psi>s); Ok (TyTuple \<tau>s)
  }" |
 "resolve_type' \<Sigma> \<Gamma> A n (TyExprCallable \<psi>s \<psi>) = do {
-   check_predefined \<Gamma> (var_of_string ''Callable'');
+   check_predefined \<Gamma> (var ''Callable'');
    \<sigma>s \<leftarrow> those_sum (map (resolve_type' \<Sigma> \<Gamma> A n) \<psi>s);
    \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>;
    Ok (TyCallable \<sigma>s \<tau>)
