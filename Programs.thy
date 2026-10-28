@@ -34,13 +34,19 @@ proof (rule fmap_ext)
     by (simp add: submods.rep_eq fmlookup_of_list)
 qed
 
+(* Failure in module q located at p, unless already located *)
+definition locate_in :: "name \<Rightarrow> pos \<Rightarrow> (name \<times> reason) + 'a \<Rightarrow> (name \<times> reason) + 'a"
+where
+"locate_in q p = map_sum (\<lambda>(q', r). (q', if q' = q then locate_reason p r else r)) id"
+
 (* V holds the modules being checked, in order, so that an import cycle is rejected; failure paired
    with the module in which it occurs *)
 function (sequential)
   check_module ::
     "program \<Rightarrow> name list \<Rightarrow> class_table \<Rightarrow> name \<Rightarrow> name \<Rightarrow> (name \<times> reason) + cxt \<times> class_table" and
   check_imports ::
-    "program \<Rightarrow> name list \<Rightarrow> class_table \<Rightarrow> name \<Rightarrow> import list \<Rightarrow> (name \<times> reason) + cxt \<times> class_table" and
+    "program \<Rightarrow> name list \<Rightarrow> class_table \<Rightarrow> name \<Rightarrow> import located list
+     \<Rightarrow> (name \<times> reason) + cxt \<times> class_table" and
   submodules ::
     "program \<Rightarrow> name list \<Rightarrow> class_table \<Rightarrow> name \<Rightarrow> name \<Rightarrow> cxt \<Rightarrow> var list
      \<Rightarrow> (name \<times> reason) + cxt \<times> class_table" and
@@ -77,21 +83,21 @@ where
          })
        })" |
 "check_imports M V \<Sigma> q [] = Ok (fmempty, \<Sigma>)" |
-"check_imports M V \<Sigma> q (Import (x, xs) # \<iota>s) = do {
+"check_imports M V \<Sigma> q (At p (Import (x, xs)) # \<iota>s) = locate_in q p (do {
    ensure (\<not> q \<prec> (x, xs)) (q, ImportOfContainedModule (x, xs) q);
    (\<Delta>, \<Sigma>\<^sub>1) \<leftarrow> check_module M V \<Sigma> q (x, []);
    (\<Delta>', \<Sigma>\<^sub>2) \<leftarrow> submodules M V \<Sigma>\<^sub>1 q (x, []) \<Delta> xs;
    (\<Gamma>, \<Sigma>') \<leftarrow> check_imports M V \<Sigma>\<^sub>2 q \<iota>s;
    Ok (fmupd x (ModChecked (x, []) \<Delta>') fmempty \<uplus> \<Gamma>, \<Sigma>')
- }" |
-"check_imports M V \<Sigma> q (FromImport q' xs # \<iota>s) = do {
+ })" |
+"check_imports M V \<Sigma> q (At p (FromImport q' xs) # \<iota>s) = locate_in q p (do {
    (\<Delta>, \<Sigma>\<^sub>1) \<leftarrow> check_module M V \<Sigma> q q';
    \<Sigma>\<^sub>2 \<leftarrow> check_modules M V \<Sigma>\<^sub>1 q (unique_to q' q);
    (case redeclared {} xs of Some x \<Rightarrow> Fail (q, DuplicateImportedName x) | None \<Rightarrow> Ok ());
    (\<theta>s, \<Sigma>\<^sub>3) \<leftarrow> imports_entries M V \<Sigma>\<^sub>2 q q' \<Delta> xs;
    (\<Gamma>, \<Sigma>') \<leftarrow> check_imports M V \<Sigma>\<^sub>3 q \<iota>s;
    Ok (fmap_of_list (zip xs \<theta>s) \<uplus> \<Gamma>, \<Sigma>')
- }" |
+ })" |
 "submodules M V \<Sigma> q q' \<Gamma> [] = Ok (\<Gamma>, \<Sigma>)" |
 "submodules M V \<Sigma> q q' \<Gamma> (x # xs) = do {
    (\<Delta>, \<Sigma>\<^sub>1) \<leftarrow> check_module M V \<Sigma> q (snoc q' x);

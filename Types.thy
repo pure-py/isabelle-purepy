@@ -49,29 +49,30 @@ definition type_params :: "class_table \<Rightarrow> name \<Rightarrow> var list
 where
 "type_params \<Sigma> C =
   (case fmlookup \<Sigma> C of
-     Some (ClassDef _ _ \<chi>s i) \<Rightarrow> (case \<chi>s ! i of Dataclass _ \<alpha>s _ _ \<Rightarrow> \<alpha>s | TypeStmt _ _ _ \<Rightarrow> undefined)
+     Some (ClassDef _ _ \<chi>s i) \<Rightarrow> (case node (\<chi>s ! i) of Dataclass _ \<alpha>s _ _ \<Rightarrow> \<alpha>s | TypeStmt _ _ _ \<Rightarrow> undefined)
    | None \<Rightarrow> undefined)"
 
-definition type_entry :: "cxt \<Rightarrow> name \<Rightarrow> type_def list \<Rightarrow> nat \<Rightarrow> cxt_entry"
+definition type_entry :: "cxt \<Rightarrow> name \<Rightarrow> type_def located list \<Rightarrow> nat \<Rightarrow> cxt_entry"
 where
 "type_entry \<Gamma> q \<chi>s i =
-  (case \<chi>s ! i of Dataclass c _ _ _ \<Rightarrow> Type (snoc q c) | TypeStmt _ _ _ \<Rightarrow> TypeAlias \<Gamma> q \<chi>s i)"
+  (case node (\<chi>s ! i) of Dataclass c _ _ _ \<Rightarrow> Type (snoc q c) | TypeStmt _ _ _ \<Rightarrow> TypeAlias \<Gamma> q \<chi>s i)"
 
-definition type_context :: "cxt \<Rightarrow> name \<Rightarrow> type_def list \<Rightarrow> nat \<Rightarrow> cxt"
+definition type_context :: "cxt \<Rightarrow> name \<Rightarrow> type_def located list \<Rightarrow> nat \<Rightarrow> cxt"
 where
 "type_context \<Gamma> q \<chi>s i =
-  (let entries = \<lambda>js. fmap_of_list (map (\<lambda>j. (type_def_name (\<chi>s ! j), type_entry \<Gamma> q \<chi>s j)) js) in
-   case \<chi>s ! i of
+  (let entries = \<lambda>js. fmap_of_list (map (\<lambda>j. (type_def_name (node (\<chi>s ! j)), type_entry \<Gamma> q \<chi>s j)) js) in
+   case node (\<chi>s ! i) of
      TypeStmt _ \<alpha>s _ \<Rightarrow> \<Gamma> \<otimes> entries [0..<length \<chi>s] \<otimes> fmconst (set \<alpha>s) TypeVar
    | Dataclass _ \<alpha>s _ _ \<Rightarrow> \<Gamma> \<otimes> entries [0..<i] \<otimes> fmconst (set \<alpha>s) TypeVar)"
 
 (* A holds the aliases being resolved, so that a cyclic alias is rejected; n bounds the nesting of alias
    resolution, and the number of alias definitions reachable from the context suffices, since the aliases in A
    are distinct *)
-fun resolve_type' :: "class_table \<Rightarrow> cxt \<Rightarrow> (name \<times> var) list \<Rightarrow> nat \<Rightarrow> ty_expr \<Rightarrow> ty may_fail"
+fun resolve_type' :: "class_table \<Rightarrow> cxt \<Rightarrow> (name \<times> var) list \<Rightarrow> nat \<Rightarrow> ty_expr located \<Rightarrow> ty may_fail"
 where
-"resolve_type' \<Sigma> \<Gamma> A n (TyExprPrim \<nu>) = do { check_predefined \<Gamma> (prim_name \<nu>); Ok (TyPrim \<nu>) }" |
-"resolve_type' \<Sigma> \<Gamma> A n (TyExprName q \<psi>s) =
+"resolve_type' \<Sigma> \<Gamma> A n (At p (TyExprPrim \<nu>)) =
+  locate p (do { check_predefined \<Gamma> (prim_name \<nu>); Ok (TyPrim \<nu>) })" |
+"resolve_type' \<Sigma> \<Gamma> A n (At p (TyExprName q \<psi>s)) = locate p
   (if snd q = [] \<and> \<psi>s = [] \<and> fmlookup \<Gamma> (fst q) = Some TypeVar then Ok (TyVar (fst q))
    else case resolve_name \<Gamma> q of
      Some (Type C) \<Rightarrow> do {
@@ -80,7 +81,7 @@ where
        if length \<tau>s = m then Ok (TyClass C \<tau>s) else Fail (ClassArityMismatch q m (length \<tau>s))
      }
    | Some (TypeAlias \<Gamma>' q' \<chi>s i) \<Rightarrow>
-       (case \<chi>s ! i of
+       (case node (\<chi>s ! i) of
           TypeStmt x \<alpha>s \<psi> \<Rightarrow> do {
             \<sigma>s \<leftarrow> those_sum (map (resolve_type' \<Sigma> \<Gamma> A n) \<psi>s);
             ensure (length \<sigma>s = length \<alpha>s) (TypeAliasArityMismatch q (length \<alpha>s) (length \<sigma>s));
@@ -92,29 +93,29 @@ where
           }
         | _ \<Rightarrow> undefined)
    | _ \<Rightarrow> Fail (not_type_name \<Gamma> q))" |
-"resolve_type' \<Sigma> \<Gamma> A n (TyExprLiteral l) =
-  do { check_predefined \<Gamma> (var ''Literal''); Ok (TyLiteral l) }" |
-"resolve_type' \<Sigma> \<Gamma> A n (TyExprList \<psi>) =
-  do { check_predefined \<Gamma> (var ''list''); \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>; Ok (TyList \<tau>) }" |
-"resolve_type' \<Sigma> \<Gamma> A n (TyExprDict \<psi>) = do {
+"resolve_type' \<Sigma> \<Gamma> A n (At p (TyExprLiteral l)) =
+  locate p (do { check_predefined \<Gamma> (var ''Literal''); Ok (TyLiteral l) })" |
+"resolve_type' \<Sigma> \<Gamma> A n (At p (TyExprList \<psi>)) =
+  locate p (do { check_predefined \<Gamma> (var ''list''); \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>; Ok (TyList \<tau>) })" |
+"resolve_type' \<Sigma> \<Gamma> A n (At p (TyExprDict \<psi>)) = locate p (do {
    check_predefined \<Gamma> (var ''dict''); check_predefined \<Gamma> (var ''str'');
    \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>; Ok (TyDict \<tau>)
- }" |
-"resolve_type' \<Sigma> \<Gamma> A n (TyExprTuple \<psi>s) = do {
+ })" |
+"resolve_type' \<Sigma> \<Gamma> A n (At p (TyExprTuple \<psi>s)) = locate p (do {
    check_predefined \<Gamma> (var ''tuple'');
    \<tau>s \<leftarrow> those_sum (map (resolve_type' \<Sigma> \<Gamma> A n) \<psi>s); Ok (TyTuple \<tau>s)
- }" |
-"resolve_type' \<Sigma> \<Gamma> A n (TyExprCallable \<psi>s \<psi>) = do {
+ })" |
+"resolve_type' \<Sigma> \<Gamma> A n (At p (TyExprCallable \<psi>s \<psi>)) = locate p (do {
    check_predefined \<Gamma> (var ''Callable'');
    \<sigma>s \<leftarrow> those_sum (map (resolve_type' \<Sigma> \<Gamma> A n) \<psi>s);
    \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>;
    Ok (TyCallable \<sigma>s \<tau>)
- }" |
-"resolve_type' \<Sigma> \<Gamma> A n (TyExprUnion \<psi> \<psi>') = do {
+ })" |
+"resolve_type' \<Sigma> \<Gamma> A n (At p (TyExprUnion \<psi> \<psi>')) = do {
    \<sigma> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>; \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>'; Ok (TyUnion \<sigma> \<tau>)
  }"
 
-definition resolve_type :: "class_table \<Rightarrow> cxt \<Rightarrow> ty_expr \<Rightarrow> ty may_fail"
+definition resolve_type :: "class_table \<Rightarrow> cxt \<Rightarrow> ty_expr located \<Rightarrow> ty may_fail"
 where
 "resolve_type \<Sigma> \<Gamma> \<psi> = resolve_type' \<Sigma> \<Gamma> [] (aliases \<Gamma>) \<psi>"
 
@@ -123,10 +124,10 @@ where
 "base \<Sigma> C =
   (case fmlookup \<Sigma> C of
      Some (ClassDef \<Gamma> q \<chi>s i) \<Rightarrow>
-       (case \<chi>s ! i of
+       (case node (\<chi>s ! i) of
           Dataclass _ _ None _ \<Rightarrow> None
         | Dataclass _ _ (Some (q', \<psi>s)) _ \<Rightarrow>
-            (case resolve_type \<Sigma> (type_context \<Gamma> q \<chi>s i) (TyExprName q' \<psi>s) of
+            (case resolve_type \<Sigma> (type_context \<Gamma> q \<chi>s i) (At (pos_of (\<chi>s ! i)) (TyExprName q' \<psi>s)) of
                Ok (TyClass D \<sigma>s) \<Rightarrow> Some (D, \<sigma>s)
              | _ \<Rightarrow> undefined)
         | TypeStmt _ _ _ \<Rightarrow> undefined)
@@ -165,7 +166,7 @@ where
 "declared_fields \<Sigma> C \<tau>s =
   (case fmlookup \<Sigma> C of
      Some (ClassDef \<Gamma> q \<chi>s i) \<Rightarrow>
-       (case \<chi>s ! i of
+       (case node (\<chi>s ! i) of
           Dataclass _ \<alpha>s _ \<phi> \<Rightarrow>
             map (\<lambda>(x, \<psi>). (x, subst \<tau>s \<alpha>s (projr (resolve_type \<Sigma> (type_context \<Gamma> q \<chi>s i) \<psi>)))) \<phi>
         | TypeStmt _ _ _ \<Rightarrow> undefined)
@@ -186,10 +187,10 @@ definition field_names :: "class_table \<Rightarrow> name \<Rightarrow> var list
 where
 "field_names \<Sigma> C = (case fields \<Sigma> C of FieldScheme _ x\<sigma>s \<Rightarrow> map fst x\<sigma>s)"
 
-definition class_table :: "cxt \<Rightarrow> name \<Rightarrow> type_def list \<Rightarrow> nat \<Rightarrow> class_table"
+definition class_table :: "cxt \<Rightarrow> name \<Rightarrow> type_def located list \<Rightarrow> nat \<Rightarrow> class_table"
 where
 "class_table \<Gamma> q \<chi>s i =
-  (case \<chi>s ! i of
+  (case node (\<chi>s ! i) of
      Dataclass c _ _ _ \<Rightarrow> fmupd (snoc q c) (ClassDef \<Gamma> q \<chi>s i) fmempty
    | TypeStmt _ _ _ \<Rightarrow> fmempty)"
 
@@ -205,7 +206,8 @@ where
 
 (* Type of the field of C supplied by each argument, in order *)
 definition constructor_args ::
-  "name \<Rightarrow> field_scheme \<Rightarrow> expr list \<Rightarrow> (var \<times> expr) list \<Rightarrow> (ty \<times> expr) list may_fail"
+  "name \<Rightarrow> field_scheme \<Rightarrow> expr located list \<Rightarrow> (var \<times> expr located) list
+   \<Rightarrow> (ty \<times> expr located) list may_fail"
 where
 "constructor_args C \<pi> es kws =
   (case \<pi> of FieldScheme _ x\<sigma>s \<Rightarrow> do {
@@ -215,20 +217,21 @@ where
    })"
 
 (* Class of constructor callee e, with the type arguments supplied by e, if any *)
-definition constructor_class :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> (name \<times> ty list option) may_fail option"
+definition constructor_class ::
+  "class_table \<Rightarrow> cxt \<Rightarrow> expr located \<Rightarrow> (name \<times> ty list option) may_fail option"
 where
 "constructor_class \<Sigma> \<Gamma> e =
-  (case (class_of_name \<Gamma> e, e) of
+  (case (class_of_name \<Gamma> (node e), node e) of
      (Some C, _) \<Rightarrow> Some (Ok (C, None))
    | (None, ExprSubscript e' e'') \<Rightarrow>
-       if class_of_name \<Gamma> e' = None then None
+       if class_of_name \<Gamma> (node e') = None then None
        else
          (case type_expr_of e of
             Some \<psi> \<Rightarrow>
               Some (do { \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; case \<tau> of TyClass C \<tau>s \<Rightarrow> Ok (C, Some \<tau>s) | _ \<Rightarrow> undefined })
           | None \<Rightarrow>
-              Some (Fail (NotTypeExpression
-                            (the (find (\<lambda>e'''. type_expr_of e''' = None) (subscript_args e''))))))
+              (let e''' = the (find (\<lambda>e'''. type_expr_of e''' = None) (subscript_args e'')) in
+               Some (Fail (Located (pos_of e''') (NotTypeExpression e''')))))
    | _ \<Rightarrow> None)"
 
 lemma constructor_args_elem:

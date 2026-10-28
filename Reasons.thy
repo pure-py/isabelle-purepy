@@ -25,11 +25,11 @@ datatype reason =
   | RangePattern
   | PatternClassUndetermined var ty
   | SequenceKindMismatch sequence_kind ty sequence_kind
-  | UnreachableCase pat
+  | UnreachableCase "pat located"
   | MissingReturnMatchPartial ty
   | MissingReturnAssertion
   | NotPredefinedName var
-  | NotTypeExpression expr
+  | NotTypeExpression "expr located"
   | NotClass name
   | ClassArityMismatch name nat nat
   | TypeAliasArityMismatch name nat nat
@@ -67,8 +67,25 @@ datatype reason =
   | MissingReturn var ty
   | ImportCycle "name list"
   | MypyCompatibility reason
+  | Located pos reason
 
 type_synonym 'a may_fail = "reason + 'a"
+
+(* Reason without its position *)
+fun unlocated :: "reason \<Rightarrow> reason"
+where
+"unlocated (Located _ r) = r" |
+"unlocated r = r"
+
+(* Reason at p, unless already located *)
+fun locate_reason :: "pos \<Rightarrow> reason \<Rightarrow> reason"
+where
+"locate_reason p (Located p' r) = Located p' r" |
+"locate_reason p r = Located p r"
+
+definition locate :: "pos \<Rightarrow> 'a may_fail \<Rightarrow> 'a may_fail"
+where
+"locate p = map_sum (locate_reason p) id"
 
 definition not_type_name :: "cxt \<Rightarrow> name \<Rightarrow> reason"
 where
@@ -130,8 +147,7 @@ where
 fun synth_failure :: "'a may_fail list \<Rightarrow> reason"
 where
 "synth_failure [] = NotSynthesised" |
-"synth_failure (Fail NotSynthesised # ms) = synth_failure ms" |
-"synth_failure (Fail r # ms) = r" |
+"synth_failure (Fail r # ms) = (if unlocated r = NotSynthesised then synth_failure ms else r)" |
 "synth_failure (Ok _ # ms) = synth_failure ms"
 
 end

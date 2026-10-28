@@ -12,7 +12,7 @@ datatype cxt_entry =
   | Unbound
   | ModStub name
   | ModChecked name "(var, cxt_entry) fmap"
-  | TypeAlias "(var, cxt_entry) fmap" name "type_def list" nat
+  | TypeAlias "(var, cxt_entry) fmap" name "type_def located list" nat
   | Type name
   | TypeVar
   | Scheme ty_scheme
@@ -21,7 +21,7 @@ datatype cxt_entry =
 
 type_synonym cxt = "(var, cxt_entry) fmap"
 
-datatype class_entry = ClassDef cxt name "type_def list" nat
+datatype class_entry = ClassDef cxt name "type_def located list" nat
 
 type_synonym class_table = "(name, class_entry) fmap"
 
@@ -88,8 +88,8 @@ where
 "predefined_classes =
   fmupd range_class
     (ClassDef (the (fmlookup predefined builtins)) builtins
-      [Dataclass (var ''range'') [] None
-        [(var ''start'', TyExprPrim int), (var ''stop'', TyExprPrim int)]] 0)
+      [At no_position (Dataclass (var ''range'') [] None
+        [(var ''start'', At no_position (TyExprPrim int)), (var ''stop'', At no_position (TyExprPrim int))])] 0)
     fmempty"
 
 lemma sorted_list_of_fmap_lookup: "(k, v) \<in> set (sorted_list_of_fmap m) \<Longrightarrow> fmlookup m k = Some v"
@@ -99,7 +99,7 @@ lemma sorted_list_of_fmap_lookup: "(k, v) \<in> set (sorted_list_of_fmap m) \<Lo
 function (sequential) entry_aliases :: "cxt_entry \<Rightarrow> nat" and aliases :: "cxt \<Rightarrow> nat"
 where
 "entry_aliases (TypeAlias \<Gamma> _ \<chi>s _) =
-  length (filter (\<lambda>\<chi>. case \<chi> of TypeStmt _ _ _ \<Rightarrow> True | _ \<Rightarrow> False) \<chi>s) + aliases \<Gamma>" |
+  length (filter (\<lambda>\<chi>. case node \<chi> of TypeStmt _ _ _ \<Rightarrow> True | _ \<Rightarrow> False) \<chi>s) + aliases \<Gamma>" |
 "entry_aliases (ModChecked _ \<Gamma>) = aliases \<Gamma>" |
 "entry_aliases _ = 0" |
 "aliases \<Gamma> = sum_list (map (entry_aliases \<circ> snd) (sorted_list_of_fmap \<Gamma>))"
