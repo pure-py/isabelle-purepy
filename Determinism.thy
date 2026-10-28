@@ -3,6 +3,10 @@ theory Determinism
     imports Eval
 begin
 
+(* The class table, ambient in evaluation as in the spec *)
+context fixes \<Sigma> :: class_table
+begin
+
 inductive_cases VarE: "\<rho>, ExprVar x \<Rightarrow>\<^sub>e r"
 inductive_cases LiteralE: "\<rho>, ExprLiteral l \<Rightarrow>\<^sub>e r"
 inductive_cases LambdaE: "\<rho>, ExprLambda xs e \<Rightarrow>\<^sub>e r"
@@ -450,5 +454,7 @@ next
   from EvalEntriesFailValue.prems EvalEntriesFailValue.hyps show ?case
     by (auto elim!: EntriesConsE dest: EvalEntriesFailValue.IH)
 qed
+
+end
 
 end

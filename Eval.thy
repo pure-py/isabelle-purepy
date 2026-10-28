@@ -61,6 +61,10 @@ where
 "fseq Stuck f = Stuck" |
 "fseq OutOfFuel f = OutOfFuel"
 
+(* The class table, ambient in evaluation as in the spec *)
+context fixes \<Sigma> :: class_table
+begin
+
 function (sequential)
   eval_expr  :: "nat \<Rightarrow> env \<Rightarrow> expr \<Rightarrow> val result fuelled" and
   eval_exprs :: "nat \<Rightarrow> env \<Rightarrow> expr list \<Rightarrow> val list result fuelled" and
@@ -211,6 +215,9 @@ by pat_completeness auto
 termination
   by (relation "measure (case_sum (case_sum (case_sum fst fst) (case_sum fst fst))
                                   (case_sum (case_sum fst fst) (case_sum fst fst)))") auto
+
+
+end
 
 lemmas eval_fun_induct =
   eval_expr_eval_exprs_eval_stmt_eval_elif_eval_quals_eval_gen_eval_comp_eval_entries.induct

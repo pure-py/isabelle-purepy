@@ -5,13 +5,13 @@ session "isabelle-purepy" = HOL +
   theories
     Util
     Syntax
+    Contexts
+    Reasons
+    Types
     Semantics
     Determinism
     Eval
     Correctness
-    Contexts
-    Reasons
-    Types
     Subtyping
     Shapes
     Patterns

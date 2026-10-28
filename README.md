@@ -26,13 +26,13 @@ To browse the theories with the prover running, open the session directory in th
 |----------------------|--------------------------------------------------------------------------------|
 | `Util.thy`           | Shared utilities                                                               |
 | `Syntax.thy`         | Abstract syntax and its analyses                                               |
+| `Contexts.thy`       | Context entries, class tables, name resolution, predefined modules             |
+| `Reasons.thy`        | Reasons for ill-formedness                                                     |
+| `Types.thy`          | Type resolution, substitution and class definitions                            |
 | `Semantics.thy`      | Values, results and evaluation judgements                                      |
 | `Determinism.thy`    | Inversion lemmas and determinism of evaluation                                 |
 | `Eval.thy`           | Evaluation as a function with fuel, and its executable code equations          |
 | `Correctness.thy`    | Soundness and completeness of the evaluator against the evaluation judgements  |
-| `Contexts.thy`       | Context entries, class tables, name resolution, predefined modules             |
-| `Reasons.thy`        | Reasons for ill-formedness                                                     |
-| `Types.thy`          | Type resolution, substitution and class definitions                            |
 | `Subtyping.thy`      | Subtyping, join and meet; element, subscript and attribute types               |
 | `Shapes.thy`         | Heads and shapes for pattern matching; head and shape typing; shapes of a type |
 | `Patterns.thy`       | Pattern checking; matched and remaining types of patterns                      |

@@ -1,6 +1,6 @@
 (* Values, results and evaluation judgements *)
 theory Semantics
-    imports Syntax "HOL-Library.Finite_Map"
+    imports Types "HOL-Library.Finite_Map"
 begin
 
 (* Free o for outcomes, as in the spec *)
@@ -238,6 +238,10 @@ where
 "NoMatch \<otimes>\<^sub>m m = NoMatch" |
 "MatchAborts \<kappa> \<otimes>\<^sub>m m = MatchAborts \<kappa>"
 
+(* The class table, ambient in evaluation as in the spec *)
+context fixes \<Sigma> :: class_table
+begin
+
 (* Without class values, the head of a constructor pattern denotes no class *)
 fun match :: "env \<Rightarrow> pat \<Rightarrow> val \<Rightarrow> match_result"
   and match_all :: "env \<Rightarrow> pat list \<Rightarrow> val list \<Rightarrow> match_result"
@@ -468,6 +472,9 @@ EvalEntriesNonStr:
 EvalEntriesFailValue:
   "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val (VLit (LitString w)) ; \<rho>, e' \<Rightarrow>\<^sub>e Aborts \<kappa> \<rbrakk>
   \<Longrightarrow> \<rho> # \<rho>s, e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s Aborts \<kappa>"
+
+
+end
 
 lemmas eval_rules = eval_expr_eval_exprs_eval_stmt_eval_elif_eval_quals_eval_gen_eval_comp_eval_entries.intros
 lemmas eval_induct = eval_expr_eval_exprs_eval_stmt_eval_elif_eval_quals_eval_gen_eval_comp_eval_entries.inducts

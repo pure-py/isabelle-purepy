@@ -3,6 +3,10 @@ theory Correctness
     imports Eval
 begin
 
+(* The class table, ambient in evaluation as in the spec *)
+context fixes \<Sigma> :: class_table
+begin
+
 lemma flet_case:
   "flet m f =
     (case m of Done (Val v) \<Rightarrow> f v | Done (Aborts \<kappa>) \<Rightarrow> Done (Aborts \<kappa>) | Stuck \<Rightarrow> Stuck | OutOfFuel \<Rightarrow> OutOfFuel)"
@@ -648,5 +652,7 @@ corollary completeness:
     and completeness_comp: "\<rho>s, e \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p vr \<Longrightarrow> \<exists>n. eval_comp n \<rho>s e = Done vr"
     and completeness_entries: "\<rho>s, e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s dr \<Longrightarrow> \<exists>n. eval_entries n \<rho>s e e' = Done dr"
   by (fact completeness_eventually[THEN eventually_happens'[OF sequentially_bot]])+
+
+end
 
 end
