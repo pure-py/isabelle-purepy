@@ -221,6 +221,45 @@ def test_eval_match_constructor_head():
     assert call_match(constr("n", "C"), lit(0)) == aborts(Semantics.AttributeError())
 
 
+def gen(x, e):
+    return Syntax.Generator(chars(x), e)
+
+
+def ints(*ns):
+    return Syntax.ExprList([lit(n) for n in ns])
+
+
+def int_list(*ns):
+    return val(Semantics.VList([Semantics.VLit(Syntax.LitInt(n)) for n in ns]))
+
+
+def test_eval_list_comprehension():
+    double = Syntax.ExprBinOp(Syntax.BOpMul(), var("x"), lit(2))
+    assert evaluate(Syntax.ExprListComp(double, [gen("x", ints(1, 2, 3))])) == int_list(2, 4, 6)
+    big = Syntax.Guard(Syntax.ExprBinOp(Syntax.BOpGt(), var("x"), lit(2)))
+    assert evaluate(Syntax.ExprListComp(var("x"), [gen("x", ints(1, 2, 3, 4)), big])) == int_list(3, 4)
+    pairs = Syntax.ExprListComp(Syntax.ExprTuple([var("x"), var("y")]), [gen("x", ints(1, 2)), gen("y", string("ab"))])
+    expected = [Semantics.VTuple([Semantics.VLit(Syntax.LitInt(x)), Semantics.VLit(Syntax.LitString(chars(y)))])
+                for x in [1, 2] for y in "ab"]
+    assert evaluate(pairs) == val(Semantics.VList(expected))
+    keys = Syntax.ExprListComp(var("k"), [gen("k", Syntax.ExprDict([(string("a"), lit(1)), (string("b"), lit(2))]))])
+    assert evaluate(keys) == val(Semantics.VList([Semantics.VLit(Syntax.LitString(chars(k))) for k in "ab"]))
+
+
+def test_eval_dict_comprehension():
+    d = Syntax.ExprDictComp(var("k"), lit(0), [gen("k", string("aba"))])
+    entries = [(chars(k), Semantics.VLit(Syntax.LitInt(0))) for k in "ab"]
+    assert evaluate(d) == val(Semantics.VDict(entries))
+    assert evaluate(Syntax.ExprDictComp(var("x"), lit(0), [gen("x", ints(1))])) == aborts(Semantics.Excluded())
+
+
+def test_eval_comprehension_aborts():
+    assert evaluate(Syntax.ExprListComp(var("x"), [gen("x", lit(5))])) == aborts(Semantics.TypeError())
+    assert evaluate(Syntax.ExprListComp(var("x"), [gen("x", ints(1)), Syntax.Guard(lit(1))])) == aborts(Semantics.Excluded())
+    inverse = Syntax.ExprBinOp(Syntax.BOpFloorDiv(), lit(1), var("x"))
+    assert evaluate(Syntax.ExprListComp(inverse, [gen("x", ints(1, 0))])) == aborts(Semantics.ZeroDivisionError())
+
+
 if __name__ == "__main__":
     tests = [f for name, f in sorted(globals().items()) if name.startswith("test_")]
     for test in tests:

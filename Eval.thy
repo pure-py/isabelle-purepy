@@ -60,11 +60,15 @@ where
 "fseq Stuck f = Stuck" |
 "fseq OutOfFuel f = OutOfFuel"
 
-fun
+function (sequential)
   eval_expr  :: "nat \<Rightarrow> env \<Rightarrow> expr \<Rightarrow> val result fuelled" and
   eval_exprs :: "nat \<Rightarrow> env \<Rightarrow> expr list \<Rightarrow> val list result fuelled" and
   eval_stmt  :: "nat \<Rightarrow> env \<Rightarrow> stmt \<Rightarrow> outcome fuelled" and
-  eval_elif  :: "nat \<Rightarrow> env \<Rightarrow> elif_block \<Rightarrow> outcome fuelled"
+  eval_elif  :: "nat \<Rightarrow> env \<Rightarrow> elif_block \<Rightarrow> outcome fuelled" and
+  eval_quals :: "nat \<Rightarrow> env \<Rightarrow> qualifier list \<Rightarrow> env list result fuelled" and
+  eval_gen   :: "nat \<Rightarrow> env \<Rightarrow> var \<Rightarrow> val list \<Rightarrow> qualifier list \<Rightarrow> env list result fuelled" and
+  eval_comp  :: "nat \<Rightarrow> env list \<Rightarrow> expr \<Rightarrow> val list result fuelled" and
+  eval_entries :: "nat \<Rightarrow> env list \<Rightarrow> expr \<Rightarrow> expr \<Rightarrow> (string \<times> val) list result fuelled"
 where
 "eval_expr 0 \<rho> e = OutOfFuel" |
 "eval_expr (Suc n) \<rho> (ExprVar x) = 
@@ -98,6 +102,10 @@ where
   flet (eval_exprs n \<rho> (concat (map (\<lambda>(e, e'). [e, e']) kes))) (\<lambda>vs. case dict_entries vs of
     Some \<delta> \<Rightarrow> Done (Val (VDict (update [] \<delta>)))
   | None \<Rightarrow> Done (Aborts Excluded))" |
+"eval_expr (Suc n) \<rho> (ExprListComp e gs) =
+  flet (eval_quals n \<rho> gs) (\<lambda>\<rho>s. flet (eval_comp n \<rho>s e) (\<lambda>vs. Done (Val (VList vs))))" |
+"eval_expr (Suc n) \<rho> (ExprDictComp e e' gs) =
+  flet (eval_quals n \<rho> gs) (\<lambda>\<rho>s. flet (eval_entries n \<rho>s e e') (\<lambda>\<delta>. Done (Val (VDict (update [] \<delta>)))))" |
 "eval_expr (Suc n) \<rho> (ExprSubscript e e') =
   flet (eval_expr n \<rho> e) (\<lambda>v. flet (eval_expr n \<rho> e') (\<lambda>v'. Done (getitem v v')))" |
 "eval_expr (Suc n) \<rho> (ExprCall e (es, [])) =
@@ -165,6 +173,45 @@ where
   flet_outcome (eval_expr n \<rho> e) (\<lambda>v. case as_bool v of
     Some True \<Rightarrow> eval_stmt n \<rho> s
   | Some False \<Rightarrow> eval_elif n \<rho> (elifs, else')
-  | None \<Rightarrow> Done (Aborts\<^sub>o Excluded))"
+  | None \<Rightarrow> Done (Aborts\<^sub>o Excluded))" |
+
+"eval_quals 0 \<rho> gs = OutOfFuel" |
+"eval_quals (Suc n) \<rho> [] = Done (Val [\<rho>])" |
+"eval_quals (Suc n) \<rho> (Guard e # gs) =
+  flet (eval_expr n \<rho> e) (\<lambda>v. case as_bool v of
+    Some True \<Rightarrow> eval_quals n \<rho> gs
+  | Some False \<Rightarrow> Done (Val [])
+  | None \<Rightarrow> Done (Aborts Excluded))" |
+"eval_quals (Suc n) \<rho> (Generator x e # gs) =
+  flet (eval_expr n \<rho> e) (\<lambda>v. case iter v of
+    Some us \<Rightarrow> eval_gen n \<rho> x us gs
+  | None \<Rightarrow> Done (Aborts TypeError))" |
+
+"eval_gen 0 \<rho> x us gs = OutOfFuel" |
+"eval_gen (Suc n) \<rho> x [] gs = Done (Val [])" |
+"eval_gen (Suc n) \<rho> x (u # us) gs =
+  flet (eval_quals n (fmupd x u \<rho>) gs) (\<lambda>\<rho>s. flet (eval_gen n \<rho> x us gs) (\<lambda>\<rho>ss. Done (Val (\<rho>s @ \<rho>ss))))" |
+
+"eval_comp 0 \<rho>s e = OutOfFuel" |
+"eval_comp (Suc n) [] e = Done (Val [])" |
+"eval_comp (Suc n) (\<rho> # \<rho>s) e =
+  flet (eval_expr n \<rho> e) (\<lambda>v. flet (eval_comp n \<rho>s e) (\<lambda>vs. Done (Val (v # vs))))" |
+
+"eval_entries 0 \<rho>s e e' = OutOfFuel" |
+"eval_entries (Suc n) [] e e' = Done (Val [])" |
+"eval_entries (Suc n) (\<rho> # \<rho>s) e e' =
+  flet (eval_expr n \<rho> e) (\<lambda>k. case k of
+    VLit (LitString w) \<Rightarrow>
+      flet (eval_expr n \<rho> e') (\<lambda>v. flet (eval_entries n \<rho>s e e') (\<lambda>\<delta>. Done (Val ((w, v) # \<delta>))))
+  | _ \<Rightarrow> Done (Aborts Excluded))"
+by pat_completeness auto
+
+(* Every call decreases the fuel, the first argument of each function *)
+termination
+  by (relation "measure (case_sum (case_sum (case_sum fst fst) (case_sum fst fst))
+                                  (case_sum (case_sum fst fst) (case_sum fst fst)))") auto
+
+lemmas eval_fun_induct =
+  eval_expr_eval_exprs_eval_stmt_eval_elif_eval_quals_eval_gen_eval_comp_eval_entries.induct
 
 end

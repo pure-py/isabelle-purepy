@@ -31,6 +31,17 @@ inductive_cases SeqE: "\<rho>, StmtSeq s s' \<Rightarrow>\<^sub>s o"
 inductive_cases MatchE: "\<rho>, StmtMatch e cases \<Rightarrow>\<^sub>s o"
 inductive_cases ElifNilE: "\<rho>, ([], else') \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o"
 inductive_cases ElifConsE: "\<rho>, ((e, s) # elifs, else') \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o"
+inductive_cases ListCompE: "\<rho>, ExprListComp e gs \<Rightarrow>\<^sub>e r"
+inductive_cases DictCompE: "\<rho>, ExprDictComp e e' gs \<Rightarrow>\<^sub>e r"
+inductive_cases QualsNilE: "\<rho>, [] \<Rightarrow>\<^sub>q r"
+inductive_cases QualGuardE: "\<rho>, Guard e # gs \<Rightarrow>\<^sub>q r"
+inductive_cases QualGeneratorE: "\<rho>, Generator x e # gs \<Rightarrow>\<^sub>q r"
+inductive_cases GenNilE: "\<rho>, x, [], gs \<Rightarrow>\<^sub>g\<^sub>e\<^sub>n r"
+inductive_cases GenConsE: "\<rho>, x, u # us, gs \<Rightarrow>\<^sub>g\<^sub>e\<^sub>n r"
+inductive_cases CompNilE: "[], e \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p r"
+inductive_cases CompConsE: "\<rho> # \<rho>s, e \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p r"
+inductive_cases EntriesNilE: "[], e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s r"
+inductive_cases EntriesConsE: "\<rho> # \<rho>s, e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s r"
 
 lemma determinism:
   shows
@@ -38,7 +49,11 @@ lemma determinism:
   and exprs_det: "\<rho>, es \<Rightarrow>\<^sub>e\<^sub>s rs \<Longrightarrow> \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s rs' \<Longrightarrow> rs = rs'"
   and stmt_det: "\<rho>, s \<Rightarrow>\<^sub>s o \<Longrightarrow> \<rho>, s \<Rightarrow>\<^sub>s o' \<Longrightarrow> o = o'"
   and elif_det: "\<rho>, eb \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o' \<Longrightarrow> \<rho>, eb \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o'' \<Longrightarrow> o' = o''"
-proof (induction arbitrary: r' and rs' and o' and o'' rule: eval_induct)
+  and quals_det: "\<rho>, gs \<Rightarrow>\<^sub>q q \<Longrightarrow> \<rho>, gs \<Rightarrow>\<^sub>q q' \<Longrightarrow> q = q'"
+  and gen_det: "\<rho>, x, us, gs \<Rightarrow>\<^sub>g\<^sub>e\<^sub>n q \<Longrightarrow> \<rho>, x, us, gs \<Rightarrow>\<^sub>g\<^sub>e\<^sub>n q' \<Longrightarrow> q = q'"
+  and comp_det: "\<rho>s, e \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p vr \<Longrightarrow> \<rho>s, e \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p vr' \<Longrightarrow> vr = vr'"
+  and entries_det: "\<rho>s, e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s dr \<Longrightarrow> \<rho>s, e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s dr' \<Longrightarrow> dr = dr'"
+proof (induction arbitrary: r' and rs' and o' and o'' and q' and q' and vr' and dr' rule: eval_induct)
   case EvalVar
   then show ?case by (auto elim!: VarE)
 next
@@ -336,6 +351,103 @@ next
   case EvalElifNonBool
   from EvalElifNonBool.prems EvalElifNonBool.hyps show ?case
     by (auto elim!: ElifConsE dest: EvalElifNonBool.IH)
+next
+  case EvalListComp
+  from EvalListComp.prems EvalListComp.hyps show ?case
+    by (auto elim!: ListCompE dest: EvalListComp.IH)
+next
+  case EvalListCompFailQuals
+  from EvalListCompFailQuals.prems EvalListCompFailQuals.hyps show ?case
+    by (auto elim!: ListCompE dest: EvalListCompFailQuals.IH)
+next
+  case EvalListCompFail
+  from EvalListCompFail.prems EvalListCompFail.hyps show ?case
+    by (auto elim!: ListCompE dest: EvalListCompFail.IH)
+next
+  case EvalDictComp
+  from EvalDictComp.prems EvalDictComp.hyps show ?case
+    by (auto elim!: DictCompE dest: EvalDictComp.IH)
+next
+  case EvalDictCompFailQuals
+  from EvalDictCompFailQuals.prems EvalDictCompFailQuals.hyps show ?case
+    by (auto elim!: DictCompE dest: EvalDictCompFailQuals.IH)
+next
+  case EvalDictCompFail
+  from EvalDictCompFail.prems EvalDictCompFail.hyps show ?case
+    by (auto elim!: DictCompE dest: EvalDictCompFail.IH)
+next
+  case EvalQualsNil
+  then show ?case by (auto elim!: QualsNilE)
+next
+  case EvalQualGuardTrue
+  from EvalQualGuardTrue.prems EvalQualGuardTrue.hyps show ?case
+    by (auto elim!: QualGuardE dest: EvalQualGuardTrue.IH)
+next
+  case EvalQualGuardFalse
+  from EvalQualGuardFalse.prems EvalQualGuardFalse.hyps show ?case
+    by (auto elim!: QualGuardE dest: EvalQualGuardFalse.IH)
+next
+  case EvalQualGuardFail
+  from EvalQualGuardFail.prems EvalQualGuardFail.hyps show ?case
+    by (auto elim!: QualGuardE dest: EvalQualGuardFail.IH)
+next
+  case EvalQualGuardNonBool
+  from EvalQualGuardNonBool.prems EvalQualGuardNonBool.hyps show ?case
+    by (auto elim!: QualGuardE dest: EvalQualGuardNonBool.IH)
+next
+  case EvalQualGenerator
+  from EvalQualGenerator.prems show ?case
+    by (auto elim!: QualGeneratorE dest!: EvalQualGenerator.IH(1) simp: EvalQualGenerator.hyps(2)
+      dest: EvalQualGenerator.IH(2))
+next
+  case EvalQualGeneratorFail
+  from EvalQualGeneratorFail.prems EvalQualGeneratorFail.hyps show ?case
+    by (auto elim!: QualGeneratorE dest: EvalQualGeneratorFail.IH)
+next
+  case EvalQualGeneratorNonSeq
+  from EvalQualGeneratorNonSeq.prems EvalQualGeneratorNonSeq.hyps show ?case
+    by (auto elim!: QualGeneratorE dest: EvalQualGeneratorNonSeq.IH)
+next
+  case EvalGenNil
+  then show ?case by (auto elim!: GenNilE)
+next
+  case EvalGenCons
+  from EvalGenCons.prems EvalGenCons.hyps show ?case
+    by (auto elim!: GenConsE dest: EvalGenCons.IH)
+next
+  case EvalGenFail
+  from EvalGenFail.prems EvalGenFail.hyps show ?case
+    by (auto elim!: GenConsE dest: EvalGenFail.IH)
+next
+  case EvalCompNil
+  then show ?case by (auto elim!: CompNilE)
+next
+  case EvalCompCons
+  from EvalCompCons.prems EvalCompCons.hyps show ?case
+    by (auto elim!: CompConsE dest: EvalCompCons.IH)
+next
+  case EvalCompFail
+  from EvalCompFail.prems EvalCompFail.hyps show ?case
+    by (auto elim!: CompConsE dest: EvalCompFail.IH)
+next
+  case EvalEntriesNil
+  then show ?case by (auto elim!: EntriesNilE)
+next
+  case EvalEntriesCons
+  from EvalEntriesCons.prems EvalEntriesCons.hyps show ?case
+    by (auto elim!: EntriesConsE dest: EvalEntriesCons.IH)
+next
+  case EvalEntriesFailKey
+  from EvalEntriesFailKey.prems EvalEntriesFailKey.hyps show ?case
+    by (auto elim!: EntriesConsE dest: EvalEntriesFailKey.IH)
+next
+  case EvalEntriesNonStr
+  from EvalEntriesNonStr.prems EvalEntriesNonStr.hyps show ?case
+    by (auto elim!: EntriesConsE dest: EvalEntriesNonStr.IH)
+next
+  case EvalEntriesFailValue
+  from EvalEntriesFailValue.prems EvalEntriesFailValue.hyps show ?case
+    by (auto elim!: EntriesConsE dest: EvalEntriesFailValue.IH)
 qed
 
 end
