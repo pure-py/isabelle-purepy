@@ -3,20 +3,19 @@ theory Strings
   imports "HOL-Library.List_Lexorder"
 begin
 
-definition code_point_lists :: "nat list set"
+definition code_point_list :: "nat list set"
 where
-"code_point_lists = {ns. \<forall>n \<in> set ns. n < 0x110000}"
+"code_point_list = {ns. \<forall>n \<in> set ns. n < 0x110000}"
 
-lemma code_point_lists_of_string: "map of_char s \<in> code_point_lists"
-  by (auto simp: code_point_lists_def of_char_def)
+lemma code_point_list_of_string: "map of_char s \<in> code_point_list"
+  by (auto simp: code_point_list_def of_char_def)
 
-typedef str = code_point_lists
+typedef str = code_point_list
   morphisms code_points Str
-  by (rule exI[of _ "[]"]) (simp add: code_point_lists_def)
+  by (rule exI[of _ "[]"]) (simp add: code_point_list_def)
 
 setup_lifting type_definition_str
 
-(* Whether w occurs in w' *)
 lift_definition substring :: "str \<Rightarrow> str \<Rightarrow> bool"
   is "\<lambda>ns ns'. \<exists>ms ms'. ns' = ms @ ns @ ms'" .
 
@@ -44,16 +43,16 @@ instance
 
 end
 
-typedef var = code_point_lists
+typedef var = code_point_list
   morphisms var_code_points Var
-  by (rule exI[of _ "[]"]) (simp add: code_point_lists_def)
+  by (rule exI[of _ "[]"]) (simp add: code_point_list_def)
 
 setup_lifting type_definition_var
 
 (* Identifier written in a theory *)
 lift_definition var :: "string \<Rightarrow> var"
   is "map of_char"
-  by (rule code_point_lists_of_string)
+  by (rule code_point_list_of_string)
 
 lemma var_inject [simp]: "var s = var s' \<longleftrightarrow> s = s'"
   by transfer (simp add: inj_map_eq_map inj_def of_char_eq_iff)
