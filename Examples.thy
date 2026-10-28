@@ -1,3 +1,4 @@
+(* Example evaluations *)
 theory Examples
     imports Semantics
 begin

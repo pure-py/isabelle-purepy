@@ -1,10 +1,10 @@
+(* Values, results and evaluation judgements *)
 theory Semantics
     imports Syntax "HOL-Library.Finite_Map"
 begin
 
 (* Free o for outcomes, as in the spec *)
 no_notation (ASCII) comp (infixl \<open>o\<close> 55)
-notation fmadd (infixl "\<otimes>" 100)
 
 datatype val =
       VLit lit

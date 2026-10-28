@@ -1,6 +1,9 @@
+(* Shared utilities *)
 theory Util
-  imports "HOL-Library.Finite_Map"
+  imports "HOL-Library.Finite_Map" "HOL-Library.Monad_Syntax"
 begin
+
+notation fmadd (infixl "\<otimes>" 100)
 
 type_synonym 'a nonempty = "'a \<times> 'a list"
 
@@ -36,6 +39,18 @@ lemma fmconst_code [code]: "fmconst (set xs) u = fold (\<lambda>x. fmupd x u) xs
 lemma size_prod_pair [simp]: "size_prod f g p = f (fst p) + g (snd p) + Suc 0"
   by (cases p) simp
 
+lemma size_list_elem: "x \<in> set xs \<Longrightarrow> f x < size_list f xs"
+  by (induction xs) auto
+
+lemma size_list_zip_elem: "(x, y) \<in> set (zip xs ys) \<Longrightarrow> f x + g y < size_list f xs + size_list g ys"
+  by (metis add_strict_mono set_zip_leftD set_zip_rightD size_list_elem)
+
+lemma size_list_snd_elem: "(a, b) \<in> set xs \<Longrightarrow> size b < size_list (\<lambda>x. Suc (size (snd x))) xs"
+  by (induction xs) auto
+
+lemma size_list_snd_elem': "b \<in> set (map snd xs) \<Longrightarrow> size b < size_list (\<lambda>x. Suc (size (snd x))) xs"
+  by (auto dest: size_list_snd_elem)
+
 lemma size_list_fst: "size_list (size \<circ> fst) kvs \<le> size_list (\<lambda>x. Suc (size (fst x) + size (snd x))) kvs"
   by (rule size_list_pointwise) simp
 
@@ -63,5 +78,44 @@ proof -
   moreover have "fmdom' M - insert q V = (fmdom' M - V) - {q}" by auto
   ultimately show ?thesis by (metis card_Diff1_less finite_Diff finite_fmdom')
 qed
+
+(* Error monad: failure Fail e or result Ok x *)
+abbreviation Fail :: "'e \<Rightarrow> 'e + 'a" where "Fail \<equiv> Inl"
+abbreviation Ok :: "'a \<Rightarrow> 'e + 'a" where "Ok \<equiv> Inr"
+
+definition bind_sum :: "'e + 'a \<Rightarrow> ('a \<Rightarrow> 'e + 'b) \<Rightarrow> 'e + 'b"
+where
+"bind_sum m f = (case m of Fail e \<Rightarrow> Fail e | Ok x \<Rightarrow> f x)"
+
+adhoc_overloading Monad_Syntax.bind \<rightleftharpoons> bind_sum
+
+(* Failure e for None, otherwise the value; e is computed eagerly by generated code *)
+definition or_else :: "'e \<Rightarrow> 'a option \<Rightarrow> 'e + 'a"
+where
+"or_else e m = (case m of Some x \<Rightarrow> Ok x | None \<Rightarrow> Fail e)"
+
+(* First failure in the list, otherwise success *)
+fun all_sum :: "('e + unit) list \<Rightarrow> 'e + unit"
+where
+"all_sum [] = Ok ()" |
+"all_sum (m # ms) = do { m; all_sum ms }"
+
+lemma bind_sum_simps [simp]: "bind_sum (Fail e) f = Fail e" "bind_sum (Ok x) f = f x"
+  by (simp_all add: bind_sum_def)
+
+lemma bind_sum_cong [fundef_cong]:
+  "\<lbrakk> m = m' ; \<And>x. m' = Ok x \<Longrightarrow> f x = f' x \<rbrakk> \<Longrightarrow> bind_sum m f = bind_sum m' f'"
+  by (cases m') simp_all
+
+(* Failure e unless b; e is computed eagerly by generated code *)
+definition ensure :: "bool \<Rightarrow> 'e \<Rightarrow> 'e + unit"
+where
+"ensure b e = (if b then Ok () else Fail e)"
+
+(* First failure in the list, otherwise the list of results *)
+fun those_sum :: "('e + 'a) list \<Rightarrow> 'e + 'a list"
+where
+"those_sum [] = Ok []" |
+"those_sum (m # ms) = do { x \<leftarrow> m; xs \<leftarrow> those_sum ms; Ok (x # xs) }"
 
 end

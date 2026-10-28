@@ -1,5 +1,5 @@
 session "isabelle-purepy" = HOL +
-  options [timeout = 600]
+  options [timeout = 1200]
   sessions
     "HOL-Library"
   theories
@@ -9,11 +9,20 @@ session "isabelle-purepy" = HOL +
     Determinism
     Eval
     Correctness
+    Contexts
+    Reasons
+    Types
+    Subtyping
+    Shapes
+    Patterns
+    Matching
+    Operators
     Typing
+    Programs
     Examples
 
 session "isabelle-purepy-python" in "python" = "isabelle-purepy" +
-  options [timeout = 600]
+  options [timeout = 1200]
   sessions
     Python
   theories
