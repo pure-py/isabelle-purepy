@@ -27,7 +27,9 @@ To browse the theories with the prover running, open the session directory in th
 | `Util.thy`           | Shared utilities                                                               |
 | `Syntax.thy`         | Abstract syntax and its analyses                                               |
 | `Semantics.thy`      | Values, results and evaluation judgements                                      |
-| `Correctness.thy`    | Inversion lemmas and determinism of evaluation                                 |
+| `Determinism.thy`    | Inversion lemmas and determinism of evaluation                                 |
+| `Eval.thy`           | Evaluation as a function with fuel, and its executable code equations          |
+| `Correctness.thy`    | Soundness and completeness of the evaluator against the evaluation judgements  |
 | `Contexts.thy`       | Context entries, class tables, name resolution, predefined modules             |
 | `Reasons.thy`        | Reasons for ill-formedness                                                     |
 | `Types.thy`          | Type resolution, substitution and class definitions                            |

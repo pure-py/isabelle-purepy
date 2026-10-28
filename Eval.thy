@@ -1,3 +1,4 @@
+(* Evaluation as a function with fuel, and its executable code equations *)
 theory Eval
     imports Semantics "HOL-Library.Sublist"
 begin

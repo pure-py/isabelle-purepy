@@ -1,3 +1,4 @@
+(* Inversion lemmas and determinism of evaluation *)
 theory Determinism
     imports Eval
 begin

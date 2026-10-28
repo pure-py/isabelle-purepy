@@ -1,4 +1,4 @@
-(* Inversion lemmas and determinism of evaluation *)
+(* Soundness and completeness of the evaluator against the evaluation judgements *)
 theory Correctness
     imports Eval
 begin
