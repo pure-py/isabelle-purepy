@@ -384,8 +384,6 @@ where
 "check_call_stmt \<Sigma> \<Gamma> (TyCallable \<sigma>s (TyPrim NoneType)) kws es = check_args \<Sigma> \<Gamma> kws es \<sigma>s" |
 "check_call_stmt \<Sigma> \<Gamma> \<sigma> kws es = do { synth_call \<Sigma> \<Gamma> \<sigma> kws es; Ok () }"
 
-abbreviation false_lit :: expr where "false_lit \<equiv> ExprLiteral (LitBool False)"
-
 (* Failure for the first assignment target of xs which isn't in X, declared or a pattern variable of Y, located
    at its assignment *)
 definition check_assignments_declared ::
@@ -433,14 +431,15 @@ where
     | _ \<Rightarrow> do { synth_expr_at \<Sigma> \<Gamma> e; Ok () });
    Ok (Assigns\<^sub>R fmempty None)
  }" |
-"check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssert e e') = do {
-   (if node e = false_lit then Ok () else check_expr_at \<Sigma> \<Gamma> e (TyPrim bool));
-   (case e' of Some e'' \<Rightarrow> check_expr_at \<Sigma> \<Gamma> e'' (TyPrim str) | None \<Rightarrow> Ok ());
-   Ok (if node e = false_lit then Returns\<^sub>R
-        else Assigns\<^sub>R fmempty
-          (if \<zeta> \<noteq> None \<and> synth_expr_at \<Sigma> \<Gamma> e = Ok (TyLiteral (LitBool False))
-           then Some (MypyCompatibility MissingReturnAssertion) else None))
- }" |
+"check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssert e e') =
+  (let false_literal = (node e = ExprLiteral (LitBool False)) in do {
+     (if false_literal then Ok () else check_expr_at \<Sigma> \<Gamma> e (TyPrim bool));
+     (case e' of Some e'' \<Rightarrow> check_expr_at \<Sigma> \<Gamma> e'' (TyPrim str) | None \<Rightarrow> Ok ());
+     Ok (if false_literal then Returns\<^sub>R
+          else Assigns\<^sub>R fmempty
+            (if \<zeta> \<noteq> None \<and> synth_expr_at \<Sigma> \<Gamma> e = Ok (TyLiteral (LitBool False))
+             then Some (MypyCompatibility MissingReturnAssertion) else None))
+   })" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtReturn None) =
   (case \<zeta> of
      Some \<tau> \<Rightarrow>
