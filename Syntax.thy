@@ -186,6 +186,12 @@ where
   concat (map (\<lambda>(q, s). map (At p) (sorted_list_of_set (binds_pat (node q))) @ pat_bound_stmt s) cases)" |
 "pat_bound_stmt _ = []"
 
+fun pat_bound_top :: "top_stmt \<Rightarrow> var located list"
+where
+"pat_bound_top (Stmt s) = pat_bound_stmt s" |
+"pat_bound_top (TopSeq t t') = pat_bound_top t @ pat_bound_top t'" |
+"pat_bound_top (TypeDefs \<chi>s) = []"
+
 definition binds_stmt :: "stmt located \<Rightarrow> var set"
 where
 "binds_stmt s = set (map node (pat_bound_stmt s))"
@@ -195,12 +201,6 @@ where
 "binds_quals [] = {}" |
 "binds_quals (At _ (Guard _) # gs) = binds_quals gs" |
 "binds_quals (At _ (Generator x _) # gs) = {x} \<union> binds_quals gs"
-
-fun pat_bound_top :: "top_stmt \<Rightarrow> var located list"
-where
-"pat_bound_top (Stmt s) = pat_bound_stmt s" |
-"pat_bound_top (TopSeq t t') = pat_bound_top t @ pat_bound_top t'" |
-"pat_bound_top (TypeDefs \<chi>s) = []"
 
 definition binds_top :: "top_stmt \<Rightarrow> var set"
 where
@@ -238,10 +238,6 @@ where
 "declarations_stmt (At _ (StmtMatch _ cases)) = concat (map (\<lambda>(_, s). declarations_stmt s) cases)" |
 "declarations_stmt _ = []"
 
-definition declares_stmt :: "stmt \<Rightarrow> var list"
-where
-"declares_stmt s = map node (declarations_stmt (At no_pos s))"
-
 (* Names bound by imports, each at the position of its import, the root of a plain import listed once *)
 fun declarations_imports :: "import located list \<Rightarrow> var located list"
 where
@@ -251,15 +247,19 @@ where
    else At p x # declarations_imports \<iota>s)" |
 "declarations_imports (At p (FromImport q xs) # \<iota>s) = map (At p) xs @ declarations_imports \<iota>s"
 
-definition declares_imports :: "import located list \<Rightarrow> var list"
-where
-"declares_imports \<iota>s = map node (declarations_imports \<iota>s)"
-
 fun declarations_top :: "top_stmt \<Rightarrow> var located list"
 where
 "declarations_top (Stmt s) = declarations_stmt s" |
 "declarations_top (TopSeq t t') = declarations_top t @ declarations_top t'" |
 "declarations_top (TypeDefs \<chi>s) = map (\<lambda>\<chi>. At (pos_of \<chi>) (type_def_name (node \<chi>))) \<chi>s"
+
+definition declares_stmt :: "stmt \<Rightarrow> var list"
+where
+"declares_stmt s = map node (declarations_stmt (At no_pos s))"
+
+definition declares_imports :: "import located list \<Rightarrow> var list"
+where
+"declares_imports \<iota>s = map node (declarations_imports \<iota>s)"
 
 definition declares_top :: "top_stmt \<Rightarrow> var list"
 where
