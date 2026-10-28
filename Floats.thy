@@ -8,7 +8,7 @@ typedecl float
 (* Value as an extended real; None for nan *)
 consts float_value :: "float \<Rightarrow> ereal option"
 
-(* Arithmetic of Python's float, uninterpreted since type soundness doesn't depend on it *)
+(* Arithmetic of Python's float, left uninterpreted since type soundness doesn't depend on the results *)
 consts
   float_of_int :: "int \<Rightarrow> float"
   float_neg :: "float \<Rightarrow> float"

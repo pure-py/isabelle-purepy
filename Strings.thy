@@ -14,24 +14,11 @@ typedef str = code_point_lists
   morphisms code_points Str
   by (rule exI[of _ "[]"]) (simp add: code_point_lists_def)
 
-typedef var = code_point_lists
-  morphisms var_code_points Var
-  by (rule exI[of _ "[]"]) (simp add: code_point_lists_def)
-
 setup_lifting type_definition_str
-setup_lifting type_definition_var
 
 (* Whether w occurs in w' *)
 lift_definition substring :: "str \<Rightarrow> str \<Rightarrow> bool"
   is "\<lambda>ns ns'. \<exists>ms ms'. ns' = ms @ ns @ ms'" .
-
-(* Identifier written in a theory *)
-lift_definition var :: "string \<Rightarrow> var"
-  is "map of_char"
-  by (rule code_point_lists_of_string)
-
-lemma var_inject [simp]: "var s = var s' \<longleftrightarrow> s = s'"
-  by transfer (simp add: inj_map_eq_map inj_def of_char_eq_iff)
 
 instantiation str :: equal
 begin
@@ -45,18 +32,6 @@ instance
 
 end
 
-instantiation var :: equal
-begin
-
-definition equal_var :: "var \<Rightarrow> var \<Rightarrow> bool"
-where
-"equal_var x x' = (x = x')"
-
-instance
-  by standard (simp add: equal_var_def)
-
-end
-
 instantiation str :: linorder
 begin
 
@@ -66,6 +41,32 @@ lift_definition less_str :: "str \<Rightarrow> str \<Rightarrow> bool" is "(<)" 
 
 instance
   by (standard; transfer) (auto simp: less_le_not_le linear intro: order_trans antisym)
+
+end
+
+typedef var = code_point_lists
+  morphisms var_code_points Var
+  by (rule exI[of _ "[]"]) (simp add: code_point_lists_def)
+
+setup_lifting type_definition_var
+
+(* Identifier written in a theory *)
+lift_definition var :: "string \<Rightarrow> var"
+  is "map of_char"
+  by (rule code_point_lists_of_string)
+
+lemma var_inject [simp]: "var s = var s' \<longleftrightarrow> s = s'"
+  by transfer (simp add: inj_map_eq_map inj_def of_char_eq_iff)
+
+instantiation var :: equal
+begin
+
+definition equal_var :: "var \<Rightarrow> var \<Rightarrow> bool"
+where
+"equal_var x x' = (x = x')"
+
+instance
+  by standard (simp add: equal_var_def)
 
 end
 
