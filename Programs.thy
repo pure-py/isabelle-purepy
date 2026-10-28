@@ -69,10 +69,13 @@ where
      | Some (ModuleBody \<iota>s t) \<Rightarrow> do {
          (\<Gamma>', \<Sigma>') \<leftarrow> check_imports M (V @ [q]) \<Sigma> q \<iota>s;
          map_sum (Pair q) id (do {
+           (case redeclared node {} (declarations \<iota>s) of
+              Some y \<Rightarrow> Fail (Located (pos_of y) (DuplicateImportedName (node y)))
+            | None \<Rightarrow> Ok ());
            \<Gamma>\<^sub>s \<leftarrow>
              (case scope Unbound (declares \<iota>s) t of
                 Some \<Gamma>\<^sub>s \<Rightarrow> Ok \<Gamma>\<^sub>s
-              | None \<Rightarrow> Fail (scope_reason (declarations \<iota>s) (declarations t) (pattern_bound t)));
+              | None \<Rightarrow> Fail (scope_reason (declares \<iota>s) (declarations t) (pattern_bound t)));
            check_assignments_declared {} (assign_targets t) (declares t) (binds t);
            (R, \<Sigma>'') \<leftarrow> check_top_stmt \<Sigma>' q (the (fmlookup predefined builtins) \<otimes> \<Gamma>' \<otimes> \<Gamma>\<^sub>s) t;
            case R of

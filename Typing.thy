@@ -417,8 +417,9 @@ where
  }"
 
 function (sequential) check_stmt :: "class_table \<Rightarrow> cxt \<Rightarrow> ty option \<Rightarrow> stmt \<Rightarrow> static_outcome may_fail"
-and check_def :: "class_table \<Rightarrow> cxt \<Rightarrow> func located \<Rightarrow> ty_scheme \<Rightarrow> unit may_fail"
+and check_def :: "class_table \<Rightarrow> cxt \<Rightarrow> func \<Rightarrow> ty_scheme \<Rightarrow> unit may_fail"
 and check_stmt_at :: "class_table \<Rightarrow> cxt \<Rightarrow> ty option \<Rightarrow> stmt located \<Rightarrow> static_outcome may_fail"
+and check_def_at :: "class_table \<Rightarrow> cxt \<Rightarrow> func located \<Rightarrow> ty_scheme \<Rightarrow> unit may_fail"
 where
 "check_stmt \<Sigma> \<Gamma> \<zeta> StmtPass = Ok (Assigns\<^sub>R fmempty None)" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtDeclare x \<psi>) =
@@ -470,7 +471,7 @@ where
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtMutualRegion ds) = do {
    \<pi>s \<leftarrow> those_sum (map (\<lambda>d. locate (pos_of d) (def_signature \<Sigma> \<Gamma> (node d))) ds);
    let \<Delta> = fmap_of_list (zip (map (def_name \<circ> node) ds) (map signature_entry \<pi>s));
-   all_sum (map2 (check_def \<Sigma> (\<Gamma> \<otimes> \<Delta>)) ds \<pi>s);
+   all_sum (map2 (check_def_at \<Sigma> (\<Gamma> \<otimes> \<Delta>)) ds \<pi>s);
    Ok (Assigns\<^sub>R \<Delta> None)
  }" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtMatch e bs) = do {
@@ -483,12 +484,12 @@ where
                  (if L = [] then Some (MypyCompatibility (MissingReturnMatchPartial \<tau>)) else None))]))
  }" |
 
-"check_def \<Sigma> \<Gamma> (At p (Def f \<alpha>s xps \<psi> s)) (TyScheme \<alpha>s' (TyCallable \<sigma>s \<tau>)) =
-  (let xs = map fst xps in locate p (do {
+"check_def \<Sigma> \<Gamma> (Def f \<alpha>s xps \<psi> s) (TyScheme \<alpha>s' (TyCallable \<sigma>s \<tau>)) =
+  (let xs = map fst xps in do {
      check_assignments_declared (set xs) (assign_targets s) (declares (node s)) (binds s);
      \<Delta> \<leftarrow> (case scope Unbound xs s of
              Some \<Delta> \<Rightarrow> Ok \<Delta>
-           | None \<Rightarrow> Fail (scope_reason (map (At p) xs) (declarations s) (pattern_bound s)));
+           | None \<Rightarrow> Fail (scope_reason xs (declarations s) (pattern_bound s)));
      if length xs = length \<sigma>s then do {
        \<Delta>' \<leftarrow> params_cxt xs \<sigma>s;
        R \<leftarrow> check_stmt_at \<Sigma> (\<Gamma> \<otimes> fmconst (set \<alpha>s) TypeVar \<otimes> \<Delta>' \<otimes> \<Delta>) (Some \<tau>) s;
@@ -501,17 +502,20 @@ where
        | Returns\<^sub>R \<Rightarrow> Ok ()
      }
      else Fail undefined
-   }))" |
+   })" |
 "check_def \<Sigma> \<Gamma> _ _ = undefined" |
 
-"check_stmt_at \<Sigma> \<Gamma> \<zeta> (At p s) = map_sum (locate_reason p) (locate_outcome p) (check_stmt \<Sigma> \<Gamma> \<zeta> s)"
+"check_stmt_at \<Sigma> \<Gamma> \<zeta> (At p s) = map_sum (locate_reason p) (locate_outcome p) (check_stmt \<Sigma> \<Gamma> \<zeta> s)" |
+
+"check_def_at \<Sigma> \<Gamma> (At p d) \<pi> = locate p (check_def \<Sigma> \<Gamma> d \<pi>)"
 by pat_completeness auto
 
 termination
 by (relation "measure (\<lambda>x. case x of
-     Inl (_, _, _, s) \<Rightarrow> size s
-   | Inr (Inl (_, _, d, _)) \<Rightarrow> Suc (size (node d))
-   | Inr (Inr (_, _, _, s)) \<Rightarrow> Suc (size (node s)))")
+     Inl (Inl (_, _, _, s)) \<Rightarrow> size s
+   | Inl (Inr (_, _, d, _)) \<Rightarrow> size d
+   | Inr (Inl (_, _, _, s)) \<Rightarrow> Suc (size (node s))
+   | Inr (Inr (_, _, d, _)) \<Rightarrow> Suc (size (node d)))")
    (auto elim!: in_set_zipE dest: size_node_snd_elem size_node_elem)
 
 fun check_type_def :: "class_table \<Rightarrow> cxt \<Rightarrow> type_def located \<Rightarrow> unit may_fail"

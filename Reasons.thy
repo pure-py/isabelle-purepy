@@ -131,19 +131,16 @@ where
 "redeclared f X [] = None" |
 "redeclared f X (x # xs) = (if f x \<in> X then Some x else redeclared f (insert (f x) X) xs)"
 
-(* Failure of the scope with bound names ys, declared names xs and pattern variables zs, each at the position of
-   the statement binding it, located at the offending binding *)
-definition scope_reason :: "var located list \<Rightarrow> var located list \<Rightarrow> var located list \<Rightarrow> reason"
+(* Failure of the scope with distinct bound names ys, declared names xs and pattern variables zs, each at the
+   position of the statement binding it, located at the offending binding *)
+definition scope_reason :: "var list \<Rightarrow> var located list \<Rightarrow> var located list \<Rightarrow> reason"
 where
 "scope_reason ys xs zs =
-  (case redeclared node {} ys of
-     Some y \<Rightarrow> Located (pos_of y) (DuplicateImportedName (node y))
+  (case redeclared node (set ys \<union> set (map node zs)) xs of
+     Some x \<Rightarrow> Located (pos_of x) (Redeclaration (node x))
    | None \<Rightarrow>
-       (case redeclared node (set (map node ys) \<union> set (map node zs)) xs of
-          Some x \<Rightarrow> Located (pos_of x) (Redeclaration (node x))
-        | None \<Rightarrow>
-            let z = Min (set (map node ys) \<inter> set (map node zs))
-            in Located (pos_of (the (find (\<lambda>z'. node z' = z) zs))) (Redeclaration z)))"
+       let z = Min (set ys \<inter> set (map node zs))
+       in Located (pos_of (the (find (\<lambda>z'. node z' = z) zs))) (Redeclaration z))"
 
 (* Reason why none of the expressions synthesises a type: the first failure of an expression with a synthesis
    rule *)
