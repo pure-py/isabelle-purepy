@@ -375,7 +375,7 @@ where
       Ok (TyScheme \<alpha>s (TyCallable \<sigma>s \<tau>))
     })"
 
-(* Call statement at callee type \<sigma> *)
+(* Check a call statement with callee type \<sigma>, where a result of None is allowed *)
 fun check_call_stmt ::
   "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow> (var \<times> expr located) list \<Rightarrow> expr located list \<Rightarrow> unit may_fail"
 where
