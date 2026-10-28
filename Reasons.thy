@@ -131,11 +131,11 @@ where
 "redeclared f X [] = None" |
 "redeclared f X (x # xs) = (if f x \<in> X then Some x else redeclared f (insert (f x) X) xs)"
 
-(* Failure of the scope with distinct bound names ys, declared names xs and pattern variables zs, each at the
-   position of the statement binding it, located at the offending binding *)
-definition scope_reason :: "var list \<Rightarrow> var located list \<Rightarrow> var located list \<Rightarrow> reason"
+(* Redeclaration among bound names ys, declarations xs and pattern variables zs, the latter two at the positions of
+   their statements, located at the statement declaring or matching the name again *)
+definition redeclaration :: "var list \<Rightarrow> var located list \<Rightarrow> var located list \<Rightarrow> reason"
 where
-"scope_reason ys xs zs =
+"redeclaration ys xs zs =
   (case redeclared node (set ys \<union> set (map node zs)) xs of
      Some x \<Rightarrow> Located (pos_of x) (Redeclaration (node x))
    | None \<Rightarrow>

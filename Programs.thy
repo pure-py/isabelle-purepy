@@ -75,7 +75,7 @@ where
            \<Gamma>\<^sub>s \<leftarrow>
              (case scope Unbound (declares \<iota>s) t of
                 Some \<Gamma>\<^sub>s \<Rightarrow> Ok \<Gamma>\<^sub>s
-              | None \<Rightarrow> Fail (scope_reason (declares \<iota>s) (declarations t) (pat_bound t)));
+              | None \<Rightarrow> Fail (redeclaration (declares \<iota>s) (declarations t) (pat_bound t)));
            check_assignments_declared {} (assign_targets t) (declares t) (binds t);
            (R, \<Sigma>'') \<leftarrow> check_top_stmt \<Sigma>' q (the (fmlookup predefined builtins) \<otimes> \<Gamma>' \<otimes> \<Gamma>\<^sub>s) t;
            case R of
