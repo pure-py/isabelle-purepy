@@ -9,7 +9,7 @@ datatype reason =
   | InheritedField var var var
   | UndefinedVariable var
   | UnassignedVariable var
-  | PossiblyUnassigned var
+  | PossiblyUnassigned var bool
   | UnboundName var
   | Redeclaration var
   | UndeclaredAssignment var
@@ -29,6 +29,7 @@ datatype reason =
   | MissingReturnMatchPartial ty
   | MissingReturnAssertion
   | NotPredefinedName var
+  | NotTypeExpression expr
   | NotClass name
   | ClassArityMismatch name nat nat
   | TypeAliasArityMismatch name nat nat
@@ -85,8 +86,8 @@ where
 "var_reason x (Some (Scheme _)) = TypeSchemeAsValue (x, [])" |
 "var_reason x (Some Unbound) = UnboundName x" |
 "var_reason x (Some (DU _)) = UnassignedVariable x" |
-"var_reason x (Some (PU _)) = PossiblyUnassigned x" |
-"var_reason x (Some (PUScheme _)) = PossiblyUnassigned x" |
+"var_reason x (Some (PU _ b)) = PossiblyUnassigned x b" |
+"var_reason x (Some (PUScheme _ b)) = PossiblyUnassigned x b" |
 "var_reason x (Some (Ty _)) = undefined" |
 "var_reason x None = UndefinedVariable x"
 
@@ -94,8 +95,8 @@ where
 fun assign_reason :: "var \<Rightarrow> cxt_entry option \<Rightarrow> reason"
 where
 "assign_reason x None = UndeclaredAssignment x" |
-"assign_reason x (Some (PU _)) = PossibleReassignment x" |
-"assign_reason x (Some (PUScheme _)) = PossibleReassignment x" |
+"assign_reason x (Some (PU _ _)) = PossibleReassignment x" |
+"assign_reason x (Some (PUScheme _ _)) = PossibleReassignment x" |
 "assign_reason x (Some Unbound) = AssignmentBeforeDeclaration x" |
 "assign_reason x (Some (Ty _)) = Reassignment x" |
 "assign_reason x (Some (Scheme _)) = Reassignment x" |

@@ -220,13 +220,15 @@ where
 "constructor_class \<Sigma> \<Gamma> e =
   (case (class_of_name \<Gamma> e, e) of
      (Some C, _) \<Rightarrow> Some (Ok (C, None))
-   | (None, ExprSubscript e' _) \<Rightarrow>
+   | (None, ExprSubscript e' e'') \<Rightarrow>
        if class_of_name \<Gamma> e' = None then None
        else
          (case type_expr_of e of
             Some \<psi> \<Rightarrow>
               Some (do { \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; case \<tau> of TyClass C \<tau>s \<Rightarrow> Ok (C, Some \<tau>s) | _ \<Rightarrow> undefined })
-          | None \<Rightarrow> undefined)
+          | None \<Rightarrow>
+              Some (Fail (NotTypeExpression
+                            (the (find (\<lambda>e'''. type_expr_of e''' = None) (subscript_args e''))))))
    | _ \<Rightarrow> None)"
 
 lemma constructor_args_elem:

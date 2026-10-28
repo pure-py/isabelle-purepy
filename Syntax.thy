@@ -381,6 +381,12 @@ definition prim_of_name :: "var \<Rightarrow> prim_ty option"
 where
 "prim_of_name x = find (\<lambda>\<nu>. prim_name \<nu> = x) [object, Never, NoneType, bool, int, float, str, Sized]"
 
+(* Arguments of a subscript *)
+fun subscript_args :: "expr \<Rightarrow> expr list"
+where
+"subscript_args (ExprTuple es) = es" |
+"subscript_args e = [e]"
+
 (* Type expression denoted by an expression *)
 fun type_expr_of :: "expr \<Rightarrow> ty_expr option"
 where

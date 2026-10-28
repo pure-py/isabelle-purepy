@@ -3,10 +3,12 @@ theory Contexts
   imports Syntax "HOL-Library.List_Lexorder" "HOL-Library.Char_ord"
 begin
 
+(* Possibly unassigned entries carry a flag, set when the variable is declared in a branch, for the diagnostic
+   only *)
 datatype cxt_entry =
     Ty ty
   | DU ty
-  | PU ty
+  | PU ty bool
   | Unbound
   | ModStub name
   | ModChecked name "(var, cxt_entry) fmap"
@@ -14,7 +16,7 @@ datatype cxt_entry =
   | Type name
   | TypeVar
   | Scheme ty_scheme
-  | PUScheme ty_scheme
+  | PUScheme ty_scheme bool
   | PredefName
 
 type_synonym cxt = "(var, cxt_entry) fmap"
