@@ -176,19 +176,19 @@ where
 
 (* Variables bound by the patterns of the match statements, each at the position of its match statement, in
    order and with repeats *)
-fun pattern_bound_stmt :: "stmt located \<Rightarrow> var located list"
+fun pat_bound_stmt :: "stmt located \<Rightarrow> var located list"
 where
-"pattern_bound_stmt (At _ (StmtSeq s s')) = pattern_bound_stmt s @ pattern_bound_stmt s'" |
-"pattern_bound_stmt (At _ (StmtIf _ s elifs else')) =
-  pattern_bound_stmt s @ concat (map (\<lambda>(_, s'). pattern_bound_stmt s') elifs)
-  @ (case else' of None \<Rightarrow> [] | Some s' \<Rightarrow> pattern_bound_stmt s')" |
-"pattern_bound_stmt (At p (StmtMatch _ cases)) =
-  concat (map (\<lambda>(q, s). map (At p) (sorted_list_of_set (binds_pat (node q))) @ pattern_bound_stmt s) cases)" |
-"pattern_bound_stmt _ = []"
+"pat_bound_stmt (At _ (StmtSeq s s')) = pat_bound_stmt s @ pat_bound_stmt s'" |
+"pat_bound_stmt (At _ (StmtIf _ s elifs else')) =
+  pat_bound_stmt s @ concat (map (\<lambda>(_, s'). pat_bound_stmt s') elifs)
+  @ (case else' of None \<Rightarrow> [] | Some s' \<Rightarrow> pat_bound_stmt s')" |
+"pat_bound_stmt (At p (StmtMatch _ cases)) =
+  concat (map (\<lambda>(q, s). map (At p) (sorted_list_of_set (binds_pat (node q))) @ pat_bound_stmt s) cases)" |
+"pat_bound_stmt _ = []"
 
 definition binds_stmt :: "stmt located \<Rightarrow> var set"
 where
-"binds_stmt s = set (map node (pattern_bound_stmt s))"
+"binds_stmt s = set (map node (pat_bound_stmt s))"
 
 fun binds_quals :: "qualifier located list \<Rightarrow> var set"
 where
@@ -196,15 +196,15 @@ where
 "binds_quals (At _ (Guard _) # gs) = binds_quals gs" |
 "binds_quals (At _ (Generator x _) # gs) = {x} \<union> binds_quals gs"
 
-fun pattern_bound_top :: "top_stmt \<Rightarrow> var located list"
+fun pat_bound_top :: "top_stmt \<Rightarrow> var located list"
 where
-"pattern_bound_top (Stmt s) = pattern_bound_stmt s" |
-"pattern_bound_top (TopSeq t t') = pattern_bound_top t @ pattern_bound_top t'" |
-"pattern_bound_top (TypeDefs \<chi>s) = []"
+"pat_bound_top (Stmt s) = pat_bound_stmt s" |
+"pat_bound_top (TopSeq t t') = pat_bound_top t @ pat_bound_top t'" |
+"pat_bound_top (TypeDefs \<chi>s) = []"
 
 definition binds_top :: "top_stmt \<Rightarrow> var set"
 where
-"binds_top t = set (map node (pattern_bound_top t))"
+"binds_top t = set (map node (pat_bound_top t))"
 
 fun assigns_stmt :: "stmt \<Rightarrow> var set"
 where
@@ -482,7 +482,7 @@ consts
   assigns :: "'a \<Rightarrow> var set"
   declares :: "'a \<Rightarrow> var list"
   declarations :: "'a \<Rightarrow> var located list"
-  pattern_bound :: "'a \<Rightarrow> var located list"
+  pat_bound :: "'a \<Rightarrow> var located list"
   fv :: "'a \<Rightarrow> var set"
   captures :: "'a \<Rightarrow> var set"
   assign_targets :: "'a \<Rightarrow> var located list"
@@ -492,7 +492,7 @@ adhoc_overloading binds \<rightleftharpoons> binds_pat binds_stmt binds_quals bi
 adhoc_overloading assigns \<rightleftharpoons> assigns_stmt assigns_top
 adhoc_overloading declares \<rightleftharpoons> declares_stmt declares_top declares_imports
 adhoc_overloading declarations \<rightleftharpoons> declarations_stmt declarations_top declarations_imports
-adhoc_overloading pattern_bound \<rightleftharpoons> pattern_bound_stmt pattern_bound_top
+adhoc_overloading pat_bound \<rightleftharpoons> pat_bound_stmt pat_bound_top
 adhoc_overloading fv \<rightleftharpoons> fv_expr fv_quals fv_ty
 adhoc_overloading captures \<rightleftharpoons> captures_expr captures_quals
 adhoc_overloading assign_targets \<rightleftharpoons> assign_targets_stmt assign_targets_top

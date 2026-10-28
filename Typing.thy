@@ -489,7 +489,7 @@ where
      check_assignments_declared (set xs) (assign_targets s) (declares (node s)) (binds s);
      \<Delta> \<leftarrow> (case scope Unbound xs s of
              Some \<Delta> \<Rightarrow> Ok \<Delta>
-           | None \<Rightarrow> Fail (scope_reason xs (declarations s) (pattern_bound s)));
+           | None \<Rightarrow> Fail (scope_reason xs (declarations s) (pat_bound s)));
      if length xs = length \<sigma>s then do {
        \<Delta>' \<leftarrow> params_cxt xs \<sigma>s;
        R \<leftarrow> check_stmt_at \<Sigma> (\<Gamma> \<otimes> fmconst (set \<alpha>s) TypeVar \<otimes> \<Delta>' \<otimes> \<Delta>) (Some \<tau>) s;
