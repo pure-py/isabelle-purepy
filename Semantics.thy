@@ -24,7 +24,7 @@ datatype termination_kind =
   | OverflowError
   | ValueError
   | ZeroDivisionError
-  | AssertionError "string option"
+  | AssertionError "str option"
   | AttributeError
   | NameError
   | SystemExit int
@@ -100,7 +100,7 @@ fun contains :: "val \<Rightarrow> val \<Rightarrow> bool result" and contains_e
 where
 "contains (VList vs) v = contains_elems vs v" |
 "contains (VTuple vs) v = contains_elems vs v" |
-"contains (VLit (LitString w')) (VLit (LitString w)) = Val (\<exists>w1 w2. w' = w1 @ w @ w2)" |
+"contains (VLit (LitString w')) (VLit (LitString w)) = Val (substring w w')" |
 "contains _ _ = Aborts TypeError" |
 
 "contains_elems [] v = Val False" |

@@ -1,6 +1,6 @@
 (* Abstract syntax and its analyses *)
 theory Syntax
-  imports Complex_Main Util Floats
+  imports Complex_Main Util Floats Strings
 begin
 
 type_alias var = string
@@ -10,7 +10,7 @@ type_synonym name = "var nonempty"
 datatype lit =
     LitInt int
   | LitFloat float
-  | LitString string
+  | LitString str
   | LitBool bool
   | LitNone
 
@@ -23,7 +23,7 @@ datatype pat =
   | PatList "pat list"
   | PatTuple "pat list"
   | PatConstr name "pat args"
-  | PatDict "(string \<times> pat) list"
+  | PatDict "(str \<times> pat) list"
   | PatAs pat var
 
 datatype bop =

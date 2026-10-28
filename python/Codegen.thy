@@ -3,10 +3,19 @@ theory Codegen
   imports "isabelle-purepy.Programs" "Python.Python_Setup"
 begin
 
-(* Floats as Python's float; equality by representation, which is reflexive on nan *)
+(* Floats as Python's float. Equality of representations, since HOL equality is reflexive; Python's == is given
+   by the semantics *)
 code_printing
     type_constructor float \<rightharpoonup> (Python) "float"
   | constant "HOL.equal :: float \<Rightarrow> float \<Rightarrow> bool" \<rightharpoonup> (Python) "(repr'(_') == repr'(_'))"
+
+(* Strings as Python's str *)
+code_printing
+    type_constructor str \<rightharpoonup> (Python) "str"
+  | constant "HOL.equal :: str \<Rightarrow> str \<Rightarrow> bool" \<rightharpoonup> (Python) "(_ == _)"
+  | constant "(\<le>) :: str \<Rightarrow> str \<Rightarrow> bool" \<rightharpoonup> (Python) "(_ <= _)"
+  | constant "(<) :: str \<Rightarrow> str \<Rightarrow> bool" \<rightharpoonup> (Python) "(_ < _)"
+  | constant substring \<rightharpoonup> (Python) "(_ in _)"
 
 code_pred subty .
 code_pred binop_overload .
