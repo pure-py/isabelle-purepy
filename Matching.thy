@@ -55,6 +55,7 @@ definition seq_result ::
   "(shape list \<Rightarrow> shape) \<Rightarrow> shape list \<Rightarrow> (shape list \<times> shape list) option list
    \<Rightarrow> (shape list \<times> shape list) option"
 where
+
 "seq_result f ks ms = do {
    rs \<leftarrow> those ms;
    let Ks = map fst rs;
@@ -68,6 +69,7 @@ where
 definition shapes_result ::
   "shape list \<Rightarrow> (shape list \<times> shape list) option list \<Rightarrow> (shape list \<times> shape list) option"
 where
+
 "shapes_result L ms =
   (let rs = [r. Some r \<leftarrow> ms] in
    if rs = [] then None else Some (concat (map fst rs), concat (map snd rs) @ [k. (k, None) \<leftarrow> zip L ms]))"
@@ -85,6 +87,7 @@ function (sequential)
   match_directly :: "class_table \<Rightarrow> cxt \<Rightarrow> shape \<Rightarrow> pat \<Rightarrow> (shape list \<times> shape list) option"
 where
 "match_shape \<Sigma> \<Gamma> k p = match_shape_upto (splits p) \<Sigma> \<Gamma> k p" |
+
 "match_shape_upto n \<Sigma> \<Gamma> k p =
   (case match_directly \<Sigma> \<Gamma> k p of
      Some r \<Rightarrow> Some r
@@ -93,6 +96,7 @@ where
           (Some (K, L), Suc n') \<Rightarrow>
             map_option (\<lambda>(K', L'). (K', L @ L')) (shapes_result K (map (\<lambda>k'. match_shape_upto n' \<Sigma> \<Gamma> k' p) K))
         | _ \<Rightarrow> None))" |
+
 "match_directly \<Sigma> \<Gamma> k (PatVar _) = Some ([k], [])" |
 "match_directly \<Sigma> \<Gamma> k PatWildcard = Some ([k], [])" |
 "match_directly \<Sigma> \<Gamma> k (PatAs p _) = match_shape \<Sigma> \<Gamma> k (node p)" |

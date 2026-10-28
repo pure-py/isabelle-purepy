@@ -86,6 +86,7 @@ where
            | Returns\<^sub>R \<Rightarrow> Fail (Located (last_pos t) TopLevelAssertFalse)
          })
        })" |
+
 "check_imports M V \<Sigma> q [] = Ok (fmempty, \<Sigma>)" |
 "check_imports M V \<Sigma> q (At p (Import (x, xs)) # \<iota>s) = locate_in q p (do {
    ensure (\<not> q \<prec> (x, xs)) (q, ImportOfContainedModule (x, xs) q);
@@ -102,12 +103,14 @@ where
    (\<Gamma>, \<Sigma>') \<leftarrow> check_imports M V \<Sigma>\<^sub>3 q \<iota>s;
    Ok (fmap_of_list (zip xs \<theta>s) \<uplus> \<Gamma>, \<Sigma>')
  })" |
+
 "submodules M V \<Sigma> q q' \<Gamma> [] = Ok (\<Gamma>, \<Sigma>)" |
 "submodules M V \<Sigma> q q' \<Gamma> (x # xs) = do {
    (\<Delta>, \<Sigma>\<^sub>1) \<leftarrow> check_module M V \<Sigma> q (snoc q' x);
    (\<Delta>', \<Sigma>') \<leftarrow> submodules M V \<Sigma>\<^sub>1 q (snoc q' x) \<Delta> xs;
    Ok (\<Gamma> \<uplus> fmupd x (ModChecked (snoc q' x) \<Delta>') fmempty, \<Sigma>')
  }" |
+
 "imports_entry M V \<Sigma> q q' \<Gamma> x =
   (case fmlookup \<Gamma> x of
      Some (ModStub q'') \<Rightarrow> do { (\<Gamma>', \<Sigma>') \<leftarrow> check_module M V \<Sigma> q q''; Ok (ModChecked q'' \<Gamma>', \<Sigma>') }
@@ -115,12 +118,14 @@ where
        (case resolve_name \<Gamma> (x, []) of
           Some \<theta>' \<Rightarrow> Ok (\<theta>', \<Sigma>)
         | None \<Rightarrow> Fail (q, case \<theta> of None \<Rightarrow> UnknownMember x q' | Some _ \<Rightarrow> UnassignedMember x q')))" |
+
 "imports_entries M V \<Sigma> q q' \<Gamma> [] = Ok ([], \<Sigma>)" |
 "imports_entries M V \<Sigma> q q' \<Gamma> (x # xs) = do {
    (\<theta>, \<Sigma>\<^sub>1) \<leftarrow> imports_entry M V \<Sigma> q q' \<Gamma> x;
    (\<theta>s, \<Sigma>') \<leftarrow> imports_entries M V \<Sigma>\<^sub>1 q q' \<Gamma> xs;
    Ok (\<theta> # \<theta>s, \<Sigma>')
  }" |
+
 "check_modules M V \<Sigma> q [] = Ok \<Sigma>" |
 "check_modules M V \<Sigma> q (q' # qs) = do { (_, \<Sigma>\<^sub>1) \<leftarrow> check_module M V \<Sigma> q q'; check_modules M V \<Sigma>\<^sub>1 q qs }"
 by pat_completeness auto
