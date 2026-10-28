@@ -48,7 +48,7 @@ lemma size_list_node_snd:
    \<le> size_list (\<lambda>x. Suc (Suc (Suc (size (node (fst x)) + size (node (snd x)))))) kvs"
   by (rule size_list_pointwise) simp
 
-definition no_position :: pos where "no_position = (0, 0)"
+definition no_pos :: pos where "no_pos = (0, 0)"
 
 datatype lit =
     LitInt int

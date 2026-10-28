@@ -88,7 +88,7 @@ where
 "predefined_classes =
   fmupd range_class
     (ClassDef (the (fmlookup predefined builtins)) builtins
-      [At no_position (Dataclass (var ''range'') [] None
+      [At no_pos (Dataclass (var ''range'') [] None
         [(var ''start'', TyExprPrim int), (var ''stop'', TyExprPrim int)])] 0)
     fmempty"
 
