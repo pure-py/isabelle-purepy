@@ -62,7 +62,7 @@ by (relation "measures [
      \<lambda>x. case x of Inl (_, _, \<tau>, _) \<Rightarrow> size \<tau> | Inr _ \<Rightarrow> 0]")
    (auto simp: less_Suc_eq dest: set_zip_rightD card_needs_eq_dom_pos intro: size_list_elem)
 
-(* Equality at \<tau> never needs equality at a type variable or at a callable type *)
+(* \<tau> is an equality type: comparing its values never involves a type variable or a callable type *)
 definition equality_type :: "class_table \<Rightarrow> ty \<Rightarrow> bool"
 where
 "equality_type \<Sigma> \<tau> = (\<not> needs_eq \<Sigma> {} \<tau> None \<and> (\<forall>\<alpha> \<in> fv \<tau>. \<not> needs_eq \<Sigma> {} \<tau> (Some \<alpha>)))"
