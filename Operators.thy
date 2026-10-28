@@ -3,40 +3,72 @@ theory Operators
   imports Subtyping
 begin
 
-(* V holds the classes assumed to be equality classes, those whose fields are being examined, and \<alpha>s the
-   type variables assumed to be equality types *)
-function (sequential)
-  equality_type :: "class_table \<Rightarrow> name list \<Rightarrow> var list \<Rightarrow> ty \<Rightarrow> bool" and
-  equality_class :: "class_table \<Rightarrow> name list \<Rightarrow> name \<Rightarrow> bool"
+(* Class judgements that can hold, at a type parameter of a class in the table or at a callable type, as None *)
+definition class_judgement :: "class_table \<Rightarrow> name \<Rightarrow> var option \<Rightarrow> bool"
 where
-"equality_type \<Sigma> V \<alpha>s (TyPrim _) = True" |
-"equality_type \<Sigma> V \<alpha>s (TyLiteral _) = True" |
-"equality_type \<Sigma> V \<alpha>s (TyVar \<alpha>) = (\<alpha> \<in> set \<alpha>s)" |
-"equality_type \<Sigma> V \<alpha>s (TyList \<tau>) = equality_type \<Sigma> V \<alpha>s \<tau>" |
-"equality_type \<Sigma> V \<alpha>s (TyDict \<tau>) = equality_type \<Sigma> V \<alpha>s \<tau>" |
-"equality_type \<Sigma> V \<alpha>s (TyTuple \<tau>s) = list_all (equality_type \<Sigma> V \<alpha>s) \<tau>s" |
-"equality_type \<Sigma> V \<alpha>s (TyUnion \<sigma> \<tau>) = (equality_type \<Sigma> V \<alpha>s \<sigma> \<and> equality_type \<Sigma> V \<alpha>s \<tau>)" |
-"equality_type \<Sigma> V \<alpha>s (TyClass C \<sigma>s) =
-  (equality_class \<Sigma> V C \<and>
-   (case fields \<Sigma> C of
-      FieldScheme \<beta>s x\<sigma>s \<Rightarrow>
-        list_all (\<lambda>(\<beta>, \<sigma>). \<beta> \<notin> \<Union> (set (map (fv \<circ> snd) x\<sigma>s)) \<or> equality_type \<Sigma> V \<alpha>s \<sigma>) (zip \<beta>s \<sigma>s)))" |
-"equality_type \<Sigma> V \<alpha>s _ = False" |
+"class_judgement \<Sigma> C \<xi> =
+  (fmlookup \<Sigma> C \<noteq> None \<and> (case \<xi> of None \<Rightarrow> True | Some \<alpha> \<Rightarrow> \<alpha> \<in> set (type_params \<Sigma> C)))"
 
-"equality_class \<Sigma> V C =
-  (if C \<in> set V then True
-   else case fmlookup \<Sigma> C of
-     Some _ \<Rightarrow>
-       (case fields \<Sigma> C of
-          FieldScheme \<alpha>s x\<sigma>s \<Rightarrow> list_all (equality_type \<Sigma> (C # V) \<alpha>s \<circ> snd) x\<sigma>s)
-   | None \<Rightarrow> False)"
+definition class_judgements :: "class_table \<Rightarrow> (name \<times> var option) set"
+where
+"class_judgements \<Sigma> = {(C, \<xi>). class_judgement \<Sigma> C \<xi>}"
+
+lemma finite_class_judgements: "finite (class_judgements \<Sigma>)"
+proof -
+  have "class_judgements \<Sigma> \<subseteq> fmdom' \<Sigma> \<times> insert None (Some ` (\<Union>C \<in> fmdom' \<Sigma>. set (type_params \<Sigma> C)))"
+  proof
+    fix p assume "p \<in> class_judgements \<Sigma>"
+    then obtain C \<xi> where p: "p = (C, \<xi>)" and "class_judgement \<Sigma> C \<xi>" by (auto simp: class_judgements_def)
+    then have C: "C \<in> fmdom' \<Sigma>" by (auto simp: class_judgement_def fmlookup_dom'_iff[symmetric])
+    show "p \<in> fmdom' \<Sigma> \<times> insert None (Some ` (\<Union>C \<in> fmdom' \<Sigma>. set (type_params \<Sigma> C)))"
+      using \<open>class_judgement \<Sigma> C \<xi>\<close> C by (cases \<xi>) (auto simp: p class_judgement_def image_iff)
+  qed
+  then show ?thesis by (rule finite_subset) simp
+qed
+
+lemma card_class_judgements_insert:
+  assumes "class_judgement \<Sigma> C \<xi>" and "(C, \<xi>) \<notin> D"
+  shows "card (class_judgements \<Sigma> - insert (C, \<xi>) D) < card (class_judgements \<Sigma> - D)"
+proof -
+  have "(C, \<xi>) \<in> class_judgements \<Sigma> - D" using assms by (simp add: class_judgements_def)
+  moreover have "class_judgements \<Sigma> - insert (C, \<xi>) D = (class_judgements \<Sigma> - D) - {(C, \<xi>)}" by auto
+  ultimately show ?thesis by (metis card_Diff1_less finite_Diff finite_class_judgements)
+qed
+
+(* D holds the class judgements being derived, at which a circular derivation stops *)
+function (sequential)
+  needs_eq :: "class_table \<Rightarrow> (name \<times> var option) set \<Rightarrow> ty \<Rightarrow> var option \<Rightarrow> bool" and
+  needs_eq_class :: "class_table \<Rightarrow> (name \<times> var option) set \<Rightarrow> name \<Rightarrow> var option \<Rightarrow> bool"
+where
+"needs_eq \<Sigma> D (TyVar \<alpha>) \<xi> = (\<xi> = Some \<alpha>)" |
+"needs_eq \<Sigma> D (TyCallable _ _) \<xi> = (\<xi> = None)" |
+"needs_eq \<Sigma> D (TyList \<tau>) \<xi> = needs_eq \<Sigma> D \<tau> \<xi>" |
+"needs_eq \<Sigma> D (TyDict \<tau>) \<xi> = needs_eq \<Sigma> D \<tau> \<xi>" |
+"needs_eq \<Sigma> D (TyTuple \<tau>s) \<xi> = list_ex (\<lambda>\<tau>. needs_eq \<Sigma> D \<tau> \<xi>) \<tau>s" |
+"needs_eq \<Sigma> D (TyUnion \<sigma> \<tau>) \<xi> = (needs_eq \<Sigma> D \<sigma> \<xi> \<or> needs_eq \<Sigma> D \<tau> \<xi>)" |
+"needs_eq \<Sigma> D (TyClass C \<sigma>s) \<xi> =
+  ((\<xi> = None \<and> needs_eq_class \<Sigma> D C None) \<or>
+   list_ex (\<lambda>(\<alpha>, \<sigma>). needs_eq_class \<Sigma> D C (Some \<alpha>) \<and> needs_eq \<Sigma> D \<sigma> \<xi>) (zip (type_params \<Sigma> C) \<sigma>s))" |
+"needs_eq \<Sigma> D _ \<xi> = False" |
+
+"needs_eq_class \<Sigma> D C \<xi> =
+  (if class_judgement \<Sigma> C \<xi> \<and> (C, \<xi>) \<notin> D then
+     (case fields \<Sigma> C of
+        FieldScheme _ x\<tau>s \<Rightarrow> list_ex (\<lambda>(_, \<tau>). needs_eq \<Sigma> (insert (C, \<xi>) D) \<tau> \<xi>) x\<tau>s)
+   else False)"
 by pat_completeness auto
 
 termination
 by (relation "measures [
-     \<lambda>x. case x of Inl (\<Sigma>, V, _, _) \<Rightarrow> card (fmdom' \<Sigma> - set V) | Inr (\<Sigma>, V, _) \<Rightarrow> card (fmdom' \<Sigma> - set V),
-     \<lambda>x. case x of Inl (_, _, _, \<tau>) \<Rightarrow> size \<tau> | Inr _ \<Rightarrow> 0]")
-   (auto simp: card_fmdom_insert less_Suc_eq dest: set_zip_rightD intro: size_list_elem)
+     \<lambda>x. case x of
+       Inl (\<Sigma>, D, _, _) \<Rightarrow> card (class_judgements \<Sigma> - D) | Inr (\<Sigma>, D, _, _) \<Rightarrow> card (class_judgements \<Sigma> - D),
+     \<lambda>x. case x of Inl (_, _, \<tau>, _) \<Rightarrow> size \<tau> | Inr _ \<Rightarrow> 0]")
+   (auto simp: card_class_judgements_insert less_Suc_eq dest: set_zip_rightD intro: size_list_elem)
+
+(* Equality at \<tau> never needs equality at a type variable or at a callable type *)
+definition equality_type :: "class_table \<Rightarrow> ty \<Rightarrow> bool"
+where
+"equality_type \<Sigma> \<tau> = (\<not> needs_eq \<Sigma> {} \<tau> None \<and> (\<forall>\<alpha> \<in> fv \<tau>. \<not> needs_eq \<Sigma> {} \<tau> (Some \<alpha>)))"
 
 abbreviation comparable :: "class_table \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> bool" where "comparable \<Sigma> \<sigma> \<tau> \<equiv> \<Sigma> \<turnstile> \<sigma> <: \<tau> \<or> \<Sigma> \<turnstile> \<tau> <: \<sigma>"
 
@@ -44,7 +76,7 @@ inductive binop_overload :: "class_table \<Rightarrow> bop \<Rightarrow> ty \<Ri
 for \<Sigma> :: class_table
 where
 OverloadEq:
-  "\<lbrakk> op \<in> {BOpEq, BOpNeq} ; equality_type \<Sigma> [] [] \<sigma>\<^sub>1 ; equality_type \<Sigma> [] [] \<sigma>\<^sub>2 ; comparable \<Sigma> \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<rbrakk>
+  "\<lbrakk> op \<in> {BOpEq, BOpNeq} ; equality_type \<Sigma> \<sigma>\<^sub>1 ; equality_type \<Sigma> \<sigma>\<^sub>2 ; comparable \<Sigma> \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<rbrakk>
   \<Longrightarrow> binop_overload \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2 ((\<sigma>\<^sub>1, \<sigma>\<^sub>2), TyPrim bool)" |
 OverloadInList:
   "\<lbrakk> op \<in> {BOpIn, BOpNotIn} ; comparable \<Sigma> \<sigma>\<^sub>1 \<tau> \<rbrakk>
