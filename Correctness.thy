@@ -3,8 +3,7 @@ theory Correctness
     imports Eval
 begin
 
-(* The class table, ambient in evaluation as in the spec *)
-context fixes \<Sigma> :: class_table
+context evaluation
 begin
 
 lemma flet_case:
@@ -42,6 +41,15 @@ lemma as_bool_Some: "as_bool v = Some b \<longleftrightarrow> v = VLit (LitBool 
 lemma as_bool_None: "as_bool v = None \<longleftrightarrow> v \<notin> {true, false}"
   by (cases v rule: as_bool.cases) auto
 
+lemma class_of_Some: "class_of v = Some C \<longleftrightarrow> v = VClass C"
+  by (cases v) auto
+
+lemma class_of_None: "class_of v = None \<longleftrightarrow> \<not> is_class v"
+  by (cases v) auto
+
+lemma class_of_nonclass: "\<not> is_class v \<Longrightarrow> class_of v = None"
+  by (simp add: class_of_None)
+
 lemma as_bool_nonbool: "v \<noteq> true \<Longrightarrow> v \<noteq> false \<Longrightarrow> as_bool v = None"
   by (simp add: as_bool_None)
 
@@ -57,11 +65,11 @@ lemma EvalBinOpVal:
   using EvalBinOp by fastforce
 
 lemma EvalSubscriptVal:
-  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<rho>, e' \<Rightarrow>\<^sub>e Val v' \<rbrakk> \<Longrightarrow> \<rho>, ExprSubscript e e' \<Rightarrow>\<^sub>e getitem v v'"
+  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<not> is_class v ; \<rho>, e' \<Rightarrow>\<^sub>e Val v' \<rbrakk> \<Longrightarrow> \<rho>, ExprSubscript e e' \<Rightarrow>\<^sub>e getitem v v'"
   using EvalSubscript by fastforce
 
 lemma EvalSubscriptAborts:
-  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<rho>, e' \<Rightarrow>\<^sub>e Aborts \<kappa> \<rbrakk> \<Longrightarrow> \<rho>, ExprSubscript e e' \<Rightarrow>\<^sub>e Aborts \<kappa>"
+  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<not> is_class v ; \<rho>, e' \<Rightarrow>\<^sub>e Aborts \<kappa> \<rbrakk> \<Longrightarrow> \<rho>, ExprSubscript e e' \<Rightarrow>\<^sub>e Aborts \<kappa>"
   using EvalSubscript by fastforce
 
 lemma EvalBinOpAborts:
@@ -128,32 +136,32 @@ lemmas eval_intros =
   EvalGenConsVal EvalGenConsAborts EvalCompConsVal EvalCompConsAborts EvalEntriesConsVal EvalEntriesConsAborts
 
 theorem soundness:
-  shows soundness_expr: "eval_expr n \<rho> e = Done r \<Longrightarrow> \<rho>, e \<Rightarrow>\<^sub>e r"
-    and soundness_exprs: "eval_exprs n \<rho> es = Done rs \<Longrightarrow> \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s rs"
-    and soundness_stmt: "eval_stmt n \<rho> s = Done o \<Longrightarrow> \<rho>, s \<Rightarrow>\<^sub>s o"
-    and soundness_elif: "eval_elif n \<rho> eb = Done o \<Longrightarrow> \<rho>, eb \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o"
-    and soundness_quals: "eval_quals n \<rho> gs = Done q \<Longrightarrow> \<rho>, gs \<Rightarrow>\<^sub>q q"
-    and soundness_gen: "eval_gen n \<rho> x us gs = Done q \<Longrightarrow> \<rho>, x, us, gs \<Rightarrow>\<^sub>g\<^sub>e\<^sub>n q"
-    and soundness_comp: "eval_comp n \<rho>s e = Done vr \<Longrightarrow> \<rho>s, e \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p vr"
-    and soundness_entries: "eval_entries n \<rho>s e e' = Done dr \<Longrightarrow> \<rho>s, e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s dr"
+  shows soundness_expr: "run_expr n \<rho> e = Done r \<Longrightarrow> \<rho>, e \<Rightarrow>\<^sub>e r"
+    and soundness_exprs: "run_exprs n \<rho> es = Done rs \<Longrightarrow> \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s rs"
+    and soundness_stmt: "run_stmt n \<rho> s = Done o \<Longrightarrow> \<rho>, s \<Rightarrow>\<^sub>s o"
+    and soundness_elif: "run_elif n \<rho> eb = Done o \<Longrightarrow> \<rho>, eb \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o"
+    and soundness_quals: "run_quals n \<rho> gs = Done q \<Longrightarrow> \<rho>, gs \<Rightarrow>\<^sub>q q"
+    and soundness_gen: "run_gen n \<rho> x us gs = Done q \<Longrightarrow> \<rho>, x, us, gs \<Rightarrow>\<^sub>g\<^sub>e\<^sub>n q"
+    and soundness_comp: "run_comp n \<rho>s e = Done vr \<Longrightarrow> \<rho>s, e \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p vr"
+    and soundness_entries: "run_entries n \<rho>s e e' = Done dr \<Longrightarrow> \<rho>s, e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s dr"
 proof (induction n \<rho> e and n \<rho> es and n \<rho> s and n \<rho> eb and n \<rho> gs and n \<rho> x us gs and n \<rho>s e
     and n \<rho>s e e' arbitrary: r and rs and o and o and q and q and vr and dr rule: eval_fun_induct)
-qed (auto simp: eval_simps map_fuelled_Done as_bool_Some as_bool_None
-  split: fuelled.splits result.splits outcome.splits option.splits bool.splits val.splits lit.splits
-    func.splits prod.splits if_splits
-  intro: eval_intros)
+qed (auto simp: eval_simps map_fuelled_Done as_bool_Some as_bool_None class_of_Some class_of_None
+  split: fuelled.splits result.splits outcome.splits option.splits bool.splits val.splits lit.splits if_splits
+  intro: eval_intros,
+  (fastforce intro: eval_intros simp: map_fuelled_Done split: func.splits if_splits option.splits)+)
 
 (* Every large enough fuel gives the outcome of a derivation *)
 theorem completeness_eventually:
-  shows "\<rho>, e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<forall>\<^sub>F n in sequentially. eval_expr n \<rho> e = Done r"
-    and "\<rho>, es \<Rightarrow>\<^sub>e\<^sub>s rs \<Longrightarrow> \<forall>\<^sub>F n in sequentially. eval_exprs n \<rho> es = Done rs"
-    and "\<rho>, s \<Rightarrow>\<^sub>s o \<Longrightarrow> \<forall>\<^sub>F n in sequentially. eval_stmt n \<rho> s = Done o"
-    and "\<rho>, eb \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o \<Longrightarrow> \<forall>\<^sub>F n in sequentially. eval_elif n \<rho> eb = Done o"
-    and "\<rho>, gs \<Rightarrow>\<^sub>q q \<Longrightarrow> \<forall>\<^sub>F n in sequentially. eval_quals n \<rho> gs = Done q"
-    and "\<rho>, x, us, gs \<Rightarrow>\<^sub>g\<^sub>e\<^sub>n q \<Longrightarrow> \<forall>\<^sub>F n in sequentially. eval_gen n \<rho> x us gs = Done q"
-    and "\<rho>s, e \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p vr \<Longrightarrow> \<forall>\<^sub>F n in sequentially. eval_comp n \<rho>s e = Done vr"
-    and "\<rho>s, e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s dr \<Longrightarrow> \<forall>\<^sub>F n in sequentially. eval_entries n \<rho>s e e' = Done dr"
-proof (induction rule: eval_induct)
+  shows "\<rho>, e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_expr n \<rho> e = Done r"
+    and "\<rho>, es \<Rightarrow>\<^sub>e\<^sub>s rs \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_exprs n \<rho> es = Done rs"
+    and "\<rho>, s \<Rightarrow>\<^sub>s o \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_stmt n \<rho> s = Done o"
+    and "\<rho>, eb \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_elif n \<rho> eb = Done o"
+    and "\<rho>, gs \<Rightarrow>\<^sub>q q \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_quals n \<rho> gs = Done q"
+    and "\<rho>, x, us, gs \<Rightarrow>\<^sub>g\<^sub>e\<^sub>n q \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_gen n \<rho> x us gs = Done q"
+    and "\<rho>s, e \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p vr \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_comp n \<rho>s e = Done vr"
+    and "\<rho>s, e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s dr \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_entries n \<rho>s e e' = Done dr"
+proof (induction rule: eval_expr_eval_exprs_eval_stmt_eval_elif_eval_quals_eval_gen_eval_comp_eval_entries.inducts[ih_names])
   case EvalVar
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1]) (use EvalVar in \<open>auto split: val.split\<close>)
@@ -290,7 +298,13 @@ next
   case EvalSubscript
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalSubscript.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalSubscript.IH in \<open>eventually_elim, insert EvalSubscript.hyps(2),
+        auto simp: eval_simps class_of_nonclass split: result.split\<close>)
+next
+  case EvalClassTypeArgs
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalClassTypeArgs.IH in \<open>eventually_elim, insert EvalClassTypeArgs.hyps(2), auto simp: eval_simps\<close>)
 next
   case EvalSubscriptFail
   show ?case
@@ -324,8 +338,8 @@ next
   case EvalCallNonFun
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalCallNonFun.IH in \<open>eventually_elim, insert EvalCallNonFun.hyps(3),
-        auto simp: eval_simps as_bool_nonbool split: val.split\<close>)
+      (use EvalCallNonFun.IH in \<open>eventually_elim, insert EvalCallNonFun.hyps(3,4),
+        auto simp: eval_simps as_bool_nonbool class_of_nonclass split: val.split\<close>)
 next
   case EvalCallFail
   show ?case
@@ -335,7 +349,17 @@ next
   case EvalCallFailArgs
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalCallFailArgs.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalCallFailArgs.IH in \<open>eventually_elim, auto simp: eval_simps class_of_Some split: result.split option.split\<close>)
+next
+  case EvalConstr
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalConstr.IH in \<open>eventually_elim, insert EvalConstr.hyps(1,3), auto simp: eval_simps\<close>)
+next
+  case EvalConstrFail
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalConstrFail.IH in \<open>eventually_elim, insert EvalConstrFail.hyps(1), auto simp: eval_simps\<close>)
 next
   case EvalExprsNil
   show ?case
@@ -643,14 +667,14 @@ next
 qed
 
 corollary completeness:
-  shows completeness_expr: "\<rho>, e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<exists>n. eval_expr n \<rho> e = Done r"
-    and completeness_exprs: "\<rho>, es \<Rightarrow>\<^sub>e\<^sub>s rs \<Longrightarrow> \<exists>n. eval_exprs n \<rho> es = Done rs"
-    and completeness_stmt: "\<rho>, s \<Rightarrow>\<^sub>s o \<Longrightarrow> \<exists>n. eval_stmt n \<rho> s = Done o"
-    and completeness_elif: "\<rho>, eb \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o \<Longrightarrow> \<exists>n. eval_elif n \<rho> eb = Done o"
-    and completeness_quals: "\<rho>, gs \<Rightarrow>\<^sub>q q \<Longrightarrow> \<exists>n. eval_quals n \<rho> gs = Done q"
-    and completeness_gen: "\<rho>, x, us, gs \<Rightarrow>\<^sub>g\<^sub>e\<^sub>n q \<Longrightarrow> \<exists>n. eval_gen n \<rho> x us gs = Done q"
-    and completeness_comp: "\<rho>s, e \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p vr \<Longrightarrow> \<exists>n. eval_comp n \<rho>s e = Done vr"
-    and completeness_entries: "\<rho>s, e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s dr \<Longrightarrow> \<exists>n. eval_entries n \<rho>s e e' = Done dr"
+  shows completeness_expr: "\<rho>, e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<exists>n. run_expr n \<rho> e = Done r"
+    and completeness_exprs: "\<rho>, es \<Rightarrow>\<^sub>e\<^sub>s rs \<Longrightarrow> \<exists>n. run_exprs n \<rho> es = Done rs"
+    and completeness_stmt: "\<rho>, s \<Rightarrow>\<^sub>s o \<Longrightarrow> \<exists>n. run_stmt n \<rho> s = Done o"
+    and completeness_elif: "\<rho>, eb \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o \<Longrightarrow> \<exists>n. run_elif n \<rho> eb = Done o"
+    and completeness_quals: "\<rho>, gs \<Rightarrow>\<^sub>q q \<Longrightarrow> \<exists>n. run_quals n \<rho> gs = Done q"
+    and completeness_gen: "\<rho>, x, us, gs \<Rightarrow>\<^sub>g\<^sub>e\<^sub>n q \<Longrightarrow> \<exists>n. run_gen n \<rho> x us gs = Done q"
+    and completeness_comp: "\<rho>s, e \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p vr \<Longrightarrow> \<exists>n. run_comp n \<rho>s e = Done vr"
+    and completeness_entries: "\<rho>s, e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s dr \<Longrightarrow> \<exists>n. run_entries n \<rho>s e e' = Done dr"
   by (fact completeness_eventually[THEN eventually_happens'[OF sequentially_bot]])+
 
 end

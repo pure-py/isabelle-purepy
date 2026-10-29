@@ -3,8 +3,7 @@ theory Determinism
     imports Eval
 begin
 
-(* The class table, ambient in evaluation as in the spec *)
-context fixes \<Sigma> :: class_table
+context evaluation
 begin
 
 inductive_cases VarE: "\<rho>, ExprVar x \<Rightarrow>\<^sub>e r"
@@ -20,8 +19,10 @@ inductive_cases TupleE: "\<rho>, ExprTuple es \<Rightarrow>\<^sub>e r"
 inductive_cases DictE: "\<rho>, ExprDict kes \<Rightarrow>\<^sub>e r"
 inductive_cases SubscriptE: "\<rho>, ExprSubscript e e' \<Rightarrow>\<^sub>e r"
 inductive_cases
-  CallE[consumes 1, case_names CallLambda CallLambdaArity CallDef CallDefArity CallNonFun CallFail CallFailArgs]:
+  CallE[consumes 1, case_names CallLambda CallLambdaArity CallDef CallDefArity CallNonFun CallFail CallFailArgs
+    CallConstr CallConstrFail]:
   "\<rho>, ExprCall e (es, []) \<Rightarrow>\<^sub>e r"
+inductive_cases CallKwE: "\<rho>, ExprCall e (es, kws) \<Rightarrow>\<^sub>e r"
 inductive_cases ExprsNilE: "\<rho>, [] \<Rightarrow>\<^sub>e\<^sub>s rs"
 inductive_cases ExprsConsE: "\<rho>, e # es \<Rightarrow>\<^sub>e\<^sub>s rs"
 inductive_cases PassE: "\<rho>, StmtPass \<Rightarrow>\<^sub>s o"
@@ -58,7 +59,7 @@ lemma determinism:
   and gen_det: "\<rho>, x, us, gs \<Rightarrow>\<^sub>g\<^sub>e\<^sub>n q \<Longrightarrow> \<rho>, x, us, gs \<Rightarrow>\<^sub>g\<^sub>e\<^sub>n q' \<Longrightarrow> q = q'"
   and comp_det: "\<rho>s, e \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p vr \<Longrightarrow> \<rho>s, e \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p vr' \<Longrightarrow> vr = vr'"
   and entries_det: "\<rho>s, e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s dr \<Longrightarrow> \<rho>s, e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s dr' \<Longrightarrow> dr = dr'"
-proof (induction arbitrary: r' and rs' and o' and o'' and q' and q' and vr' and dr' rule: eval_induct)
+proof (induction arbitrary: r' and rs' and o' and o'' and q' and q' and vr' and dr' rule: eval_expr_eval_exprs_eval_stmt_eval_elif_eval_quals_eval_gen_eval_comp_eval_entries.inducts[ih_names])
   case EvalVar
   then show ?case by (auto elim!: VarE)
 next
@@ -166,6 +167,10 @@ next
   from EvalSubscript.prems EvalSubscript.hyps show ?case
     by (auto elim!: SubscriptE dest: EvalSubscript.IH)
 next
+  case EvalClassTypeArgs
+  from EvalClassTypeArgs.prems EvalClassTypeArgs.hyps show ?case
+    by (auto elim!: SubscriptE dest: EvalClassTypeArgs.IH)
+next
   case EvalSubscriptFail
   from EvalSubscriptFail.prems EvalSubscriptFail.hyps show ?case
     by (auto elim!: SubscriptE dest: EvalSubscriptFail.IH)
@@ -213,11 +218,28 @@ next
 next
   case EvalCallFail
   from EvalCallFail.prems EvalCallFail.hyps show ?case
-    by (auto elim!: CallE dest: EvalCallFail.IH)
+    by (auto elim!: CallKwE dest: EvalCallFail.IH)
 next
   case EvalCallFailArgs
   from EvalCallFailArgs.prems EvalCallFailArgs.hyps show ?case
     by (auto elim!: CallE dest: EvalCallFailArgs.IH)
+next
+  case (EvalConstr \<rho> e C es kws us xus)
+  have callee: "\<rho>, e \<Rightarrow>\<^sub>e r \<Longrightarrow> r = Val (VClass C)" for r using EvalConstr.IH(1) by fastforce
+  have args: "\<rho>, es @ map snd kws \<Rightarrow>\<^sub>e\<^sub>s r \<Longrightarrow> r = Val us" for r using EvalConstr.IH(2) by fastforce
+  then have args_positional: "kws = [] \<Longrightarrow> \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s r \<Longrightarrow> r = Val us" for r by simp
+  have object: "field_map C (take (length es) us) (zip (map fst kws) (drop (length es) us)) = Some yus \<Longrightarrow> xus = yus"
+    for yus
+    using EvalConstr.hyps(3) by simp
+  from EvalConstr.prems show ?case
+    by (auto elim!: CallKwE dest!: callee args args_positional intro: object)
+next
+  case (EvalConstrFail \<rho> e C es kws \<kappa>)
+  have callee: "\<rho>, e \<Rightarrow>\<^sub>e r \<Longrightarrow> r = Val (VClass C)" for r using EvalConstrFail.IH(1) by fastforce
+  have args: "\<rho>, es @ map snd kws \<Rightarrow>\<^sub>e\<^sub>s r \<Longrightarrow> r = Aborts \<kappa>" for r using EvalConstrFail.IH(2) by fastforce
+  then have args_positional: "kws = [] \<Longrightarrow> \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s r \<Longrightarrow> r = Aborts \<kappa>" for r by simp
+  from EvalConstrFail.prems show ?case
+    by (auto elim!: CallKwE dest: callee args args_positional)
 next
   case EvalExprsNil
   then show ?case by (auto elim!: ExprsNilE)

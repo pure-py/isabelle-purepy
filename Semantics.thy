@@ -11,6 +11,8 @@ datatype val =
     | VList "val list"
     | VTuple "val list"
     | VDict "(string \<times> val) list"
+    | VClass name
+    | VObject name "(var \<times> val) list"
     | VLamClosure "(var, val) fmap" "var list" expr  ("Lam'(_, _, _')")
     | VDefClosure "(var, val) fmap" "func list" nat  ("Def'(_, _, _')")
     | VUnbound
@@ -63,6 +65,21 @@ where
 "call_result (Assigns \<rho>) = Val (VLit LitNone)" |
 "call_result (Aborts\<^sub>o \<kappa>) = Aborts \<kappa>"
 
+fun is_class :: "val \<Rightarrow> bool"
+where
+"is_class (VClass _) = True" |
+"is_class _ = False"
+
+fun class_of :: "val \<Rightarrow> name option"
+where
+"class_of (VClass C) = Some C" |
+"class_of _ = None"
+
+(* Type arguments of a subscript e[\<psi>s], read from its index *)
+definition type_args_of :: "expr \<Rightarrow> ty_expr list option"
+where
+"type_args_of e' = those (case e' of ExprTuple es \<Rightarrow> map type_expr_of es | _ \<Rightarrow> [type_expr_of e'])"
+
 fun is_closure :: "val \<Rightarrow> bool"
 where
 "is_closure Lam(_, _, _) = True" |
@@ -91,6 +108,7 @@ where
 "eq Lam(_, _, _) Def(_, _, _) = Aborts Undef" |
 "eq Def(_, _, _) Lam(_, _, _) = Aborts Undef" |
 "eq Def(_, _, _) Def(_, _, _) = Aborts Undef" |
+"eq (VObject C xvs) (VObject D yvs) = (if C = D then eq_elems (map snd xvs) (map snd yvs) else Val False)" |
 "eq _ _ = Val False" |
 
 "eq_elems [] [] = Val True" |
@@ -238,9 +256,21 @@ where
 "NoMatch \<otimes>\<^sub>m m = NoMatch" |
 "MatchAborts \<kappa> \<otimes>\<^sub>m m = MatchAborts \<kappa>"
 
-(* The class table, ambient in evaluation as in the spec *)
-context fixes \<Sigma> :: class_table
-begin
+(* Names a case hypothesis IH when it contains an induction predicate, and hyps otherwise, as for a rule without
+   parameters. The induction method also takes the free variables among the conclusion's arguments for predicates,
+   which makes every premise mentioning \<Sigma> an IH. *)
+attribute_setup ih_names = \<open>
+  let
+    fun is_ih t = exists_subterm (fn u => (case strip_comb u of (Var _, _ :: _) => true | _ => false)) t
+    fun hyp_name h = if is_ih h then "IH" else Rule_Cases.case_hypsN
+  in
+    Scan.succeed (Thm.mixed_attribute (fn (context, th) =>
+      let
+        val (cases, n) = Rule_Cases.get th
+        val hyps = map (map hyp_name o Logic.strip_assums_hyp) (drop n (Thm.prems_of th))
+      in swap (Thm.apply_attribute (Rule_Cases.cases_hyp_names (map (#1 o #1) cases) hyps) th context) end))
+  end
+\<close>
 
 (* Without class values, the head of a constructor pattern denotes no class *)
 fun match :: "env \<Rightarrow> pat \<Rightarrow> val \<Rightarrow> match_result"
@@ -280,6 +310,20 @@ where
      Match \<rho>' \<Rightarrow> Val (\<rho>', s)
    | NoMatch \<Rightarrow> dispatch \<rho> v cases
    | MatchAborts \<kappa> \<Rightarrow> Aborts \<kappa>)"
+
+(* The class table, ambient in evaluation as in the spec *)
+locale evaluation = fixes \<Sigma> :: class_table
+begin
+
+(* Argument for each field of C: positional arguments fill the fields in order, keyword arguments match by name;
+   None unless they cover the fields exactly *)
+definition field_map :: "name \<Rightarrow> val list \<Rightarrow> (var \<times> val) list \<Rightarrow> (var \<times> val) list option"
+where
+"field_map C us kvs =
+  (let xs = field_names \<Sigma> C; n = length us in
+   if n + length kvs = length xs \<and> set (map fst kvs) = set (drop n xs)
+   then Some (zip (take n xs) us @ map (\<lambda>y. (y, the (map_of kvs y))) (drop n xs))
+   else None)"
 
 abbreviation true :: val where "true \<equiv> VLit (LitBool True)"
 abbreviation false :: val where "false \<equiv> VLit (LitBool False)"
@@ -331,7 +375,10 @@ EvalDictFail:
 EvalDictNonStr:
   "\<lbrakk> \<rho>, concat (map (\<lambda>(e, e'). [e, e']) kes) \<Rightarrow>\<^sub>e\<^sub>s Val vs ; dict_entries vs = None \<rbrakk>
   \<Longrightarrow> \<rho>, ExprDict kes \<Rightarrow>\<^sub>e Aborts Excluded" |
-EvalSubscript: "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<rho>, e' \<Rightarrow>\<^sub>e r \<rbrakk> \<Longrightarrow> \<rho>, ExprSubscript e e' \<Rightarrow>\<^sub>e mlet r (getitem v)" |
+EvalSubscript:
+  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<not> is_class v ; \<rho>, e' \<Rightarrow>\<^sub>e r \<rbrakk> \<Longrightarrow> \<rho>, ExprSubscript e e' \<Rightarrow>\<^sub>e mlet r (getitem v)" |
+EvalClassTypeArgs:
+  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val (VClass C) ; type_args_of e' = Some \<psi>s \<rbrakk> \<Longrightarrow> \<rho>, ExprSubscript e e' \<Rightarrow>\<^sub>e Val (VClass C)" |
 EvalSubscriptFail: "\<rho>, e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, ExprSubscript e e' \<Rightarrow>\<^sub>e Aborts \<kappa>" |
 EvalListComp:
   "\<lbrakk> \<rho>, gs \<Rightarrow>\<^sub>q Val \<rho>s ; \<rho>s, e \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p Val vs \<rbrakk> \<Longrightarrow> \<rho>, ExprListComp e gs \<Rightarrow>\<^sub>e Val (VList vs)" |
@@ -374,11 +421,17 @@ EvalCallDefArity:
   ; j < length ds
   \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e (es, []) \<Rightarrow>\<^sub>e Aborts TypeError" |
 EvalCallNonFun:
-  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Val us ; \<not> is_closure v \<rbrakk>
+  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Val us ; \<not> is_closure v ; \<not> is_class v \<rbrakk>
   \<Longrightarrow> \<rho>, ExprCall e (es, []) \<Rightarrow>\<^sub>e Aborts TypeError" |
-EvalCallFail: "\<rho>, e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, ExprCall e (es, []) \<Rightarrow>\<^sub>e Aborts \<kappa>" |
+EvalCallFail: "\<rho>, e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, ExprCall e (es, kws) \<Rightarrow>\<^sub>e Aborts \<kappa>" |
 EvalCallFailArgs:
   "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Aborts \<kappa> \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e (es, []) \<Rightarrow>\<^sub>e Aborts \<kappa>" |
+EvalConstr:
+  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val (VClass C) ; \<rho>, es @ map snd kws \<Rightarrow>\<^sub>e\<^sub>s Val us
+  ; field_map C (take (length es) us) (zip (map fst kws) (drop (length es) us)) = Some xus
+  \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e (es, kws) \<Rightarrow>\<^sub>e Val (VObject C xus)" |
+EvalConstrFail:
+  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val (VClass C) ; \<rho>, es @ map snd kws \<Rightarrow>\<^sub>e\<^sub>s Aborts \<kappa> \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e (es, kws) \<Rightarrow>\<^sub>e Aborts \<kappa>" |
 
 EvalExprsNil: "\<rho>, [] \<Rightarrow>\<^sub>e\<^sub>s Val []" |
 EvalExprsCons: "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s r \<rbrakk>
@@ -474,9 +527,9 @@ EvalEntriesFailValue:
   \<Longrightarrow> \<rho> # \<rho>s, e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s Aborts \<kappa>"
 
 
+lemmas eval_rules = eval_expr_eval_exprs_eval_stmt_eval_elif_eval_quals_eval_gen_eval_comp_eval_entries.intros
+
 end
 
-lemmas eval_rules = eval_expr_eval_exprs_eval_stmt_eval_elif_eval_quals_eval_gen_eval_comp_eval_entries.intros
-lemmas eval_induct = eval_expr_eval_exprs_eval_stmt_eval_elif_eval_quals_eval_gen_eval_comp_eval_entries.inducts
 
 end

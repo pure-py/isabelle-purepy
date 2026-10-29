@@ -6,6 +6,9 @@ begin
 definition ex_add :: expr
 where "ex_add = ExprBinOp BOpAdd (ExprLiteral (LitInt 10)) (ExprLiteral (LitInt 20))"
 
+context evaluation
+begin
+
 lemma ex_add_eval: "\<epsilon>, ex_add \<Rightarrow>\<^sub>e Val (VLit (LitInt 30))"
 proof -
   have "\<epsilon>, ex_add \<Rightarrow>\<^sub>e mlet (Val (VLit (LitInt 20))) (binop_meaning BOpAdd (VLit (LitInt 10)))"
@@ -13,11 +16,16 @@ proof -
   then show ?thesis by simp
 qed
 
+end
+
 definition ex_lambda :: expr
 where "ex_lambda =
     ExprCall
         (ExprLambda [''x''] (ExprBinOp BOpAdd (ExprVar ''x'') (ExprLiteral (LitInt 1))))
         ([ExprLiteral (LitInt 2)], [])"
+
+context evaluation
+begin
 
 lemma ex_lambda_eval: "\<epsilon>, ex_lambda \<Rightarrow>\<^sub>e Val (VLit (LitInt 3))"
 proof -
@@ -34,5 +42,7 @@ proof -
   show ?thesis
     unfolding ex_lambda_def by (rule EvalCallLambda[OF EvalLambda args _ body]) simp
 qed
+
+end
 
 end
