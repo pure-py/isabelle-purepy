@@ -50,6 +50,15 @@ lemma class_of_None: "class_of v = None \<longleftrightarrow> \<not> is_class v"
 lemma class_of_nonclass: "\<not> is_class v \<Longrightarrow> class_of v = None"
   by (simp add: class_of_None)
 
+lemma fields_of_Some: "fields_of v = Some xvs \<longleftrightarrow> (\<exists>C. v = VObject C xvs)"
+  by (cases v) auto
+
+lemma fields_of_None: "fields_of v = None \<longleftrightarrow> \<not> is_object v"
+  by (cases v) auto
+
+lemma fields_of_nonobject: "\<not> is_object v \<Longrightarrow> fields_of v = None"
+  by (simp add: fields_of_None)
+
 lemma as_bool_nonbool: "v \<noteq> true \<Longrightarrow> v \<noteq> false \<Longrightarrow> as_bool v = None"
   by (simp add: as_bool_None)
 
@@ -146,7 +155,7 @@ theorem soundness:
     and soundness_entries: "run_entries n \<rho>s e e' = Done dr \<Longrightarrow> \<rho>s, e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s dr"
 proof (induction n \<rho> e and n \<rho> es and n \<rho> s and n \<rho> eb and n \<rho> gs and n \<rho> x us gs and n \<rho>s e
     and n \<rho>s e e' arbitrary: r and rs and o and o and q and q and vr and dr rule: eval_fun_induct)
-qed (auto simp: eval_simps map_fuelled_Done as_bool_Some as_bool_None class_of_Some class_of_None
+qed (auto simp: eval_simps map_fuelled_Done as_bool_Some as_bool_None class_of_Some class_of_None fields_of_Some fields_of_None
   split: fuelled.splits result.splits outcome.splits option.splits bool.splits val.splits lit.splits if_splits
   intro: eval_intros,
   (fastforce intro: eval_intros simp: map_fuelled_Done split: func.splits if_splits option.splits)+)
@@ -310,6 +319,27 @@ next
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
       (use EvalSubscriptFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+next
+  case EvalAttrObject
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalAttrObject.IH in \<open>eventually_elim, insert EvalAttrObject.hyps(2), auto simp: eval_simps\<close>)
+next
+  case EvalAttrMissing
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalAttrMissing.IH in \<open>eventually_elim, insert EvalAttrMissing.hyps(2), auto simp: eval_simps\<close>)
+next
+  case EvalAttrNonObject
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalAttrNonObject.IH in \<open>eventually_elim, insert EvalAttrNonObject.hyps(2),
+        auto simp: eval_simps fields_of_nonobject\<close>)
+next
+  case EvalAttrFail
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalAttrFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
 next
   case EvalCallLambda
   show ?case

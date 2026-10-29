@@ -75,6 +75,16 @@ where
 "class_of (VClass C) = Some C" |
 "class_of _ = None"
 
+fun is_object :: "val \<Rightarrow> bool"
+where
+"is_object (VObject _ _) = True" |
+"is_object _ = False"
+
+fun fields_of :: "val \<Rightarrow> (var \<times> val) list option"
+where
+"fields_of (VObject _ xvs) = Some xvs" |
+"fields_of _ = None"
+
 (* Type arguments of a subscript e[\<psi>s], read from its index *)
 definition type_args_of :: "expr \<Rightarrow> ty_expr list option"
 where
@@ -392,6 +402,13 @@ EvalDictCompFailQuals: "\<rho>, gs \<Rightarrow>\<^sub>q Aborts \<kappa> \<Longr
 EvalDictCompFail:
   "\<lbrakk> \<rho>, gs \<Rightarrow>\<^sub>q Val \<rho>s ; \<rho>s, e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s Aborts \<kappa> \<rbrakk>
   \<Longrightarrow> \<rho>, ExprDictComp e e' gs \<Rightarrow>\<^sub>e Aborts \<kappa>" |
+EvalAttrObject:
+  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val (VObject C xvs) ; map_of xvs x = Some v \<rbrakk> \<Longrightarrow> \<rho>, ExprAttribute e x \<Rightarrow>\<^sub>e Val v" |
+EvalAttrMissing:
+  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val (VObject C xvs) ; map_of xvs x = None \<rbrakk> \<Longrightarrow> \<rho>, ExprAttribute e x \<Rightarrow>\<^sub>e Aborts AttributeError" |
+EvalAttrNonObject:
+  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<not> is_object v \<rbrakk> \<Longrightarrow> \<rho>, ExprAttribute e x \<Rightarrow>\<^sub>e Aborts Excluded" |
+EvalAttrFail: "\<rho>, e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, ExprAttribute e x \<Rightarrow>\<^sub>e Aborts \<kappa>" |
 EvalCallLambda:
   "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val Lam(\<rho>', xs, e')
   ; \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Val us

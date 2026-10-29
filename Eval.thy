@@ -123,6 +123,10 @@ where
   flet (run_expr n \<rho> e) (\<lambda>v. case class_of v of
     Some C \<Rightarrow> if type_args_of e' = None then Stuck else Done (Val (VClass C))
   | None \<Rightarrow> flet (run_expr n \<rho> e') (\<lambda>v'. Done (getitem v v')))" |
+"run_expr (Suc n) \<rho> (ExprAttribute e x) =
+  flet (run_expr n \<rho> e) (\<lambda>v. case fields_of v of
+    Some xvs \<Rightarrow> (case map_of xvs x of Some u \<Rightarrow> Done (Val u) | None \<Rightarrow> Done (Aborts AttributeError))
+  | None \<Rightarrow> Done (Aborts Excluded))" |
 "run_expr (Suc n) \<rho> (ExprCall e (es, kws)) =
   flet (run_expr n \<rho> e) (\<lambda>v. case class_of v of
     Some C \<Rightarrow>
@@ -149,7 +153,6 @@ where
               else Done (Aborts TypeError))
           else Stuck
       | _ \<Rightarrow> Done (Aborts TypeError)))" |
-"run_expr (Suc n) \<rho> _ = Stuck" |
 
 "run_exprs 0 \<rho> es = OutOfFuel" |
 "run_exprs (Suc n) \<rho> [] = Done (Val [])" |

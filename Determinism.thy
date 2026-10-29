@@ -18,6 +18,7 @@ inductive_cases ListE: "\<rho>, ExprList es \<Rightarrow>\<^sub>e r"
 inductive_cases TupleE: "\<rho>, ExprTuple es \<Rightarrow>\<^sub>e r"
 inductive_cases DictE: "\<rho>, ExprDict kes \<Rightarrow>\<^sub>e r"
 inductive_cases SubscriptE: "\<rho>, ExprSubscript e e' \<Rightarrow>\<^sub>e r"
+inductive_cases AttributeE: "\<rho>, ExprAttribute e x \<Rightarrow>\<^sub>e r"
 inductive_cases
   CallE[consumes 1, case_names CallLambda CallLambdaArity CallDef CallDefArity CallNonFun CallFail CallFailArgs
     CallConstr CallConstrFail]:
@@ -174,6 +175,22 @@ next
   case EvalSubscriptFail
   from EvalSubscriptFail.prems EvalSubscriptFail.hyps show ?case
     by (auto elim!: SubscriptE dest: EvalSubscriptFail.IH)
+next
+  case EvalAttrObject
+  from EvalAttrObject.prems EvalAttrObject.hyps show ?case
+    by (auto elim!: AttributeE dest: EvalAttrObject.IH)
+next
+  case EvalAttrMissing
+  from EvalAttrMissing.prems EvalAttrMissing.hyps show ?case
+    by (auto elim!: AttributeE dest: EvalAttrMissing.IH)
+next
+  case EvalAttrNonObject
+  from EvalAttrNonObject.prems EvalAttrNonObject.hyps show ?case
+    by (auto elim!: AttributeE dest: EvalAttrNonObject.IH)
+next
+  case EvalAttrFail
+  from EvalAttrFail.prems EvalAttrFail.hyps show ?case
+    by (auto elim!: AttributeE dest: EvalAttrFail.IH)
 next
   case EvalCallLambda
   from EvalCallLambda.prems EvalCallLambda.hyps show ?case
