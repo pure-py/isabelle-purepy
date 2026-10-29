@@ -6,8 +6,16 @@ from . import syntax
 from .conformance import Exit
 from .generated import Finite_Map, Option, Programs, Reasons
 from .messages import message
-from .syntax import ModuleBody, Program, QualifiedName, Reason, name
-from .type_syntax import Name, parse_name, proper_prefixes
+from .syntax import (
+    ModuleBody,
+    Name,
+    Program,
+    QualifiedName,
+    Reason,
+    name,
+    parse_name,
+    proper_prefixes,
+)
 
 MAIN = parse_name("__main__")
 
