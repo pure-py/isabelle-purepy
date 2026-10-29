@@ -16,11 +16,12 @@ jobs:
     outputs:
       isabelle: ${{ steps.read.outputs.isabelle }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: read
         run: echo "isabelle=$(cat .isabelle-version)" >> "$GITHUB_OUTPUT"
 
   build:
+    name: proofs, type checker and conformance suite
     needs: version
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -34,11 +35,75 @@ jobs:
           apt-get update -q
           apt-get install -y -q --no-install-recommends make git
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
 
-      - name: Build session
+      - name: Check the proofs and generate the type checker
         timeout-minutes: 20
         run: make build ISABELLE=/home/isabelle/Isabelle/bin/isabelle
+
+      - name: Lint, run the conformance suite and build the wheel
+        run: make wheel
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel
+          path: dist/*.whl
+
+  # The suite's tests, and the type checker, under other Python runtimes
+  runtimes:
+    name: conformance suite (${{ matrix.runtime }})
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runtime: GraalPy
+            version: "graalpy-25.2"
+          - runtime: Pyodide
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: wheel
+          path: dist
+
+      - name: Unpack the wheel
+        run: |
+          mkdir site
+          unzip -q dist/*.whl -d site
+
+      - name: Set up GraalPy
+        if: matrix.runtime == 'GraalPy'
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.version }}
+
+      - name: Set up uv for Pyodide
+        if: matrix.runtime == 'Pyodide'
+        uses: astral-sh/setup-uv@v10.2.0
+
+      - name: Install Pyodide
+        if: matrix.runtime == 'Pyodide'
+        run: |
+          uv python install "pyodide@$(cat .python-version)"
+          PYODIDE_PYTHON="$(uv python find "pyodide@$(cat .python-version)")"
+          echo "PYODIDE_PYTHON=$PYODIDE_PYTHON" >> "$GITHUB_ENV"
+
+      - name: Run tests with GraalPy
+        if: matrix.runtime == 'GraalPy'
+        env:
+          PYTHONPATH: ${{ github.workspace }}/site
+        run: test/run-all.sh python --no-lint
+
+      - name: Run tests with Pyodide
+        if: matrix.runtime == 'Pyodide'
+        env:
+          PYTHONPATH: ${{ github.workspace }}/site
+        run: test/run-all.sh "$PYODIDE_PYTHON" --no-lint
