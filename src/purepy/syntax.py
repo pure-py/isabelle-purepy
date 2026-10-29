@@ -9,6 +9,8 @@ from .generated import Option, Positions, Syntax
 # Sorts of the mechanisation, Any until the generator annotates them: #7, Type annotations in generated code,
 # https://github.com/pure-py/isabelle-python-codegen/issues/7
 type Var = str
+type Pos = tuple[int, int]
+type Located = Any
 type QualifiedName = Any
 type Lit = Any
 type Pat = Any
@@ -122,27 +124,19 @@ def duplicate[T](xs: Sequence[T]) -> T | None:
     return next((x for i, x in enumerate(xs) if x in xs[:i]), None)
 
 
-def format_result(result: ParserRejects | None, filename: str) -> str:
-    if result is None:
-        return f"{filename}: ok"
-    if result.line is not None:
-        return f"{filename}:{result.line}:{result.col}: {result.msg}"
-    return f"{filename}: {result.msg}"
-
-
 def option(x: Any) -> Any:
     return Option.None_() if x is None else Option.Some(x)
 
 
-def position(node: ast.expr | ast.stmt | ast.pattern) -> tuple[int, int]:
+def position(node: ast.expr | ast.stmt | ast.pattern) -> Pos:
     return (node.lineno, node.col_offset)
 
 
-def at(node: ast.expr | ast.stmt | ast.pattern, term: Any) -> Any:
+def at(node: ast.expr | ast.stmt | ast.pattern, term: Any) -> Located:
     return Positions.At(position(node), term)
 
 
-def located_at(t: Any) -> tuple[int, int]:
+def located_at(t: Located) -> Pos:
     match t:
         case Positions.At((line, col), _):
             return (line, col)
@@ -150,7 +144,7 @@ def located_at(t: Any) -> tuple[int, int]:
             raise AssertionError(f"unlocated term: {t}")
 
 
-def node(t: Any) -> Any:
+def node(t: Located) -> Any:
     match t:
         case Positions.At(_, u):
             return u

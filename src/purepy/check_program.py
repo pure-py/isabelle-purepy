@@ -124,8 +124,10 @@ def format_result(result: Result, filename: str) -> str:
     match result:
         case None:
             return f"{filename}: ok"
+        case syntax.ParserRejects() if result.line is not None:
+            return f"{filename}:{result.line}:{result.col}: {result.msg}"
         case syntax.ParserRejects():
-            return syntax.format_result(result, filename)
+            return f"{filename}: {result.msg}"
         case (_, Reasons.Located((line, col), r)):
             return f"{filename}:{line}:{col}: {message(r)}"
         case (_, r):
