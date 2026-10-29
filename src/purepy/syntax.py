@@ -684,7 +684,6 @@ def position(node: ast.expr | ast.stmt | ast.pattern) -> tuple[int, int]:
 
 
 def at(node: ast.expr | ast.stmt | ast.pattern, term: Any) -> Any:
-    """Term located at node"""
     return Positions.At(position(node), term)
 
 
