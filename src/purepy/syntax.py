@@ -44,8 +44,7 @@ def name(e: ast.expr) -> Name | None:
             return None
 
 
-type TypeDefinition = ast.ClassDef | ast.TypeAlias
-type Statement = ast.stmt | list[ast.FunctionDef] | list[TypeDefinition]
+type Statement = ast.stmt | list[ast.FunctionDef] | list[ast.ClassDef | ast.TypeAlias]
 
 
 def is_import(s: ast.stmt) -> bool:
@@ -78,7 +77,9 @@ def extend_def_region(region: list[ast.FunctionDef], rest: list[ast.stmt]) -> li
     return [region] + statements(rest)
 
 
-def extend_type_region(region: list[TypeDefinition], rest: list[ast.stmt]) -> list[Statement]:
+def extend_type_region(
+    region: list[ast.ClassDef | ast.TypeAlias], rest: list[ast.stmt]
+) -> list[Statement]:
     if len(rest) == 0:
         return [region]
     head = rest[0]
