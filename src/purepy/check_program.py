@@ -1,6 +1,5 @@
 """Module discovery and checking of a program by the generated type checker"""
 
-import ast
 import pathlib
 from typing import Any
 
@@ -8,7 +7,7 @@ from . import syntax
 from .generated import Finite_Map, Option, Programs, Reasons
 from .messages import IllFormed, IllFormedModule, IllFormedProgram, message
 from .messages import name as name_of
-from .syntax import module_body, name
+from .syntax import name
 from .type_syntax import Name, parse_name, proper_prefixes
 
 MAIN = parse_name("__main__")
@@ -21,20 +20,6 @@ def module_path(q: Name, base_dir: pathlib.Path) -> pathlib.Path:
             return candidate
     assert (base_dir / stem).is_dir()
     return base_dir / stem
-
-
-def parse(path: pathlib.Path) -> ast.Module:
-    if path.is_dir():
-        return ast.Module(body=[], type_ignores=[])
-    source = path.read_text()
-    try:
-        m = syntax.parse(source, str(path))
-    except SyntaxError as e:
-        raise syntax.ParseError(e) from e
-    unsupported = syntax.check_syntax_module(m)
-    if unsupported is not None:
-        raise unsupported
-    return m
 
 
 def module_name(base_dir: pathlib.Path, path: pathlib.Path) -> Name | None:
@@ -50,26 +35,29 @@ def module_names(base_dir: pathlib.Path) -> set[Name]:
     return {p for q in names if q is not None for p in [q, *proper_prefixes(q)]}
 
 
-def parse_program(entry_path: pathlib.Path) -> dict[Name, ast.Module]:
-    """Modules by name, every module of the source tree parsed, the main module first"""
+def parse_program(entry_path: pathlib.Path) -> Any:
+    """Program of every module of the source tree, the main module first"""
     base_dir = entry_path.parent
     names = sorted(module_names(base_dir), key=str)
-    return {
-        MAIN: parse_module(MAIN, entry_path),
-        **{q: parse_module(q, module_path(q, base_dir)) for q in names},
-    }
+    return program(
+        {
+            MAIN: parse_module(MAIN, entry_path),
+            **{q: parse_module(q, module_path(q, base_dir)) for q in names},
+        }
+    )
 
 
-def parse_module(q: Name, path: pathlib.Path) -> ast.Module:
+# A package directory is an empty module
+def parse_module(q: Name, path: pathlib.Path) -> Any:
     try:
-        return parse(path)
+        return syntax.parse_module("" if path.is_dir() else path.read_text(), str(path), q)
     except syntax.Unsupported as e:
         e.module = q
         raise
 
 
-def translate_program(M: dict[Name, ast.Module]) -> Any:
-    return Finite_Map.fmap_of_list([(name(q), module_body(q, m)) for q, m in M.items()])
+def program(bodies: dict[Name, Any]) -> Any:
+    return Finite_Map.fmap_of_list([(name(q), body) for q, body in bodies.items()])
 
 
 def ill_formed(q: Any, r: Any) -> IllFormed:
@@ -95,7 +83,7 @@ def check(M: Any) -> IllFormed | None:
 
 def check_program(entry_path: pathlib.Path) -> IllFormed | syntax.Unsupported | None:
     try:
-        return check(translate_program(parse_program(entry_path)))
+        return check(parse_program(entry_path))
     except syntax.Unsupported as e:
         return e
 
@@ -103,7 +91,7 @@ def check_program(entry_path: pathlib.Path) -> IllFormed | syntax.Unsupported | 
 # Check the module at path as a program of one module
 def check_module(path: pathlib.Path) -> IllFormed | syntax.Unsupported | None:
     try:
-        return check(translate_program({MAIN: parse_module(MAIN, path)}))
+        return check(program({MAIN: parse_module(MAIN, path)}))
     except syntax.Unsupported as e:
         return e
 

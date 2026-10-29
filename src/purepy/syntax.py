@@ -933,3 +933,13 @@ def module_body(q: Name, m: ast.Module) -> Any:
     return Syntax.ModuleBody(
         imports, top_stmt([ast.fix_missing_locations(name_declaration(q)), *stmts])
     )
+
+
+def parse_module(source: str, filename: str, q: Name) -> Any:
+    """Body of module q in the generated syntax, or Unsupported raised for a source outside the fragment"""
+    try:
+        m = parse(source, filename)
+    except SyntaxError as e:
+        raise ParseError(e) from e
+    check_syntax_top_level(m.body)
+    return module_body(q, m)
