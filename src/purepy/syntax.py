@@ -42,7 +42,7 @@ def split_imports(body: list[ast.stmt]) -> tuple[list[ast.stmt], list[ast.stmt]]
     return iotas, body[len(iotas) :]
 
 
-OP_SYMBOLS: dict[type, str] = {
+SYMBOL: dict[type, str] = {
     ast.BitOr: "|",
     ast.Eq: "==",
     ast.NotEq: "!=",
@@ -404,7 +404,7 @@ def expr_node(e: ast.expr) -> Expr:
         case ast.Subscript(value=e_, slice=e__):
             return Syntax.ExprSubscript(expr(e_), expr(e__))
         case ast.BinOp(op=op) if type(op) not in BOP:
-            raise NotAllowed(e, f"binary operator '{OP_SYMBOLS.get(type(op), type(op).__name__)}'")
+            raise NotAllowed(e, f"binary operator '{SYMBOL.get(type(op), type(op).__name__)}'")
         case ast.BinOp(left=e_, op=op, right=e__):
             return Syntax.ExprBinOp(BOP[type(op)](), expr(e_), expr(e__))
         case ast.Compare(ops=[_, _, *_]):
@@ -414,7 +414,7 @@ def expr_node(e: ast.expr) -> Expr:
         case ast.Compare(left=e_, ops=[op], comparators=[e__]):
             return Syntax.ExprBinOp(BOP[type(op)](), expr(e_), expr(e__))
         case ast.UnaryOp(op=op) if type(op) not in UOP:
-            raise NotAllowed(e, f"unary operator '{OP_SYMBOLS.get(type(op), type(op).__name__)}'")
+            raise NotAllowed(e, f"unary operator '{SYMBOL.get(type(op), type(op).__name__)}'")
         case ast.UnaryOp(op=op, operand=e_):
             return Syntax.ExprUnOp(UOP[type(op)](), expr(e_))
         case ast.BoolOp(values=[_, _, _, *_]):

@@ -7,8 +7,8 @@ from functools import reduce
 from .generated import Option, Reasons, Syntax
 from .syntax import (
     BOP_AST,
-    OP_SYMBOLS,
     PRIMITIVE,
+    SYMBOL,
     UOP_AST,
     Expr,
     Lit,
@@ -266,11 +266,11 @@ def message(r: Reason) -> str:
             return f"'{unparse_name(q)}' is a type alias, usable only in annotations"
         case Reasons.NoBinaryOverload(op, sigma, sigma_):
             return (
-                f"no overload of '{OP_SYMBOLS[BOP_AST[type(op)]]}' at operand types "
+                f"no overload of '{SYMBOL[BOP_AST[type(op)]]}' at operand types "
                 f"{unparse_type(sigma)} and {unparse_type(sigma_)}"
             )
         case Reasons.NoUnaryOverload(op, sigma):
-            return f"no overload of '{OP_SYMBOLS[UOP_AST[type(op)]]}' at operand type {unparse_type(sigma)}"
+            return f"no overload of '{SYMBOL[UOP_AST[type(op)]]}' at operand type {unparse_type(sigma)}"
         case Reasons.NotCallable(tau):
             return f"values of type {unparse_type(tau)} cannot be called"
         case Reasons.KeywordArgumentsNotConstructor():
