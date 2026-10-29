@@ -8,7 +8,7 @@ from . import syntax
 from .generated import Finite_Map, Option, Programs, Reasons
 from .messages import IllFormed, IllFormedModule, IllFormedProgram, message
 from .messages import name as name_of
-from .translate import module_body, name
+from .syntax import module_body, name
 from .type_syntax import Name, parse_name, proper_prefixes
 
 MAIN = parse_name("__main__")

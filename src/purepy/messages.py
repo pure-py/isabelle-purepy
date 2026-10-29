@@ -6,7 +6,7 @@ from functools import reduce
 from typing import Any
 
 from .generated import Option, Reasons, Syntax
-from .translate import BOP, PRIM_TY, UOP, node
+from .syntax import BOP, PRIM_TY, UOP, node
 from .type_syntax import Name
 
 
