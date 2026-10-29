@@ -7,7 +7,7 @@ from . import syntax
 from .conformance import Exit
 from .generated import Finite_Map, Option, Programs, Reasons
 from .messages import message
-from .syntax import name
+from .syntax import ModuleBody, name
 from .type_syntax import Name, parse_name, proper_prefixes
 
 MAIN = parse_name("__main__")
@@ -35,8 +35,14 @@ def module_names(base_dir: pathlib.Path) -> set[Name]:
     return {p for q in names if q is not None for p in [q, *proper_prefixes(q)]}
 
 
+type Program = Any
+# Module and reason of an ill-formed program
+type IllFormed = tuple[Any, Any]
+type Result = IllFormed | syntax.Unsupported | None
+
+
 # Entry module parsed first, so its errors take precedence
-def parse_program(entry_path: pathlib.Path) -> Any:
+def parse_program(entry_path: pathlib.Path) -> Program:
     base_dir = entry_path.parent
     names = sorted(module_names(base_dir), key=str)
     return program(
@@ -48,7 +54,7 @@ def parse_program(entry_path: pathlib.Path) -> Any:
 
 
 # A package directory is an empty module
-def parse_module(q: Name, path: pathlib.Path) -> Any:
+def parse_module(q: Name, path: pathlib.Path) -> ModuleBody:
     try:
         return syntax.parse_module("" if path.is_dir() else path.read_text(), str(path), q)
     except syntax.Unsupported as e:
@@ -56,15 +62,11 @@ def parse_module(q: Name, path: pathlib.Path) -> Any:
         raise
 
 
-def program(bodies: dict[Name, Any]) -> Any:
+def program(bodies: dict[Name, ModuleBody]) -> Program:
     return Finite_Map.fmap_of_list([(name(q), body) for q, body in bodies.items()])
 
 
-# Module and reason of an ill-formed program
-type IllFormed = tuple[Any, Any]
-
-
-def check(M: Any) -> IllFormed | None:
+def check(M: Program) -> IllFormed | None:
     match Programs.check_program(M):
         case Option.None_():
             return None
@@ -72,9 +74,6 @@ def check(M: Any) -> IllFormed | None:
             return (q, r)
         case result:
             raise AssertionError(f"unexpected result: {result}")
-
-
-type Result = IllFormed | syntax.Unsupported | None
 
 
 def check_program(entry_path: pathlib.Path) -> Result:

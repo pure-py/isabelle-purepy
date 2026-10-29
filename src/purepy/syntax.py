@@ -927,7 +927,10 @@ def name_declaration(q: Name) -> ast.AnnAssign:
     )
 
 
-def module_body(q: Name, m: ast.Module) -> Any:
+type ModuleBody = Any
+
+
+def module_body(q: Name, m: ast.Module) -> ModuleBody:
     iotas, stmts = split_imports(m.body)
     imports = [import_(iota) for iota in iotas]
     return Syntax.ModuleBody(
@@ -935,7 +938,7 @@ def module_body(q: Name, m: ast.Module) -> Any:
     )
 
 
-def parse_module(source: str, filename: str, q: Name) -> Any:
+def parse_module(source: str, filename: str, q: Name) -> ModuleBody:
     """Body of module q in the generated syntax, or Unsupported raised for a source outside the fragment"""
     try:
         m = parse(source, filename)
