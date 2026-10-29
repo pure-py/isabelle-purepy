@@ -33,9 +33,6 @@ def parse_name(name: str) -> Name:
     return tuple(name.split("."))
 
 
-type Statement = ast.stmt | list[ast.FunctionDef] | list[ast.ClassDef | ast.TypeAlias]
-
-
 def is_import(s: ast.stmt) -> bool:
     return isinstance(s, (ast.Import, ast.ImportFrom))
 
@@ -43,38 +40,6 @@ def is_import(s: ast.stmt) -> bool:
 def split_imports(body: list[ast.stmt]) -> tuple[list[ast.stmt], list[ast.stmt]]:
     iotas = list(takewhile(is_import, body))
     return iotas, body[len(iotas) :]
-
-
-def statements(body: list[ast.stmt]) -> list[Statement]:
-    if len(body) == 0:
-        return []
-    head = body[0]
-    rest = body[1:]
-    if isinstance(head, ast.FunctionDef):
-        return extend_def_region([head], rest)
-    if isinstance(head, (ast.ClassDef, ast.TypeAlias)):
-        return extend_type_region([head], rest)
-    return [head] + statements(rest)
-
-
-def extend_def_region(region: list[ast.FunctionDef], rest: list[ast.stmt]) -> list[Statement]:
-    if len(rest) == 0:
-        return [region]
-    head = rest[0]
-    if isinstance(head, ast.FunctionDef):
-        return extend_def_region(region + [head], rest[1:])
-    return [region] + statements(rest)
-
-
-def extend_type_region(
-    region: list[ast.ClassDef | ast.TypeAlias], rest: list[ast.stmt]
-) -> list[Statement]:
-    if len(rest) == 0:
-        return [region]
-    head = rest[0]
-    if isinstance(head, (ast.ClassDef, ast.TypeAlias)):
-        return extend_type_region(region + [head], rest[1:])
-    return [region] + statements(rest)
 
 
 def bound(pattern: ast.pattern) -> list[Var]:
@@ -90,23 +55,6 @@ def bound(pattern: ast.pattern) -> list[Var]:
             return [x for p in list(ps) + list(ps_) for x in bound(p)]
         case _:
             raise AssertionError(f"unexpected pattern: {type(pattern).__name__}")
-
-
-def dict_keys(e: ast.Dict) -> list[ast.expr]:
-    keys = [k for k in e.keys if k is not None]
-    assert len(keys) == len(e.keys)
-    return keys
-
-
-def target_name(g: ast.comprehension) -> str:
-    assert isinstance(g.target, ast.Name)
-    return g.target.id
-
-
-def type_param_names(node: ast.FunctionDef | ast.ClassDef | ast.TypeAlias) -> tuple[Var, ...]:
-    alphas = tuple(p.name for p in node.type_params if isinstance(p, ast.TypeVar))
-    assert len(alphas) == len(node.type_params)
-    return alphas
 
 
 OP_SYMBOLS: dict[type, str] = {
@@ -689,6 +637,58 @@ def node(t: Any) -> Any:
             return u
         case _:
             raise AssertionError(f"unlocated term: {t}")
+
+
+type Statement = ast.stmt | list[ast.FunctionDef] | list[ast.ClassDef | ast.TypeAlias]
+
+
+def statements(body: list[ast.stmt]) -> list[Statement]:
+    if len(body) == 0:
+        return []
+    head = body[0]
+    rest = body[1:]
+    if isinstance(head, ast.FunctionDef):
+        return extend_def_region([head], rest)
+    if isinstance(head, (ast.ClassDef, ast.TypeAlias)):
+        return extend_type_region([head], rest)
+    return [head] + statements(rest)
+
+
+def extend_def_region(region: list[ast.FunctionDef], rest: list[ast.stmt]) -> list[Statement]:
+    if len(rest) == 0:
+        return [region]
+    head = rest[0]
+    if isinstance(head, ast.FunctionDef):
+        return extend_def_region(region + [head], rest[1:])
+    return [region] + statements(rest)
+
+
+def extend_type_region(
+    region: list[ast.ClassDef | ast.TypeAlias], rest: list[ast.stmt]
+) -> list[Statement]:
+    if len(rest) == 0:
+        return [region]
+    head = rest[0]
+    if isinstance(head, (ast.ClassDef, ast.TypeAlias)):
+        return extend_type_region(region + [head], rest[1:])
+    return [region] + statements(rest)
+
+
+def dict_keys(e: ast.Dict) -> list[ast.expr]:
+    keys = [k for k in e.keys if k is not None]
+    assert len(keys) == len(e.keys)
+    return keys
+
+
+def target_name(g: ast.comprehension) -> str:
+    assert isinstance(g.target, ast.Name)
+    return g.target.id
+
+
+def type_param_names(node: ast.FunctionDef | ast.ClassDef | ast.TypeAlias) -> tuple[Var, ...]:
+    alphas = tuple(p.name for p in node.type_params if isinstance(p, ast.TypeVar))
+    assert len(alphas) == len(node.type_params)
+    return alphas
 
 
 def lit(v: object) -> Lit:
