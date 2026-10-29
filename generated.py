@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Generated modules copied into the package, with relative imports between them"""
+"""Generated modules copied into the package, with relative imports between them; delete the rewriting with
+pure-py/isabelle-python-codegen#12"""
 
 import pathlib
 import re
