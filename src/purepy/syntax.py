@@ -1,7 +1,7 @@
 import ast
 from collections.abc import Callable, Sequence
 from functools import reduce
-from itertools import dropwhile, takewhile
+from itertools import takewhile
 from typing import Any
 
 from .generated import Option, Positions, Syntax
@@ -53,7 +53,8 @@ def is_import(s: ast.stmt) -> bool:
 
 
 def split_imports(body: list[ast.stmt]) -> tuple[list[ast.stmt], list[ast.stmt]]:
-    return list(takewhile(is_import, body)), list(dropwhile(is_import, body))
+    iotas = list(takewhile(is_import, body))
+    return iotas, body[len(iotas) :]
 
 
 def statements(body: list[ast.stmt]) -> list[Statement]:
