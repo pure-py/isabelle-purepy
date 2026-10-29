@@ -335,10 +335,10 @@ next
     by (rule eventually_sequentially_Suc[THEN iffD1])
       (use EvalAttrObject.IH in \<open>eventually_elim, insert EvalAttrObject.hyps(2), auto simp: eval_simps\<close>)
 next
-  case EvalAttrMissing
+  case EvalAttrObjectMissing
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalAttrMissing.IH in \<open>eventually_elim, insert EvalAttrMissing.hyps(2), auto simp: eval_simps\<close>)
+      (use EvalAttrObjectMissing.IH in \<open>eventually_elim, insert EvalAttrObjectMissing.hyps(2), auto simp: eval_simps\<close>)
 next
   case EvalAttrModule
   show ?case

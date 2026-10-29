@@ -180,9 +180,9 @@ next
   from EvalAttrObject.prems EvalAttrObject.hyps show ?case
     by (auto elim!: AttributeE dest: EvalAttrObject.IH)
 next
-  case EvalAttrMissing
-  from EvalAttrMissing.prems EvalAttrMissing.hyps show ?case
-    by (auto elim!: AttributeE dest: EvalAttrMissing.IH)
+  case EvalAttrObjectMissing
+  from EvalAttrObjectMissing.prems EvalAttrObjectMissing.hyps show ?case
+    by (auto elim!: AttributeE dest: EvalAttrObjectMissing.IH)
 next
   case EvalAttrModule
   from EvalAttrModule.prems EvalAttrModule.hyps show ?case
