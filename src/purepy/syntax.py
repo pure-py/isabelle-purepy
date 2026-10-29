@@ -717,7 +717,6 @@ PRIMITIVE = {c: x for x, c in PRIM_TY.items()}
 
 
 def ty_expr(e: ast.expr) -> TyExpr | None:
-    """Type expression e in the generated syntax, or None if e is not a type expression"""
     match e:
         case ast.Constant(value=None):
             return Syntax.TyExprPrim(Syntax.NoneType())
