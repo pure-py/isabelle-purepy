@@ -126,7 +126,10 @@ where
 "run_expr (Suc n) \<rho> (ExprAttribute e x) =
   flet (run_expr n \<rho> e) (\<lambda>v. case fields_of v of
     Some xvs \<Rightarrow> (case map_of xvs x of Some u \<Rightarrow> Done (Val u) | None \<Rightarrow> Done (Aborts AttributeError))
-  | None \<Rightarrow> Done (Aborts Excluded))" |
+  | None \<Rightarrow>
+      (case module_env_of v of
+         Some \<rho>' \<Rightarrow> (case fmlookup \<rho>' x of Some u \<Rightarrow> Done (Val u) | None \<Rightarrow> Done (Aborts AttributeError))
+       | None \<Rightarrow> Done (Aborts Excluded)))" |
 "run_expr (Suc n) \<rho> (ExprCall e (es, kws)) =
   flet (run_expr n \<rho> e) (\<lambda>v. case class_of v of
     Some C \<Rightarrow>
@@ -152,6 +155,7 @@ where
                 | None \<Rightarrow> Stuck)
               else Done (Aborts TypeError))
           else Stuck
+      | VPrim f \<Rightarrow> Done (prim_meaning f us)
       | _ \<Rightarrow> Done (Aborts TypeError)))" |
 
 "run_exprs 0 \<rho> es = OutOfFuel" |

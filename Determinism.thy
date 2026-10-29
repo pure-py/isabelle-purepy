@@ -184,6 +184,14 @@ next
   from EvalAttrMissing.prems EvalAttrMissing.hyps show ?case
     by (auto elim!: AttributeE dest: EvalAttrMissing.IH)
 next
+  case EvalAttrModule
+  from EvalAttrModule.prems EvalAttrModule.hyps show ?case
+    by (auto elim!: AttributeE dest: EvalAttrModule.IH)
+next
+  case EvalAttrModuleMissing
+  from EvalAttrModuleMissing.prems EvalAttrModuleMissing.hyps show ?case
+    by (auto elim!: AttributeE dest: EvalAttrModuleMissing.IH)
+next
   case EvalAttrNonObject
   from EvalAttrNonObject.prems EvalAttrNonObject.hyps show ?case
     by (auto elim!: AttributeE dest: EvalAttrNonObject.IH)
@@ -228,6 +236,10 @@ next
     moreover from EvalCallDefArity.IH(2)[OF CallDef(4)] have "us' = us" by simp
     ultimately show ?thesis using CallDef(5) EvalCallDefArity.hyps(4) by simp
   qed (use EvalCallDefArity.hyps in \<open>auto dest: EvalCallDefArity.IH\<close>)
+next
+  case EvalCallPrim
+  from EvalCallPrim.prems EvalCallPrim.hyps show ?case
+    by (auto elim!: CallE dest: EvalCallPrim.IH)
 next
   case EvalCallNonFun
   from EvalCallNonFun.prems EvalCallNonFun.hyps show ?case

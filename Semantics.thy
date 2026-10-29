@@ -6,6 +6,9 @@ begin
 (* Free o for outcomes, as in the spec *)
 no_notation (ASCII) comp (infixl \<open>o\<close> 55)
 
+(* Predefined functions, each standing for its meaning prim_meaning *)
+datatype prim = PrimLen | PrimRound | PrimExit
+
 datatype val =
       VLit lit
     | VList "val list"
@@ -15,8 +18,12 @@ datatype val =
     | VObject name "(var \<times> val) list"
     | VLamClosure "(var, val) fmap" "var list" expr  ("Lam'(_, _, _')")
     | VDefClosure "(var, val) fmap" "func list" nat  ("Def'(_, _, _')")
+    | VModStub name
+    | VModLoaded name "(var, val) fmap"
     | VTypeAlias name "type_def list" nat
     | VUnbound
+    | VPrim prim
+    | VOpaque name
 
 type_synonym env = "(var, val) fmap"
 abbreviation \<epsilon> :: env where "\<epsilon> \<equiv> fmempty"
@@ -97,30 +104,59 @@ where
 "is_closure Def(_, _, _) = True" |
 "is_closure _ = False"
 
+fun is_prim :: "val \<Rightarrow> bool"
+where
+"is_prim (VPrim _) = True" |
+"is_prim _ = False"
+
+fun is_loaded_module :: "val \<Rightarrow> bool"
+where
+"is_loaded_module (VModLoaded _ _) = True" |
+"is_loaded_module _ = False"
+
+fun module_env_of :: "val \<Rightarrow> (var, val) fmap option"
+where
+"module_env_of (VModLoaded _ \<rho>) = Some \<rho>" |
+"module_env_of _ = None"
+
+(* Opaque value of a predefined class of builtins, such as int, which Python matches by an instance test *)
+fun opaque_builtin :: "val \<Rightarrow> bool"
+where
+"opaque_builtin (VOpaque (x, [y])) = ((x, []) = builtins)" |
+"opaque_builtin _ = False"
+
+(* Literals by value; a Boolean and a number, which Python compares numerically, give Undef *)
+fun eq_lit :: "lit \<Rightarrow> lit \<Rightarrow> bool result"
+where
+"eq_lit (LitInt n) (LitInt n') = Val (n = n')" |
+"eq_lit (LitInt n) (LitFloat x') = Val (real_of_int n = x')" |
+"eq_lit (LitFloat x) (LitInt n') = Val (x = real_of_int n')" |
+"eq_lit (LitFloat x) (LitFloat x') = Val (x = x')" |
+"eq_lit (LitString w) (LitString w') = Val (w = w')" |
+"eq_lit (LitBool b) (LitBool b') = Val (b = b')" |
+"eq_lit LitNone LitNone = Val True" |
+"eq_lit (LitBool _) (LitInt _) = Aborts Undef" |
+"eq_lit (LitBool _) (LitFloat _) = Aborts Undef" |
+"eq_lit (LitInt _) (LitBool _) = Aborts Undef" |
+"eq_lit (LitFloat _) (LitBool _) = Aborts Undef" |
+"eq_lit _ _ = Val False"
+
+(* By the form of the first value, then of the second: patterns on both would make pattern completion over the
+   values very slow. Undefined between two functions, closures or primitives, which Python compares by identity *)
 fun eq :: "val \<Rightarrow> val \<Rightarrow> bool result" and eq_elems :: "val list \<Rightarrow> val list \<Rightarrow> bool result"
 where
-"eq (VLit (LitInt n)) (VLit (LitInt n')) = Val (n = n')" |
-"eq (VLit (LitInt n)) (VLit (LitFloat x')) = Val (real_of_int n = x')" |
-"eq (VLit (LitFloat x)) (VLit (LitInt n')) = Val (x = real_of_int n')" |
-"eq (VLit (LitFloat x)) (VLit (LitFloat x')) = Val (x = x')" |
-"eq (VLit (LitString w)) (VLit (LitString w')) = Val (w = w')" |
-"eq (VLit (LitBool b)) (VLit (LitBool b')) = Val (b = b')" |
-"eq (VLit LitNone) (VLit LitNone) = Val True" |
-"eq (VLit (LitBool _)) (VLit (LitInt _)) = Aborts Undef" |
-"eq (VLit (LitBool _)) (VLit (LitFloat _)) = Aborts Undef" |
-"eq (VLit (LitInt _)) (VLit (LitBool _)) = Aborts Undef" |
-"eq (VLit (LitFloat _)) (VLit (LitBool _)) = Aborts Undef" |
-"eq (VList vs) (VList vs') = eq_elems vs vs'" |
-"eq (VTuple vs) (VTuple vs') = eq_elems vs vs'" |
-"eq (VDict \<delta>) (VDict \<delta>') =
-  (if set (map fst \<delta>) = set (map fst \<delta>') then eq_elems (map snd \<delta>) (map (the \<circ> map_of \<delta>') (map fst \<delta>))
-   else Val False)" |
-"eq Lam(_, _, _) Lam(_, _, _) = Aborts Undef" |
-"eq Lam(_, _, _) Def(_, _, _) = Aborts Undef" |
-"eq Def(_, _, _) Lam(_, _, _) = Aborts Undef" |
-"eq Def(_, _, _) Def(_, _, _) = Aborts Undef" |
-"eq (VObject C xvs) (VObject D yvs) = (if C = D then eq_elems (map snd xvs) (map snd yvs) else Val False)" |
-"eq _ _ = Val False" |
+"eq (VLit l) v' = (case v' of VLit l' \<Rightarrow> eq_lit l l' | _ \<Rightarrow> Val False)" |
+"eq (VList vs) v' = (case v' of VList vs' \<Rightarrow> eq_elems vs vs' | _ \<Rightarrow> Val False)" |
+"eq (VTuple vs) v' = (case v' of VTuple vs' \<Rightarrow> eq_elems vs vs' | _ \<Rightarrow> Val False)" |
+"eq (VDict \<delta>) v' =
+  (case v' of
+     VDict \<delta>' \<Rightarrow>
+       if set (map fst \<delta>) = set (map fst \<delta>') then eq_elems (map snd \<delta>) (map (the \<circ> map_of \<delta>') (map fst \<delta>))
+       else Val False
+   | _ \<Rightarrow> Val False)" |
+"eq (VObject C xvs) v' =
+  (case v' of VObject D yvs \<Rightarrow> if C = D then eq_elems (map snd xvs) (map snd yvs) else Val False | _ \<Rightarrow> Val False)" |
+"eq v v' = (if (is_closure v \<or> is_prim v) \<and> (is_closure v' \<or> is_prim v') then Aborts Undef else Val False)" |
 
 "eq_elems [] [] = Val True" |
 "eq_elems (v # vs) (v' # vs') =
@@ -244,10 +280,34 @@ where
 "iter (VDict \<delta>) = Some (map (\<lambda>(w, _). VLit (LitString w)) \<delta>)" |
 "iter v = elems v"
 
+(* Nearest integer, ties to even *)
+definition round_even :: "real \<Rightarrow> int"
+where
+"round_even x =
+  (let n = \<lfloor>x\<rfloor>; d = x - real_of_int n in
+   if d < 1 / 2 then n else if 1 / 2 < d then n + 1 else if even n then n else n + 1)"
+
+(* Meanings of the predefined functions; with floats as reals, round has no infinite or nan argument *)
+fun prim_meaning :: "prim \<Rightarrow> val list \<Rightarrow> val result"
+where
+"prim_meaning PrimLen [v] = (case iter v of Some vs \<Rightarrow> Val (VLit (LitInt (of_nat (length vs)))) | None \<Rightarrow> Aborts TypeError)" |
+"prim_meaning PrimRound [VLit (LitBool _)] = Aborts Excluded" |
+"prim_meaning PrimRound [VLit (LitInt n)] = Val (VLit (LitInt n))" |
+"prim_meaning PrimRound [VLit (LitFloat x)] = Val (VLit (LitInt (round_even x)))" |
+"prim_meaning PrimRound [v, v'] =
+  (if (as_real v \<noteq> None \<or> is_bool v) \<and> (case v' of VLit (LitInt _) \<Rightarrow> True | VLit (LitBool _) \<Rightarrow> True | VLit LitNone \<Rightarrow> True | _ \<Rightarrow> False)
+   then Aborts Excluded else Aborts TypeError)" |
+"prim_meaning PrimExit [VLit (LitInt n)] = Aborts (SystemExit n)" |
+"prim_meaning PrimExit [] = Aborts Excluded" |
+"prim_meaning PrimExit [v] = Aborts Excluded" |
+"prim_meaning _ _ = Aborts TypeError"
+
 fun getitem :: "val \<Rightarrow> val \<Rightarrow> val result"
 where
-"getitem (VDict \<delta>) (VLit (LitString w)) = (case map_of \<delta> w of Some v \<Rightarrow> Val v | None \<Rightarrow> Aborts KeyError)" |
-"getitem (VDict \<delta>) _ = Aborts Excluded" |
+"getitem (VDict \<delta>) v' =
+  (case v' of
+     VLit (LitString w) \<Rightarrow> (case map_of \<delta> w of Some v \<Rightarrow> Val v | None \<Rightarrow> Aborts KeyError)
+   | _ \<Rightarrow> Aborts Excluded)" |
 "getitem v v' =
   (case (elems v, v') of
      (Some vs, VLit (LitInt n)) \<Rightarrow>
@@ -257,6 +317,18 @@ where
        else Aborts IndexError
    | (Some vs, VLit (LitBool _)) \<Rightarrow> Aborts Excluded
    | _ \<Rightarrow> Aborts TypeError)"
+
+(* Value denoted by a name: a simple name looked up directly, a qualified name in the environment of the loaded
+   module denoted by its prefix; None if the prefix denotes a module stub or a value other than a module *)
+fun resolve_path :: "val option \<Rightarrow> var list \<Rightarrow> val option"
+where
+"resolve_path v [] = v" |
+"resolve_path (Some (VModLoaded _ \<rho>')) (y # ys) = resolve_path (fmlookup \<rho>' y) ys" |
+"resolve_path _ _ = None"
+
+definition resolve :: "env \<Rightarrow> name \<Rightarrow> val option"
+where
+"resolve \<rho> q = resolve_path (fmlookup \<rho> (fst q)) (snd q)"
 
 datatype match_result = Match env | NoMatch | MatchAborts termination_kind
 
@@ -298,7 +370,8 @@ where
    else None)"
 
 (* The head of a constructor pattern resolves as in Python: NameError if its first name is unbound, AttributeError if
-   a later name is not found (there are no module values yet), and TypeError if it denotes a value other than a class.
+   a later name is not found, Excluded if it denotes a predefined class of builtins, which Python matches by an
+   instance test, and TypeError if it denotes any other value which is not a class.
    Sub-patterns of a class C match the fields of an object whose class has C among its ancestors: positional ones in
    field order, then keyword ones as written; TypeError for excess positional sub-patterns, a keyword sub-pattern for
    a field already matched by position, or a positional sub-pattern of range, as in Python; Excluded if they otherwise
@@ -323,8 +396,11 @@ where
   (case fmlookup \<rho> x of
      None \<Rightarrow> MatchAborts NameError
    | Some VUnbound \<Rightarrow> MatchAborts NameError
-   | Some u \<Rightarrow>
-       if xs \<noteq> [] then MatchAborts AttributeError else
+   | Some _ \<Rightarrow>
+       case resolve \<rho> (x, xs) of
+         None \<Rightarrow> MatchAborts AttributeError
+       | Some u \<Rightarrow>
+       if opaque_builtin u then MatchAborts Excluded else
        case class_of u of
          None \<Rightarrow> MatchAborts TypeError
        | Some C \<Rightarrow>
@@ -427,8 +503,12 @@ EvalAttrObject:
   "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val (VObject C xvs) ; map_of xvs x = Some v \<rbrakk> \<Longrightarrow> \<rho>, ExprAttribute e x \<Rightarrow>\<^sub>e Val v" |
 EvalAttrMissing:
   "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val (VObject C xvs) ; map_of xvs x = None \<rbrakk> \<Longrightarrow> \<rho>, ExprAttribute e x \<Rightarrow>\<^sub>e Aborts AttributeError" |
+EvalAttrModule:
+  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val (VModLoaded q' \<rho>') ; fmlookup \<rho>' x = Some v \<rbrakk> \<Longrightarrow> \<rho>, ExprAttribute e x \<Rightarrow>\<^sub>e Val v" |
+EvalAttrModuleMissing:
+  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val (VModLoaded q' \<rho>') ; fmlookup \<rho>' x = None \<rbrakk> \<Longrightarrow> \<rho>, ExprAttribute e x \<Rightarrow>\<^sub>e Aborts AttributeError" |
 EvalAttrNonObject:
-  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<not> is_object v \<rbrakk> \<Longrightarrow> \<rho>, ExprAttribute e x \<Rightarrow>\<^sub>e Aborts Excluded" |
+  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<not> is_object v ; \<not> is_loaded_module v \<rbrakk> \<Longrightarrow> \<rho>, ExprAttribute e x \<Rightarrow>\<^sub>e Aborts Excluded" |
 EvalAttrFail: "\<rho>, e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, ExprAttribute e x \<Rightarrow>\<^sub>e Aborts \<kappa>" |
 EvalCallLambda:
   "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val Lam(\<rho>', xs, e')
@@ -458,8 +538,10 @@ EvalCallDefArity:
   ; length xps \<noteq> length us
   ; j < length ds
   \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e (es, []) \<Rightarrow>\<^sub>e Aborts TypeError" |
+EvalCallPrim:
+  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val (VPrim f) ; \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Val us \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e (es, []) \<Rightarrow>\<^sub>e prim_meaning f us" |
 EvalCallNonFun:
-  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Val us ; \<not> is_closure v ; \<not> is_class v \<rbrakk>
+  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Val us ; \<not> is_closure v ; \<not> is_prim v ; \<not> is_class v \<rbrakk>
   \<Longrightarrow> \<rho>, ExprCall e (es, []) \<Rightarrow>\<^sub>e Aborts TypeError" |
 EvalCallFail: "\<rho>, e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, ExprCall e (es, kws) \<Rightarrow>\<^sub>e Aborts \<kappa>" |
 EvalCallFailArgs:
