@@ -138,8 +138,8 @@ def at(node: ast.expr | ast.stmt | ast.pattern, term: Any) -> Located:
 
 def located_at(t: Located) -> Pos:
     match t:
-        case Positions.At(pos, _):
-            return pos
+        case Positions.At((line, col), _):
+            return (line, col)
         case _:
             raise AssertionError(f"unlocated term: {t}")
 
