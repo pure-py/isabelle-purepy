@@ -501,6 +501,25 @@ next
     by (auto elim!: EntriesConsE dest: EvalEntriesFailValue.IH)
 qed
 
+inductive_cases TopStmtE: "q, \<rho>, Stmt s \<Rightarrow>\<^sub>t o"
+inductive_cases TopSeqE: "q, \<rho>, TopSeq t t' \<Rightarrow>\<^sub>t o"
+inductive_cases TypesE: "q, \<rho>, TypeDefs \<chi>s \<Rightarrow>\<^sub>t o"
+
+theorem top_det: "q, \<rho>, t \<Rightarrow>\<^sub>t o \<Longrightarrow> q, \<rho>, t \<Rightarrow>\<^sub>t o' \<Longrightarrow> o = o'"
+proof (induction arbitrary: o' rule: eval_top.induct[ih_names])
+  case EvalTopStmt
+  then show ?case by (auto elim!: TopStmtE dest: stmt_det)
+next
+  case EvalTopSeq
+  from EvalTopSeq.prems show ?case by (auto elim!: TopSeqE dest: EvalTopSeq.IH)
+next
+  case EvalTopSeqFail
+  from EvalTopSeqFail.prems show ?case by (auto elim!: TopSeqE dest: EvalTopSeqFail.IH)
+next
+  case EvalTypes
+  then show ?case by (auto elim!: TypesE)
+qed
+
 end
 
 end

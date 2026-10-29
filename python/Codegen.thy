@@ -20,6 +20,7 @@ lemma unop_overloads_code [code]:
 (* A definition or function in the evaluation locale has no code equation of its own *)
 declare evaluation.field_map_def [code] evaluation.match.simps [code]
   evaluation.match_all.simps [code] evaluation.match_dict.simps [code] evaluation.dispatch.simps [code]
+  evaluation.type_value_def [code] evaluation.run_top.simps [code]
 
 (* Natural numbers are target integers, so the evaluator's equations can't match the fuel against 0 and Suc. One
    equation per function tests the fuel; the equations for positive fuel are stated for a step function. *)
@@ -54,7 +55,7 @@ lemmas run_step_code [code] =
   evaluation.run_quals.simps(2-)[folded run_steps_def] evaluation.run_gen.simps(2-)[folded run_steps_def]
   evaluation.run_comp.simps(2-)[folded run_steps_def] evaluation.run_entries.simps(2-)[folded run_steps_def]
 
-export_code check_program evaluation.run_expr evaluation.run_stmt
+export_code check_program evaluation.run_expr evaluation.run_stmt evaluation.run_top
   in Python file_prefix "."
 
 end

@@ -241,6 +241,19 @@ termination
 lemmas eval_fun_induct =
   run_expr_run_exprs_run_stmt_run_elif_run_quals_run_gen_run_comp_run_entries.induct
 
+(* Top-level statements, each plain statement with fuel n; Stuck on a return before a further statement, which no
+   rule covers *)
+primrec run_top :: "nat \<Rightarrow> name \<Rightarrow> env \<Rightarrow> top_stmt \<Rightarrow> outcome fuelled"
+where
+"run_top n q \<rho> (Stmt s) = run_stmt n \<rho> s" |
+"run_top n q \<rho> (TopSeq t t') =
+  (case run_top n q \<rho> t of
+     Done (Assigns \<rho>') \<Rightarrow> map_fuelled (\<lambda>o. Assigns \<rho>' \<otimes>\<^sub>o o) (run_top n q (\<rho> \<otimes> \<rho>') t')
+   | Done (Returns v) \<Rightarrow> Stuck
+   | r \<Rightarrow> r)" |
+"run_top n q \<rho> (TypeDefs \<chi>s) =
+  Done (Assigns (fmap_of_list (map (\<lambda>j. (type_def_name (\<chi>s ! j), type_value q \<chi>s j)) [0..<length \<chi>s])))"
+
 end
 
 end

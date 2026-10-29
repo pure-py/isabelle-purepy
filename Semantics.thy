@@ -15,6 +15,7 @@ datatype val =
     | VObject name "(var \<times> val) list"
     | VLamClosure "(var, val) fmap" "var list" expr  ("Lam'(_, _, _')")
     | VDefClosure "(var, val) fmap" "func list" nat  ("Def'(_, _, _')")
+    | VTypeAlias name "type_def list" nat
     | VUnbound
 
 type_synonym env = "(var, val) fmap"
@@ -569,6 +570,21 @@ EvalEntriesFailValue:
 
 
 lemmas eval_rules = eval_expr_eval_exprs_eval_stmt_eval_elif_eval_quals_eval_gen_eval_comp_eval_entries.intros
+
+(* Value of the name declared by definition i of a mutual type region of module q: as in the spec, the context entry
+   of the definition, an alias value recording the region in place of the context entry's context *)
+definition type_value :: "name \<Rightarrow> type_def list \<Rightarrow> nat \<Rightarrow> val"
+where
+"type_value q \<chi>s i = (case \<chi>s ! i of Dataclass c _ _ _ \<Rightarrow> VClass (snoc q c) | TypeStmt _ _ _ \<Rightarrow> VTypeAlias q \<chi>s i)"
+
+(* Top-level statement t of module q *)
+inductive eval_top :: "name \<Rightarrow> env \<Rightarrow> top_stmt \<Rightarrow> outcome \<Rightarrow> bool"  ("_, _, _ \<Rightarrow>\<^sub>t _" [60,60,0,60] 60)
+where
+EvalTopStmt: "\<rho>, s \<Rightarrow>\<^sub>s o \<Longrightarrow> q, \<rho>, Stmt s \<Rightarrow>\<^sub>t o" |
+EvalTopSeq: "\<lbrakk> q, \<rho>, t \<Rightarrow>\<^sub>t Assigns \<rho>' ; q, \<rho> \<otimes> \<rho>', t' \<Rightarrow>\<^sub>t o \<rbrakk> \<Longrightarrow> q, \<rho>, TopSeq t t' \<Rightarrow>\<^sub>t Assigns \<rho>' \<otimes>\<^sub>o o" |
+EvalTopSeqFail: "q, \<rho>, t \<Rightarrow>\<^sub>t Aborts\<^sub>o \<kappa> \<Longrightarrow> q, \<rho>, TopSeq t t' \<Rightarrow>\<^sub>t Aborts\<^sub>o \<kappa>" |
+EvalTypes:
+  "q, \<rho>, TypeDefs \<chi>s \<Rightarrow>\<^sub>t Assigns (fmap_of_list (map (\<lambda>j. (type_def_name (\<chi>s ! j), type_value q \<chi>s j)) [0..<length \<chi>s]))"
 
 end
 

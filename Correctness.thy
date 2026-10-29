@@ -712,6 +712,32 @@ corollary completeness:
     and completeness_entries: "\<rho>s, e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s dr \<Longrightarrow> \<exists>n. run_entries n \<rho>s e e' = Done dr"
   by (fact completeness_eventually[THEN eventually_happens'[OF sequentially_bot]])+
 
+
+theorem soundness_top: "run_top n q \<rho> t = Done o \<Longrightarrow> q, \<rho>, t \<Rightarrow>\<^sub>t o"
+proof (induction t arbitrary: \<rho> o)
+  case (Stmt s)
+  then show ?case by (auto intro: EvalTopStmt soundness_stmt)
+next
+  case (TopSeq t t')
+  then show ?case
+    by (auto simp: map_fuelled_Done intro: eval_top.intros split: fuelled.splits outcome.splits)
+qed (auto intro: EvalTypes)
+
+theorem completeness_top_eventually: "q, \<rho>, t \<Rightarrow>\<^sub>t o \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_top n q \<rho> t = Done o"
+proof (induction rule: eval_top.induct[ih_names])
+  case EvalTopStmt
+  then show ?case by (simp add: completeness_eventually(3))
+next
+  case EvalTopSeq
+  from EvalTopSeq.IH show ?case by eventually_elim simp
+next
+  case EvalTopSeqFail
+  from EvalTopSeqFail.IH show ?case by eventually_elim simp
+qed simp
+
+corollary completeness_top: "q, \<rho>, t \<Rightarrow>\<^sub>t o \<Longrightarrow> \<exists>n. run_top n q \<rho> t = Done o"
+  by (fact completeness_top_eventually[THEN eventually_happens'[OF sequentially_bot]])
+
 end
 
 end
