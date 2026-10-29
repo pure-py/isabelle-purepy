@@ -231,8 +231,15 @@ next
   have object: "field_map C (take (length es) us) (zip (map fst kws) (drop (length es) us)) = Some yus \<Longrightarrow> xus = yus"
     for yus
     using EvalConstr.hyps(3) by simp
-  from EvalConstr.prems show ?case
+  from EvalConstr.prems EvalConstr.hyps(3) show ?case
     by (auto elim!: CallKwE dest!: callee args args_positional intro: object)
+next
+  case (EvalConstrArity \<rho> e C es kws us)
+  have callee: "\<rho>, e \<Rightarrow>\<^sub>e r \<Longrightarrow> r = Val (VClass C)" for r using EvalConstrArity.IH(1) by fastforce
+  have args: "\<rho>, es @ map snd kws \<Rightarrow>\<^sub>e\<^sub>s r \<Longrightarrow> r = Val us" for r using EvalConstrArity.IH(2) by fastforce
+  then have args_positional: "kws = [] \<Longrightarrow> \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s r \<Longrightarrow> r = Val us" for r by simp
+  from EvalConstrArity.prems EvalConstrArity.hyps(3) show ?case
+    by (auto elim!: CallKwE dest!: callee args args_positional)
 next
   case (EvalConstrFail \<rho> e C es kws \<kappa>)
   have callee: "\<rho>, e \<Rightarrow>\<^sub>e r \<Longrightarrow> r = Val (VClass C)" for r using EvalConstrFail.IH(1) by fastforce

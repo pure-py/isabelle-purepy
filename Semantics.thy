@@ -430,6 +430,10 @@ EvalConstr:
   "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val (VClass C) ; \<rho>, es @ map snd kws \<Rightarrow>\<^sub>e\<^sub>s Val us
   ; field_map C (take (length es) us) (zip (map fst kws) (drop (length es) us)) = Some xus
   \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e (es, kws) \<Rightarrow>\<^sub>e Val (VObject C xus)" |
+EvalConstrArity:
+  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val (VClass C) ; \<rho>, es @ map snd kws \<Rightarrow>\<^sub>e\<^sub>s Val us
+  ; field_map C (take (length es) us) (zip (map fst kws) (drop (length es) us)) = None
+  \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e (es, kws) \<Rightarrow>\<^sub>e Aborts TypeError" |
 EvalConstrFail:
   "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val (VClass C) ; \<rho>, es @ map snd kws \<Rightarrow>\<^sub>e\<^sub>s Aborts \<kappa> \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e (es, kws) \<Rightarrow>\<^sub>e Aborts \<kappa>" |
 

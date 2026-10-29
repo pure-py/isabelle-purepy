@@ -129,7 +129,7 @@ where
       flet (run_exprs n \<rho> (es @ map snd kws)) (\<lambda>us.
         case field_map C (take (length es) us) (zip (map fst kws) (drop (length es) us)) of
           Some xus \<Rightarrow> Done (Val (VObject C xus))
-        | None \<Rightarrow> Stuck)
+        | None \<Rightarrow> Done (Aborts TypeError))
   | None \<Rightarrow>
       if kws \<noteq> [] then Stuck else
       flet (run_exprs n \<rho> es) (\<lambda>us. case v of

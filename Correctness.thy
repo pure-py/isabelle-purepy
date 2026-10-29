@@ -356,6 +356,11 @@ next
     by (rule eventually_sequentially_Suc[THEN iffD1])
       (use EvalConstr.IH in \<open>eventually_elim, insert EvalConstr.hyps(1,3), auto simp: eval_simps\<close>)
 next
+  case EvalConstrArity
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalConstrArity.IH in \<open>eventually_elim, insert EvalConstrArity.hyps(1,3), auto simp: eval_simps\<close>)
+next
   case EvalConstrFail
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
