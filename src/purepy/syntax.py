@@ -6,7 +6,23 @@ from typing import Any
 
 from .generated import Option, Positions, Syntax
 
+# Sorts of the mechanisation, Any until the generator annotates them (pure-py/isabelle-python-codegen#7)
 type Var = str
+type QualifiedName = Any
+type Lit = Any
+type Pat = Any
+type Expr = Any
+type Qualifier = Any
+type TyExpr = Any
+type Ty = Any
+type Import = Any
+type Stmt = Any
+type Func = Any
+type TypeDef = Any
+type TopStmt = Any
+type ModuleBody = Any
+type Program = Any
+type Reason = Any
 # Name as a tuple of variables, hashable unlike the generated form; delete with pure-py/isabelle-purepy#24
 type Name = tuple[Var, ...]
 
@@ -669,24 +685,6 @@ def format_result(result: Unsupported | None, filename: str) -> str:
     if result.line is not None:
         return f"{filename}:{result.line}:{result.col}: {result.msg}"
     return f"{filename}: {result.msg}"
-
-
-# Sorts of the mechanisation, Any until the generator annotates them (pure-py/isabelle-python-codegen#7)
-type QualifiedName = Any
-type Lit = Any
-type Pat = Any
-type Expr = Any
-type Qualifier = Any
-type TyExpr = Any
-type Ty = Any
-type Import = Any
-type Stmt = Any
-type Func = Any
-type TypeDef = Any
-type TopStmt = Any
-type ModuleBody = Any
-type Program = Any
-type Reason = Any
 
 
 def lit(v: object) -> Lit:
