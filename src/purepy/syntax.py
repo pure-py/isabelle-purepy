@@ -674,26 +674,6 @@ def format_result(result: Unsupported | None, filename: str) -> str:
     return f"{filename}: {result.msg}"
 
 
-def lit(v: object) -> Lit:
-    match v:
-        case bool():
-            return Syntax.LitBool(v)
-        case int():
-            return Syntax.LitInt(v)
-        case float():
-            return Syntax.LitFloat(v)
-        case str():
-            return Syntax.LitString(v)
-        case None:
-            return Syntax.LitNone()
-        case _:
-            raise AssertionError(f"unexpected literal: {type(v).__name__}")
-
-
-def qualified_name(q: Name) -> QualifiedName:
-    return (q[0], list(q[1:]))
-
-
 def option(x: Any) -> Any:
     return Option.None_() if x is None else Option.Some(x)
 
@@ -720,6 +700,26 @@ def node(t: Any) -> Any:
             return u
         case _:
             raise AssertionError(f"unlocated term: {t}")
+
+
+def lit(v: object) -> Lit:
+    match v:
+        case bool():
+            return Syntax.LitBool(v)
+        case int():
+            return Syntax.LitInt(v)
+        case float():
+            return Syntax.LitFloat(v)
+        case str():
+            return Syntax.LitString(v)
+        case None:
+            return Syntax.LitNone()
+        case _:
+            raise AssertionError(f"unexpected literal: {type(v).__name__}")
+
+
+def qualified_name(q: Name) -> QualifiedName:
+    return (q[0], list(q[1:]))
 
 
 PRIM_TY = {
