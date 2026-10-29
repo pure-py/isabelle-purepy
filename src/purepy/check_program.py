@@ -60,8 +60,11 @@ def program(bodies: dict[Name, Any]) -> Any:
     return Finite_Map.fmap_of_list([(name(q), body) for q, body in bodies.items()])
 
 
-# Module and reason of an ill-formed program, or None
-def check(M: Any) -> tuple[Any, Any] | None:
+# Module and reason of an ill-formed program
+type IllFormed = tuple[Any, Any]
+
+
+def check(M: Any) -> IllFormed | None:
     match Programs.check_program(M):
         case Option.None_():
             return None
@@ -71,7 +74,7 @@ def check(M: Any) -> tuple[Any, Any] | None:
             raise AssertionError(f"unexpected result: {result}")
 
 
-type Result = tuple[Any, Any] | syntax.Unsupported | None
+type Result = IllFormed | syntax.Unsupported | None
 
 
 def check_program(entry_path: pathlib.Path) -> Result:
@@ -100,9 +103,7 @@ def exit_code(result: Result) -> Exit:
 
 
 # File of the module at fault
-def error_path(
-    result: tuple[Any, Any] | syntax.Unsupported, entry_path: pathlib.Path
-) -> pathlib.Path:
+def error_path(result: IllFormed | syntax.Unsupported, entry_path: pathlib.Path) -> pathlib.Path:
     match result:
         case syntax.Unsupported():
             q = result.module
