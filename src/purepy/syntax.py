@@ -1,5 +1,5 @@
 import ast
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from functools import reduce
 from itertools import takewhile
 from typing import Any
@@ -106,63 +106,14 @@ class ParseError(ParserRejects):
         Exception.__init__(self, self.msg)
 
 
-class PatList(ast.MatchSequence):
-    pass
-
-
-class PatTuple(ast.MatchSequence):
-    pass
-
-
-def map_tree(f: Callable[[ast.AST], ast.AST], node: ast.AST) -> ast.AST:
-    """Rebuild node bottom-up, applying f to each node. Subtrees f leaves alone are shared, not copied."""
-    fields: dict[str, object] = {}
-    for name in node._fields:
-        v = getattr(node, name)
-        match v:
-            case ast.AST():
-                fields[name] = map_tree(f, v)
-            case list():
-                new = [map_tree(f, x) if isinstance(x, ast.AST) else x for x in v]
-                fields[name] = v if all(a is b for a, b in zip(new, v)) else new
-            case _:
-                fields[name] = v
-    unchanged = all(fields[name] is getattr(node, name) for name in node._fields)
-    return f(node if unchanged else ast.copy_location(type(node)(**fields), node))
-
-
-def fold_negative(node: ast.AST) -> ast.AST:
-    """Unary minus applied to a numeric literal is a literal."""
-    match node:
-        case ast.UnaryOp(op=ast.USub(), operand=ast.Constant(value=n)) if isinstance(
-            n, (int, float)
-        ) and not isinstance(n, bool):
-            return ast.copy_location(ast.Constant(value=-n), node)
-        case _:
-            return node
-
-
-def classify_sequence(source: str) -> Callable[[ast.AST], ast.AST]:
-    """AST doesn't record brackets or parentheses; classify sequence patterns by source text."""
-
-    def classify(node: ast.AST) -> ast.AST:
-        match node:
-            case ast.MatchSequence(patterns=ps):
-                segment = ast.get_source_segment(source, node)
-                assert segment is not None
-                if segment.startswith("["):
-                    return ast.copy_location(PatList(patterns=ps), node)
-                return ast.copy_location(PatTuple(patterns=ps), node)
-            case _:
-                return node
-
-    return classify
-
-
+# Each sequence pattern is marked as a list or not, since the tree doesn't record the brackets
 def parse(source: str, filename: str) -> ast.Module:
-    classify = classify_sequence(source)
-    m = map_tree(lambda node: classify(fold_negative(node)), ast.parse(source, filename=filename))
-    assert isinstance(m, ast.Module)
+    m = ast.parse(source, filename=filename)
+    for node_ in ast.walk(m):
+        if isinstance(node_, ast.MatchSequence):
+            segment = ast.get_source_segment(source, node_)
+            assert segment is not None
+            setattr(node_, "list", segment.startswith("["))  # noqa: B010
     return m
 
 
@@ -302,6 +253,10 @@ def ty_expr(e: ast.expr) -> TyExpr | None:
             match s:
                 case ast.Constant(value=bool() | int() | str() | None as v):
                     return Syntax.TyExprLiteral(lit(v))
+                case ast.UnaryOp(op=ast.USub(), operand=ast.Constant(value=int() as n)) if (
+                    type(n) is not bool
+                ):
+                    return Syntax.TyExprLiteral(lit(-n))
                 case _:
                     return None
         case ast.Subscript(value=ast.Name(id="Callable"), slice=s):
@@ -415,6 +370,10 @@ def expr_node(e: ast.expr) -> Expr:
             raise SyntacticallyExcluded(e, "identity operator (is/is not)")
         case ast.Compare(left=e_, ops=[op], comparators=[e__]):
             return Syntax.ExprBinOp(BOP[type(op)](), expr(e_), expr(e__))
+        case ast.UnaryOp(op=ast.USub(), operand=ast.Constant(value=int() | float() as n)) if (
+            type(n) is not bool
+        ):
+            return Syntax.ExprLiteral(lit(-n))
         case ast.UnaryOp(op=op) if type(op) not in UOP:
             raise SyntacticallyExcluded(
                 e, f"unary operator '{SYMBOL.get(type(op), type(op).__name__)}'"
@@ -528,6 +487,10 @@ def pat_node(p: ast.pattern) -> Pat:
     match p:
         case ast.MatchValue(value=ast.Constant(value=int() | float() | str() as v)):
             return Syntax.PatLiteral(lit(v))
+        case ast.MatchValue(
+            value=ast.UnaryOp(op=ast.USub(), operand=ast.Constant(value=int() | float() as n))
+        ) if type(n) is not bool:
+            return Syntax.PatLiteral(lit(-n))
         case ast.MatchValue(value=ast.Attribute()):
             raise SyntacticallyExcluded(p, "attribute value patterns")
         case ast.MatchValue():
@@ -540,9 +503,9 @@ def pat_node(p: ast.pattern) -> Pat:
             return Syntax.PatVar(x)
         case ast.MatchAs(pattern=ast.pattern() as p_, name=str(x)):
             return Syntax.PatAs(pat(p_), x)
-        case PatList(patterns=ps):
+        case ast.MatchSequence(patterns=ps) if getattr(p, "list", False):
             return Syntax.PatList([pat(p_) for p_ in ps])
-        case PatTuple(patterns=ps):
+        case ast.MatchSequence(patterns=ps):
             return Syntax.PatTuple([pat(p_) for p_ in ps])
         case ast.MatchClass(cls=c, patterns=ps, kwd_attrs=xs, kwd_patterns=qs):
             q = name(c)
