@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Copy the generated modules into a package directory, their imports of one another made relative"""
+"""Generated modules copied into the package, with relative imports between them"""
 
 import pathlib
 import re
