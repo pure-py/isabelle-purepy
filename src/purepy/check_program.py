@@ -95,21 +95,19 @@ def exit_code(result: Result) -> Exit:
             return Exit.OK
         case syntax.Unsupported():
             return Exit(result.exit_code)
-        case (_, Reasons.ImportCycle()):
-            return Exit.ILL_FORMED_PROGRAM
         case _:
             return Exit.ILL_FORMED
 
 
-# File of the module at fault, or of the entry module for a program-level error
-def error_path(result: Result, entry_path: pathlib.Path) -> pathlib.Path:
+# File of the module at fault
+def error_path(
+    result: tuple[Any, Any] | syntax.Unsupported, entry_path: pathlib.Path
+) -> pathlib.Path:
     match result:
         case syntax.Unsupported():
             q = result.module
-        case ((x, xs), r) if not isinstance(r, Reasons.ImportCycle):
+        case ((x, xs), _):
             q = Name((x, *xs))
-        case _:
-            q = None
     return entry_path if q is None or q == MAIN else module_path(q, entry_path.parent)
 
 
@@ -126,4 +124,5 @@ def format_result(result: Result, filename: str) -> str:
 
 
 def format_program_result(result: Result, entry_path: pathlib.Path) -> str:
-    return format_result(result, str(error_path(result, entry_path)))
+    path = entry_path if result is None else error_path(result, entry_path)
+    return format_result(result, str(path))
