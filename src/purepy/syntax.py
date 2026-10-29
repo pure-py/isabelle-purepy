@@ -195,19 +195,16 @@ def check_syntax_stmt(node: ast.stmt) -> None:
                 case ast.Attribute():
                     raise NotAllowed(node, "attribute assignment")
                 case ast.Name():
-                    check_syntax_expr(node.value)
+                    pass
                 case _:
                     raise NotAllowed(node, "unpacking assignment")
         case ast.Return():
-            if node.value is not None:
-                check_syntax_expr(node.value)
+            pass
         case ast.If():
-            check_syntax_expr(node.test)
             check_syntax_body(node.body)
             check_syntax_body(node.orelse)
         case ast.FunctionDef():
             check_syntax_type_params(node)
-            check_syntax_arguments(node.args)
             if len(node.decorator_list) > 0:
                 raise NotAllowed(node, "decorators")
             if any(a.annotation is None for a in node.args.args):
@@ -216,20 +213,14 @@ def check_syntax_stmt(node: ast.stmt) -> None:
                 raise NotAllowed(node, "unannotated return type")
             check_syntax_annotation(node.returns)
             check_syntax_body(node.body)
-        case ast.Expr():
-            check_syntax_expr(node.value)
-        case ast.Assert():
-            check_syntax_expr(node.test)
-            if node.msg is not None:
-                check_syntax_expr(node.msg)
+        case ast.Expr() | ast.Assert():
+            pass
         case ast.AugAssign():
             raise NotAllowed(node, "augmented assignment (+=, etc.)")
         case ast.AnnAssign():
             if not isinstance(node.target, ast.Name):
                 raise NotAllowed(node, "assignment target other than a simple name")
             check_syntax_annotation(node.annotation)
-            if node.value is not None:
-                check_syntax_expr(node.value)
         case ast.Delete():
             raise NotAllowed(node, "del")
         case ast.For():
@@ -255,7 +246,6 @@ def check_syntax_stmt(node: ast.stmt) -> None:
         case ast.TypeAlias():
             raise NotAllowed(node, "type statement outside the module top level")
         case ast.Match():
-            check_syntax_expr(node.subject)
             for case in node.cases:
                 if case.guard is not None:
                     raise NotAllowed(case, "case guards")
@@ -393,114 +383,6 @@ def check_syntax_pattern(node: ast.pattern) -> None:
             raise NotAllowed(node, f"{type(node).__name__} pattern")
 
 
-def check_syntax_expr(node: ast.expr) -> None:
-    match node:
-        case ast.Constant():
-            if isinstance(node.value, (int, float, str, bool, type(None))):
-                return
-            raise NotAllowed(node, f"{type(node.value).__name__} literal")
-        case ast.Name():
-            pass
-        case ast.BinOp():
-            allowed = (
-                ast.Add,
-                ast.Sub,
-                ast.Mult,
-                ast.Div,
-                ast.FloorDiv,
-                ast.Mod,
-                ast.Pow,
-                ast.BitOr,
-            )
-            if not isinstance(node.op, allowed):
-                sym = OP_SYMBOLS.get(type(node.op), type(node.op).__name__)
-                raise NotAllowed(node, f"binary operator '{sym}'")
-            check_syntax_expr(node.left)
-            check_syntax_expr(node.right)
-        case ast.UnaryOp():
-            if isinstance(node.op, (ast.Not, ast.UAdd, ast.USub)):
-                check_syntax_expr(node.operand)
-                return
-            sym = OP_SYMBOLS.get(type(node.op), type(node.op).__name__)
-            raise NotAllowed(node, f"unary operator '{sym}'")
-        case ast.BoolOp():
-            if len(node.values) > 2:
-                raise NotAllowed(node, "chained boolean operator")
-            for v in node.values:
-                check_syntax_expr(v)
-        case ast.Compare():
-            if len(node.ops) > 1:
-                raise NotAllowed(node, "chained comparison")
-            for op in node.ops:
-                if isinstance(op, (ast.Is, ast.IsNot)):
-                    raise NotAllowed(node, "identity operator (is/is not)")
-            check_syntax_expr(node.left)
-            for c in node.comparators:
-                check_syntax_expr(c)
-        case ast.Call():
-            check_syntax_expr(node.func)
-            for a in node.args:
-                check_syntax_expr(a)
-            for k in node.keywords:
-                if k.arg is None:
-                    raise NotAllowed(k, "dictionary unpacking in argument list")
-                check_syntax_expr(k.value)
-            dup = duplicate([k.arg for k in node.keywords])
-            if dup is not None:
-                raise NotAllowed(node, f"duplicate keyword argument {dup}")
-        case ast.IfExp():
-            check_syntax_expr(node.test)
-            check_syntax_expr(node.body)
-            check_syntax_expr(node.orelse)
-        case ast.Lambda():
-            check_syntax_arguments(node.args)
-            check_syntax_expr(node.body)
-        case ast.List() | ast.Tuple():
-            for e in node.elts:
-                check_syntax_expr(e)
-        case ast.Dict():
-            for key in node.keys:
-                if key is None:
-                    raise NotAllowed(node, "dictionary unpacking")
-                check_syntax_expr(key)
-            for v in node.values:
-                check_syntax_expr(v)
-        case ast.Set():
-            raise NotAllowed(node, "set literals")
-        case ast.Attribute():
-            check_syntax_expr(node.value)
-        case ast.Subscript():
-            check_syntax_expr(node.value)
-            check_syntax_expr(node.slice)
-        case ast.ListComp():
-            check_syntax_expr(node.elt)
-            for g in node.generators:
-                check_syntax_generator(g)
-        case ast.DictComp():
-            check_syntax_expr(node.key)
-            check_syntax_expr(node.value)
-            for g in node.generators:
-                check_syntax_generator(g)
-        case ast.SetComp():
-            raise NotAllowed(node, "set comprehensions")
-        case ast.Slice():
-            raise NotAllowed(node, "slicing")
-        case ast.GeneratorExp():
-            raise NotAllowed(node, "generator expressions")
-        case ast.NamedExpr():
-            raise NotAllowed(node, "walrus operator (:=)")
-        case ast.Starred():
-            raise NotAllowed(node, "starred expressions")
-        case ast.Await():
-            raise NotAllowed(node, "async")
-        case ast.Yield() | ast.YieldFrom():
-            raise NotAllowed(node, "yield")
-        case ast.JoinedStr() | ast.FormattedValue():
-            raise NotAllowed(node, "f-strings")
-        case _:
-            raise NotAllowed(node, f"{type(node).__name__} expression")
-
-
 def check_syntax_body(stmts: list[ast.stmt]) -> None:
     for s in stmts:
         check_syntax_stmt(s)
@@ -558,41 +440,11 @@ def returns_outside_function(s: ast.stmt) -> list[ast.Return]:
             return []
 
 
-def check_syntax_generator(node: ast.comprehension) -> None:
-    if node.is_async:
-        raise NotAllowed(node, "async comprehensions")
-    if not isinstance(node.target, ast.Name):
-        raise NotAllowed(node, "unpacking in comprehensions")
-    check_syntax_expr(node.iter)
-    for i in node.ifs:
-        check_syntax_expr(i)
-
-
 def check_syntax_annotation(node: ast.expr | None) -> None:
     if node is None:
         return
     if ty_expr(node) is None:
         raise NotAllowed(node, "annotation that is not a type expression")
-
-
-def check_syntax_arguments(node: ast.arguments) -> None:
-    if node.vararg is not None:
-        raise NotAllowed(node, "*args")
-    if node.kwarg is not None:
-        raise NotAllowed(node, "**kwargs")
-    if len(node.kwonlyargs) > 0:
-        raise NotAllowed(node, "keyword-only arguments")
-    if len(node.defaults) > 0:
-        raise NotAllowed(node, "default arguments")
-    if len(node.kw_defaults) > 0:
-        raise NotAllowed(node, "default arguments")
-    if len(node.posonlyargs) > 0:
-        raise NotAllowed(node, "positional-only arguments")
-    for a in node.args:
-        check_syntax_annotation(a.annotation)
-    dup = duplicate([a.arg for a in node.args])
-    if dup is not None:
-        raise NotAllowed(node, f"duplicate parameter {dup}")
 
 
 def check_syntax_module(node: ast.Module) -> Unsupported | None:
@@ -672,17 +524,6 @@ def extend_type_region(
     if isinstance(head, (ast.ClassDef, ast.TypeAlias)):
         return extend_type_region(region + [head], rest[1:])
     return [region] + statements(rest)
-
-
-def dict_keys(e: ast.Dict) -> list[ast.expr]:
-    keys = [k for k in e.keys if k is not None]
-    assert len(keys) == len(e.keys)
-    return keys
-
-
-def target_name(g: ast.comprehension) -> str:
-    assert isinstance(g.target, ast.Name)
-    return g.target.id
 
 
 def type_param_names(node: ast.FunctionDef | ast.ClassDef | ast.TypeAlias) -> tuple[Var, ...]:
@@ -788,8 +629,10 @@ def ty_exprs(es: list[ast.expr]) -> list[TyExpr] | None:
 
 
 def annotation(e: ast.expr | None) -> TyExpr:
-    psi = None if e is None else ty_expr(e)
-    assert psi is not None  # missing and malformed annotations rejected by the parser
+    assert e is not None  # missing annotations rejected by the parser
+    psi = ty_expr(e)
+    if psi is None:
+        raise NotAllowed(e, "annotation that is not a type expression")
     return psi
 
 
@@ -830,27 +673,49 @@ def expr_node(e: ast.expr) -> Expr:
         case ast.Name(id=x):
             return Syntax.ExprVar(x)
         case ast.Constant(value=v):
+            if not isinstance(v, (int, float, str, bool, type(None))):
+                raise NotAllowed(e, f"{type(v).__name__} literal")
             return Syntax.ExprLiteral(lit(v))
         case ast.Call(func=f, args=es, keywords=ks):
-            return Syntax.ExprCall(expr(f), ([expr(e_) for e_ in es], [keyword(k) for k in ks]))
-        case ast.Dict(values=vs):
-            return Syntax.ExprDict([(expr(k), expr(v)) for k, v in zip(dict_keys(e), vs)])
+            f_ = expr(f)
+            es_ = [expr(e_) for e_ in es]
+            ks_ = [keyword(k) for k in ks]
+            dup = duplicate([k.arg for k in ks])
+            if dup is not None:
+                raise NotAllowed(e, f"duplicate keyword argument {dup}")
+            return Syntax.ExprCall(f_, (es_, ks_))
+        case ast.Dict(keys=ks, values=vs):
+            if any(k is None for k in ks):
+                raise NotAllowed(e, "dictionary unpacking")
+            ks_ = [expr(k) for k in ks if k is not None]
+            return Syntax.ExprDict(list(zip(ks_, [expr(v) for v in vs])))
         case ast.Attribute(value=e_, attr=x):
             return Syntax.ExprAttribute(expr(e_), x)
         case ast.Subscript(value=e_, slice=e__):
             return Syntax.ExprSubscript(expr(e_), expr(e__))
+        case ast.BinOp(op=op) if type(op) not in BOP:
+            raise NotAllowed(e, f"binary operator '{OP_SYMBOLS.get(type(op), type(op).__name__)}'")
         case ast.BinOp(left=e_, op=op, right=e__):
             return Syntax.ExprBinOp(BOP[type(op)](), expr(e_), expr(e__))
+        case ast.Compare(ops=[_, _, *_]):
+            raise NotAllowed(e, "chained comparison")
+        case ast.Compare(ops=[ast.Is() | ast.IsNot()]):
+            raise NotAllowed(e, "identity operator (is/is not)")
         case ast.Compare(left=e_, ops=[op], comparators=[e__]):
             return Syntax.ExprBinOp(BOP[type(op)](), expr(e_), expr(e__))
+        case ast.UnaryOp(op=op) if type(op) not in UOP:
+            raise NotAllowed(e, f"unary operator '{OP_SYMBOLS.get(type(op), type(op).__name__)}'")
         case ast.UnaryOp(op=op, operand=e_):
             return Syntax.ExprUnOp(UOP[type(op)](), expr(e_))
+        case ast.BoolOp(values=[_, _, _, *_]):
+            raise NotAllowed(e, "chained boolean operator")
         case ast.BoolOp(op=ast.And(), values=[e_, e__]):
             return Syntax.ExprAnd(expr(e_), expr(e__))
         case ast.BoolOp(op=ast.Or(), values=[e_, e__]):
             return Syntax.ExprOr(expr(e_), expr(e__))
         case ast.IfExp(test=e_, body=e1, orelse=e2):
-            return Syntax.ExprCond(expr(e1), expr(e_), expr(e2))
+            e_t = expr(e_)
+            return Syntax.ExprCond(expr(e1), e_t, expr(e2))
         case ast.List(elts=es):
             return Syntax.ExprList([expr(e_) for e_ in es])
         case ast.Tuple(elts=es):
@@ -858,28 +723,72 @@ def expr_node(e: ast.expr) -> Expr:
         case ast.ListComp(elt=e_, generators=gs):
             return Syntax.ExprListComp(expr(e_), qualifiers(gs))
         case ast.DictComp(key=e_, value=e__, generators=gs):
-            return Syntax.ExprDictComp(expr(e_), expr(e__), qualifiers(gs))
+            k = expr(e_)
+            return Syntax.ExprDictComp(k, expr(e__), qualifiers(gs))
         case ast.Lambda(args=args, body=e_):
-            return Syntax.ExprLambda([a.arg for a in args.args], expr(e_))
+            xs = [a.arg for a in params(args)]
+            return Syntax.ExprLambda(xs, expr(e_))
+        case ast.Set():
+            raise NotAllowed(e, "set literals")
+        case ast.SetComp():
+            raise NotAllowed(e, "set comprehensions")
+        case ast.Slice():
+            raise NotAllowed(e, "slicing")
+        case ast.GeneratorExp():
+            raise NotAllowed(e, "generator expressions")
+        case ast.NamedExpr():
+            raise NotAllowed(e, "walrus operator (:=)")
+        case ast.Starred():
+            raise NotAllowed(e, "starred expressions")
+        case ast.Await():
+            raise NotAllowed(e, "async")
+        case ast.Yield() | ast.YieldFrom():
+            raise NotAllowed(e, "yield")
+        case ast.JoinedStr() | ast.FormattedValue():
+            raise NotAllowed(e, "f-strings")
         case _:
-            raise AssertionError(f"unexpected expression: {type(e).__name__}")
+            raise NotAllowed(e, f"{type(e).__name__} expression")
 
 
 def keyword(k: ast.keyword) -> tuple[str, Expr]:
-    assert k.arg is not None  # dictionary unpacking rejected by the parser
+    if k.arg is None:
+        raise NotAllowed(k, "dictionary unpacking in argument list")
     return (k.arg, expr(k.value))
+
+
+def params(args: ast.arguments) -> list[ast.arg]:
+    if args.vararg is not None:
+        raise NotAllowed(args, "*args")
+    if args.kwarg is not None:
+        raise NotAllowed(args, "**kwargs")
+    if len(args.kwonlyargs) > 0:
+        raise NotAllowed(args, "keyword-only arguments")
+    if len(args.defaults) > 0 or len(args.kw_defaults) > 0:
+        raise NotAllowed(args, "default arguments")
+    if len(args.posonlyargs) > 0:
+        raise NotAllowed(args, "positional-only arguments")
+    dup = duplicate([a.arg for a in args.args])
+    if dup is not None:
+        raise NotAllowed(args, f"duplicate parameter {dup}")
+    return args.args
 
 
 # A generator is located at its target, since the parsed form has no position for the generator itself
 def qualifiers(gs: list[ast.comprehension]) -> list[Qualifier]:
-    return [
-        q
-        for g in gs
-        for q in [
-            at(g.target, Syntax.Generator(target_name(g), expr(g.iter))),
-            *(at(c, Syntax.Guard(expr(c))) for c in g.ifs),
-        ]
-    ]
+    return [q for g in gs for q in qualifier(g)]
+
+
+def qualifier(g: ast.comprehension) -> list[Qualifier]:
+    match g:
+        case ast.comprehension(is_async=1):
+            raise NotAllowed(g, "async comprehensions")
+        case ast.comprehension(target=ast.Name(id=x), iter=e, ifs=cs):
+            return [
+                at(g.target, Syntax.Generator(x, expr(e))),
+                *(at(c, Syntax.Guard(expr(c))) for c in cs),
+            ]
+        case _:
+            raise NotAllowed(g, "unpacking in comprehensions")
 
 
 def pat(p: ast.pattern) -> Pat:
@@ -985,7 +894,7 @@ def func(d: ast.stmt) -> Func:
         Syntax.Def(
             d.name,
             type_params(d),
-            [(a.arg, annotation(a.annotation)) for a in d.args.args],
+            [(a.arg, annotation(a.annotation)) for a in params(d.args)],
             annotation(d.returns),
             seq(d.body),
         ),
