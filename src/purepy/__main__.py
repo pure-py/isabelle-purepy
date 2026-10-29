@@ -3,7 +3,6 @@ import pathlib
 import sys
 
 from .check_program import check_module, check_program, format_program_result
-from .conformance import Exit
 
 
 def main() -> None:
@@ -19,7 +18,7 @@ def main() -> None:
 
     result = check_module(args.path) if args.module else check_program(args.path)
     print(format_program_result(result, args.path))
-    sys.exit(Exit.OK if result is None else result.exit_code)
+    sys.exit(0 if result is None else result.exit_code)
 
 
 if __name__ == "__main__":

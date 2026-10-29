@@ -3,8 +3,8 @@ import argparse
 import pathlib
 import sys
 
-from purepy import conformance
-from purepy.conformance import Results, run
+import purepy_conformance
+from purepy_conformance import Results, run
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 TEST = ROOT / "test"
@@ -13,8 +13,10 @@ PYTHON_VERSION = (ROOT / ".python-version").read_text().strip()
 
 
 def check_lint(r: Results) -> None:
-    with r.test("front end passes mypy and ruff"):
-        sources = sorted(str(path) for path in SRC.glob("*.py")) + [str(TEST / "run-all.py")]
+    with r.test("hand-written modules pass mypy and ruff"):
+        sources = sorted(str(path) for path in SRC.glob("*.py")) + [
+            str(TEST / "check-conformance.py")
+        ]
         for tool in (
             ["mypy", "--strict", "--python-version", PYTHON_VERSION],
             ["ruff", "check"],
@@ -37,7 +39,9 @@ def main() -> None:
         lint.summary()
         if lint.failed:
             sys.exit(1)
-    conformance.main(conformance_args)
+    purepy_conformance.main(
+        ["--type-checker", f"{sys.executable} -m purepy --check", *conformance_args]
+    )
 
 
 if __name__ == "__main__":

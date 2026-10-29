@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -251,6 +251,7 @@ source = { editable = "." }
 [package.dev-dependencies]
 dev = [
     { name = "mypy" },
+    { name = "purepy-conformance" },
     { name = "ruff" },
 ]
 
@@ -259,7 +260,16 @@ dev = [
 [package.metadata.requires-dev]
 dev = [
     { name = "mypy", specifier = ">=2.3.1" },
+    { name = "purepy-conformance", url = "https://github.com/pure-py/pure-py-spec/releases/download/v0.23.1/purepy_conformance-0.23.1-py3-none-any.whl" },
     { name = "ruff", specifier = ">=0.16.2" },
+]
+
+[[package]]
+name = "purepy-conformance"
+version = "0.23.1"
+source = { url = "https://github.com/pure-py/pure-py-spec/releases/download/v0.23.1/purepy_conformance-0.23.1-py3-none-any.whl" }
+wheels = [
+    { url = "https://github.com/pure-py/pure-py-spec/releases/download/v0.23.1/purepy_conformance-0.23.1-py3-none-any.whl", hash = "sha256:3d4cbf74f8817931d3391c06ef76ee0065ac6452574664194b6d2b5593a8ee85" },
 ]
 
 [[package]]

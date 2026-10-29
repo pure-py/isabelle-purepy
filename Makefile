@@ -27,11 +27,11 @@ build: check-version codegen
 	$(PYTHON) generated.py $(CODE) $(GENERATED)
 
 # Lint and conformance suite, under the generated type checker
-check-tests:
+check-conformance:
 	@test -e $(GENERATED) || { echo "$(GENERATED) not generated: make build"; exit 1; }
-	uv run --locked ./test/run-all.sh
+	uv run --locked ./test/check-conformance.sh
 
-wheel: check-tests
+wheel: check-conformance
 	rm -rf dist && uv build --wheel
 
 # Self-contained copy under DEST
@@ -43,4 +43,4 @@ dist: codegen
 	git -C $(CODEGEN) archive --format=tar HEAD | tar -x -C $(DEST)/$(CODEGEN)
 	rm -rf $(DEST)/.github $(DEST)/.claude $(DEST)/fetch-codegen.sh
 
-.PHONY: default check-version codegen build check-tests wheel dist
+.PHONY: default check-version codegen build check-conformance wheel dist

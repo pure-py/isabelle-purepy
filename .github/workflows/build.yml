@@ -54,7 +54,7 @@ jobs:
           name: wheel
           path: dist/*.whl
 
-  # The suite's tests, and the type checker, under other Python runtimes
+  # The suite's tests, and the type checker, under other Python runtimes, from the unpacked wheels
   runtimes:
     name: conformance suite (${{ matrix.runtime }})
     needs: build
@@ -74,10 +74,12 @@ jobs:
           name: wheel
           path: dist
 
-      - name: Unpack the wheel
+      - name: Unpack the wheel and the conformance package
         run: |
           mkdir site
           unzip -q dist/*.whl -d site
+          uv export --locked --only-group dev --no-hashes --no-emit-project 2>/dev/null | grep -o 'https://[^ ]*purepy_conformance[^ ]*\.whl' | xargs curl -sSL -o conformance.whl
+          unzip -q conformance.whl -d site
 
       - name: Set up GraalPy
         if: matrix.runtime == 'GraalPy'
@@ -100,10 +102,10 @@ jobs:
         if: matrix.runtime == 'GraalPy'
         env:
           PYTHONPATH: ${{ github.workspace }}/site
-        run: test/run-all.sh python --no-lint
+        run: test/check-conformance.sh python --no-lint
 
       - name: Run tests with Pyodide
         if: matrix.runtime == 'Pyodide'
         env:
           PYTHONPATH: ${{ github.workspace }}/site
-        run: test/run-all.sh "$PYODIDE_PYTHON" --no-lint
+        run: test/check-conformance.sh "$PYODIDE_PYTHON" --no-lint

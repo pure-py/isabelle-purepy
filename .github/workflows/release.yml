@@ -1,12 +1,10 @@
 name: Release
 
+# The version is that of the specification whose conformance suite the type checker passes, read from the
+# pinned purepy-conformance release, with a post-release suffix for a further release against the same
+# specification.
 on:
   workflow_dispatch:
-    inputs:
-      version:
-        description: "Release version (x.y.z, e.g. 0.24.0)"
-        required: true
-        type: string
 
 permissions:
   contents: write
@@ -27,14 +25,18 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v10.2.0
 
-      - name: Parse and validate version
+      - name: Derive the version from the pinned conformance suite
         id: version
         run: |
-          VERSION="${{ inputs.version }}"
-          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Version must be in the form x.y.z (no leading v)"
-            exit 1
-          fi
+          SPEC="$(sed -n 's|.*/purepy_conformance-\([0-9.]*\)-py3-none-any\.whl.*|\1|p' pyproject.toml)"
+          test -n "$SPEC" || { echo "pyproject.toml pins no purepy-conformance release"; exit 1; }
+          git fetch --tags origin
+          VERSION="$SPEC"
+          N=0
+          while git rev-parse -q --verify "v$VERSION" >/dev/null; do
+            N=$((N + 1))
+            VERSION="$SPEC.post$N"
+          done
           uv version "$VERSION"
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
           echo "isabelle=$(cat .isabelle-version)" >> "$GITHUB_OUTPUT"

@@ -27,7 +27,7 @@ To browse the theories with the prover running, open the session directory in th
 
 `src/purepy/` holds the `purepy` package: the parser, built on Python's `ast`, the translation of parsed
 programs into the generated syntax and of the generated reasons into messages, module discovery and output
-formatting, around the generated type checker. The conformance suite is shipped in the package.
+formatting, around the generated type checker.
 
 Install the wheel attached to the latest [release](https://github.com/pure-py/isabelle-purepy/releases) as a
 standalone command-line tool with `uv tool install <wheel URL>`. Then check a single module, or a whole program
@@ -45,44 +45,14 @@ From a checkout, after `make build`, the same checks run with `uv run --locked p
 After `make build`:
 
 ```bash
-make check-tests
+make check-conformance
 ```
 
-The target runs mypy and ruff over the front end, then the conformance suite under the generated type checker,
-which must pass; `make wheel` also builds the wheel under `dist/`. The suite installed with the package runs
-with `purepy-conformance`; `purepy-conformance --help` lists its options.
-
-Tests in `src/purepy/conformance-suite/` are organised by the outcome under Python and the outcome under
-PurePy, following the grid in the conformance section of the specification; the runner derives every
-assertion from the path. A test of one module is a `.py` file with expectation files as siblings
-(`.expected`, `.error.expected`, `.exception.expected`, `.status.expected`); a test of a program of several
-modules is a directory holding `main.py`, the expectation files of `main.py` and the other modules.
-
-The outcome under Python is one of:
-
-- `python-rejects/`: Python raises `SyntaxError` before running the program
-- `python-raises/`: Python raises another exception while running the program
-- `python-succeeds/`: Python runs the program with the expected output
-
-The outcome under PurePy is one of:
-
-- `parser-rejects/`: rejected by the parser
-- `typing-rejects/`: rejected by the type checker
-- `undefined/`: well-formed, and the run aborts with termination kind `undef`
-- `agrees/`: well-formed, and the run yields the same result as under Python, including the same exception
-
-The directory `python-succeeds/agrees/mypy-bug/` holds tests rejected by mypy because of a behaviour reported as a
-mypy bug; every other test in `python-succeeds/agrees/` type-checks under mypy. The tests in `syntactic-only/`
-construct a form as an AST, because Python source cannot express the form, and check that PurePy rejects it.
-
-A test has `.expected` under `python-succeeds/` and `.exception.expected` elsewhere, naming `SyntaxError` exactly
-under `python-rejects/`, so a misfiled test fails. A test that exits with a nonzero status through `sys.exit`
-states the status in `.status.expected`.
-
-Every test under `typing-rejects/`, `undefined/` and `agrees/` names a rule of the specification on its first line,
-as `# rule: name`. Under `typing-rejects/` the rule is the one with a premise or side condition that fails for the
-program. Under `undefined/` and `agrees/` the rule is the one yielding the result. The specification repository
-checks the rule names and the mypy claims against each release.
+The target runs mypy and ruff over the hand-written modules of the package, then the conformance suite of the
+specification under the generated type checker, which must pass; `make wheel` also builds the wheel under
+`dist/`. The suite and its runner come from the `purepy-conformance` package of the
+[pure-py-spec](https://github.com/pure-py/pure-py-spec) repository, pinned to a specification release in
+`pyproject.toml`; the type checker is released at the version of the specification it passes.
 
 ## Development
 
@@ -95,7 +65,7 @@ uv sync --locked
 Format the sources:
 
 ```bash
-uv run --locked ruff format ./src/purepy ./test/run-all.py
+uv run --locked ruff format ./src/purepy ./test/check-conformance.py
 ```
 
 After changing dependencies or metadata in `pyproject.toml`, run `uv lock` and commit `pyproject.toml` and
@@ -103,10 +73,14 @@ After changing dependencies or metadata in `pyproject.toml`, run `uv lock` and c
 
 ## Release workflow
 
-Run the `Release` GitHub Action manually with a version in the form `x.y.z` (for example, `0.24.0`). The action
-updates and commits the package version on `main`, creates and pushes the tag `v0.24.0`, checks the proofs,
-generates the type checker, runs the conformance suite and creates the GitHub Release for the tag with the
-wheel of the `purepy` package attached. The specification repository depends on the latest release.
+Run the `Release` GitHub Action manually. The action derives the version from the `purepy-conformance` release
+pinned in `pyproject.toml`, so a type checker passing the suite of specification 0.23.1 is released as 0.23.1,
+and a further release against the same specification as 0.23.1.post1. It updates and commits the package
+version on `main`, creates and pushes the tag, checks the proofs, generates the type checker, runs the
+conformance suite and creates the GitHub Release for the tag with the wheel of the `purepy` package attached.
+
+To take a new specification release, change the wheel URL in `pyproject.toml`, run `uv lock` and commit
+`pyproject.toml` and `uv.lock`.
 
 ## Theories
 
