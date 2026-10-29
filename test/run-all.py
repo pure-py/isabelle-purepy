@@ -13,7 +13,7 @@ PYTHON_VERSION = (ROOT / ".python-version").read_text().strip()
 
 
 def check_lint(r: Results) -> None:
-    with r.test("front end passes mypy and ruff"):
+    with r.test("package passes mypy and ruff"):
         sources = sorted(str(path) for path in SRC.glob("*.py")) + [str(TEST / "run-all.py")]
         for tool in (
             ["mypy", "--strict", "--python-version", PYTHON_VERSION],

@@ -48,7 +48,7 @@ After `make build`:
 make check-tests
 ```
 
-The target runs mypy and ruff over the front end, then the conformance suite under the generated type checker,
+The target runs mypy and ruff over the package, then the conformance suite under the generated type checker,
 which must pass; `make wheel` also builds the wheel under `dist/`. The suite installed with the package runs
 with `purepy-conformance`; `purepy-conformance --help` lists its options.
 
