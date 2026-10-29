@@ -59,7 +59,7 @@ UOP_AST = {uop: op for op, uop in UOP.items()}
 
 
 def unparse_expr(e: Any) -> str:
-    def tree(e: Any) -> ast.expr:
+    def ast_expr(e: Any) -> ast.expr:
         match node(e):
             case Syntax.ExprVar(x):
                 return ast.Name(x)
@@ -67,37 +67,37 @@ def unparse_expr(e: Any) -> str:
                 return ast.Constant(lit_value(ell))
             case Syntax.ExprCall(f, (es, kws)):
                 return ast.Call(
-                    tree(f),
-                    [tree(e_) for e_ in es],
-                    [ast.keyword(x, tree(e_)) for x, e_ in kws],
+                    ast_expr(f),
+                    [ast_expr(e_) for e_ in es],
+                    [ast.keyword(x, ast_expr(e_)) for x, e_ in kws],
                 )
             case Syntax.ExprDict(kvs):
-                return ast.Dict([tree(k) for k, _ in kvs], [tree(v) for _, v in kvs])
+                return ast.Dict([ast_expr(k) for k, _ in kvs], [ast_expr(v) for _, v in kvs])
             case Syntax.ExprAttribute(e_, x):
-                return ast.Attribute(tree(e_), x)
+                return ast.Attribute(ast_expr(e_), x)
             case Syntax.ExprSubscript(e_, e__):
-                return ast.Subscript(tree(e_), tree(e__))
+                return ast.Subscript(ast_expr(e_), ast_expr(e__))
             case Syntax.ExprBinOp(op, e_, e__):
                 op_ = BOP_AST[type(op)]
                 if issubclass(op_, ast.cmpop):
-                    return ast.Compare(tree(e_), [op_()], [tree(e__)])
-                return ast.BinOp(tree(e_), op_(), tree(e__))
+                    return ast.Compare(ast_expr(e_), [op_()], [ast_expr(e__)])
+                return ast.BinOp(ast_expr(e_), op_(), ast_expr(e__))
             case Syntax.ExprUnOp(op, e_):
-                return ast.UnaryOp(UOP_AST[type(op)](), tree(e_))
+                return ast.UnaryOp(UOP_AST[type(op)](), ast_expr(e_))
             case Syntax.ExprAnd(e_, e__):
-                return ast.BoolOp(ast.And(), [tree(e_), tree(e__)])
+                return ast.BoolOp(ast.And(), [ast_expr(e_), ast_expr(e__)])
             case Syntax.ExprOr(e_, e__):
-                return ast.BoolOp(ast.Or(), [tree(e_), tree(e__)])
+                return ast.BoolOp(ast.Or(), [ast_expr(e_), ast_expr(e__)])
             case Syntax.ExprCond(e_, e__, e___):
-                return ast.IfExp(tree(e__), tree(e_), tree(e___))
+                return ast.IfExp(ast_expr(e__), ast_expr(e_), ast_expr(e___))
             case Syntax.ExprList(es):
-                return ast.List([tree(e_) for e_ in es])
+                return ast.List([ast_expr(e_) for e_ in es])
             case Syntax.ExprTuple(es):
-                return ast.Tuple([tree(e_) for e_ in es])
+                return ast.Tuple([ast_expr(e_) for e_ in es])
             case Syntax.ExprListComp(e_, qs):
-                return ast.ListComp(tree(e_), comprehensions(qs))
+                return ast.ListComp(ast_expr(e_), ast_comprehensions(qs))
             case Syntax.ExprDictComp(e_, e__, qs):
-                return ast.DictComp(tree(e_), tree(e__), comprehensions(qs))
+                return ast.DictComp(ast_expr(e_), ast_expr(e__), ast_comprehensions(qs))
             case Syntax.ExprLambda(xs, e_):
                 args = ast.arguments(
                     posonlyargs=[],
@@ -106,27 +106,27 @@ def unparse_expr(e: Any) -> str:
                     kw_defaults=[],
                     defaults=[],
                 )
-                return ast.Lambda(args, tree(e_))
+                return ast.Lambda(args, ast_expr(e_))
             case _:
                 raise AssertionError(f"unexpected expression: {e}")
 
-    def comprehensions(qs: list[Any]) -> list[ast.comprehension]:
+    def ast_comprehensions(qs: list[Any]) -> list[ast.comprehension]:
         """Comprehension nodes of the qualifiers qs, one per generator, holding the guards that follow that
         generator"""
 
         def add(gs: list[ast.comprehension], q: Any) -> list[ast.comprehension]:
             match node(q):
                 case Syntax.Generator(x, e):
-                    return [*gs, ast.comprehension(ast.Name(x), tree(e), [], 0)]
+                    return [*gs, ast.comprehension(ast.Name(x), ast_expr(e), [], 0)]
                 case Syntax.Guard(e):
                     *gs_, g = gs
-                    return [*gs_, ast.comprehension(g.target, g.iter, [*g.ifs, tree(e)], 0)]
+                    return [*gs_, ast.comprehension(g.target, g.iter, [*g.ifs, ast_expr(e)], 0)]
                 case _:
                     raise AssertionError(f"unexpected qualifier: {q}")
 
         return reduce(add, qs, [])
 
-    return ast.unparse(tree(e))
+    return ast.unparse(ast_expr(e))
 
 
 BINARY = {
