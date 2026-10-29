@@ -1,1 +1,1 @@
-duplicate variable x in pattern
+multiple assignments to name 'x' in pattern
