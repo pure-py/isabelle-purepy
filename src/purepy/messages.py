@@ -65,11 +65,7 @@ def render_expr(e: Any) -> str:
 
 def from_expr(e: Any) -> ast.expr:
     """Syntax tree of e, so that a message can quote e by unparsing it"""
-    return from_expr_node(node(e))
-
-
-def from_expr_node(e: Any) -> ast.expr:
-    match e:
+    match node(e):
         case Syntax.ExprVar(x):
             return ast.Name(x)
         case Syntax.ExprLiteral(ell):
@@ -165,11 +161,7 @@ SEQUENCE_KIND = {
 
 
 def render_pat(p: Any) -> str:
-    return render_pat_node(node(p))
-
-
-def render_pat_node(p: Any) -> str:
-    match p:
+    match node(p):
         case Syntax.PatLiteral(ell):
             return ast.unparse(ast.Constant(lit_value(ell)))
         case Syntax.PatVar(x):
