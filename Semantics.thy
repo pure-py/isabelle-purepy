@@ -671,4 +671,152 @@ EvalTypes:
 end
 
 
+(* Environments of the predefined modules: each binds __name__ to the name of the module and each member to its
+   value; print and sys.argv, which the spec gives no value, are left out *)
+definition predefined_env :: "(name, env) fmap"
+where
+"predefined_env =
+  (let name = \<lambda>x. (''__name__'', VLit (LitString x)) in
+   fmap_of_list
+    [(builtins, fmap_of_list
+       ([name ''builtins'', (''len'', VPrim PrimLen), (''range'', VClass range_class), (''round'', VPrim PrimRound)]
+        @ map (\<lambda>y. (y, VOpaque (snoc builtins y)))
+            (map prim_name [NoneType, object, bool, int, float, str] @ [''list'', ''dict'', ''tuple'']))),
+     ((''sys'', []), fmap_of_list [name ''sys'', (''exit'', VPrim PrimExit)]),
+     ((''typing'', []), fmap_of_list
+       (name ''typing'' # map (\<lambda>y. (y, VOpaque (''typing'', [y])))
+          [''Callable'', ''Literal'', prim_name Never, prim_name Sized])),
+     ((''dataclasses'', []), fmap_of_list
+       [name ''dataclasses'', (''dataclass'', VOpaque (''dataclasses'', [''dataclass'']))])])"
+
+(* Extension of environments, with the equations of context extension on values: a loaded module extends a stub
+   of itself, and two loads of one module merge *)
+function (sequential) extend_val :: "val \<Rightarrow> val \<Rightarrow> val"
+and extend_env :: "env \<Rightarrow> env \<Rightarrow> env" (infixl "\<uplus>\<^sub>v" 65)
+where
+"extend_val (VModLoaded q \<rho>) v' =
+   (case v' of
+      VModStub q' \<Rightarrow> if q = q' then VModLoaded q \<rho> else v'
+    | VModLoaded q' \<rho>' \<Rightarrow> if q = q' then VModLoaded q (\<rho> \<uplus>\<^sub>v \<rho>') else v'
+    | _ \<Rightarrow> v')" |
+"extend_val _ v' = v'" |
+"\<rho> \<uplus>\<^sub>v \<rho>' =
+   \<rho> ++\<^sub>f fmmap_keys (\<lambda>x v'. case fmlookup \<rho> x of None \<Rightarrow> v' | Some v \<Rightarrow> extend_val v v') \<rho>'"
+by pat_completeness auto
+
+termination
+by (relation "measure (\<lambda>p. case p of Inl (v, _) \<Rightarrow> size v | Inr (\<rho>, _) \<Rightarrow> size_fmap (\<lambda>_. 0) size \<rho>)")
+   (simp_all add: size_fmap_lookup del: size_fmap_def)
+
+declare extend_env.simps [simp del]
+
+fun stub_of :: "val \<Rightarrow> name option"
+where
+"stub_of (VModStub q) = Some q" |
+"stub_of _ = None"
+
+fun is_stub :: "val \<Rightarrow> bool"
+where
+"is_stub (VModStub _) = True" |
+"is_stub _ = False"
+
+lemma stub_of_Some: "stub_of v = Some q \<longleftrightarrow> v = VModStub q"
+  by (cases v) auto
+
+lemma stub_of_None: "stub_of v = None \<longleftrightarrow> \<not> is_stub v"
+  by (cases v) auto
+
+(* The program, ambient in loading as in the spec *)
+locale loading = evaluation +
+  fixes M :: program
+begin
+
+(* Environment that binds each submodule of q to a stub; the predefined modules have no submodules *)
+definition submods_env :: "name \<Rightarrow> env"
+where
+"submods_env q = fmmap (\<lambda>\<theta>. case \<theta> of ModStub q' \<Rightarrow> VModStub q' | _ \<Rightarrow> VUnbound) (submods M q)"
+
+abbreviation builtins_env :: env where "builtins_env \<equiv> the (fmlookup predefined_env builtins)"
+
+(* Loading of a module, an import prefix, a submodule chain and an imported name, with lists of modules loaded for
+   their aborts and of imported names, which the spec writes with premises for each element *)
+inductive
+  eval_mod     :: "name \<Rightarrow> env result \<Rightarrow> bool"                     ("_ \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d _" [60,60] 60) and
+  eval_imports :: "name \<Rightarrow> import list \<Rightarrow> env result \<Rightarrow> bool"       ("_, _ \<Rightarrow>\<^sub>i _" [60,0,60] 60) and
+  eval_sub     :: "name \<Rightarrow> env \<Rightarrow> var list \<Rightarrow> env result \<Rightarrow> bool" ("_, _, _ \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b _" [60,60,0,60] 60) and
+  eval_imp     :: "env \<Rightarrow> var \<Rightarrow> val result \<Rightarrow> bool"              ("_, _ \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p _" [60,0,60] 60) and
+  eval_imps    :: "env \<Rightarrow> var list \<Rightarrow> val list result \<Rightarrow> bool"    ("_, _ \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s _" [60,0,60] 60) and
+  eval_mods    :: "name list \<Rightarrow> unit result \<Rightarrow> bool"                ("_ \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s _" [60,60] 60)
+where
+EvalPredefined: "fmlookup predefined_env q = Some \<rho> \<Longrightarrow> q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho>" |
+EvalModule:
+  "\<lbrakk> fmlookup M q = Some (ModuleBody \<iota>s t) ; q, \<iota>s \<Rightarrow>\<^sub>i Val \<rho>' ; scope VUnbound (declares \<iota>s) t = Some \<rho>s
+  ; q, builtins_env \<otimes> \<rho>' \<otimes> \<rho>s, t \<Rightarrow>\<^sub>t Assigns \<rho>''
+  \<rbrakk> \<Longrightarrow> q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val (submods_env q \<otimes> \<rho>'')" |
+EvalModuleFail: "\<lbrakk> fmlookup M q = Some (ModuleBody \<iota>s t) ; q, \<iota>s \<Rightarrow>\<^sub>i Aborts \<kappa> \<rbrakk> \<Longrightarrow> q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Aborts \<kappa>" |
+EvalModuleFailBody:
+  "\<lbrakk> fmlookup M q = Some (ModuleBody \<iota>s t) ; q, \<iota>s \<Rightarrow>\<^sub>i Val \<rho>' ; scope VUnbound (declares \<iota>s) t = Some \<rho>s
+  ; q, builtins_env \<otimes> \<rho>' \<otimes> \<rho>s, t \<Rightarrow>\<^sub>t Aborts\<^sub>o \<kappa>
+  \<rbrakk> \<Longrightarrow> q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Aborts \<kappa>" |
+
+EvalImportsNil: "q, [] \<Rightarrow>\<^sub>i Val \<epsilon>" |
+EvalImport:
+  "\<lbrakk> (x, []) \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> ; (x, []), \<rho>, xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b Val \<rho>'' ; q, \<iota>s \<Rightarrow>\<^sub>i r \<rbrakk>
+  \<Longrightarrow> q, Import (x, xs) # \<iota>s \<Rightarrow>\<^sub>i mlet r (\<lambda>\<rho>'. Val (fmupd x (VModLoaded (x, []) \<rho>'') \<epsilon> \<uplus>\<^sub>v \<rho>'))" |
+EvalImportFail: "(x, []) \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Aborts \<kappa> \<Longrightarrow> q, Import (x, xs) # \<iota>s \<Rightarrow>\<^sub>i Aborts \<kappa>" |
+EvalImportFailChain:
+  "\<lbrakk> (x, []) \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> ; (x, []), \<rho>, xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b Aborts \<kappa> \<rbrakk> \<Longrightarrow> q, Import (x, xs) # \<iota>s \<Rightarrow>\<^sub>i Aborts \<kappa>" |
+EvalFromImport:
+  "\<lbrakk> unique_to q' q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s Val () ; q' \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> ; \<rho>, xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s Val vs ; q, \<iota>s \<Rightarrow>\<^sub>i r \<rbrakk>
+  \<Longrightarrow> q, FromImport q' xs # \<iota>s \<Rightarrow>\<^sub>i mlet r (\<lambda>\<rho>''. Val (fmap_of_list (zip xs vs) \<uplus>\<^sub>v \<rho>''))" |
+EvalFromImportFail:
+  "\<lbrakk> unique_to q' q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s Val () ; q' \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Aborts \<kappa> \<rbrakk> \<Longrightarrow> q, FromImport q' xs # \<iota>s \<Rightarrow>\<^sub>i Aborts \<kappa>" |
+EvalFromImportFailContaining:
+  "unique_to q' q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s Aborts \<kappa> \<Longrightarrow> q, FromImport q' xs # \<iota>s \<Rightarrow>\<^sub>i Aborts \<kappa>" |
+EvalFromImportFailMember:
+  "\<lbrakk> unique_to q' q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s Val () ; q' \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> ; \<rho>, xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s Aborts \<kappa> \<rbrakk>
+  \<Longrightarrow> q, FromImport q' xs # \<iota>s \<Rightarrow>\<^sub>i Aborts \<kappa>" |
+
+EvalSubmodulesNil: "q, \<rho>, [] \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b Val \<rho>" |
+EvalSubmodulesCons:
+  "\<lbrakk> snoc q x \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho>' ; snoc q x, \<rho>', xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b r \<rbrakk>
+  \<Longrightarrow> q, \<rho>, x # xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b mlet r (\<lambda>\<rho>''. Val (\<rho> \<uplus>\<^sub>v fmupd x (VModLoaded (snoc q x) \<rho>'') \<epsilon>))" |
+EvalSubmodulesFail: "snoc q x \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Aborts \<kappa> \<Longrightarrow> q, \<rho>, x # xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b Aborts \<kappa>" |
+
+EvalImpMember: "\<lbrakk> fmlookup \<rho> x = Some v ; \<not> is_stub v \<rbrakk> \<Longrightarrow> \<rho>, x \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p Val v" |
+EvalImpSubmodule:
+  "\<lbrakk> fmlookup \<rho> x = Some (VModStub q') ; q' \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho>' \<rbrakk> \<Longrightarrow> \<rho>, x \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p Val (VModLoaded q' \<rho>')" |
+EvalImpSubmoduleFail:
+  "\<lbrakk> fmlookup \<rho> x = Some (VModStub q') ; q' \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Aborts \<kappa> \<rbrakk> \<Longrightarrow> \<rho>, x \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p Aborts \<kappa>" |
+
+EvalImpsNil: "\<rho>, [] \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s Val []" |
+EvalImpsCons:
+  "\<lbrakk> \<rho>, x \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p Val v ; \<rho>, xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s r \<rbrakk> \<Longrightarrow> \<rho>, x # xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s mlet r (\<lambda>vs. Val (v # vs))" |
+EvalImpsFail: "\<rho>, x \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p Aborts \<kappa> \<Longrightarrow> \<rho>, x # xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s Aborts \<kappa>" |
+
+EvalModsNil: "[] \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s Val ()" |
+EvalModsCons: "\<lbrakk> q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> ; qs \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s r \<rbrakk> \<Longrightarrow> q # qs \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s r" |
+EvalModsFail: "q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Aborts \<kappa> \<Longrightarrow> q # qs \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s Aborts \<kappa>"
+
+(* A program exits with 0 if __main__ loads, and otherwise with the termination kind of loading *)
+inductive eval_program :: "termination_kind \<Rightarrow> bool"
+where
+EvalProgram: "main \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> \<Longrightarrow> eval_program (SystemExit 0)" |
+EvalProgramAbort: "main \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Aborts \<kappa> \<Longrightarrow> eval_program \<kappa>"
+
+(* No module of the program is predefined, as well-formedness of programs requires *)
+context
+  assumes disjoint: "fmdom M |\<inter>| fmdom predefined_env = {||}"
+begin
+
+lemma predefined_not_module: "fmlookup predefined_env q = Some \<rho> \<Longrightarrow> fmlookup M q = Some b \<Longrightarrow> False"
+  using disjoint by (auto dest!: fmdomI)
+
+lemma module_not_predefined: "fmlookup M q = Some b \<Longrightarrow> fmlookup predefined_env q = None"
+  by (cases "fmlookup predefined_env q") (use predefined_not_module[of q _ b] in auto)
+
+end
+
+end
+
 end

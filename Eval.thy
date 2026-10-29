@@ -260,4 +260,84 @@ where
 
 end
 
+context loading
+begin
+
+(* Evaluator: each loading step consumes fuel, so an import cycle runs out of fuel, as it has no derivation; the
+   statements of a module body run with the same fuel *)
+function (sequential) run_mod :: "nat \<Rightarrow> name \<Rightarrow> env result fuelled"
+and run_imports :: "nat \<Rightarrow> name \<Rightarrow> import list \<Rightarrow> env result fuelled"
+and run_sub     :: "nat \<Rightarrow> name \<Rightarrow> env \<Rightarrow> var list \<Rightarrow> env result fuelled"
+and run_imp     :: "nat \<Rightarrow> env \<Rightarrow> var \<Rightarrow> val result fuelled"
+and run_imps    :: "nat \<Rightarrow> env \<Rightarrow> var list \<Rightarrow> val list result fuelled"
+and run_mods    :: "nat \<Rightarrow> name list \<Rightarrow> unit result fuelled"
+where
+"run_mod 0 q = OutOfFuel" |
+"run_mod (Suc n) q =
+  (case fmlookup predefined_env q of
+     Some \<rho> \<Rightarrow> Done (Val \<rho>)
+   | None \<Rightarrow>
+       (case fmlookup M q of
+          None \<Rightarrow> Stuck
+        | Some (ModuleBody \<iota>s t) \<Rightarrow>
+            flet (run_imports n q \<iota>s) (\<lambda>\<rho>'.
+              case scope VUnbound (declares \<iota>s) t of
+                None \<Rightarrow> Stuck
+              | Some \<rho>s \<Rightarrow>
+                  (case run_top n q (builtins_env \<otimes> \<rho>' \<otimes> \<rho>s) t of
+                     Done (Assigns \<rho>'') \<Rightarrow> Done (Val (submods_env q \<otimes> \<rho>''))
+                   | Done (Aborts\<^sub>o \<kappa>) \<Rightarrow> Done (Aborts \<kappa>)
+                   | Done (Returns v) \<Rightarrow> Stuck
+                   | Stuck \<Rightarrow> Stuck
+                   | OutOfFuel \<Rightarrow> OutOfFuel))))" |
+
+"run_imports 0 q \<iota>s = OutOfFuel" |
+"run_imports (Suc n) q [] = Done (Val \<epsilon>)" |
+"run_imports (Suc n) q (Import (x, xs) # \<iota>s) =
+  flet (run_mod n (x, [])) (\<lambda>\<rho>. flet (run_sub n (x, []) \<rho> xs) (\<lambda>\<rho>''. flet (run_imports n q \<iota>s) (\<lambda>\<rho>'.
+    Done (Val (fmupd x (VModLoaded (x, []) \<rho>'') \<epsilon> \<uplus>\<^sub>v \<rho>')))))" |
+"run_imports (Suc n) q (FromImport q' xs # \<iota>s) =
+  flet (run_mods n (unique_to q' q)) (\<lambda>_. flet (run_mod n q') (\<lambda>\<rho>. flet (run_imps n \<rho> xs) (\<lambda>vs.
+    flet (run_imports n q \<iota>s) (\<lambda>\<rho>''. Done (Val (fmap_of_list (zip xs vs) \<uplus>\<^sub>v \<rho>''))))))" |
+
+"run_sub 0 q \<rho> xs = OutOfFuel" |
+"run_sub (Suc n) q \<rho> [] = Done (Val \<rho>)" |
+"run_sub (Suc n) q \<rho> (x # xs) =
+  flet (run_mod n (snoc q x)) (\<lambda>\<rho>'. flet (run_sub n (snoc q x) \<rho>' xs) (\<lambda>\<rho>''.
+    Done (Val (\<rho> \<uplus>\<^sub>v fmupd x (VModLoaded (snoc q x) \<rho>'') \<epsilon>))))" |
+
+"run_imp 0 \<rho> x = OutOfFuel" |
+"run_imp (Suc n) \<rho> x =
+  (case fmlookup \<rho> x of
+     None \<Rightarrow> Stuck
+   | Some v \<Rightarrow>
+       (case stub_of v of
+          Some q' \<Rightarrow> flet (run_mod n q') (\<lambda>\<rho>'. Done (Val (VModLoaded q' \<rho>')))
+        | None \<Rightarrow> Done (Val v)))" |
+
+"run_imps 0 \<rho> xs = OutOfFuel" |
+"run_imps (Suc n) \<rho> [] = Done (Val [])" |
+"run_imps (Suc n) \<rho> (x # xs) = flet (run_imp n \<rho> x) (\<lambda>v. flet (run_imps n \<rho> xs) (\<lambda>vs. Done (Val (v # vs))))" |
+
+"run_mods 0 qs = OutOfFuel" |
+"run_mods (Suc n) [] = Done (Val ())" |
+"run_mods (Suc n) (q # qs) = flet (run_mod n q) (\<lambda>_. run_mods n qs)"
+by pat_completeness auto
+
+termination
+  by (relation "measure (case_sum (case_sum fst (case_sum fst fst)) (case_sum fst (case_sum fst fst)))") auto
+
+definition run_program :: "nat \<Rightarrow> termination_kind fuelled"
+where
+"run_program n =
+  (case run_mod n main of
+     Done (Val \<rho>) \<Rightarrow> Done (SystemExit 0)
+   | Done (Aborts \<kappa>) \<Rightarrow> Done \<kappa>
+   | Stuck \<Rightarrow> Stuck
+   | OutOfFuel \<Rightarrow> OutOfFuel)"
+
+lemmas run_loading_induct = run_mod_run_imports_run_sub_run_imp_run_imps_run_mods.induct
+
+end
+
 end

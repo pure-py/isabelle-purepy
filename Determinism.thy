@@ -534,4 +534,126 @@ qed
 
 end
 
+context loading
+begin
+
+(* Inversion lemmas and determinism of loading, given that no module of the program is predefined *)
+inductive_cases ModE: "q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d r"
+inductive_cases ImportsNilE: "q, [] \<Rightarrow>\<^sub>i r"
+inductive_cases ImportE: "q, Import x # \<iota>s \<Rightarrow>\<^sub>i r"
+inductive_cases FromImportE: "q, FromImport q' xs # \<iota>s \<Rightarrow>\<^sub>i r"
+inductive_cases SubNilE: "q, \<rho>, [] \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b r"
+inductive_cases SubConsE: "q, \<rho>, x # xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b r"
+inductive_cases ImpE: "\<rho>, x \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p r"
+inductive_cases ImpsNilE: "\<rho>, [] \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s r"
+inductive_cases ImpsConsE: "\<rho>, x # xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s r"
+inductive_cases ModsNilE: "[] \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s r"
+inductive_cases ModsConsE: "q # qs \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s r"
+inductive_cases ProgramE: "eval_program \<kappa>"
+
+context
+  assumes disjoint: "fmdom M |\<inter>| fmdom predefined_env = {||}"
+begin
+
+lemma imp_stub_cases:
+  "\<rho>, x \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p vr \<Longrightarrow> fmlookup \<rho> x = Some (VModStub q')
+  \<Longrightarrow> (\<exists>\<rho>'. q' \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho>' \<and> vr = Val (VModLoaded q' \<rho>')) \<or> (\<exists>\<kappa>. q' \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Aborts \<kappa> \<and> vr = Aborts \<kappa>)"
+  by (erule ImpE; simp)
+
+theorem loading_det:
+  shows mod_det: "q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d r \<Longrightarrow> q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d r' \<Longrightarrow> r = r'"
+    and imports_det: "q, \<iota>s \<Rightarrow>\<^sub>i r \<Longrightarrow> q, \<iota>s \<Rightarrow>\<^sub>i r' \<Longrightarrow> r = r'"
+    and sub_det: "q, \<rho>, xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b r \<Longrightarrow> q, \<rho>, xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b r' \<Longrightarrow> r = r'"
+    and imp_det: "\<rho>, x \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p vr \<Longrightarrow> \<rho>, x \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p vr' \<Longrightarrow> vr = vr'"
+    and imps_det: "\<rho>, xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s vsr \<Longrightarrow> \<rho>, xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s vsr' \<Longrightarrow> vsr = vsr'"
+    and mods_det: "qs \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s ur \<Longrightarrow> qs \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s ur' \<Longrightarrow> ur = ur'"
+proof (induction arbitrary: r' and r' and r' and vr' and vsr' and ur' rule: eval_mod_eval_imports_eval_sub_eval_imp_eval_imps_eval_mods.inducts[ih_names])
+  case EvalPredefined
+  from EvalPredefined.prems EvalPredefined.hyps show ?case by (auto elim!: ModE dest: predefined_not_module[OF disjoint] module_not_predefined[OF disjoint] simp: stub_of_Some)
+next
+  case (EvalModule q \<iota>s t \<rho>' \<rho>s \<rho>'')
+  have prefix: "q, \<iota>s \<Rightarrow>\<^sub>i r \<Longrightarrow> r = Val \<rho>'" for r using EvalModule.IH by fastforce
+  have top: "q, builtins_env \<otimes> \<rho>' \<otimes> \<rho>s, t \<Rightarrow>\<^sub>t ob \<Longrightarrow> ob = Assigns \<rho>''" for ob
+    using top_det[OF EvalModule.hyps(4)] by simp
+  from EvalModule.prems EvalModule.hyps(1,3) show ?case
+    by (auto elim!: ModE dest!: prefix top dest: predefined_not_module[OF disjoint])
+next
+  case EvalModuleFail
+  from EvalModuleFail.prems EvalModuleFail.hyps show ?case by (auto elim!: ModE dest: EvalModuleFail.IH predefined_not_module[OF disjoint] module_not_predefined[OF disjoint] simp: stub_of_Some)
+next
+  case (EvalModuleFailBody q \<iota>s t \<rho>' \<rho>s \<kappa>)
+  have prefix: "q, \<iota>s \<Rightarrow>\<^sub>i r \<Longrightarrow> r = Val \<rho>'" for r using EvalModuleFailBody.IH by fastforce
+  have top: "q, builtins_env \<otimes> \<rho>' \<otimes> \<rho>s, t \<Rightarrow>\<^sub>t ob \<Longrightarrow> ob = Aborts\<^sub>o \<kappa>" for ob
+    using top_det[OF EvalModuleFailBody.hyps(4)] by simp
+  from EvalModuleFailBody.prems EvalModuleFailBody.hyps(1,3) show ?case
+    by (auto elim!: ModE dest!: prefix top dest: predefined_not_module[OF disjoint])
+next
+  case EvalImportsNil
+  from EvalImportsNil.prems show ?case by (auto elim!: ImportsNilE simp: stub_of_Some)
+next
+  case EvalImport
+  from EvalImport.prems EvalImport.hyps show ?case by (auto elim!: ImportE dest: EvalImport.IH simp: stub_of_Some)
+next
+  case EvalImportFail
+  from EvalImportFail.prems EvalImportFail.hyps show ?case by (auto elim!: ImportE dest: EvalImportFail.IH simp: stub_of_Some)
+next
+  case EvalImportFailChain
+  from EvalImportFailChain.prems EvalImportFailChain.hyps show ?case by (auto elim!: ImportE dest: EvalImportFailChain.IH simp: stub_of_Some)
+next
+  case EvalFromImport
+  from EvalFromImport.prems EvalFromImport.hyps show ?case by (auto elim!: FromImportE dest: EvalFromImport.IH simp: stub_of_Some)
+next
+  case EvalFromImportFail
+  from EvalFromImportFail.prems EvalFromImportFail.hyps show ?case by (auto elim!: FromImportE dest: EvalFromImportFail.IH simp: stub_of_Some)
+next
+  case EvalFromImportFailContaining
+  from EvalFromImportFailContaining.prems EvalFromImportFailContaining.hyps show ?case by (auto elim!: FromImportE dest: EvalFromImportFailContaining.IH simp: stub_of_Some)
+next
+  case EvalFromImportFailMember
+  from EvalFromImportFailMember.prems EvalFromImportFailMember.hyps show ?case by (auto elim!: FromImportE dest: EvalFromImportFailMember.IH simp: stub_of_Some)
+next
+  case EvalSubmodulesNil
+  from EvalSubmodulesNil.prems show ?case by (auto elim!: SubNilE simp: stub_of_Some)
+next
+  case EvalSubmodulesCons
+  from EvalSubmodulesCons.prems EvalSubmodulesCons.hyps show ?case by (auto elim!: SubConsE dest: EvalSubmodulesCons.IH simp: stub_of_Some)
+next
+  case EvalSubmodulesFail
+  from EvalSubmodulesFail.prems EvalSubmodulesFail.hyps show ?case by (auto elim!: SubConsE dest: EvalSubmodulesFail.IH simp: stub_of_Some)
+next
+  case EvalImpMember
+  from EvalImpMember.prems EvalImpMember.hyps show ?case by (auto elim!: ImpE simp: stub_of_Some)
+next
+  case EvalImpSubmodule
+  from imp_stub_cases[OF EvalImpSubmodule.prems EvalImpSubmodule.hyps(1)] show ?case by (auto dest: EvalImpSubmodule.IH)
+next
+  case EvalImpSubmoduleFail
+  from imp_stub_cases[OF EvalImpSubmoduleFail.prems EvalImpSubmoduleFail.hyps(1)] show ?case by (auto dest: EvalImpSubmoduleFail.IH)
+next
+  case EvalImpsNil
+  from EvalImpsNil.prems show ?case by (auto elim!: ImpsNilE simp: stub_of_Some)
+next
+  case EvalImpsCons
+  from EvalImpsCons.prems EvalImpsCons.hyps show ?case by (auto elim!: ImpsConsE dest: EvalImpsCons.IH simp: stub_of_Some)
+next
+  case EvalImpsFail
+  from EvalImpsFail.prems EvalImpsFail.hyps show ?case by (auto elim!: ImpsConsE dest: EvalImpsFail.IH simp: stub_of_Some)
+next
+  case EvalModsNil
+  from EvalModsNil.prems show ?case by (auto elim!: ModsNilE simp: stub_of_Some)
+next
+  case EvalModsCons
+  from EvalModsCons.prems EvalModsCons.hyps show ?case by (auto elim!: ModsConsE dest: EvalModsCons.IH simp: stub_of_Some)
+next
+  case EvalModsFail
+  from EvalModsFail.prems EvalModsFail.hyps show ?case by (auto elim!: ModsConsE dest: EvalModsFail.IH simp: stub_of_Some)
+qed
+
+theorem program_det: "eval_program \<kappa> \<Longrightarrow> eval_program \<kappa>' \<Longrightarrow> \<kappa> = \<kappa>'"
+  by (auto elim!: ProgramE dest: mod_det)
+
+end
+
+end
+
 end

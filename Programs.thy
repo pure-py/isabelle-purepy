@@ -3,37 +3,6 @@ theory Programs
   imports Typing
 begin
 
-type_synonym program = "(name, module_body) fmap"
-
-context includes fmap.lifting
-begin
-lift_definition submods :: "program \<Rightarrow> name \<Rightarrow> cxt"
-  is "\<lambda>M q x. if snoc q x \<in> dom M then Some (ModStub (snoc q x)) else None"
-proof -
-  fix M :: "name \<Rightarrow> module_body option" and q
-  let ?S = "\<lambda>x. if snoc q x \<in> dom M then Some (ModStub (snoc q x)) else None"
-  assume "finite (dom M)"
-  have "dom ?S \<subseteq> (\<lambda>q'. snd (the (unsnoc q'))) ` dom M"
-    by (auto simp: dom_def image_iff intro: rev_image_eqI)
-  then show "finite (dom ?S)"
-    using \<open>finite (dom M)\<close> by (blast intro: finite_subset finite_imageI)
-qed
-end
-
-lemma submods_of_list [code]:
-  "submods (fmap_of_list m) q
-   = fmap_of_list (map (\<lambda>(q', _). (snd (the (unsnoc q')), ModStub q'))
-                       (filter (\<lambda>(q', _). case unsnoc q' of Some (q'', _) \<Rightarrow> q'' = q | None \<Rightarrow> False) m))"
-proof (rule fmap_ext)
-  fix x
-  let ?l = "map (\<lambda>(q', _). (snd (the (unsnoc q')), ModStub q'))
-              (filter (\<lambda>(q', _). case unsnoc q' of Some (q'', _) \<Rightarrow> q'' = q | None \<Rightarrow> False) m)"
-  have "map_of ?l x = (if snoc q x \<in> dom (map_of m) then Some (ModStub (snoc q x)) else None)"
-    by (induction m) (auto simp: dom_def snoc_eq_iff simp del: snoc.simps unsnoc.simps split: option.splits)
-  then show "fmlookup (submods (fmap_of_list m) q) x = fmlookup (fmap_of_list ?l) x"
-    by (simp add: submods.rep_eq fmlookup_of_list)
-qed
-
 (* V holds the modules being checked, in order, so that an import cycle is rejected; failure paired
    with the module in which it occurs *)
 function (sequential)

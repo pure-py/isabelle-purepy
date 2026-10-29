@@ -765,4 +765,221 @@ corollary completeness_top: "q, \<rho>, t \<Rightarrow>\<^sub>t o \<Longrightarr
 
 end
 
+context loading
+begin
+
+(* The rules whose results are composed by mlet, at a value and at an abort *)
+lemma EvalImportVal:
+  "\<lbrakk> (x, []) \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> ; (x, []), \<rho>, xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b Val \<rho>'' ; q, \<iota>s \<Rightarrow>\<^sub>i Val \<rho>' \<rbrakk>
+  \<Longrightarrow> q, Import (x, xs) # \<iota>s \<Rightarrow>\<^sub>i Val (fmupd x (VModLoaded (x, []) \<rho>'') \<epsilon> \<uplus>\<^sub>v \<rho>')"
+  using EvalImport by fastforce
+
+lemma EvalImportAborts:
+  "\<lbrakk> (x, []) \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> ; (x, []), \<rho>, xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b Val \<rho>'' ; q, \<iota>s \<Rightarrow>\<^sub>i Aborts \<kappa> \<rbrakk>
+  \<Longrightarrow> q, Import (x, xs) # \<iota>s \<Rightarrow>\<^sub>i Aborts \<kappa>"
+  using EvalImport by fastforce
+
+lemma EvalFromImportVal:
+  "\<lbrakk> unique_to q' q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s Val () ; q' \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> ; \<rho>, xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s Val vs ; q, \<iota>s \<Rightarrow>\<^sub>i Val \<rho>'' \<rbrakk>
+  \<Longrightarrow> q, FromImport q' xs # \<iota>s \<Rightarrow>\<^sub>i Val (fmap_of_list (zip xs vs) \<uplus>\<^sub>v \<rho>'')"
+  using EvalFromImport by fastforce
+
+lemma EvalFromImportAborts:
+  "\<lbrakk> unique_to q' q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s Val () ; q' \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> ; \<rho>, xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s Val vs ; q, \<iota>s \<Rightarrow>\<^sub>i Aborts \<kappa> \<rbrakk>
+  \<Longrightarrow> q, FromImport q' xs # \<iota>s \<Rightarrow>\<^sub>i Aborts \<kappa>"
+  using EvalFromImport by fastforce
+
+lemma EvalSubmodulesConsVal:
+  "\<lbrakk> snoc q x \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho>' ; snoc q x, \<rho>', xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b Val \<rho>'' \<rbrakk>
+  \<Longrightarrow> q, \<rho>, x # xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b Val (\<rho> \<uplus>\<^sub>v fmupd x (VModLoaded (snoc q x) \<rho>'') \<epsilon>)"
+  using EvalSubmodulesCons by fastforce
+
+lemma EvalSubmodulesConsAborts:
+  "\<lbrakk> snoc q x \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho>' ; snoc q x, \<rho>', xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b Aborts \<kappa> \<rbrakk> \<Longrightarrow> q, \<rho>, x # xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b Aborts \<kappa>"
+  using EvalSubmodulesCons by fastforce
+
+lemma EvalImpsConsVal:
+  "\<lbrakk> \<rho>, x \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p Val v ; \<rho>, xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s Val vs \<rbrakk> \<Longrightarrow> \<rho>, x # xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s Val (v # vs)"
+  using EvalImpsCons by fastforce
+
+lemma EvalImpsConsAborts:
+  "\<lbrakk> \<rho>, x \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p Val v ; \<rho>, xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s Aborts \<kappa> \<rbrakk> \<Longrightarrow> \<rho>, x # xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s Aborts \<kappa>"
+  using EvalImpsCons by fastforce
+
+lemmas loading_intros =
+  eval_mod_eval_imports_eval_sub_eval_imp_eval_imps_eval_mods.intros
+  EvalImportVal EvalImportAborts EvalFromImportVal EvalFromImportAborts
+  EvalSubmodulesConsVal EvalSubmodulesConsAborts EvalImpsConsVal EvalImpsConsAborts
+
+(* Soundness of the evaluator *)
+theorem loading_soundness:
+  shows "run_mod n q = Done r \<Longrightarrow> q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d r"
+    and "run_imports n q \<iota>s = Done r \<Longrightarrow> q, \<iota>s \<Rightarrow>\<^sub>i r"
+    and "run_sub n q \<rho> xs = Done r \<Longrightarrow> q, \<rho>, xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b r"
+    and "run_imp n \<rho> x = Done vr \<Longrightarrow> \<rho>, x \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p vr"
+    and "run_imps n \<rho> xs = Done vsr \<Longrightarrow> \<rho>, xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s vsr"
+    and "run_mods n qs = Done ur \<Longrightarrow> qs \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s ur"
+proof (induction n q and n q \<iota>s and n q \<rho> xs and n \<rho> x and n \<rho> xs and n qs
+    arbitrary: r and r and r and vr and vsr and ur rule: run_loading_induct)
+  case (2 n q)
+  then show ?case
+    by (auto simp: flet_case intro: loading_intros soundness_top
+      split: option.splits module_body.splits fuelled.splits result.splits outcome.splits)
+qed (auto intro: loading_intros simp: flet_case stub_of_Some stub_of_None split: option.splits fuelled.splits result.splits,
+  (fastforce intro: loading_intros)+)
+
+theorem program_soundness: "run_program n = Done \<kappa> \<Longrightarrow> eval_program \<kappa>"
+  by (auto simp: run_program_def intro: eval_program.intros loading_soundness(1)
+    split: fuelled.splits result.splits)
+
+(* Completeness of loading, given that no module of the program is predefined *)
+context
+  assumes disjoint: "fmdom M |\<inter>| fmdom predefined_env = {||}"
+begin
+
+lemma flet_Done_mlet: "flet (Done r) (\<lambda>v. Done (f v)) = Done (mlet r f)"
+  by (cases r) simp_all
+
+theorem loading_completeness_eventually:
+  shows "q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d r \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_mod n q = Done r"
+    and "q, \<iota>s \<Rightarrow>\<^sub>i r \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_imports n q \<iota>s = Done r"
+    and "q, \<rho>, xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b r \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_sub n q \<rho> xs = Done r"
+    and "\<rho>, x \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p vr \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_imp n \<rho> x = Done vr"
+    and "\<rho>, xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s vsr \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_imps n \<rho> xs = Done vsr"
+    and "qs \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s ur \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_mods n qs = Done ur"
+proof (induction rule: eval_mod_eval_imports_eval_sub_eval_imp_eval_imps_eval_mods.inducts[ih_names])
+  case EvalPredefined
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1]) (simp add: EvalPredefined.hyps)
+next
+  case EvalModule
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalModule.IH completeness_top_eventually[OF EvalModule.hyps(4)] in \<open>eventually_elim,
+        simp add: EvalModule.hyps(1,3) module_not_predefined[OF disjoint]\<close>)
+next
+  case EvalModuleFail
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalModuleFail.IH in \<open>eventually_elim, simp add: EvalModuleFail.hyps flet_Done_mlet module_not_predefined[OF disjoint]\<close>)
+next
+  case EvalModuleFailBody
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalModuleFailBody.IH completeness_top_eventually[OF EvalModuleFailBody.hyps(4)] in \<open>eventually_elim,
+        simp add: EvalModuleFailBody.hyps(1,3) module_not_predefined[OF disjoint]\<close>)
+next
+  case EvalImportsNil
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1]) simp
+next
+  case EvalImport
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalImport.IH in \<open>eventually_elim, simp add: flet_Done_mlet\<close>)
+next
+  case EvalImportFail
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalImportFail.IH in \<open>eventually_elim, simp add: flet_Done_mlet\<close>)
+next
+  case EvalImportFailChain
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalImportFailChain.IH in \<open>eventually_elim, simp add: flet_Done_mlet\<close>)
+next
+  case EvalFromImport
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalFromImport.IH in \<open>eventually_elim, simp add: flet_Done_mlet\<close>)
+next
+  case EvalFromImportFail
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalFromImportFail.IH in \<open>eventually_elim, simp add: flet_Done_mlet\<close>)
+next
+  case EvalFromImportFailContaining
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalFromImportFailContaining.IH in \<open>eventually_elim, simp add: flet_Done_mlet\<close>)
+next
+  case EvalFromImportFailMember
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalFromImportFailMember.IH in \<open>eventually_elim, simp add: flet_Done_mlet\<close>)
+next
+  case EvalSubmodulesNil
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1]) simp
+next
+  case EvalSubmodulesCons
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalSubmodulesCons.IH in \<open>eventually_elim, simp add: flet_Done_mlet\<close>)
+next
+  case EvalSubmodulesFail
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalSubmodulesFail.IH in \<open>eventually_elim, simp add: flet_Done_mlet\<close>)
+next
+  case EvalImpMember
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1]) (simp add: EvalImpMember.hyps(1) stub_of_None[THEN iffD2, OF EvalImpMember.hyps(2)])
+next
+  case EvalImpSubmodule
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalImpSubmodule.IH in \<open>eventually_elim, simp add: EvalImpSubmodule.hyps flet_Done_mlet\<close>)
+next
+  case EvalImpSubmoduleFail
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalImpSubmoduleFail.IH in \<open>eventually_elim, simp add: EvalImpSubmoduleFail.hyps flet_Done_mlet\<close>)
+next
+  case EvalImpsNil
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1]) simp
+next
+  case EvalImpsCons
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalImpsCons.IH in \<open>eventually_elim, simp add: flet_Done_mlet\<close>)
+next
+  case EvalImpsFail
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalImpsFail.IH in \<open>eventually_elim, simp add: flet_Done_mlet\<close>)
+next
+  case EvalModsNil
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1]) simp
+next
+  case EvalModsCons
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalModsCons.IH in \<open>eventually_elim, simp add: flet_Done_mlet\<close>)
+next
+  case EvalModsFail
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalModsFail.IH in \<open>eventually_elim, simp add: flet_Done_mlet\<close>)
+qed
+
+theorem program_completeness: "eval_program \<kappa> \<Longrightarrow> \<exists>n. run_program n = Done \<kappa>"
+proof (induction rule: eval_program.induct)
+  case (EvalProgram \<rho>)
+  then obtain n where "run_mod n main = Done (Val \<rho>)"
+    using loading_completeness_eventually(1)[THEN eventually_happens'[OF sequentially_bot]] by blast
+  then show ?case by (intro exI[of _ n]) (simp add: run_program_def)
+next
+  case (EvalProgramAbort \<kappa>)
+  then obtain n where "run_mod n main = Done (Aborts \<kappa>)"
+    using loading_completeness_eventually(1)[THEN eventually_happens'[OF sequentially_bot]] by blast
+  then show ?case by (intro exI[of _ n]) (simp add: run_program_def)
+qed
+
+end
+
+end
+
 end

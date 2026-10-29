@@ -26,7 +26,7 @@ To browse the theories with the prover running, open the session directory in th
 |----------------------|--------------------------------------------------------------------------------|
 | `Util.thy`           | Shared utilities                                                               |
 | `Syntax.thy`         | Abstract syntax and its analyses                                               |
-| `Contexts.thy`       | Context entries, class tables, name resolution, predefined modules             |
+| `Contexts.thy`       | Context entries, class tables, name resolution, predefined modules, programs   |
 | `Reasons.thy`        | Reasons for ill-formedness                                                     |
 | `Types.thy`          | Type resolution, substitution and class definitions                            |
 | `Semantics.thy`      | Values, results and evaluation judgements                                      |
