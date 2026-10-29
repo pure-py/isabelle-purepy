@@ -5,9 +5,10 @@ import pathlib
 from typing import Any
 
 from . import syntax
-from .generated import Finite_Map
-from .reasons import IllFormed, IllFormedModule
-from .translate import check, module_body, name
+from .generated import Finite_Map, Option, Programs, Reasons
+from .messages import IllFormed, IllFormedModule, IllFormedProgram, message
+from .messages import name as name_of
+from .translate import module_body, name
 from .type_syntax import Name, parse_name, proper_prefixes
 
 MAIN = parse_name("__main__")
@@ -69,6 +70,27 @@ def parse_module(q: Name, path: pathlib.Path) -> ast.Module:
 
 def translate_program(M: dict[Name, ast.Module]) -> Any:
     return Finite_Map.fmap_of_list([(name(q), module_body(q, m)) for q, m in M.items()])
+
+
+def ill_formed(q: Any, r: Any) -> IllFormed:
+    """Failure for reason r in module q"""
+    match r:
+        case Reasons.ImportCycle():
+            return IllFormedProgram(message(r))
+        case Reasons.Located(p, r_):
+            return IllFormedModule(p, message(r_), name_of(q))
+        case _:
+            return IllFormedModule(None, message(r), name_of(q))
+
+
+def check(M: Any) -> IllFormed | None:
+    match Programs.check_program(M):
+        case Option.None_():
+            return None
+        case Option.Some((q, r)):
+            return ill_formed(q, r)
+        case result:
+            raise AssertionError(f"unexpected result: {result}")
 
 
 def check_program(entry_path: pathlib.Path) -> IllFormed | syntax.Unsupported | None:

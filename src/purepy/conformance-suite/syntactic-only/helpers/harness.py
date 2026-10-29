@@ -3,10 +3,9 @@
 import ast
 import sys
 
-from purepy.check_program import MAIN, translate_program
-from purepy.reasons import IllFormed
+from purepy.check_program import MAIN, check, translate_program
+from purepy.messages import IllFormed
 from purepy.syntax import Unsupported, check_syntax_module
-from purepy.translate import check
 
 
 def expect_rejected(m: ast.Module, msg_contains: str = "") -> None:
