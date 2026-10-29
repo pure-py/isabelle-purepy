@@ -6,7 +6,7 @@ from functools import reduce
 from typing import Any
 
 from .generated import Option, Reasons, Syntax
-from .syntax import BOP, PRIM_TY, UOP, node
+from .syntax import BOP_AST, PRIMITIVE, UOP_AST, node
 
 
 def unparse_name(q: Any) -> str:
@@ -23,9 +23,6 @@ def lit_value(ell: Any) -> bool | int | float | str | None:
             return None
         case _:
             raise AssertionError(f"unexpected literal: {ell}")
-
-
-PRIMITIVE = {c: nu.value for nu, c in PRIM_TY.items()}
 
 
 def unparse_type(tau: Any) -> str:
@@ -52,10 +49,6 @@ def unparse_type(tau: Any) -> str:
             return f"{unparse_type(sigma)} | {unparse_type(tau_)}"
         case _:
             raise AssertionError(f"unexpected type: {tau}")
-
-
-BOP_AST = {bop: op for op, bop in BOP.items()}
-UOP_AST = {uop: op for op, uop in UOP.items()}
 
 
 def unparse_expr(e: Any) -> str:

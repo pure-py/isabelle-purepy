@@ -628,6 +628,7 @@ PRIM_TY = {
     Primitive.STR: Syntax.str_,
     Primitive.SIZED: Syntax.Sized,
 }
+PRIMITIVE = {c: nu.value for nu, c in PRIM_TY.items()}
 
 
 def ty_expr(psi: TypeExpr) -> Any:
@@ -679,6 +680,8 @@ UOP: dict[type[ast.unaryop], Any] = {
     ast.UAdd: Syntax.UOpPos,
     ast.USub: Syntax.UOpNeg,
 }
+BOP_AST = {bop: op for op, bop in BOP.items()}
+UOP_AST = {uop: op for op, uop in UOP.items()}
 
 
 def expr(e: ast.expr) -> Any:
