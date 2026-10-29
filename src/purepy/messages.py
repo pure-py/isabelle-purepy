@@ -1,4 +1,4 @@
-"""Messages for the reasons of the generated type checker, with its names, types, expressions and patterns
+"""Messages for the reasons of the generated type checker, with names, types, expressions and patterns
 unparsed to Python source"""
 
 import ast
