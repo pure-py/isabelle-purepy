@@ -10,7 +10,7 @@ no_notation (ASCII) comp (infixl \<open>o\<close> 55)
 no_notation (ASCII) comp (infixl \<open>o\<close> 55)
 
 (* Predefined functions, each standing for its meaning prim_meaning *)
-datatype prim = PrimLen | PrimRound | PrimExit
+datatype prim = PrimPrint | PrimLen | PrimRound | PrimExit
 
 datatype val =
       VLit lit
@@ -307,9 +307,15 @@ where
   (let n = \<lfloor>x\<rfloor>; d = x - real_of_int n in
    if d < 1 / 2 then n else if 1 / 2 < d then n + 1 else if even n then n else n + 1)"
 
+(* Output of print: None, as the semantics models no output. Code generation prints the value as an effect *)
+definition print_value :: "val \<Rightarrow> val result"
+where
+"print_value v = Val (VLit LitNone)"
+
 (* Meanings of the predefined functions *)
 fun prim_meaning :: "prim \<Rightarrow> val list \<Rightarrow> val result"
 where
+"prim_meaning PrimPrint [v] = print_value v" |
 "prim_meaning PrimLen [v] = (case iter v of Some vs \<Rightarrow> Val (VLit (LitInt (of_nat (length vs)))) | None \<Rightarrow> Aborts TypeError)" |
 "prim_meaning PrimRound [VLit (LitBool _)] = Aborts Excluded" |
 "prim_meaning PrimRound [VLit (LitInt n)] = Val (VLit (LitInt n))" |
@@ -700,15 +706,15 @@ end
 
 
 (* Environments of the predefined modules: each binds __name__ to the name of the module and each member to its
-   value; print and sys.argv, which the spec gives no value, are left out *)
+   value; sys.argv, which the spec gives no value, is left out *)
 definition predefined_env :: "(name, env) fmap"
 where
 "predefined_env =
   (let name = \<lambda>x. (var ''__name__'', VLit (LitString (str_of x))) in
    fmap_of_list
     [(builtins, fmap_of_list
-       ([name ''builtins'', (var ''len'', VPrim PrimLen), (var ''range'', VClass range_class),
-         (var ''round'', VPrim PrimRound)]
+       ([name ''builtins'', (var ''print'', VPrim PrimPrint), (var ''len'', VPrim PrimLen),
+         (var ''range'', VClass range_class), (var ''round'', VPrim PrimRound)]
         @ map (\<lambda>y. (y, VOpaque (snoc builtins y)))
             (map prim_name [NoneType, object, bool, int, float, str] @ map var [''list'', ''dict'', ''tuple'']))),
      ((var ''sys'', []), fmap_of_list [name ''sys'', (var ''exit'', VPrim PrimExit)]),

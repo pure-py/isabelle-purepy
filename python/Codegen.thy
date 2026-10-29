@@ -25,6 +25,71 @@ code_printing
   | constant "(<) :: var \<Rightarrow> var \<Rightarrow> bool" \<rightharpoonup> (Python) "(_ < _)"
   | constant var \<rightharpoonup> (Python) "\"\".join'(_')"
 
+(* Output of print, as Python's str of the value, written through a helper module as an effect; the equation
+   gives None, as the printed code does *)
+code_printing
+    constant print_value \<rightharpoonup> (Python) "'_'_import'_'_'(\"Purepy'_Output\"').output'(_')"
+  | code_module "Purepy_Output.py" \<rightharpoonup> (Python)
+\<open>import dataclasses
+import Semantics
+import Syntax
+
+
+def args(x):
+    return [getattr(x, f.name) for f in dataclasses.fields(x)]
+
+
+def kind(x):
+    return type(x).__name__.rstrip("_")
+
+
+def qualified(q):
+    x, xs = q
+    return ".".join([x, *xs])
+
+
+def to_str(v, nested=False):
+    k = kind(v)
+    if k == "VLit":
+        (lit,) = args(v)
+        lk = kind(lit)
+        if lk == "LitInt":
+            return str(args(lit)[0])
+        if lk == "LitFloat":
+            return repr(args(lit)[0])
+        if lk == "LitString":
+            w = args(lit)[0]
+            return repr(w) if nested else w
+        if lk == "LitBool":
+            return "True" if args(lit)[0] else "False"
+        return "None"
+    if k == "VList":
+        return "[" + ", ".join(to_str(u, True) for u in args(v)[0]) + "]"
+    if k == "VTuple":
+        us = args(v)[0]
+        return "(" + ", ".join(to_str(u, True) for u in us) + ("," if len(us) == 1 else "") + ")"
+    if k == "VDict":
+        return "{" + ", ".join(repr(w) + ": " + to_str(u, True) for w, u in args(v)[0]) + "}"
+    if k == "VObject":
+        c, fields = args(v)
+        return c[1][-1] + "(" + ", ".join(f"{x}={to_str(u, True)}" for x, u in fields) + ")"
+    if k == "VClass":
+        return f"<class '{qualified(args(v)[0])}'>"
+    if k == "VOpaque":
+        x, xs = args(v)[0]
+        return f"<class '{xs[-1]}'>" if x == "builtins" else f"<{qualified(args(v)[0])}>"
+    if k == "VPrim":
+        return f"<built-in function {kind(args(v)[0])[4:].lower()}>"
+    if k in ("VModStub", "VModLoaded"):
+        return f"<module '{qualified(args(v)[0])}'>"
+    return f"<{k}>"
+
+
+def output(v):
+    print(to_str(v), flush=True)
+    return Semantics.Val(Semantics.VLit(Syntax.LitNone()))
+\<close>
+
 (* The equations of the lifted string operations aren't executable, and their printings replace them *)
 declare [[code drop: substring str_of str_chars]]
 
@@ -141,7 +206,8 @@ lemmas run_loading_step_code [code] =
   loading.run_imps.simps(2-)[folded run_loading_steps_def]
   loading.run_mods.simps(2-)[folded run_loading_steps_def]
 
-export_code check_program evaluation.run_expr evaluation.run_stmt evaluation.run_top loading.run_program
+export_code check_program check_module predefined_classes main
+  evaluation.run_expr evaluation.run_stmt evaluation.run_top loading.run_program
   in Python file_prefix "."
 
 end

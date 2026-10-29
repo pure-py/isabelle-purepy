@@ -4,6 +4,7 @@ import sys
 
 from .check_program import check_module, check_program, format_program_result
 from .conformance import Exit
+from .run_program import DEFAULT_FUEL, run_program
 
 
 def main() -> None:
@@ -11,11 +12,12 @@ def main() -> None:
     parser.add_argument("path", type=pathlib.Path)
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--module", action="store_true")
+    parser.add_argument("--fuel", type=int, default=DEFAULT_FUEL)
 
     args = parser.parse_args()
 
     if not args.check:
-        parser.error("running programs not yet implemented")
+        sys.exit(run_program(args.path, args.fuel))
 
     result = check_module(args.path) if args.module else check_program(args.path)
     print(format_program_result(result, args.path))
