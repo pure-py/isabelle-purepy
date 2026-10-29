@@ -1081,7 +1081,7 @@ def module_body(q: Name, m: ast.Module) -> ModuleBody:
 
 
 def parse_module(source: str, filename: str, q: Name) -> ModuleBody:
-    """Body of module q in the generated syntax, or Unsupported raised for a source outside the fragment"""
+    """Body of module q in the generated syntax, or Unsupported raised for a source outside the subset"""
     try:
         m = parse(source, filename)
     except SyntaxError as e:
