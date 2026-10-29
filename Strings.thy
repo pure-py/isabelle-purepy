@@ -19,6 +19,16 @@ setup_lifting type_definition_str
 lift_definition substring :: "str \<Rightarrow> str \<Rightarrow> bool"
   is "\<lambda>ns ns'. \<exists>ms ms'. ns' = ms @ ns @ ms'" .
 
+(* String written in a theory *)
+lift_definition str_of :: "string \<Rightarrow> str"
+  is "map of_char"
+  by (rule code_point_list_of_string)
+
+(* The one-character strings of a string, in order *)
+lift_definition str_chars :: "str \<Rightarrow> str list"
+  is "map (\<lambda>n. [n])"
+  by (auto simp: code_point_list_def list.pred_set)
+
 instantiation str :: equal
 begin
 
