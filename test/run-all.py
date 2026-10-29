@@ -13,7 +13,7 @@ PYTHON_VERSION = (ROOT / ".python-version").read_text().strip()
 
 
 def check_lint(r: Results) -> None:
-    with r.test("package passes mypy and ruff"):
+    with r.test("mypy and ruff"):
         sources = sorted(str(path) for path in SRC.glob("*.py")) + [str(TEST / "run-all.py")]
         for tool in (
             ["mypy", "--strict", "--python-version", PYTHON_VERSION],
@@ -32,7 +32,6 @@ def main() -> None:
     args, conformance_args = parser.parse_known_args()
     if not args.no_lint:
         lint = Results()
-        print("mypy and ruff over src/purepy")
         check_lint(lint)
         lint.summary()
         if lint.failed:
