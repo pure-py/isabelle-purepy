@@ -6,7 +6,8 @@ from typing import Any
 
 from .generated import Option, Positions, Syntax
 
-# Sorts of the mechanisation, Any until the generator annotates them (pure-py/isabelle-python-codegen#7)
+# Sorts of the mechanisation, Any until the generator annotates them: #7, Type annotations in generated code,
+# https://github.com/pure-py/isabelle-python-codegen/issues/7
 type Var = str
 type QualifiedName = Any
 type Lit = Any
@@ -23,7 +24,8 @@ type TopStmt = Any
 type ModuleBody = Any
 type Program = Any
 type Reason = Any
-# Name as a tuple of variables, hashable unlike the generated form; delete with pure-py/isabelle-purepy#24
+# Name as a tuple of variables, hashable unlike the generated form; delete with #24, Names as a datatype,
+# https://github.com/pure-py/isabelle-purepy/issues/24
 type Name = tuple[Var, ...]
 
 
@@ -39,12 +41,12 @@ def proper_prefixes(q: Name) -> list[Name]:
     return [q[:i] for i in range(1, len(q))]
 
 
-def dotted_name(e: ast.expr) -> Name | None:
+def name(e: ast.expr) -> Name | None:
     match e:
         case ast.Name(id=x):
             return (x,)
         case ast.Attribute(value=e_, attr=x):
-            q = dotted_name(e_)
+            q = name(e_)
             return None if q is None else (*q, x)
         case _:
             return None
@@ -703,7 +705,7 @@ def lit(v: object) -> Lit:
             raise AssertionError(f"unexpected literal: {type(v).__name__}")
 
 
-def name(q: Name) -> QualifiedName:
+def qualified_name(q: Name) -> QualifiedName:
     return (q[0], list(q[1:]))
 
 
@@ -757,8 +759,8 @@ def ty_expr(e: ast.expr) -> TyExpr | None:
         case ast.Name(id=x) if x in PRIM_TY:
             return Syntax.TyExprPrim(PRIM_TY[x]())
         case ast.Name() | ast.Attribute():
-            q = dotted_name(e)
-            return None if q is None else Syntax.TyExprName(name(q), [])
+            q = name(e)
+            return None if q is None else Syntax.TyExprName(qualified_name(q), [])
         case ast.BinOp(left=e1, op=ast.BitOr(), right=e2):
             psi, psi_ = ty_expr(e1), ty_expr(e2)
             return None if psi is None or psi_ is None else Syntax.TyExprUnion(psi, psi_)
@@ -791,8 +793,8 @@ def ty_expr(e: ast.expr) -> TyExpr | None:
                 case ast.Name(id="dict"), _:
                     return None
                 case _:
-                    q = dotted_name(head)
-                    return None if q is None else Syntax.TyExprName(name(q), psis)
+                    q = name(head)
+                    return None if q is None else Syntax.TyExprName(qualified_name(q), psis)
         case _:
             return None
 
@@ -916,10 +918,10 @@ def pat_node(p: ast.pattern) -> Pat:
         case PatTuple(patterns=ps):
             return Syntax.PatTuple([pat(p_) for p_ in ps])
         case ast.MatchClass(cls=c, patterns=ps, kwd_attrs=xs, kwd_patterns=qs):
-            q = dotted_name(c)
+            q = name(c)
             assert q is not None  # other heads rejected by Python
             return Syntax.PatConstr(
-                name(q), ([pat(p_) for p_ in ps], [(x, pat(q_)) for x, q_ in zip(xs, qs)])
+                qualified_name(q), ([pat(p_) for p_ in ps], [(x, pat(q_)) for x, q_ in zip(xs, qs)])
             )
         case ast.MatchMapping(keys=ks, patterns=ps):
             return Syntax.PatDict([(key(k), pat(q)) for k, q in zip(ks, ps)])
@@ -1067,9 +1069,9 @@ def import_(iota: ast.stmt) -> Import:
 def import_node(iota: ast.stmt) -> Import:
     match iota:
         case ast.Import(names=[alias]):
-            return Syntax.Import(name(parse_name(alias.name)))
+            return Syntax.Import(qualified_name(parse_name(alias.name)))
         case ast.ImportFrom(module=str(q), names=aliases):
-            return Syntax.FromImport(name(parse_name(q)), [a.name for a in aliases])
+            return Syntax.FromImport(qualified_name(parse_name(q)), [a.name for a in aliases])
         case _:
             raise AssertionError(f"unexpected import: {type(iota).__name__}")
 

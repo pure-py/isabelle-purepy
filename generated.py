@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Copy the generated modules into the package with relative imports; delete with pure-py/isabelle-python-codegen#12"""
+"""Copy the generated modules into the package with relative imports; delete with #12, Relative imports between
+generated modules, https://github.com/pure-py/isabelle-python-codegen/issues/12"""
 
 import pathlib
 import re
@@ -19,7 +20,7 @@ def main() -> None:
             r"^import (\w+)$",
             lambda m: f"from . import {m.group(1)}" if m.group(1) in modules else m.group(0),
             text,
-            flags=re.M,
+            flags=re.MULTILINE,
         )
         (package / f"{module}.py").write_text(text)
 

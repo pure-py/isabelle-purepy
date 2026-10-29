@@ -12,9 +12,9 @@ from .syntax import (
     Program,
     QualifiedName,
     Reason,
-    name,
     parse_name,
     proper_prefixes,
+    qualified_name,
 )
 
 MAIN = parse_name("__main__")
@@ -69,7 +69,7 @@ def parse_module(q: Name, path: pathlib.Path) -> ModuleBody:
 
 
 def program(bodies: dict[Name, ModuleBody]) -> Program:
-    return Finite_Map.fmap_of_list([(name(q), body) for q, body in bodies.items()])
+    return Finite_Map.fmap_of_list([(qualified_name(q), body) for q, body in bodies.items()])
 
 
 def check(M: Program) -> IllFormed | None:
