@@ -52,8 +52,6 @@ def name(e: ast.expr) -> Name | None:
             return None
 
 
-# PurePy statement: Python statement, mutual def region or mutual type region. Python body (statement
-# list) represents spec's right-nested sequence s s'.
 type TypeDefinition = ast.ClassDef | ast.TypeAlias
 type Statement = ast.stmt | list[ast.FunctionDef] | list[TypeDefinition]
 
