@@ -78,7 +78,7 @@ def check_program(entry_path: pathlib.Path) -> IllFormed | syntax.Unsupported | 
         return e
 
 
-# Check of the module at path on its own, as a program without other modules
+# Check the module at path as a program of one module
 def check_module(path: pathlib.Path) -> IllFormed | syntax.Unsupported | None:
     try:
         return check(translate_program({MAIN: parse_module(MAIN, path)}))

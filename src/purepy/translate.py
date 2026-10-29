@@ -391,7 +391,7 @@ def import_node(iota: ast.stmt) -> Any:
 NAME = "__name__"
 
 
-# Declaration `__name__: str = name(q)` beginning the body of module q, located at the module start
+# Declaration of the module name variable, assigned the name of q, at the start of the body of module q
 def name_declaration(q: Name) -> ast.AnnAssign:
     return ast.AnnAssign(
         target=ast.Name(id=NAME, ctx=ast.Store()),

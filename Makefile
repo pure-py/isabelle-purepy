@@ -17,7 +17,7 @@ check-version:
 codegen:
 	@test -e $(CODEGEN)/Python.thy -a ! -e $(CODEGEN)/.git || ./fetch-codegen.sh
 
-# Checks the proofs, then generates the type checker into $(GENERATED), a subpackage of purepy
+# Check the proofs, then generate the type checker as a subpackage of purepy
 build: check-version codegen
 	@test "$$(cat .python-version)" = "$$(cat $(CODEGEN)/.python-version)" || \
 		{ echo "code generator targets Python $$(cat $(CODEGEN)/.python-version), not $$(cat .python-version)"; exit 1; }

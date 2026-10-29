@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Generated modules copied from the code generator's output directory into a package directory, their imports
-of one another made relative, so that the package can be installed under any name."""
+"""Copy the generated modules into a package directory, their imports of one another made relative"""
 
 import pathlib
 import re
