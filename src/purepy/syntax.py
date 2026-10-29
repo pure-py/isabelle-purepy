@@ -569,7 +569,25 @@ def format_result(result: Unsupported | None, filename: str) -> str:
     return f"{filename}: {result.msg}"
 
 
-def lit(v: object) -> Any:
+# Sorts of the mechanisation, Any until the generator annotates them (pure-py/isabelle-python-codegen#7)
+type QualifiedName = Any
+type Lit = Any
+type Pat = Any
+type Expr = Any
+type Qualifier = Any
+type TyExpr = Any
+type Ty = Any
+type Import = Any
+type Stmt = Any
+type Func = Any
+type TypeDef = Any
+type TopStmt = Any
+type ModuleBody = Any
+type Program = Any
+type Reason = Any
+
+
+def lit(v: object) -> Lit:
     match v:
         case bool():
             return Syntax.LitBool(v)
@@ -585,7 +603,7 @@ def lit(v: object) -> Any:
             raise AssertionError(f"unexpected literal: {type(v).__name__}")
 
 
-def name(q: Name) -> Any:
+def name(q: Name) -> QualifiedName:
     return (q.parts[0], list(q.parts[1:]))
 
 
@@ -631,7 +649,7 @@ PRIM_TY = {
 PRIMITIVE = {c: nu.value for nu, c in PRIM_TY.items()}
 
 
-def ty_expr(psi: TypeExpr) -> Any:
+def ty_expr(psi: TypeExpr) -> TyExpr:
     match psi:
         case Primitive():
             return Syntax.TyExprPrim(PRIM_TY[psi]())
@@ -651,7 +669,7 @@ def ty_expr(psi: TypeExpr) -> Any:
             return Syntax.TyExprUnion(ty_expr(left), ty_expr(right))
 
 
-def annotation(e: ast.expr | None) -> Any:
+def annotation(e: ast.expr | None) -> TyExpr:
     assert e is not None  # missing annotations rejected by the parser
     return ty_expr(type_expr(e))
 
@@ -684,11 +702,11 @@ BOP_AST = {bop: op for op, bop in BOP.items()}
 UOP_AST = {uop: op for op, uop in UOP.items()}
 
 
-def expr(e: ast.expr) -> Any:
+def expr(e: ast.expr) -> Expr:
     return at(e, expr_node(e))
 
 
-def expr_node(e: ast.expr) -> Any:
+def expr_node(e: ast.expr) -> Expr:
     match e:
         case ast.Name(id=x):
             return Syntax.ExprVar(x)
@@ -728,13 +746,13 @@ def expr_node(e: ast.expr) -> Any:
             raise AssertionError(f"unexpected expression: {type(e).__name__}")
 
 
-def keyword(k: ast.keyword) -> tuple[Any, Any]:
+def keyword(k: ast.keyword) -> tuple[str, Expr]:
     assert k.arg is not None  # dictionary unpacking rejected by the parser
     return (k.arg, expr(k.value))
 
 
 # A generator is located at its target, since the parsed form has no position for the generator itself
-def qualifiers(gs: list[ast.comprehension]) -> list[Any]:
+def qualifiers(gs: list[ast.comprehension]) -> list[Qualifier]:
     return [
         q
         for g in gs
@@ -745,11 +763,11 @@ def qualifiers(gs: list[ast.comprehension]) -> list[Any]:
     ]
 
 
-def pat(p: ast.pattern) -> Any:
+def pat(p: ast.pattern) -> Pat:
     return at(p, pat_node(p))
 
 
-def pat_node(p: ast.pattern) -> Any:
+def pat_node(p: ast.pattern) -> Pat:
     match p:
         case ast.MatchValue(value=ast.Constant(value=v)) | ast.MatchSingleton(value=v):
             return Syntax.PatLiteral(lit(v))
@@ -780,11 +798,11 @@ def key(k: ast.expr) -> str:
     return k.value
 
 
-def stmt(s: ast.stmt) -> Any:
+def stmt(s: ast.stmt) -> Stmt:
     return at(s, stmt_node(s))
 
 
-def stmt_node(s: ast.stmt) -> Any:
+def stmt_node(s: ast.stmt) -> Stmt:
     match s:
         case ast.Pass():
             return Syntax.StmtPass()
@@ -809,7 +827,7 @@ def stmt_node(s: ast.stmt) -> Any:
             raise AssertionError(f"unexpected statement: {type(s).__name__}")
 
 
-def branches(col: int, orelse: list[ast.stmt]) -> tuple[list[Any], Any]:
+def branches(col: int, orelse: list[ast.stmt]) -> tuple[list[tuple[Expr, Stmt]], Any]:
     """Recover the elifs, which Python parses as nested ifs. A nested if at the same column as the
     outer if is an elif."""
     match orelse:
@@ -822,17 +840,17 @@ def branches(col: int, orelse: list[ast.stmt]) -> tuple[list[Any], Any]:
             return [], Option.Some(seq(orelse))
 
 
-def seq(body: list[ast.stmt]) -> Any:
+def seq(body: list[ast.stmt]) -> Stmt:
     *items, item = statements(body)
     return reduce(lambda s, item_: seq_stmt(item_stmt(item_), s), reversed(items), item_stmt(item))
 
 
 # Sequence at the position of its first statement
-def seq_stmt(s: Any, s_: Any) -> Any:
+def seq_stmt(s: Stmt, s_: Stmt) -> Stmt:
     return Positions.At(located_at(s), Syntax.StmtSeq(s, s_))
 
 
-def item_stmt(item: Statement) -> Any:
+def item_stmt(item: Statement) -> Stmt:
     match item:
         case ast.stmt():
             return stmt(item)
@@ -842,7 +860,7 @@ def item_stmt(item: Statement) -> Any:
             raise AssertionError("type definition outside the module top level")
 
 
-def func(d: ast.stmt) -> Any:
+def func(d: ast.stmt) -> Func:
     assert isinstance(d, ast.FunctionDef)  # mutual def regions hold only def statements
     return at(
         d,
@@ -856,15 +874,15 @@ def func(d: ast.stmt) -> Any:
     )
 
 
-def type_params(node: ast.FunctionDef | ast.ClassDef | ast.TypeAlias) -> list[Any]:
+def type_params(node: ast.FunctionDef | ast.ClassDef | ast.TypeAlias) -> list[str]:
     return [alpha for alpha in type_param_names(node)]
 
 
-def type_def(chi: ast.stmt) -> Any:
+def type_def(chi: ast.stmt) -> TypeDef:
     return at(chi, type_def_node(chi))
 
 
-def type_def_node(chi: ast.stmt) -> Any:
+def type_def_node(chi: ast.stmt) -> TypeDef:
     match chi:
         case ast.ClassDef(name=c, bases=bases):
             fields = [(x, ty_expr(psi)) for x, psi in own_fields(chi)]
@@ -887,14 +905,14 @@ def extends(bases: list[ast.expr]) -> Any:
             raise AssertionError("multiple inheritance")
 
 
-def top_stmt(body: list[ast.stmt]) -> Any:
+def top_stmt(body: list[ast.stmt]) -> TopStmt:
     *items, item = statements(body)
     return reduce(
         lambda s, item_: Syntax.TopSeq(top_item(item_), s), reversed(items), top_item(item)
     )
 
 
-def top_item(item: Statement) -> Any:
+def top_item(item: Statement) -> TopStmt:
     match item:
         case [ast.ClassDef() | ast.TypeAlias(), *_]:
             return Syntax.TypeDefs([type_def(chi) for chi in item])
@@ -902,11 +920,11 @@ def top_item(item: Statement) -> Any:
             return Syntax.Stmt(item_stmt(item))
 
 
-def import_(iota: ast.stmt) -> Any:
+def import_(iota: ast.stmt) -> Import:
     return at(iota, import_node(iota))
 
 
-def import_node(iota: ast.stmt) -> Any:
+def import_node(iota: ast.stmt) -> Import:
     match iota:
         case ast.Import(names=[alias]):
             return Syntax.Import(name(parse_name(alias.name)))
@@ -928,9 +946,6 @@ def name_declaration(q: Name) -> ast.AnnAssign:
         lineno=1,
         col_offset=0,
     )
-
-
-type ModuleBody = Any
 
 
 def module_body(q: Name, m: ast.Module) -> ModuleBody:

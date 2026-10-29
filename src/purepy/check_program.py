@@ -1,13 +1,12 @@
 """Module discovery and checking of a program by the generated type checker"""
 
 import pathlib
-from typing import Any
 
 from . import syntax
 from .conformance import Exit
 from .generated import Finite_Map, Option, Programs, Reasons
 from .messages import message
-from .syntax import ModuleBody, name
+from .syntax import ModuleBody, Program, QualifiedName, Reason, name
 from .type_syntax import Name, parse_name, proper_prefixes
 
 MAIN = parse_name("__main__")
@@ -35,9 +34,8 @@ def module_names(base_dir: pathlib.Path) -> set[Name]:
     return {p for q in names if q is not None for p in [q, *proper_prefixes(q)]}
 
 
-type Program = Any
 # Module and reason of an ill-formed program
-type IllFormed = tuple[Any, Any]
+type IllFormed = tuple[QualifiedName, Reason]
 type Result = IllFormed | syntax.Unsupported | None
 
 

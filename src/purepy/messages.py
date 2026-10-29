@@ -3,18 +3,29 @@ unparsed to Python source"""
 
 import ast
 from functools import reduce
-from typing import Any
 
 from .generated import Option, Reasons, Syntax
-from .syntax import BOP_AST, PRIMITIVE, UOP_AST, node
+from .syntax import (
+    BOP_AST,
+    PRIMITIVE,
+    UOP_AST,
+    Expr,
+    Lit,
+    Pat,
+    QualifiedName,
+    Qualifier,
+    Reason,
+    Ty,
+    node,
+)
 
 
-def unparse_name(q: Any) -> str:
+def unparse_name(q: QualifiedName) -> str:
     x, xs = q
     return ".".join([x, *xs])
 
 
-def lit_value(ell: Any) -> bool | int | float | str | None:
+def lit_value(ell: Lit) -> bool | int | float | str | None:
     match ell:
         case Syntax.LitInt(v) | Syntax.LitBool(v) | Syntax.LitFloat(v) | Syntax.LitString(v):
             assert isinstance(v, bool | int | float | str)
@@ -25,7 +36,7 @@ def lit_value(ell: Any) -> bool | int | float | str | None:
             raise AssertionError(f"unexpected literal: {ell}")
 
 
-def unparse_type(tau: Any) -> str:
+def unparse_type(tau: Ty) -> str:
     match tau:
         case Syntax.TyPrim(nu):
             return PRIMITIVE[type(nu)]
@@ -51,8 +62,8 @@ def unparse_type(tau: Any) -> str:
             raise AssertionError(f"unexpected type: {tau}")
 
 
-def unparse_expr(e: Any) -> str:
-    def ast_expr(e: Any) -> ast.expr:
+def unparse_expr(e: Expr) -> str:
+    def ast_expr(e: Expr) -> ast.expr:
         match node(e):
             case Syntax.ExprVar(x):
                 return ast.Name(x)
@@ -103,10 +114,10 @@ def unparse_expr(e: Any) -> str:
             case _:
                 raise AssertionError(f"unexpected expression: {e}")
 
-    def ast_comprehensions(qs: list[Any]) -> list[ast.comprehension]:
+    def ast_comprehensions(qs: list[Qualifier]) -> list[ast.comprehension]:
         """Comprehension node per generator in qs, whose conditions are the guards following the generator"""
 
-        def add(gs: list[ast.comprehension], q: Any) -> list[ast.comprehension]:
+        def add(gs: list[ast.comprehension], q: Qualifier) -> list[ast.comprehension]:
             match node(q):
                 case Syntax.Generator(x, e):
                     return [*gs, ast.comprehension(ast.Name(x), ast_expr(e), [], 0)]
@@ -148,7 +159,7 @@ SEQUENCE_KIND = {
 }
 
 
-def unparse_pat(p: Any) -> str:
+def unparse_pat(p: Pat) -> str:
     match node(p):
         case Syntax.PatLiteral(ell):
             return ast.unparse(ast.Constant(lit_value(ell)))
@@ -172,7 +183,7 @@ def unparse_pat(p: Any) -> str:
             raise AssertionError(f"unexpected pattern: {p}")
 
 
-def message(r: Any) -> str:
+def message(r: Reason) -> str:
     match r:
         case Reasons.DuplicateField(x, c):
             return f"duplicate field '{x}' in class '{c}'"
