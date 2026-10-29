@@ -35,8 +35,8 @@ def module_names(base_dir: pathlib.Path) -> set[Name]:
     return {p for q in names if q is not None for p in [q, *proper_prefixes(q)]}
 
 
+# Entry module parsed first, so that its errors take precedence
 def parse_program(entry_path: pathlib.Path) -> Any:
-    """Program of every module of the source tree, the main module first"""
     base_dir = entry_path.parent
     names = sorted(module_names(base_dir), key=str)
     return program(
