@@ -5,13 +5,13 @@ import sys
 
 from purepy.check_program import MAIN, check, program
 from purepy.messages import message
-from purepy.syntax import Unsupported, module_body
+from purepy.syntax import ParserRejects, module_body
 
 
 def expect_rejected(m: ast.Module, msg_contains: str = "") -> None:
     try:
         body = module_body(MAIN, m)
-    except Unsupported as e:
+    except ParserRejects as e:
         msg = e.msg
     else:
         result = check(program({MAIN: body}))

@@ -47,7 +47,7 @@ def module_names(base_dir: pathlib.Path) -> set[Name]:
 
 # Module and reason of an ill-formed program
 type IllFormed = tuple[QualifiedName, Reason]
-type Result = IllFormed | syntax.Unsupported | None
+type Result = IllFormed | syntax.ParserRejects | None
 
 
 # Entry module parsed first, so its errors take precedence
@@ -66,7 +66,7 @@ def parse_program(entry_path: pathlib.Path) -> Program:
 def parse_module(q: Name, path: pathlib.Path) -> ModuleBody:
     try:
         return syntax.parse_module("" if path.is_dir() else path.read_text(), str(path), q)
-    except syntax.Unsupported as e:
+    except syntax.ParserRejects as e:
         e.module = q
         raise
 
@@ -88,7 +88,7 @@ def check(M: Program) -> IllFormed | None:
 def check_program(entry_path: pathlib.Path) -> Result:
     try:
         return check(parse_program(entry_path))
-    except syntax.Unsupported as e:
+    except syntax.ParserRejects as e:
         return e
 
 
@@ -96,7 +96,7 @@ def check_program(entry_path: pathlib.Path) -> Result:
 def check_module(path: pathlib.Path) -> Result:
     try:
         return check(program({MAIN: parse_module(MAIN, path)}))
-    except syntax.Unsupported as e:
+    except syntax.ParserRejects as e:
         return e
 
 
@@ -104,16 +104,16 @@ def exit_code(result: Result) -> Exit:
     match result:
         case None:
             return Exit.OK
-        case syntax.Unsupported():
+        case syntax.ParserRejects():
             return Exit(result.exit_code)
         case _:
             return Exit.ILL_FORMED
 
 
 # File of the module at fault
-def error_path(result: IllFormed | syntax.Unsupported, entry_path: pathlib.Path) -> pathlib.Path:
+def error_path(result: IllFormed | syntax.ParserRejects, entry_path: pathlib.Path) -> pathlib.Path:
     match result:
-        case syntax.Unsupported():
+        case syntax.ParserRejects():
             q = result.module
         case ((x, xs), _):
             q = (x, *xs)
@@ -124,7 +124,7 @@ def format_result(result: Result, filename: str) -> str:
     match result:
         case None:
             return f"{filename}: ok"
-        case syntax.Unsupported():
+        case syntax.ParserRejects():
             return syntax.format_result(result, filename)
         case (_, Reasons.Located((line, col), r)):
             return f"{filename}:{line}:{col}: {message(r)}"
