@@ -42,21 +42,6 @@ def split_imports(body: list[ast.stmt]) -> tuple[list[ast.stmt], list[ast.stmt]]
     return iotas, body[len(iotas) :]
 
 
-def bound(pattern: ast.pattern) -> list[Var]:
-    """Variables bound by pattern, in order and with repetitions"""
-    match pattern:
-        case ast.MatchValue() | ast.MatchSingleton():
-            return []
-        case ast.MatchAs(pattern=p, name=x):
-            return (bound(p) if p is not None else []) + ([x] if x else [])
-        case ast.MatchSequence(patterns=ps) | ast.MatchMapping(patterns=ps):
-            return [x for p in ps for x in bound(p)]
-        case ast.MatchClass(patterns=ps, kwd_patterns=ps_):
-            return [x for p in list(ps) + list(ps_) for x in bound(p)]
-        case _:
-            raise AssertionError(f"unexpected pattern: {type(pattern).__name__}")
-
-
 OP_SYMBOLS: dict[type, str] = {
     ast.BitOr: "|",
     ast.Eq: "==",
@@ -181,91 +166,9 @@ def parse(source: str, filename: str) -> ast.Module:
     return m
 
 
-def check_syntax_stmt(node: ast.stmt) -> None:
-    match node:
-        case ast.Pass():
-            pass
-        case ast.Assign():
-            if len(node.targets) != 1:
-                raise NotAllowed(node, "multiple assignment targets")
-            target = node.targets[0]
-            match target:
-                case ast.Subscript():
-                    raise NotAllowed(node, "item assignment")
-                case ast.Attribute():
-                    raise NotAllowed(node, "attribute assignment")
-                case ast.Name():
-                    pass
-                case _:
-                    raise NotAllowed(node, "unpacking assignment")
-        case ast.Return():
-            pass
-        case ast.If():
-            check_syntax_body(node.body)
-            check_syntax_body(node.orelse)
-        case ast.FunctionDef():
-            check_syntax_type_params(node)
-            if len(node.decorator_list) > 0:
-                raise NotAllowed(node, "decorators")
-            if any(a.annotation is None for a in node.args.args):
-                raise NotAllowed(node, "unannotated parameter")
-            if node.returns is None:
-                raise NotAllowed(node, "unannotated return type")
-            check_syntax_annotation(node.returns)
-            check_syntax_body(node.body)
-        case ast.Expr() | ast.Assert():
-            pass
-        case ast.AugAssign():
-            raise NotAllowed(node, "augmented assignment (+=, etc.)")
-        case ast.AnnAssign():
-            if not isinstance(node.target, ast.Name):
-                raise NotAllowed(node, "assignment target other than a simple name")
-            check_syntax_annotation(node.annotation)
-        case ast.Delete():
-            raise NotAllowed(node, "del")
-        case ast.For():
-            raise NotAllowed(node, "for loops")
-        case ast.While():
-            raise NotAllowed(node, "while loops")
-        case ast.With():
-            raise NotAllowed(node, "with statements")
-        case ast.AsyncFunctionDef() | ast.AsyncFor() | ast.AsyncWith():
-            raise NotAllowed(node, "async")
-        case ast.Raise():
-            raise NotAllowed(node, "raise")
-        case ast.Try() | ast.TryStar():
-            raise NotAllowed(node, "try/except")
-        case ast.Import() | ast.ImportFrom():
-            raise NotAllowed(node, "import outside the module top level")
-        case ast.Global():
-            raise NotAllowed(node, "global")
-        case ast.Nonlocal():
-            raise NotAllowed(node, "nonlocal")
-        case ast.ClassDef():
-            raise NotAllowed(node, "class definition outside the module top level")
-        case ast.TypeAlias():
-            raise NotAllowed(node, "type statement outside the module top level")
-        case ast.Match():
-            for case in node.cases:
-                if case.guard is not None:
-                    raise NotAllowed(case, "case guards")
-                check_syntax_pattern(case.pattern)
-                dup = duplicate(bound(case.pattern))
-                if dup is not None:
-                    raise NotAllowed(case.pattern, f"duplicate variable {dup} in pattern")
-                check_syntax_body(case.body)
-        case ast.Break():
-            raise NotAllowed(node, "break")
-        case ast.Continue():
-            raise NotAllowed(node, "continue")
-        case _:
-            raise NotAllowed(node, f"{type(node).__name__} statement")
-
-
 def check_syntax_classdef(node: ast.ClassDef) -> None:
     if any(isinstance(b, ast.Name) and b.id == "Enum" for b in node.bases):
         raise NotAllowed(node, "enum classes")
-    check_syntax_type_params(node)
     if len(node.decorator_list) == 0:
         raise NotAllowed(node, "undecorated class")
     if len(node.decorator_list) > 1:
@@ -289,38 +192,12 @@ def check_syntax_classdef(node: ast.ClassDef) -> None:
 
 
 def check_syntax_type_alias(node: ast.TypeAlias) -> None:
-    check_syntax_type_params(node)
     check_syntax_annotation(node.value)
 
 
 def duplicate[T](xs: Sequence[T]) -> T | None:
     """An element occurring twice in xs, if any"""
     return next((x for i, x in enumerate(xs) if x in xs[:i]), None)
-
-
-def check_syntax_type_params(node: ast.FunctionDef | ast.ClassDef | ast.TypeAlias) -> None:
-    dup = duplicate(
-        [
-            param.name
-            for param in node.type_params
-            if isinstance(param, (ast.TypeVar, ast.ParamSpec, ast.TypeVarTuple))
-        ]
-    )
-    if dup is not None:
-        raise NotAllowed(node, f"duplicate type parameter {dup}")
-    for param in node.type_params:
-        match param:
-            case ast.TypeVar():
-                if isinstance(param.bound, ast.Tuple):
-                    raise NotAllowed(param, f"constraints on type parameter {param.name}")
-                if param.bound is not None:
-                    raise NotAllowed(param, f"bound on type parameter {param.name}")
-            case ast.ParamSpec():
-                raise NotAllowed(param, f"ParamSpec type parameter **{param.name}")
-            case ast.TypeVarTuple():
-                raise NotAllowed(param, f"TypeVarTuple type parameter *{param.name}")
-            case _:
-                raise AssertionError(f"unexpected type parameter: {type(param).__name__}")
 
 
 def check_syntax_field(stmt: ast.stmt) -> None:
@@ -331,61 +208,6 @@ def check_syntax_field(stmt: ast.stmt) -> None:
     if stmt.value is not None:
         raise NotAllowed(stmt, "field default values")
     check_syntax_annotation(stmt.annotation)
-
-
-def check_syntax_pattern(node: ast.pattern) -> None:
-    match node:
-        case ast.MatchValue():
-            v = node.value
-            match v:
-                case ast.Constant():
-                    if isinstance(v.value, (int, float, str)):
-                        return
-                case ast.Attribute():
-                    raise NotAllowed(node, "attribute value patterns")
-            raise NotAllowed(node, "complex and bytes literal patterns")
-        case ast.MatchSingleton():
-            pass
-        case ast.MatchAs():
-            if node.pattern is not None:
-                check_syntax_pattern(node.pattern)
-        case PatList() | PatTuple():
-            for p in node.patterns:
-                check_syntax_pattern(p)
-        case ast.MatchClass():
-            for p in list(node.patterns) + list(node.kwd_patterns):
-                check_syntax_pattern(p)
-            dup = duplicate(node.kwd_attrs)
-            if dup is not None:
-                raise NotAllowed(node, f"duplicate keyword {dup} in constructor pattern")
-        case ast.MatchMapping():
-            if node.rest is not None:
-                raise NotAllowed(node, "rest capture in dictionary patterns")
-            for key in node.keys:
-                if not (isinstance(key, ast.Constant) and isinstance(key.value, str)):
-                    raise NotAllowed(key, "dictionary pattern key other than a string literal")
-            dup = duplicate(
-                [
-                    key.value
-                    for key in node.keys
-                    if isinstance(key, ast.Constant) and isinstance(key.value, str)
-                ]
-            )
-            if dup is not None:
-                raise NotAllowed(node, f"duplicate key '{dup}' in dictionary pattern")
-            for sub in node.patterns:
-                check_syntax_pattern(sub)
-        case ast.MatchOr():
-            raise NotAllowed(node, "or-patterns")
-        case ast.MatchStar():
-            raise NotAllowed(node, "star patterns")
-        case _:
-            raise NotAllowed(node, f"{type(node).__name__} pattern")
-
-
-def check_syntax_body(stmts: list[ast.stmt]) -> None:
-    for s in stmts:
-        check_syntax_stmt(s)
 
 
 def check_syntax_import(node: ast.stmt) -> None:
@@ -423,8 +245,6 @@ def check_syntax_top_level(body: list[ast.stmt]) -> None:
             check_syntax_classdef(s)
         elif isinstance(s, ast.TypeAlias):
             check_syntax_type_alias(s)
-        else:
-            check_syntax_stmt(s)
 
 
 def returns_outside_function(s: ast.stmt) -> list[ast.Return]:
@@ -524,12 +344,6 @@ def extend_type_region(
     if isinstance(head, (ast.ClassDef, ast.TypeAlias)):
         return extend_type_region(region + [head], rest[1:])
     return [region] + statements(rest)
-
-
-def type_param_names(node: ast.FunctionDef | ast.ClassDef | ast.TypeAlias) -> tuple[Var, ...]:
-    alphas = tuple(p.name for p in node.type_params if isinstance(p, ast.TypeVar))
-    assert len(alphas) == len(node.type_params)
-    return alphas
 
 
 def lit(v: object) -> Lit:
@@ -791,13 +605,34 @@ def qualifier(g: ast.comprehension) -> list[Qualifier]:
             raise NotAllowed(g, "unpacking in comprehensions")
 
 
+def bound(pattern: ast.pattern) -> list[Var]:
+    """Variables bound by pattern, in order and with repetitions"""
+    match pattern:
+        case ast.MatchValue() | ast.MatchSingleton():
+            return []
+        case ast.MatchAs(pattern=p, name=x):
+            return (bound(p) if p is not None else []) + ([x] if x else [])
+        case ast.MatchSequence(patterns=ps) | ast.MatchMapping(patterns=ps):
+            return [x for p in ps for x in bound(p)]
+        case ast.MatchClass(patterns=ps, kwd_patterns=ps_):
+            return [x for p in list(ps) + list(ps_) for x in bound(p)]
+        case _:
+            raise AssertionError(f"unexpected pattern: {type(pattern).__name__}")
+
+
 def pat(p: ast.pattern) -> Pat:
     return at(p, pat_node(p))
 
 
 def pat_node(p: ast.pattern) -> Pat:
     match p:
-        case ast.MatchValue(value=ast.Constant(value=v)) | ast.MatchSingleton(value=v):
+        case ast.MatchValue(value=ast.Constant(value=int() | float() | str() as v)):
+            return Syntax.PatLiteral(lit(v))
+        case ast.MatchValue(value=ast.Attribute()):
+            raise NotAllowed(p, "attribute value patterns")
+        case ast.MatchValue():
+            raise NotAllowed(p, "complex and bytes literal patterns")
+        case ast.MatchSingleton(value=v):
             return Syntax.PatLiteral(lit(v))
         case ast.MatchAs(pattern=None, name=None):
             return Syntax.PatWildcard()
@@ -812,18 +647,34 @@ def pat_node(p: ast.pattern) -> Pat:
         case ast.MatchClass(cls=c, patterns=ps, kwd_attrs=xs, kwd_patterns=qs):
             q = name(c)
             assert q is not None  # other heads rejected by Python
-            return Syntax.PatConstr(
-                qualified_name(q), ([pat(p_) for p_ in ps], [(x, pat(q_)) for x, q_ in zip(xs, qs)])
-            )
+            ps_ = [pat(p_) for p_ in ps]
+            qs_ = [pat(q_) for q_ in qs]
+            dup = duplicate(xs)
+            if dup is not None:
+                raise NotAllowed(p, f"duplicate keyword {dup} in constructor pattern")
+            return Syntax.PatConstr(qualified_name(q), (ps_, list(zip(xs, qs_))))
+        case ast.MatchMapping(rest=str()):
+            raise NotAllowed(p, "rest capture in dictionary patterns")
         case ast.MatchMapping(keys=ks, patterns=ps):
-            return Syntax.PatDict([(key(k), pat(q)) for k, q in zip(ks, ps)])
+            ws = [key(k) for k in ks]
+            dup = duplicate(ws)
+            if dup is not None:
+                raise NotAllowed(p, f"duplicate key '{dup}' in dictionary pattern")
+            return Syntax.PatDict([(w, pat(q)) for w, q in zip(ws, ps)])
+        case ast.MatchOr():
+            raise NotAllowed(p, "or-patterns")
+        case ast.MatchStar():
+            raise NotAllowed(p, "star patterns")
         case _:
-            raise AssertionError(f"unexpected pattern: {type(p).__name__}")
+            raise NotAllowed(p, f"{type(p).__name__} pattern")
 
 
 def key(k: ast.expr) -> str:
-    assert isinstance(k, ast.Constant) and isinstance(k.value, str)  # others rejected by the parser
-    return k.value
+    match k:
+        case ast.Constant(value=str(w)):
+            return w
+        case _:
+            raise NotAllowed(k, "dictionary pattern key other than a string literal")
 
 
 def stmt(s: ast.stmt) -> Stmt:
@@ -834,25 +685,76 @@ def stmt_node(s: ast.stmt) -> Stmt:
     match s:
         case ast.Pass():
             return Syntax.StmtPass()
+        case ast.Assign(targets=[_, _, *_]):
+            raise NotAllowed(s, "multiple assignment targets")
+        case ast.Assign(targets=[ast.Subscript()]):
+            raise NotAllowed(s, "item assignment")
+        case ast.Assign(targets=[ast.Attribute()]):
+            raise NotAllowed(s, "attribute assignment")
         case ast.Assign(targets=[ast.Name(id=x)], value=e):
             return Syntax.StmtAssign(x, Option.None_(), expr(e))
+        case ast.Assign():
+            raise NotAllowed(s, "unpacking assignment")
         case ast.AnnAssign(target=ast.Name(id=x), annotation=a, value=None):
             return Syntax.StmtDeclare(x, annotation(a))
         case ast.AnnAssign(target=ast.Name(id=x), annotation=a, value=ast.expr() as e):
-            return Syntax.StmtAssign(x, Option.Some(annotation(a)), expr(e))
+            psi = annotation(a)
+            return Syntax.StmtAssign(x, Option.Some(psi), expr(e))
+        case ast.AnnAssign():
+            raise NotAllowed(s, "assignment target other than a simple name")
         case ast.Expr(value=e):
             return Syntax.StmtExpr(expr(e))
         case ast.Assert(test=e, msg=e_):
-            return Syntax.StmtAssert(expr(e), option(None if e_ is None else expr(e_)))
+            e_t = expr(e)
+            return Syntax.StmtAssert(e_t, option(None if e_ is None else expr(e_)))
         case ast.Return(value=e):
             return Syntax.StmtReturn(option(None if e is None else expr(e)))
         case ast.If(test=e, body=ss, orelse=ss_):
+            e_t = expr(e)
+            ss_t = seq(ss)
             elifs, else_ = branches(s.col_offset, ss_)
-            return Syntax.StmtIf(expr(e), seq(ss), elifs, else_)
+            return Syntax.StmtIf(e_t, ss_t, elifs, else_)
         case ast.Match(subject=e, cases=bs):
-            return Syntax.StmtMatch(expr(e), [(pat(b.pattern), seq(b.body)) for b in bs])
+            e_t = expr(e)
+            return Syntax.StmtMatch(e_t, [match_case(b) for b in bs])
+        case ast.AugAssign():
+            raise NotAllowed(s, "augmented assignment (+=, etc.)")
+        case ast.Delete():
+            raise NotAllowed(s, "del")
+        case ast.For():
+            raise NotAllowed(s, "for loops")
+        case ast.While():
+            raise NotAllowed(s, "while loops")
+        case ast.With():
+            raise NotAllowed(s, "with statements")
+        case ast.AsyncFunctionDef() | ast.AsyncFor() | ast.AsyncWith():
+            raise NotAllowed(s, "async")
+        case ast.Raise():
+            raise NotAllowed(s, "raise")
+        case ast.Try() | ast.TryStar():
+            raise NotAllowed(s, "try/except")
+        case ast.Import() | ast.ImportFrom():
+            raise NotAllowed(s, "import outside the module top level")
+        case ast.Global():
+            raise NotAllowed(s, "global")
+        case ast.Nonlocal():
+            raise NotAllowed(s, "nonlocal")
+        case ast.Break():
+            raise NotAllowed(s, "break")
+        case ast.Continue():
+            raise NotAllowed(s, "continue")
         case _:
-            raise AssertionError(f"unexpected statement: {type(s).__name__}")
+            raise NotAllowed(s, f"{type(s).__name__} statement")
+
+
+def match_case(b: ast.match_case) -> tuple[Pat, Stmt]:
+    if b.guard is not None:
+        raise NotAllowed(b, "case guards")
+    p = pat(b.pattern)
+    dup = duplicate(bound(b.pattern))
+    if dup is not None:
+        raise NotAllowed(b.pattern, f"duplicate variable {dup} in pattern")
+    return (p, seq(b.body))
 
 
 def branches(col: int, orelse: list[ast.stmt]) -> tuple[list[tuple[Expr, Stmt]], Any]:
@@ -883,26 +785,56 @@ def item_stmt(item: Statement) -> Stmt:
             return stmt(item)
         case [ast.FunctionDef() as d, *_]:
             return at(d, Syntax.StmtMutualRegion([func(d_) for d_ in item]))
+        case [ast.ClassDef() as chi, *_]:
+            raise NotAllowed(chi, "class definition outside the module top level")
+        case [chi, *_]:
+            raise NotAllowed(chi, "type statement outside the module top level")
         case _:
-            raise AssertionError("type definition outside the module top level")
+            raise AssertionError("empty region")
 
 
 def func(d: ast.stmt) -> Func:
     assert isinstance(d, ast.FunctionDef)  # mutual def regions hold only def statements
-    return at(
-        d,
-        Syntax.Def(
-            d.name,
-            type_params(d),
-            [(a.arg, annotation(a.annotation)) for a in params(d.args)],
-            annotation(d.returns),
-            seq(d.body),
-        ),
-    )
+    alphas = type_params(d)
+    args = params(d.args)
+    if len(d.decorator_list) > 0:
+        raise NotAllowed(d, "decorators")
+    if any(a.annotation is None for a in args):
+        raise NotAllowed(d, "unannotated parameter")
+    if d.returns is None:
+        raise NotAllowed(d, "unannotated return type")
+    tau = annotation(d.returns)
+    xs = [(a.arg, annotation(a.annotation)) for a in args]
+    return at(d, Syntax.Def(d.name, alphas, xs, tau, seq(d.body)))
 
 
 def type_params(node: ast.FunctionDef | ast.ClassDef | ast.TypeAlias) -> list[str]:
-    return [alpha for alpha in type_param_names(node)]
+    dup = duplicate(
+        [
+            param.name
+            for param in node.type_params
+            if isinstance(param, (ast.TypeVar, ast.ParamSpec, ast.TypeVarTuple))
+        ]
+    )
+    if dup is not None:
+        raise NotAllowed(node, f"duplicate type parameter {dup}")
+    return [type_param(param) for param in node.type_params]
+
+
+def type_param(param: ast.type_param) -> str:
+    match param:
+        case ast.TypeVar(name=alpha, bound=ast.Tuple()):
+            raise NotAllowed(param, f"constraints on type parameter {alpha}")
+        case ast.TypeVar(name=alpha, bound=None):
+            return alpha
+        case ast.TypeVar(name=alpha):
+            raise NotAllowed(param, f"bound on type parameter {alpha}")
+        case ast.ParamSpec(name=alpha):
+            raise NotAllowed(param, f"ParamSpec type parameter **{alpha}")
+        case ast.TypeVarTuple(name=alpha):
+            raise NotAllowed(param, f"TypeVarTuple type parameter *{alpha}")
+        case _:
+            raise AssertionError(f"unexpected type parameter: {type(param).__name__}")
 
 
 def type_def(chi: ast.stmt) -> TypeDef:
