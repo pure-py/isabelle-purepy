@@ -17,8 +17,9 @@ lemma unop_overloads_code [code]:
   "unop_overloads \<Sigma> op \<sigma> = set_of_pred (unop_overload_i_i_i_Poo \<Sigma> op \<sigma>)"
   by (auto simp: unop_overloads_def unop_overload_i_i_i_Poo_def)
 
-(* A definition in the evaluation locale has no code equation of its own *)
-declare evaluation.field_map_def [code]
+(* A definition or function in the evaluation locale has no code equation of its own *)
+declare evaluation.field_map_def [code] evaluation.match.simps [code]
+  evaluation.match_all.simps [code] evaluation.match_dict.simps [code] evaluation.dispatch.simps [code]
 
 (* Natural numbers are target integers, so the evaluator's equations can't match the fuel against 0 and Suc. One
    equation per function tests the fuel; the equations for positive fuel are stated for a step function. *)

@@ -282,7 +282,26 @@ attribute_setup ih_names = \<open>
   end
 \<close>
 
-(* Without class values, the head of a constructor pattern denotes no class *)
+(* The class table, ambient in evaluation as in the spec *)
+locale evaluation = fixes \<Sigma> :: class_table
+begin
+
+(* Argument or sub-pattern for each field of C: positional ones fill the fields in order, keyword ones match by
+   name; None unless they cover the fields exactly *)
+definition field_map :: "name \<Rightarrow> 'a list \<Rightarrow> (var \<times> 'a) list \<Rightarrow> (var \<times> 'a) list option"
+where
+"field_map C us kvs =
+  (let xs = field_names \<Sigma> C; n = length us in
+   if n + length kvs = length xs \<and> set (map fst kvs) = set (drop n xs)
+   then Some (zip (take n xs) us @ map (\<lambda>y. (y, the (map_of kvs y))) (drop n xs))
+   else None)"
+
+(* The head of a constructor pattern resolves as in Python: NameError if its first name is unbound, AttributeError if
+   a later name is not found (there are no module values yet), and TypeError if it denotes a value other than a class.
+   Sub-patterns of a class C match the fields of an object whose class has C among its ancestors: positional ones in
+   field order, then keyword ones as written; TypeError for excess positional sub-patterns, a keyword sub-pattern for
+   a field already matched by position, or a positional sub-pattern of range, as in Python; Excluded if they otherwise
+   do not cover the fields of C exactly *)
 fun match :: "env \<Rightarrow> pat \<Rightarrow> val \<Rightarrow> match_result"
   and match_all :: "env \<Rightarrow> pat list \<Rightarrow> val list \<Rightarrow> match_result"
   and match_dict :: "env \<Rightarrow> (string \<times> pat) list \<Rightarrow> (string \<times> val) list \<Rightarrow> match_result"
@@ -299,11 +318,26 @@ where
 "match \<rho> (PatTuple ps) (VList vs) = MatchAborts Excluded" |
 "match \<rho> (PatDict kps) (VDict \<delta>) =
   (if set (map fst kps) \<subseteq> set (map fst \<delta>) then match_dict \<rho> kps \<delta> else NoMatch)" |
-"match \<rho> (PatConstr (x, xs) a) v =
+"match \<rho> (PatConstr (x, xs) (ps, kps)) v =
   (case fmlookup \<rho> x of
      None \<Rightarrow> MatchAborts NameError
    | Some VUnbound \<Rightarrow> MatchAborts NameError
-   | Some _ \<Rightarrow> if xs = [] then MatchAborts TypeError else MatchAborts AttributeError)" |
+   | Some u \<Rightarrow>
+       if xs \<noteq> [] then MatchAborts AttributeError else
+       case class_of u of
+         None \<Rightarrow> MatchAborts TypeError
+       | Some C \<Rightarrow>
+           (case v of
+              VObject D zvs \<Rightarrow>
+                if C \<notin> set (ancestors \<Sigma> D) then NoMatch
+                else if C = range_class then MatchAborts (if ps = [] then Excluded else TypeError)
+                else
+                  let ys = field_names \<Sigma> C; n = length ps in
+                  if field_map C ps kps \<noteq> None \<and> set ys \<subseteq> set (map fst zvs)
+                  then match_all \<rho> ps (map (\<lambda>y. the (map_of zvs y)) (take n ys)) \<otimes>\<^sub>m match_dict \<rho> kps zvs
+                  else if length ys < n \<or> (\<exists>y \<in> set (map fst kps). y \<in> set (take n ys)) then MatchAborts TypeError
+                  else MatchAborts Excluded
+            | _ \<Rightarrow> NoMatch))" |
 "match \<rho> _ _ = NoMatch" |
 
 "match_all \<rho> (p # ps) (v # vs) = match \<rho> p v \<otimes>\<^sub>m match_all \<rho> ps vs" |
@@ -320,20 +354,6 @@ where
      Match \<rho>' \<Rightarrow> Val (\<rho>', s)
    | NoMatch \<Rightarrow> dispatch \<rho> v cases
    | MatchAborts \<kappa> \<Rightarrow> Aborts \<kappa>)"
-
-(* The class table, ambient in evaluation as in the spec *)
-locale evaluation = fixes \<Sigma> :: class_table
-begin
-
-(* Argument for each field of C: positional arguments fill the fields in order, keyword arguments match by name;
-   None unless they cover the fields exactly *)
-definition field_map :: "name \<Rightarrow> val list \<Rightarrow> (var \<times> val) list \<Rightarrow> (var \<times> val) list option"
-where
-"field_map C us kvs =
-  (let xs = field_names \<Sigma> C; n = length us in
-   if n + length kvs = length xs \<and> set (map fst kvs) = set (drop n xs)
-   then Some (zip (take n xs) us @ map (\<lambda>y. (y, the (map_of kvs y))) (drop n xs))
-   else None)"
 
 abbreviation true :: val where "true \<equiv> VLit (LitBool True)"
 abbreviation false :: val where "false \<equiv> VLit (LitBool False)"
