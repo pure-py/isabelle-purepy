@@ -121,6 +121,25 @@ def type_param_names(node: ast.FunctionDef | ast.ClassDef | ast.TypeAlias) -> tu
 
 
 OP_SYMBOLS: dict[type, str] = {
+    ast.BitOr: "|",
+    ast.Eq: "==",
+    ast.NotEq: "!=",
+    ast.Lt: "<",
+    ast.LtE: "<=",
+    ast.Gt: ">",
+    ast.GtE: ">=",
+    ast.Add: "+",
+    ast.Sub: "-",
+    ast.Mult: "*",
+    ast.Div: "/",
+    ast.FloorDiv: "//",
+    ast.Mod: "%",
+    ast.Pow: "**",
+    ast.In: "in",
+    ast.NotIn: "not in",
+    ast.Not: "not",
+    ast.UAdd: "+",
+    ast.USub: "-",
     ast.BitAnd: "&",
     ast.BitXor: "^",
     ast.LShift: "<<",
@@ -945,7 +964,6 @@ def seq(body: list[ast.stmt]) -> Stmt:
     return reduce(lambda s, item_: seq_stmt(item_stmt(item_), s), reversed(items), item_stmt(item))
 
 
-# Sequence at the position of its first statement
 def seq_stmt(s: Stmt, s_: Stmt) -> Stmt:
     return Positions.At(located_at(s), Syntax.StmtSeq(s, s_))
 
