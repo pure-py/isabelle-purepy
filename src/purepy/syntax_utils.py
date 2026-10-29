@@ -1,13 +1,7 @@
 import ast
 from itertools import dropwhile, takewhile
 
-from .type_syntax import (
-    TypeExpr,
-    Var,
-    parse_annotation,
-    parse_name,
-    root,
-)
+from .type_syntax import Var, parse_name, root
 
 # PurePy statement: Python statement, mutual def region or mutual type region. Python body (statement
 # list) represents spec's right-nested sequence s s'.
@@ -109,18 +103,3 @@ def type_param_names(node: ast.FunctionDef | ast.ClassDef | ast.TypeAlias) -> tu
     alphas = tuple(p.name for p in node.type_params if isinstance(p, ast.TypeVar))
     assert len(alphas) == len(node.type_params)
     return alphas
-
-
-def own_fields(node: ast.ClassDef) -> tuple[tuple[Var, TypeExpr], ...]:
-    return tuple(
-        (t.target.id, type_expr(t.annotation))
-        for t in node.body
-        if isinstance(t, ast.AnnAssign) and isinstance(t.target, ast.Name)
-    )
-
-
-def type_expr(annotation: ast.expr | None) -> TypeExpr:
-    assert annotation is not None
-    t = parse_annotation(annotation)
-    assert t is not None
-    return t

@@ -9,28 +9,12 @@ from .syntax_utils import (
     bound,
     dict_keys,
     is_import,
-    own_fields,
     split_imports,
     statements,
     target_name,
-    type_expr,
     type_param_names,
 )
-from .type_syntax import (
-    CallableExpr,
-    DictExpr,
-    ListExpr,
-    LiteralType,
-    Name,
-    Primitive,
-    TupleExpr,
-    TypeExpr,
-    TypeName,
-    UnionExpr,
-    dotted_name,
-    parse_annotation,
-    parse_name,
-)
+from .type_syntax import Name, dotted_name, parse_name
 
 OP_SYMBOLS: dict[type, str] = {
     ast.BitAnd: "&",
@@ -243,11 +227,10 @@ def check_syntax_classdef(node: ast.ClassDef) -> None:
         raise NotAllowed(node, "multiple inheritance")
     if len(node.bases) > 0:
         base = node.bases[0]
-        if not isinstance(parse_annotation(base), TypeName):
+        if not isinstance(ty_expr(base), Syntax.TyExprName):
             raise NotAllowed(
                 base, "base class other than a name, optionally applied to type arguments"
             )
-        check_syntax_annotation(base)
     if len(node.keywords) > 0:
         raise NotAllowed(node, "class keyword arguments")
     if not (len(node.body) == 1 and isinstance(node.body[0], ast.Pass)):
@@ -528,8 +511,7 @@ def check_syntax_generator(node: ast.comprehension) -> None:
 def check_syntax_annotation(node: ast.expr | None) -> None:
     if node is None:
         return
-    psi = parse_annotation(node)
-    if psi is None:
+    if ty_expr(node) is None:
         raise NotAllowed(node, "annotation that is not a type expression")
 
 
@@ -637,41 +619,75 @@ def node(t: Any) -> Any:
 
 
 PRIM_TY = {
-    Primitive.OBJECT: Syntax.object_,
-    Primitive.NEVER: Syntax.Never,
-    Primitive.NONE: Syntax.NoneType,
-    Primitive.BOOL: Syntax.bool_,
-    Primitive.INT: Syntax.int_,
-    Primitive.FLOAT: Syntax.float_,
-    Primitive.STR: Syntax.str_,
-    Primitive.SIZED: Syntax.Sized,
+    "object": Syntax.object_,
+    "Never": Syntax.Never,
+    "None": Syntax.NoneType,
+    "bool": Syntax.bool_,
+    "int": Syntax.int_,
+    "float": Syntax.float_,
+    "str": Syntax.str_,
+    "Sized": Syntax.Sized,
 }
-PRIMITIVE = {c: nu.value for nu, c in PRIM_TY.items()}
+PRIMITIVE = {c: x for x, c in PRIM_TY.items()}
 
 
-def ty_expr(psi: TypeExpr) -> TyExpr:
-    match psi:
-        case Primitive():
-            return Syntax.TyExprPrim(PRIM_TY[psi]())
-        case ListExpr(elem):
-            return Syntax.TyExprList(ty_expr(elem))
-        case TupleExpr(components):
-            return Syntax.TyExprTuple([ty_expr(c) for c in components])
-        case DictExpr(value):
-            return Syntax.TyExprDict(ty_expr(value))
-        case CallableExpr(params, result):
-            return Syntax.TyExprCallable([ty_expr(q) for q in params], ty_expr(result))
-        case LiteralType(ell):
-            return Syntax.TyExprLiteral(lit(ell.value))
-        case TypeName(q, args):
-            return Syntax.TyExprName(name(q), [ty_expr(a) for a in args])
-        case UnionExpr(left, right):
-            return Syntax.TyExprUnion(ty_expr(left), ty_expr(right))
+def ty_expr(e: ast.expr) -> TyExpr | None:
+    """Type expression e in the generated syntax, or None if e is not a type expression"""
+    match e:
+        case ast.Constant(value=None):
+            return Syntax.TyExprPrim(Syntax.NoneType())
+        case ast.Name(id=x) if x in PRIM_TY:
+            return Syntax.TyExprPrim(PRIM_TY[x]())
+        case ast.Name() | ast.Attribute():
+            q = dotted_name(e)
+            return None if q is None else Syntax.TyExprName(name(q), [])
+        case ast.BinOp(left=e1, op=ast.BitOr(), right=e2):
+            psi, psi_ = ty_expr(e1), ty_expr(e2)
+            return None if psi is None or psi_ is None else Syntax.TyExprUnion(psi, psi_)
+        case ast.Subscript(value=ast.Name(id="Literal"), slice=s):
+            match s:
+                case ast.Constant(value=bool() | int() | str() | None as v):
+                    return Syntax.TyExprLiteral(lit(v))
+                case _:
+                    return None
+        case ast.Subscript(value=ast.Name(id="Callable"), slice=s):
+            match s:
+                case ast.Tuple(elts=[ast.List(elts=es), e_]):
+                    psis, psi = ty_exprs(es), ty_expr(e_)
+                    return None if psis is None or psi is None else Syntax.TyExprCallable(psis, psi)
+                case _:
+                    return None
+        case ast.Subscript(value=head, slice=s):
+            psis = ty_exprs(s.elts if isinstance(s, ast.Tuple) else [s])
+            if psis is None:
+                return None
+            match head, psis:
+                case ast.Name(id="list"), [psi]:
+                    return Syntax.TyExprList(psi)
+                case ast.Name(id="list"), _:
+                    return None
+                case ast.Name(id="tuple"), _:
+                    return Syntax.TyExprTuple(psis)
+                case ast.Name(id="dict"), [Syntax.TyExprPrim(Syntax.str_()), psi]:
+                    return Syntax.TyExprDict(psi)
+                case ast.Name(id="dict"), _:
+                    return None
+                case _:
+                    q = dotted_name(head)
+                    return None if q is None else Syntax.TyExprName(name(q), psis)
+        case _:
+            return None
+
+
+def ty_exprs(es: list[ast.expr]) -> list[TyExpr] | None:
+    psis = [ty_expr(e) for e in es]
+    return None if any(psi is None for psi in psis) else psis
 
 
 def annotation(e: ast.expr | None) -> TyExpr:
-    assert e is not None  # missing annotations rejected by the parser
-    return ty_expr(type_expr(e))
+    psi = None if e is None else ty_expr(e)
+    assert psi is not None  # missing and malformed annotations rejected by the parser
+    return psi
 
 
 BOP: dict[type[ast.operator | ast.cmpop], Any] = {
@@ -884,8 +900,12 @@ def type_def(chi: ast.stmt) -> TypeDef:
 
 def type_def_node(chi: ast.stmt) -> TypeDef:
     match chi:
-        case ast.ClassDef(name=c, bases=bases):
-            fields = [(x, ty_expr(psi)) for x, psi in own_fields(chi)]
+        case ast.ClassDef(name=c, bases=bases, body=body):
+            fields = [
+                (t.target.id, annotation(t.annotation))
+                for t in body
+                if isinstance(t, ast.AnnAssign) and isinstance(t.target, ast.Name)
+            ]
             return Syntax.Dataclass(c, type_params(chi), extends(bases), fields)
         case ast.TypeAlias(name=ast.Name(id=x), value=psi):
             return Syntax.TypeStmt(x, type_params(chi), annotation(psi))
@@ -898,9 +918,11 @@ def extends(bases: list[ast.expr]) -> Any:
         case []:
             return Option.None_()
         case [b]:
-            psi = type_expr(b)
-            assert isinstance(psi, TypeName)  # other base classes rejected by the parser
-            return Option.Some((name(psi.q), [ty_expr(a) for a in psi.args]))
+            match ty_expr(b):
+                case Syntax.TyExprName(q, args):
+                    return Option.Some((q, args))
+                case _:
+                    raise AssertionError("base class rejected by the parser")
         case _:
             raise AssertionError("multiple inheritance")
 
