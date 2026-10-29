@@ -6,7 +6,7 @@ from typing import Any
 from . import syntax
 from .conformance import Exit
 from .generated import Finite_Map, Option, Programs, Reasons
-from .messages import from_name, message
+from .messages import message
 from .syntax import name
 from .type_syntax import Name, parse_name, proper_prefixes
 
@@ -106,8 +106,8 @@ def error_path(result: Result, entry_path: pathlib.Path) -> pathlib.Path:
     match result:
         case syntax.Unsupported():
             q = result.module
-        case (q_, r) if not isinstance(r, Reasons.ImportCycle):
-            q = from_name(q_)
+        case ((x, xs), r) if not isinstance(r, Reasons.ImportCycle):
+            q = Name((x, *xs))
         case _:
             q = None
     return entry_path if q is None or q == MAIN else module_path(q, entry_path.parent)
