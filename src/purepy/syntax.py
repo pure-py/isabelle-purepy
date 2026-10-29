@@ -33,10 +33,6 @@ def parse_name(name: str) -> Name:
     return tuple(name.split("."))
 
 
-def root(q: Name) -> Var:
-    return q[0]
-
-
 def proper_prefixes(q: Name) -> list[Name]:
     return [q[:i] for i in range(1, len(q))]
 
@@ -118,32 +114,6 @@ def dict_keys(e: ast.Dict) -> list[ast.expr]:
 def target_name(g: ast.comprehension) -> str:
     assert isinstance(g.target, ast.Name)
     return g.target.id
-
-
-def declares(s: ast.stmt) -> list[tuple[Var, ast.stmt]]:
-    """Names declared in `s`, or bound by import `s`, with their AST nodes, in textual order and
-    with repeats."""
-    match s:
-        case ast.AnnAssign():
-            assert isinstance(s.target, ast.Name)
-            return [(s.target.id, s)]
-        case ast.If(body=ss, orelse=ss_):
-            return declares_body(ss) + declares_body(ss_)
-        case ast.Match():
-            return [d for case in s.cases for d in declares_body(case.body)]
-        case ast.FunctionDef(name=x) | ast.ClassDef(name=x) | ast.TypeAlias(name=ast.Name(id=x)):
-            return [(x, s)]
-        case ast.Import():
-            (alias,) = s.names
-            return [(root(parse_name(alias.name)), s)]
-        case ast.ImportFrom():
-            return [(alias.name, s) for alias in s.names]
-        case _:
-            return []
-
-
-def declares_body(body: list[ast.stmt]) -> list[tuple[Var, ast.stmt]]:
-    return [d for s in body for d in declares(s)]
 
 
 def type_param_names(node: ast.FunctionDef | ast.ClassDef | ast.TypeAlias) -> tuple[Var, ...]:
