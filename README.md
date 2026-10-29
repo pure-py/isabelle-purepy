@@ -7,11 +7,18 @@ Mechanisation of the PurePy specification in Isabelle/HOL.
 ## Building
 
 Install the [Isabelle](https://isabelle.in.tum.de/) release named in `.isabelle-version` and
-[uv](https://docs.astral.sh/uv/). Then check the proofs:
+[uv](https://docs.astral.sh/uv/). Then check the proofs and generate the type checker:
 
 ```bash
 make build
 ```
+
+The generated Python is written to `python/generated/`, which is committed, so that the type checker can be
+used without Isabelle; commit it with the change to the theories. The build fails unless the code generator
+targets the Python version in `.python-version`, and `make check-generated`, run by CI, fails if the
+committed code differs from the build output. With the specification repository checked out alongside this one,
+`make check-tests` runs its conformance suite under the generated code of this checkout, before committing;
+`SPEC=<path>` names another checkout.
 
 To browse the theories with the prover running, open the session directory in the bundled editor:
 

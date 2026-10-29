@@ -39,6 +39,6 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v10.2.0
 
-      - name: Build session
+      - name: Build session and check the generated code is current
         timeout-minutes: 20
-        run: make build ISABELLE=/home/isabelle/Isabelle/bin/isabelle
+        run: make check-generated ISABELLE=/home/isabelle/Isabelle/bin/isabelle

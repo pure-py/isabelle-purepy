@@ -74,9 +74,8 @@ _opam/
 # Generated code (adjust to your project)
 ###############################################################################
 
-# Isabelle code generation output
-generated/
-extracted/
+# Compiled Python
+__pycache__/
 
 python/isabelle-python-codegen/
 
