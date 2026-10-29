@@ -166,113 +166,9 @@ def parse(source: str, filename: str) -> ast.Module:
     return m
 
 
-def check_syntax_classdef(node: ast.ClassDef) -> None:
-    if any(isinstance(b, ast.Name) and b.id == "Enum" for b in node.bases):
-        raise NotAllowed(node, "enum classes")
-    if len(node.decorator_list) == 0:
-        raise NotAllowed(node, "undecorated class")
-    if len(node.decorator_list) > 1:
-        raise NotAllowed(node, "multiple class decorators")
-    deco = node.decorator_list[0]
-    if not (isinstance(deco, ast.Name) and deco.id == "dataclass"):
-        raise NotAllowed(node, "class decorator other than @dataclass")
-    if len(node.bases) > 1:
-        raise NotAllowed(node, "multiple inheritance")
-    if len(node.bases) > 0:
-        base = node.bases[0]
-        if not isinstance(ty_expr(base), Syntax.TyExprName):
-            raise NotAllowed(
-                base, "base class other than a name, optionally applied to type arguments"
-            )
-    if len(node.keywords) > 0:
-        raise NotAllowed(node, "class keyword arguments")
-    if not (len(node.body) == 1 and isinstance(node.body[0], ast.Pass)):
-        for stmt in node.body:
-            check_syntax_field(stmt)
-
-
-def check_syntax_type_alias(node: ast.TypeAlias) -> None:
-    check_syntax_annotation(node.value)
-
-
 def duplicate[T](xs: Sequence[T]) -> T | None:
     """An element occurring twice in xs, if any"""
     return next((x for i, x in enumerate(xs) if x in xs[:i]), None)
-
-
-def check_syntax_field(stmt: ast.stmt) -> None:
-    if not isinstance(stmt, ast.AnnAssign):
-        raise NotAllowed(stmt, "dataclass member other than a field declaration")
-    if not isinstance(stmt.target, ast.Name):
-        raise NotAllowed(stmt, "field target other than a simple name")
-    if stmt.value is not None:
-        raise NotAllowed(stmt, "field default values")
-    check_syntax_annotation(stmt.annotation)
-
-
-def check_syntax_import(node: ast.stmt) -> None:
-    match node:
-        case ast.Import():
-            if len(node.names) != 1:
-                raise NotAllowed(node, "multi-target import (import a, b)")
-            if node.names[0].asname is not None:
-                raise NotAllowed(node, "import-as")
-        case ast.ImportFrom():
-            if len(node.names) == 0:
-                raise NotAllowed(node, "empty name list")
-            if node.level > 0:
-                raise NotAllowed(node, "relative imports")
-            assert node.module is not None  # absent only in a relative import
-            for alias in node.names:
-                if alias.name == "*":
-                    raise NotAllowed(node, "from M import *")
-                if alias.asname is not None:
-                    raise NotAllowed(node, "from-import-as")
-        case _:
-            raise AssertionError(f"unexpected statement: {type(node).__name__}")
-
-
-def check_syntax_top_level(body: list[ast.stmt]) -> None:
-    iotas, stmts = split_imports(body)
-    for iota in iotas:
-        check_syntax_import(iota)
-    for s in stmts:
-        if is_import(s):
-            raise NotAllowed(s, "import after another statement")
-        for ret in returns_outside_function(s):
-            raise NotAllowed(ret, "return outside a function")
-        if isinstance(s, ast.ClassDef):
-            check_syntax_classdef(s)
-        elif isinstance(s, ast.TypeAlias):
-            check_syntax_type_alias(s)
-
-
-def returns_outside_function(s: ast.stmt) -> list[ast.Return]:
-    """Return statements of a top-level statement s, which Python rejects when compiling a module"""
-    match s:
-        case ast.Return():
-            return [s]
-        case ast.If(body=ss, orelse=ss_):
-            return [r for s_ in ss + ss_ for r in returns_outside_function(s_)]
-        case ast.Match(cases=cases):
-            return [r for case in cases for s_ in case.body for r in returns_outside_function(s_)]
-        case _:
-            return []
-
-
-def check_syntax_annotation(node: ast.expr | None) -> None:
-    if node is None:
-        return
-    if ty_expr(node) is None:
-        raise NotAllowed(node, "annotation that is not a type expression")
-
-
-def check_syntax_module(node: ast.Module) -> Unsupported | None:
-    try:
-        check_syntax_top_level(node.body)
-        return None
-    except Unsupported as e:
-        return e
 
 
 def format_result(result: Unsupported | None, filename: str) -> str:
@@ -771,8 +667,8 @@ def branches(col: int, orelse: list[ast.stmt]) -> tuple[list[tuple[Expr, Stmt]],
 
 
 def seq(body: list[ast.stmt]) -> Stmt:
-    *items, item = statements(body)
-    return reduce(lambda s, item_: seq_stmt(item_stmt(item_), s), reversed(items), item_stmt(item))
+    *ss, s = [item_stmt(item) for item in statements(body)]
+    return reduce(lambda s_, s__: seq_stmt(s__, s_), reversed(ss), s)
 
 
 def seq_stmt(s: Stmt, s_: Stmt) -> Stmt:
@@ -843,20 +739,50 @@ def type_def(chi: ast.stmt) -> TypeDef:
 
 def type_def_node(chi: ast.stmt) -> TypeDef:
     match chi:
-        case ast.ClassDef(name=c, bases=bases, body=body):
-            fields = [
-                (t.target.id, annotation(t.annotation))
-                for t in body
-                if isinstance(t, ast.AnnAssign) and isinstance(t.target, ast.Name)
-            ]
-            return Syntax.Dataclass(c, type_params(chi), extends(bases), fields)
+        case ast.ClassDef(
+            name=c, bases=bases, body=body, decorator_list=decorators, keywords=keywords
+        ):
+            if any(isinstance(b, ast.Name) and b.id == "Enum" for b in bases):
+                raise NotAllowed(chi, "enum classes")
+            alphas = type_params(chi)
+            match decorators:
+                case []:
+                    raise NotAllowed(chi, "undecorated class")
+                case [ast.Name(id="dataclass")]:
+                    pass
+                case [_]:
+                    raise NotAllowed(chi, "class decorator other than @dataclass")
+                case _:
+                    raise NotAllowed(chi, "multiple class decorators")
+            base = extends(chi, bases)
+            if len(keywords) > 0:
+                raise NotAllowed(chi, "class keyword arguments")
+            match body:
+                case [ast.Pass()]:
+                    fields = []
+                case _:
+                    fields = [field(t) for t in body]
+            return Syntax.Dataclass(c, alphas, base, fields)
         case ast.TypeAlias(name=ast.Name(id=x), value=psi):
-            return Syntax.TypeStmt(x, type_params(chi), annotation(psi))
+            alphas = type_params(chi)
+            return Syntax.TypeStmt(x, alphas, annotation(psi))
         case _:
             raise AssertionError(f"unexpected type definition: {type(chi).__name__}")
 
 
-def extends(bases: list[ast.expr]) -> Any:
+def field(t: ast.stmt) -> tuple[str, TyExpr]:
+    match t:
+        case ast.AnnAssign(target=ast.Name(id=x), annotation=a, value=None):
+            return (x, annotation(a))
+        case ast.AnnAssign(target=ast.Name(), value=ast.expr()):
+            raise NotAllowed(t, "field default values")
+        case ast.AnnAssign():
+            raise NotAllowed(t, "field target other than a simple name")
+        case _:
+            raise NotAllowed(t, "dataclass member other than a field declaration")
+
+
+def extends(chi: ast.ClassDef, bases: list[ast.expr]) -> Any:
     match bases:
         case []:
             return Option.None_()
@@ -865,24 +791,41 @@ def extends(bases: list[ast.expr]) -> Any:
                 case Syntax.TyExprName(q, args):
                     return Option.Some((q, args))
                 case _:
-                    raise AssertionError("base class rejected by the parser")
+                    raise NotAllowed(
+                        b, "base class other than a name, optionally applied to type arguments"
+                    )
         case _:
-            raise AssertionError("multiple inheritance")
+            raise NotAllowed(chi, "multiple inheritance")
 
 
 def top_stmt(body: list[ast.stmt]) -> TopStmt:
-    *items, item = statements(body)
-    return reduce(
-        lambda s, item_: Syntax.TopSeq(top_item(item_), s), reversed(items), top_item(item)
-    )
+    *ss, s = [top_item(item) for item in statements(body)]
+    return reduce(lambda s_, s__: Syntax.TopSeq(s__, s_), reversed(ss), s)
 
 
 def top_item(item: Statement) -> TopStmt:
     match item:
         case [ast.ClassDef() | ast.TypeAlias(), *_]:
             return Syntax.TypeDefs([type_def(chi) for chi in item])
+        case ast.stmt() if is_import(item):
+            raise NotAllowed(item, "import after another statement")
+        case ast.stmt() if len(returns_outside_function(item)) > 0:
+            raise NotAllowed(returns_outside_function(item)[0], "return outside a function")
         case _:
             return Syntax.Stmt(item_stmt(item))
+
+
+def returns_outside_function(s: ast.stmt) -> list[ast.Return]:
+    """Return statements of a top-level statement s, which Python rejects when compiling a module"""
+    match s:
+        case ast.Return():
+            return [s]
+        case ast.If(body=ss, orelse=ss_):
+            return [r for s_ in ss + ss_ for r in returns_outside_function(s_)]
+        case ast.Match(cases=cases):
+            return [r for case in cases for s_ in case.body for r in returns_outside_function(s_)]
+        case _:
+            return []
 
 
 def import_(iota: ast.stmt) -> Import:
@@ -891,9 +834,22 @@ def import_(iota: ast.stmt) -> Import:
 
 def import_node(iota: ast.stmt) -> Import:
     match iota:
-        case ast.Import(names=[alias]):
-            return Syntax.Import(qualified_name(parse_name(alias.name)))
+        case ast.Import(names=[ast.alias(name=q, asname=None)]):
+            return Syntax.Import(qualified_name(parse_name(q)))
+        case ast.Import(names=[_]):
+            raise NotAllowed(iota, "import-as")
+        case ast.Import():
+            raise NotAllowed(iota, "multi-target import (import a, b)")
+        case ast.ImportFrom(names=[]):
+            raise NotAllowed(iota, "empty name list")
+        case ast.ImportFrom(level=int() as level) if level > 0:
+            raise NotAllowed(iota, "relative imports")
         case ast.ImportFrom(module=str(q), names=aliases):
+            for alias in aliases:
+                if alias.name == "*":
+                    raise NotAllowed(iota, "from M import *")
+                if alias.asname is not None:
+                    raise NotAllowed(iota, "from-import-as")
             return Syntax.FromImport(qualified_name(parse_name(q)), [a.name for a in aliases])
         case _:
             raise AssertionError(f"unexpected import: {type(iota).__name__}")
@@ -927,5 +883,4 @@ def parse_module(source: str, filename: str, q: Name) -> ModuleBody:
         m = parse(source, filename)
     except SyntaxError as e:
         raise ParseError(e) from e
-    check_syntax_top_level(m.body)
     return module_body(q, m)

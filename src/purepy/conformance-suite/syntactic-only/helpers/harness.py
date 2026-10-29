@@ -5,15 +5,16 @@ import sys
 
 from purepy.check_program import MAIN, check, program
 from purepy.messages import message
-from purepy.syntax import check_syntax_module, module_body
+from purepy.syntax import Unsupported, module_body
 
 
 def expect_rejected(m: ast.Module, msg_contains: str = "") -> None:
-    unsupported = check_syntax_module(m)
-    if unsupported is not None:
-        msg = unsupported.msg
+    try:
+        body = module_body(MAIN, m)
+    except Unsupported as e:
+        msg = e.msg
     else:
-        result = check(program({MAIN: module_body(MAIN, m)}))
+        result = check(program({MAIN: body}))
         if result is None:
             print("FAIL: expected rejection but got ok", file=sys.stderr)
             sys.exit(1)
