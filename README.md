@@ -74,8 +74,8 @@ After changing dependencies or metadata in `pyproject.toml`, run `uv lock` and c
 ## Release workflow
 
 Run the `Release` GitHub Action manually. The action derives the version from the `purepy-conformance` release
-pinned in `pyproject.toml`, so a type checker passing the suite of specification 0.23.1 is released as 0.23.1,
-and a further release against the same specification as 0.23.1.post1. It updates and commits the package
+pinned in `pyproject.toml`, so a type checker passing the suite of specification 0.23.2 is released as 0.23.2,
+and a further release against the same specification as 0.23.2.post1. It updates and commits the package
 version on `main`, creates and pushes the tag, checks the proofs, generates the type checker, runs the
 conformance suite and creates the GitHub Release for the tag with the wheel of the `purepy` package attached.
 
