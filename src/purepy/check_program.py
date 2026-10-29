@@ -4,9 +4,9 @@ import pathlib
 from typing import Any
 
 from . import syntax
+from .conformance import Exit
 from .generated import Finite_Map, Option, Programs, Reasons
-from .messages import IllFormed, IllFormedModule, IllFormedProgram, message
-from .messages import name as name_of
+from .messages import from_name, message
 from .syntax import name
 from .type_syntax import Name, parse_name, proper_prefixes
 
@@ -60,28 +60,21 @@ def program(bodies: dict[Name, Any]) -> Any:
     return Finite_Map.fmap_of_list([(name(q), body) for q, body in bodies.items()])
 
 
-def ill_formed(q: Any, r: Any) -> IllFormed:
-    """Failure for reason r in module q"""
-    match r:
-        case Reasons.ImportCycle():
-            return IllFormedProgram(message(r))
-        case Reasons.Located(p, r_):
-            return IllFormedModule(p, message(r_), name_of(q))
-        case _:
-            return IllFormedModule(None, message(r), name_of(q))
-
-
-def check(M: Any) -> IllFormed | None:
+# Module and reason of an ill-formed program, or None
+def check(M: Any) -> tuple[Any, Any] | None:
     match Programs.check_program(M):
         case Option.None_():
             return None
         case Option.Some((q, r)):
-            return ill_formed(q, r)
+            return (q, r)
         case result:
             raise AssertionError(f"unexpected result: {result}")
 
 
-def check_program(entry_path: pathlib.Path) -> IllFormed | syntax.Unsupported | None:
+type Result = tuple[Any, Any] | syntax.Unsupported | None
+
+
+def check_program(entry_path: pathlib.Path) -> Result:
     try:
         return check(parse_program(entry_path))
     except syntax.Unsupported as e:
@@ -89,33 +82,48 @@ def check_program(entry_path: pathlib.Path) -> IllFormed | syntax.Unsupported | 
 
 
 # Check the module at path as a program of one module
-def check_module(path: pathlib.Path) -> IllFormed | syntax.Unsupported | None:
+def check_module(path: pathlib.Path) -> Result:
     try:
         return check(program({MAIN: parse_module(MAIN, path)}))
     except syntax.Unsupported as e:
         return e
 
 
+def exit_code(result: Result) -> Exit:
+    match result:
+        case None:
+            return Exit.OK
+        case syntax.Unsupported():
+            return Exit(result.exit_code)
+        case (_, Reasons.ImportCycle()):
+            return Exit.ILL_FORMED_PROGRAM
+        case _:
+            return Exit.ILL_FORMED
+
+
 # File of the module at fault, or of the entry module for a program-level error
-def error_path(result: IllFormed | syntax.Unsupported, entry_path: pathlib.Path) -> pathlib.Path:
-    q = result.module if isinstance(result, (IllFormedModule, syntax.Unsupported)) else None
+def error_path(result: Result, entry_path: pathlib.Path) -> pathlib.Path:
+    match result:
+        case syntax.Unsupported():
+            q = result.module
+        case (q_, r) if not isinstance(r, Reasons.ImportCycle):
+            q = from_name(q_)
+        case _:
+            q = None
     return entry_path if q is None or q == MAIN else module_path(q, entry_path.parent)
 
 
-def format_result(result: IllFormed | syntax.Unsupported | None, filename: str) -> str:
+def format_result(result: Result, filename: str) -> str:
     match result:
-        case syntax.Unsupported():
-            return syntax.format_result(result, filename)
         case None:
             return f"{filename}: ok"
-        case IllFormedModule():
-            return f"{filename}:{result.line}:{result.col}: {result.msg}"
-        case _:
-            return f"{filename}: {result.msg}"
+        case syntax.Unsupported():
+            return syntax.format_result(result, filename)
+        case (_, Reasons.Located((line, col), r)):
+            return f"{filename}:{line}:{col}: {message(r)}"
+        case (_, r):
+            return f"{filename}: {message(r)}"
 
 
-def format_program_result(
-    result: IllFormed | syntax.Unsupported | None, entry_path: pathlib.Path
-) -> str:
-    path = entry_path if result is None else error_path(result, entry_path)
-    return format_result(result, str(path))
+def format_program_result(result: Result, entry_path: pathlib.Path) -> str:
+    return format_result(result, str(error_path(result, entry_path)))

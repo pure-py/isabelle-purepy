@@ -10,7 +10,7 @@ from .syntax import BOP, PRIM_TY, UOP, node
 from .type_syntax import Name
 
 
-def name(q: Any) -> Name:
+def from_name(q: Any) -> Name:
     x, xs = q
     return Name((x, *xs))
 
@@ -48,7 +48,7 @@ def render(tau: Any) -> str:
             return str(alpha)
         case Syntax.TyClass(c, taus):
             args = ", ".join(render(a) for a in taus)
-            return str(name(c)) if len(taus) == 0 else f"{name(c)}[{args}]"
+            return str(from_name(c)) if len(taus) == 0 else f"{from_name(c)}[{args}]"
         case Syntax.TyUnion(sigma, tau_):
             return f"{render(sigma)} | {render(tau_)}"
         case _:
@@ -187,7 +187,7 @@ def render_pat_node(p: Any) -> str:
             return "{" + ", ".join(items) + "}"
         case Syntax.PatConstr(q, (ps, kps)):
             args = [render_pat(p_) for p_ in ps] + [f"{x}={render_pat(p_)}" for x, p_ in kps]
-            return f"{name(q)}({', '.join(args)})"
+            return f"{from_name(q)}({', '.join(args)})"
         case _:
             raise AssertionError(f"unexpected pattern: {p}")
 
@@ -251,49 +251,49 @@ def message(r: Any) -> str:
         case Reasons.NotTypeExpression(e):
             return f"'{render_expr(e)}' is not a type expression"
         case Reasons.NotClass(q):
-            return f"'{name(q)}' is not a declared class"
+            return f"'{from_name(q)}' is not a declared class"
         case Reasons.ClassArityMismatch(q, m, n):
-            return f"class '{name(q)}' expects {m} type arguments, given {n}"
+            return f"class '{from_name(q)}' expects {m} type arguments, given {n}"
         case Reasons.TypeAliasArityMismatch(q, m, n):
-            return f"type alias '{name(q)}' expects {m} type arguments, given {n}"
+            return f"type alias '{from_name(q)}' expects {m} type arguments, given {n}"
         case Reasons.CyclicTypeAlias(x):
             return f"type alias '{x}' is cyclic"
         case Reasons.DuplicateMember(x, q):
             return (
-                f"duplicate member of module '{name(q)}': "
-                f"it defines '{x}' and also has submodule '{name(q)}.{x}'"
+                f"duplicate member of module '{from_name(q)}': "
+                f"it defines '{x}' and also has submodule '{from_name(q)}.{x}'"
             )
         case Reasons.SubmoduleNotImported(q):
-            return f"submodule '{name(q)}' is not imported"
+            return f"submodule '{from_name(q)}' is not imported"
         case Reasons.UnassignedMember(x, q):
-            return f"member '{x}' of module '{name(q)}' is not definitely assigned"
+            return f"member '{x}' of module '{from_name(q)}' is not definitely assigned"
         case Reasons.TopLevelAssertFalse():
             return "module body definitely reaches 'assert False'"
         case Reasons.UnknownModule(q):
-            return f"unknown module '{name(q)}'"
+            return f"unknown module '{from_name(q)}'"
         case Reasons.DuplicateImportedName(x):
             return f"name '{x}' imported twice"
         case Reasons.UnknownMember(x, q):
-            return f"module '{name(q)}' has no member '{x}'"
+            return f"module '{from_name(q)}' has no member '{x}'"
         case Reasons.ModuleAsValue(q):
-            return f"'{name(q)}' refers to a module; modules are not first-class values"
+            return f"'{from_name(q)}' refers to a module; modules are not first-class values"
         case Reasons.ImportOfContainedModule(q, q_):
             return (
-                f"'{name(q)}' is contained in importing module '{name(q_)}'; "
-                f"plain import not allowed, write 'from {name(q)} import <name>'"
+                f"'{from_name(q)}' is contained in importing module '{from_name(q_)}'; "
+                f"plain import not allowed, write 'from {from_name(q)} import <name>'"
             )
         case Reasons.PredefinedNameAsValue(q):
-            return f"'{name(q)}' is usable only in annotations or as a decorator"
+            return f"'{from_name(q)}' is usable only in annotations or as a decorator"
         case Reasons.TypeParameterAsValue(x):
             return f"'{x}' is a type parameter, usable only in annotations"
         case Reasons.TypeSchemeAsValue(q):
-            return f"type arguments of '{name(q)}' cannot be inferred"
+            return f"type arguments of '{from_name(q)}' cannot be inferred"
         case Reasons.NoTypeArgument(alpha):
             return f"type parameter '{alpha}' has no type argument"
         case Reasons.ClassAsValue(q):
-            return f"'{name(q)}' refers to a class; classes are not first-class values"
+            return f"'{from_name(q)}' refers to a class; classes are not first-class values"
         case Reasons.TypeAliasAsValue(q):
-            return f"'{name(q)}' is a type alias, usable only in annotations"
+            return f"'{from_name(q)}' is a type alias, usable only in annotations"
         case Reasons.NoBinaryOverload(op, sigma, sigma_):
             return (
                 f"no overload of '{BINARY[type(op)]}' at operand types "
@@ -333,31 +333,9 @@ def message(r: Any) -> str:
             return f"'{x}' declares result type {render(tau)} but does not always return"
         case Reasons.MypyCompatibility(r_):
             return f"{message(r_)} (mypy compatibility)"
+        case Reasons.Located(_, r_):
+            return message(r_)
         case Reasons.ImportCycle(qs):
-            return f"import cycle: {' -> '.join(str(name(q)) for q in qs)}"
+            return f"import cycle: {' -> '.join(str(from_name(q)) for q in qs)}"
         case _:
             raise AssertionError(f"unexpected reason: {r}")
-
-
-class IllFormed(Exception):
-    exit_code: int
-    msg: str
-
-
-class IllFormedModule(IllFormed):
-    exit_code = 3
-
-    def __init__(self, position: tuple[int, int] | None, msg: str, module: Name):
-        self.line: int | None = None if position is None else position[0]
-        self.col: int | None = None if position is None else position[1]
-        self.msg = msg
-        self.module = module
-        super().__init__(msg)
-
-
-class IllFormedProgram(IllFormed):
-    exit_code = 4
-
-    def __init__(self, msg: str):
-        self.msg = msg
-        super().__init__(msg)
