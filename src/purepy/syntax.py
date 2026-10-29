@@ -1,6 +1,5 @@
 import ast
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
 from functools import reduce
 from itertools import dropwhile, takewhile
 from typing import Any
@@ -8,35 +7,29 @@ from typing import Any
 from .generated import Option, Positions, Syntax
 
 type Var = str
-
-
-@dataclass(frozen=True)
-class Name:
-    parts: tuple[Var, ...]
-
-    def __str__(self) -> str:
-        return ".".join(self.parts)
+# Name as a tuple of variables, hashable unlike the generated form; delete with pure-py/isabelle-purepy#24
+type Name = tuple[Var, ...]
 
 
 def parse_name(name: str) -> Name:
-    return Name(tuple(name.split(".")))
+    return tuple(name.split("."))
 
 
 def root(q: Name) -> Var:
-    return q.parts[0]
+    return q[0]
 
 
 def proper_prefixes(q: Name) -> list[Name]:
-    return [Name(q.parts[:i]) for i in range(1, len(q.parts))]
+    return [q[:i] for i in range(1, len(q))]
 
 
 def dotted_name(e: ast.expr) -> Name | None:
     match e:
         case ast.Name(id=x):
-            return Name((x,))
+            return (x,)
         case ast.Attribute(value=e_, attr=x):
             q = dotted_name(e_)
-            return None if q is None else Name((*q.parts, x))
+            return None if q is None else (*q, x)
         case _:
             return None
 
@@ -713,7 +706,7 @@ def lit(v: object) -> Lit:
 
 
 def name(q: Name) -> QualifiedName:
-    return (q.parts[0], list(q.parts[1:]))
+    return (q[0], list(q[1:]))
 
 
 def option(x: Any) -> Any:
@@ -1090,7 +1083,7 @@ def name_declaration(q: Name) -> ast.AnnAssign:
     return ast.AnnAssign(
         target=ast.Name(id=NAME, ctx=ast.Store()),
         annotation=ast.Name(id="str", ctx=ast.Load()),
-        value=ast.Constant(value=str(q)),
+        value=ast.Constant(value=".".join(q)),
         simple=1,
         lineno=1,
         col_offset=0,

@@ -21,7 +21,7 @@ MAIN = parse_name("__main__")
 
 
 def module_path(q: Name, base_dir: pathlib.Path) -> pathlib.Path:
-    stem = pathlib.Path(*q.parts)
+    stem = pathlib.Path(*q)
     for candidate in (base_dir / f"{stem}.py", base_dir / stem / "__init__.py"):
         if candidate.exists():
             return candidate
@@ -32,7 +32,7 @@ def module_path(q: Name, base_dir: pathlib.Path) -> pathlib.Path:
 def module_name(base_dir: pathlib.Path, path: pathlib.Path) -> Name | None:
     rel = path.relative_to(base_dir)
     parts = rel.parent.parts if rel.name == "__init__.py" else rel.with_suffix("").parts
-    return Name(parts) if len(parts) > 0 else None
+    return parts if len(parts) > 0 else None
 
 
 def module_names(base_dir: pathlib.Path) -> set[Name]:
@@ -113,7 +113,7 @@ def error_path(result: IllFormed | syntax.Unsupported, entry_path: pathlib.Path)
         case syntax.Unsupported():
             q = result.module
         case ((x, xs), _):
-            q = Name((x, *xs))
+            q = (x, *xs)
     return entry_path if q is None or q == MAIN else module_path(q, entry_path.parent)
 
 
