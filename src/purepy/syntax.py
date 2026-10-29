@@ -33,17 +33,6 @@ def parse_name(name: str) -> Name:
     return tuple(name.split("."))
 
 
-def name(e: ast.expr) -> Name | None:
-    match e:
-        case ast.Name(id=x):
-            return (x,)
-        case ast.Attribute(value=e_, attr=x):
-            q = name(e_)
-            return None if q is None else (*q, x)
-        case _:
-            return None
-
-
 type Statement = ast.stmt | list[ast.FunctionDef] | list[ast.ClassDef | ast.TypeAlias]
 
 
@@ -716,6 +705,17 @@ def lit(v: object) -> Lit:
             return Syntax.LitNone()
         case _:
             raise AssertionError(f"unexpected literal: {type(v).__name__}")
+
+
+def name(e: ast.expr) -> Name | None:
+    match e:
+        case ast.Name(id=x):
+            return (x,)
+        case ast.Attribute(value=e_, attr=x):
+            q = name(e_)
+            return None if q is None else (*q, x)
+        case _:
+            return None
 
 
 def qualified_name(q: Name) -> QualifiedName:
