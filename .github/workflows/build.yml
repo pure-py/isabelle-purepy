@@ -78,7 +78,7 @@ jobs:
         run: |
           mkdir site
           unzip -q dist/*.whl -d site
-          uv export --locked --only-group dev --no-hashes --no-emit-project 2>/dev/null | grep -o 'https://[^ ]*purepy_conformance[^ ]*\.whl' | xargs curl -sSL -o conformance.whl
+          curl -sSL -o conformance.whl "$(sed -n 's|.*"purepy-conformance @ \(https://[^"]*\.whl\)".*|\1|p' pyproject.toml)"
           unzip -q conformance.whl -d site
 
       - name: Set up GraalPy
