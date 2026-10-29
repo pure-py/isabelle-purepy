@@ -1,0 +1,96 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (x.y.z, e.g. 0.24.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      isabelle: ${{ steps.version.outputs.isabelle }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.2.0
+
+      - name: Parse and validate version
+        id: version
+        run: |
+          VERSION="${{ inputs.version }}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Version must be in the form x.y.z (no leading v)"
+            exit 1
+          fi
+          uv version "$VERSION"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "isabelle=$(cat .isabelle-version)" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and push version change
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml uv.lock
+          git diff --cached --quiet || git commit -m "Bump version to ${{ steps.version.outputs.tag }}"
+          git pull --rebase origin main
+          git push origin HEAD:refs/heads/main
+
+      - name: Create and push tag
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          git fetch --tags origin
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists"
+            exit 1
+          fi
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+  release:
+    needs: bump-version
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: makarius/isabelle:${{ needs.bump-version.outputs.isabelle }}
+      options: --user root
+    steps:
+      - name: Install make and git
+        run: |
+          apt-get update -q
+          apt-get install -y -q --no-install-recommends make git
+
+      - name: Checkout tagged commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.bump-version.outputs.tag }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+
+      - name: Check the proofs and generate the type checker
+        timeout-minutes: 20
+        run: make build ISABELLE=/home/isabelle/Isabelle/bin/isabelle
+
+      - name: Lint, run the conformance suite and build the wheel
+        run: make wheel
+
+      - name: Create release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.bump-version.outputs.tag }}
+          files: dist/*.whl

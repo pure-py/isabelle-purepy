@@ -72,52 +72,52 @@ lemma as_bool_nonbool: "v \<noteq> true \<Longrightarrow> v \<noteq> false \<Lon
   by (simp add: as_bool_None)
 
 (* Rules with the monadic let of the conclusion evaluated, one per shape of the last result *)
-lemma EvalUnOpVal: "\<rho>, e \<Rightarrow>\<^sub>e Val v \<Longrightarrow> \<rho>, ExprUnOp op e \<Rightarrow>\<^sub>e unop_meaning op v"
+lemma EvalUnOpVal: "\<rho>, node e \<Rightarrow>\<^sub>e Val v \<Longrightarrow> \<rho>, ExprUnOp op e \<Rightarrow>\<^sub>e unop_meaning op v"
   using EvalUnOp by fastforce
 
-lemma EvalUnOpAborts: "\<rho>, e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, ExprUnOp op e \<Rightarrow>\<^sub>e Aborts \<kappa>"
+lemma EvalUnOpAborts: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, ExprUnOp op e \<Rightarrow>\<^sub>e Aborts \<kappa>"
   using EvalUnOp by fastforce
 
 lemma EvalBinOpVal:
-  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<rho>, e' \<Rightarrow>\<^sub>e Val v' \<rbrakk> \<Longrightarrow> \<rho>, ExprBinOp op e e' \<Rightarrow>\<^sub>e binop_meaning op v v'"
+  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; \<rho>, node e' \<Rightarrow>\<^sub>e Val v' \<rbrakk> \<Longrightarrow> \<rho>, ExprBinOp op e e' \<Rightarrow>\<^sub>e binop_meaning op v v'"
   using EvalBinOp by fastforce
 
 lemma EvalSubscriptVal:
-  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<not> is_class v ; \<rho>, e' \<Rightarrow>\<^sub>e Val v' \<rbrakk> \<Longrightarrow> \<rho>, ExprSubscript e e' \<Rightarrow>\<^sub>e getitem v v'"
+  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; \<not> is_class v ; \<rho>, node e' \<Rightarrow>\<^sub>e Val v' \<rbrakk> \<Longrightarrow> \<rho>, ExprSubscript e e' \<Rightarrow>\<^sub>e getitem v v'"
   using EvalSubscript by fastforce
 
 lemma EvalSubscriptAborts:
-  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<not> is_class v ; \<rho>, e' \<Rightarrow>\<^sub>e Aborts \<kappa> \<rbrakk> \<Longrightarrow> \<rho>, ExprSubscript e e' \<Rightarrow>\<^sub>e Aborts \<kappa>"
+  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; \<not> is_class v ; \<rho>, node e' \<Rightarrow>\<^sub>e Aborts \<kappa> \<rbrakk> \<Longrightarrow> \<rho>, ExprSubscript e e' \<Rightarrow>\<^sub>e Aborts \<kappa>"
   using EvalSubscript by fastforce
 
 lemma EvalBinOpAborts:
-  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<rho>, e' \<Rightarrow>\<^sub>e Aborts \<kappa> \<rbrakk> \<Longrightarrow> \<rho>, ExprBinOp op e e' \<Rightarrow>\<^sub>e Aborts \<kappa>"
+  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; \<rho>, node e' \<Rightarrow>\<^sub>e Aborts \<kappa> \<rbrakk> \<Longrightarrow> \<rho>, ExprBinOp op e e' \<Rightarrow>\<^sub>e Aborts \<kappa>"
   using EvalBinOp by fastforce
 
 lemma EvalExprsConsVal:
-  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Val vs \<rbrakk> \<Longrightarrow> \<rho>, e # es \<Rightarrow>\<^sub>e\<^sub>s Val (v # vs)"
+  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Val vs \<rbrakk> \<Longrightarrow> \<rho>, e # es \<Rightarrow>\<^sub>e\<^sub>s Val (v # vs)"
   using EvalExprsCons by fastforce
 
 lemma EvalExprsConsAborts:
-  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Aborts \<kappa> \<rbrakk> \<Longrightarrow> \<rho>, e # es \<Rightarrow>\<^sub>e\<^sub>s Aborts \<kappa>"
+  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Aborts \<kappa> \<rbrakk> \<Longrightarrow> \<rho>, e # es \<Rightarrow>\<^sub>e\<^sub>s Aborts \<kappa>"
   using EvalExprsCons by fastforce
 
-lemma EvalAssignVal: "\<rho>, e \<Rightarrow>\<^sub>e Val v \<Longrightarrow> \<rho>, StmtAssign x \<pi> e \<Rightarrow>\<^sub>s Assigns (fmupd x v \<epsilon>)"
+lemma EvalAssignVal: "\<rho>, node e \<Rightarrow>\<^sub>e Val v \<Longrightarrow> \<rho>, StmtAssign x \<pi> e \<Rightarrow>\<^sub>s Assigns (fmupd x v \<epsilon>)"
   using EvalAssign by fastforce
 
-lemma EvalAssignAborts: "\<rho>, e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtAssign x \<pi> e \<Rightarrow>\<^sub>s Aborts\<^sub>o \<kappa>"
+lemma EvalAssignAborts: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtAssign x \<pi> e \<Rightarrow>\<^sub>s Aborts\<^sub>o \<kappa>"
   using EvalAssign by fastforce
 
-lemma EvalExprStmtVal: "\<rho>, e \<Rightarrow>\<^sub>e Val v \<Longrightarrow> \<rho>, StmtExpr e \<Rightarrow>\<^sub>s Assigns \<epsilon>"
+lemma EvalExprStmtVal: "\<rho>, node e \<Rightarrow>\<^sub>e Val v \<Longrightarrow> \<rho>, StmtExpr e \<Rightarrow>\<^sub>s Assigns \<epsilon>"
   using EvalExprStmt by fastforce
 
-lemma EvalExprStmtAborts: "\<rho>, e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtExpr e \<Rightarrow>\<^sub>s Aborts\<^sub>o \<kappa>"
+lemma EvalExprStmtAborts: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtExpr e \<Rightarrow>\<^sub>s Aborts\<^sub>o \<kappa>"
   using EvalExprStmt by fastforce
 
-lemma EvalReturnVal: "\<rho>, e \<Rightarrow>\<^sub>e Val v \<Longrightarrow> \<rho>, StmtReturn (Some e) \<Rightarrow>\<^sub>s Returns v"
+lemma EvalReturnVal: "\<rho>, node e \<Rightarrow>\<^sub>e Val v \<Longrightarrow> \<rho>, StmtReturn (Some e) \<Rightarrow>\<^sub>s Returns v"
   using EvalReturn by fastforce
 
-lemma EvalReturnAborts: "\<rho>, e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtReturn (Some e) \<Rightarrow>\<^sub>s Aborts\<^sub>o \<kappa>"
+lemma EvalReturnAborts: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtReturn (Some e) \<Rightarrow>\<^sub>s Aborts\<^sub>o \<kappa>"
   using EvalReturn by fastforce
 
 lemma EvalGenConsVal:
@@ -129,20 +129,20 @@ lemma EvalGenConsAborts:
   using EvalGenCons by fastforce
 
 lemma EvalCompConsVal:
-  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<rho>s, e \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p Val vs \<rbrakk> \<Longrightarrow> \<rho> # \<rho>s, e \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p Val (v # vs)"
+  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; \<rho>s, e \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p Val vs \<rbrakk> \<Longrightarrow> \<rho> # \<rho>s, e \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p Val (v # vs)"
   using EvalCompCons by fastforce
 
 lemma EvalCompConsAborts:
-  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val v ; \<rho>s, e \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p Aborts \<kappa> \<rbrakk> \<Longrightarrow> \<rho> # \<rho>s, e \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p Aborts \<kappa>"
+  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; \<rho>s, e \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p Aborts \<kappa> \<rbrakk> \<Longrightarrow> \<rho> # \<rho>s, e \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p Aborts \<kappa>"
   using EvalCompCons by fastforce
 
 lemma EvalEntriesConsVal:
-  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val (VLit (LitString w)) ; \<rho>, e' \<Rightarrow>\<^sub>e Val v ; \<rho>s, e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s Val \<delta> \<rbrakk>
+  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val (VLit (LitString w)) ; \<rho>, node e' \<Rightarrow>\<^sub>e Val v ; \<rho>s, e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s Val \<delta> \<rbrakk>
   \<Longrightarrow> \<rho> # \<rho>s, e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s Val ((w, v) # \<delta>)"
   using EvalEntriesCons by fastforce
 
 lemma EvalEntriesConsAborts:
-  "\<lbrakk> \<rho>, e \<Rightarrow>\<^sub>e Val (VLit (LitString w)) ; \<rho>, e' \<Rightarrow>\<^sub>e Val v ; \<rho>s, e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s Aborts \<kappa> \<rbrakk>
+  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val (VLit (LitString w)) ; \<rho>, node e' \<Rightarrow>\<^sub>e Val v ; \<rho>s, e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s Aborts \<kappa> \<rbrakk>
   \<Longrightarrow> \<rho> # \<rho>s, e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s Aborts \<kappa>"
   using EvalEntriesCons by fastforce
 
@@ -160,10 +160,10 @@ theorem soundness:
     and soundness_elif: "run_elif n \<rho> eb = Done o \<Longrightarrow> \<rho>, eb \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o"
     and soundness_quals: "run_quals n \<rho> gs = Done q \<Longrightarrow> \<rho>, gs \<Rightarrow>\<^sub>q q"
     and soundness_gen: "run_gen n \<rho> x us gs = Done q \<Longrightarrow> \<rho>, x, us, gs \<Rightarrow>\<^sub>g\<^sub>e\<^sub>n q"
-    and soundness_comp: "run_comp n \<rho>s e = Done vr \<Longrightarrow> \<rho>s, e \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p vr"
-    and soundness_entries: "run_entries n \<rho>s e e' = Done dr \<Longrightarrow> \<rho>s, e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s dr"
-proof (induction n \<rho> e and n \<rho> es and n \<rho> s and n \<rho> eb and n \<rho> gs and n \<rho> x us gs and n \<rho>s e
-    and n \<rho>s e e' arbitrary: r and rs and o and o and q and q and vr and dr rule: eval_fun_induct)
+    and soundness_comp: "run_comp n \<rho>s ec = Done vr \<Longrightarrow> \<rho>s, ec \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p vr"
+    and soundness_entries: "run_entries n \<rho>s ec ec' = Done dr \<Longrightarrow> \<rho>s, ec, ec' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s dr"
+proof (induction n \<rho> e and n \<rho> es and n \<rho> s and n \<rho> eb and n \<rho> gs and n \<rho> x us gs and n \<rho>s ec
+    and n \<rho>s ec ec' arbitrary: r and rs and o and o and q and q and vr and dr rule: eval_fun_induct)
 qed (auto simp: eval_simps map_fuelled_Done as_bool_Some as_bool_None class_of_Some class_of_None fields_of_Some fields_of_None
   module_env_of_Some module_env_of_None
   split: fuelled.splits result.splits outcome.splits option.splits bool.splits val.splits lit.splits if_splits
@@ -178,8 +178,8 @@ theorem completeness_eventually:
     and "\<rho>, eb \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_elif n \<rho> eb = Done o"
     and "\<rho>, gs \<Rightarrow>\<^sub>q q \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_quals n \<rho> gs = Done q"
     and "\<rho>, x, us, gs \<Rightarrow>\<^sub>g\<^sub>e\<^sub>n q \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_gen n \<rho> x us gs = Done q"
-    and "\<rho>s, e \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p vr \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_comp n \<rho>s e = Done vr"
-    and "\<rho>s, e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s dr \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_entries n \<rho>s e e' = Done dr"
+    and "\<rho>s, ec \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p vr \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_comp n \<rho>s ec = Done vr"
+    and "\<rho>s, ec, ec' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s dr \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_entries n \<rho>s ec ec' = Done dr"
 proof (induction rule: eval_expr_eval_exprs_eval_stmt_eval_elif_eval_quals_eval_gen_eval_comp_eval_entries.inducts[ih_names])
   case EvalVar
   show ?case
@@ -733,8 +733,8 @@ corollary completeness:
     and completeness_elif: "\<rho>, eb \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o \<Longrightarrow> \<exists>n. run_elif n \<rho> eb = Done o"
     and completeness_quals: "\<rho>, gs \<Rightarrow>\<^sub>q q \<Longrightarrow> \<exists>n. run_quals n \<rho> gs = Done q"
     and completeness_gen: "\<rho>, x, us, gs \<Rightarrow>\<^sub>g\<^sub>e\<^sub>n q \<Longrightarrow> \<exists>n. run_gen n \<rho> x us gs = Done q"
-    and completeness_comp: "\<rho>s, e \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p vr \<Longrightarrow> \<exists>n. run_comp n \<rho>s e = Done vr"
-    and completeness_entries: "\<rho>s, e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s dr \<Longrightarrow> \<exists>n. run_entries n \<rho>s e e' = Done dr"
+    and completeness_comp: "\<rho>s, ec \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p vr \<Longrightarrow> \<exists>n. run_comp n \<rho>s ec = Done vr"
+    and completeness_entries: "\<rho>s, ec, ec' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s dr \<Longrightarrow> \<exists>n. run_entries n \<rho>s ec ec' = Done dr"
   by (fact completeness_eventually[THEN eventually_happens'[OF sequentially_bot]])+
 
 
@@ -771,22 +771,22 @@ begin
 (* The rules whose results are composed by mlet, at a value and at an abort *)
 lemma EvalImportVal:
   "\<lbrakk> (x, []) \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> ; (x, []), \<rho>, xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b Val \<rho>'' ; q, \<iota>s \<Rightarrow>\<^sub>i Val \<rho>' \<rbrakk>
-  \<Longrightarrow> q, Import (x, xs) # \<iota>s \<Rightarrow>\<^sub>i Val (fmupd x (VModLoaded (x, []) \<rho>'') \<epsilon> \<uplus>\<^sub>v \<rho>')"
+  \<Longrightarrow> q, At p (Import (x, xs)) # \<iota>s \<Rightarrow>\<^sub>i Val (fmupd x (VModLoaded (x, []) \<rho>'') \<epsilon> \<uplus>\<^sub>v \<rho>')"
   using EvalImport by fastforce
 
 lemma EvalImportAborts:
   "\<lbrakk> (x, []) \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> ; (x, []), \<rho>, xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b Val \<rho>'' ; q, \<iota>s \<Rightarrow>\<^sub>i Aborts \<kappa> \<rbrakk>
-  \<Longrightarrow> q, Import (x, xs) # \<iota>s \<Rightarrow>\<^sub>i Aborts \<kappa>"
+  \<Longrightarrow> q, At p (Import (x, xs)) # \<iota>s \<Rightarrow>\<^sub>i Aborts \<kappa>"
   using EvalImport by fastforce
 
 lemma EvalFromImportVal:
   "\<lbrakk> unique_to q' q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s Val () ; q' \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> ; \<rho>, xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s Val vs ; q, \<iota>s \<Rightarrow>\<^sub>i Val \<rho>'' \<rbrakk>
-  \<Longrightarrow> q, FromImport q' xs # \<iota>s \<Rightarrow>\<^sub>i Val (fmap_of_list (zip xs vs) \<uplus>\<^sub>v \<rho>'')"
+  \<Longrightarrow> q, At p (FromImport q' xs) # \<iota>s \<Rightarrow>\<^sub>i Val (fmap_of_list (zip xs vs) \<uplus>\<^sub>v \<rho>'')"
   using EvalFromImport by fastforce
 
 lemma EvalFromImportAborts:
   "\<lbrakk> unique_to q' q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s Val () ; q' \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> ; \<rho>, xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s Val vs ; q, \<iota>s \<Rightarrow>\<^sub>i Aborts \<kappa> \<rbrakk>
-  \<Longrightarrow> q, FromImport q' xs # \<iota>s \<Rightarrow>\<^sub>i Aborts \<kappa>"
+  \<Longrightarrow> q, At p (FromImport q' xs) # \<iota>s \<Rightarrow>\<^sub>i Aborts \<kappa>"
   using EvalFromImport by fastforce
 
 lemma EvalSubmodulesConsVal:

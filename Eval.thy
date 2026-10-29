@@ -1,10 +1,7 @@
 (* Evaluation as a function with fuel, and its executable code equations *)
 theory Eval
-    imports Semantics "HOL-Library.Sublist"
+    imports Semantics
 begin
-
-(* Free o for outcomes again, after importing Sublist *)
-no_notation (ASCII) comp (infixl \<open>o\<close> 55)
 
 (* Stuck where no rule applies, OutOfFuel where the fuel runs out first *)
 datatype 'a fuelled = Done 'a | Stuck | OutOfFuel
@@ -41,9 +38,9 @@ lemma contains_code [code]:
       VList vs \<Rightarrow> contains_elems vs v
     | VTuple vs \<Rightarrow> contains_elems vs v
     | VDict \<delta> \<Rightarrow> (case v of VLit (LitString w) \<Rightarrow> Val (w \<in> set (map fst \<delta>)) | _ \<Rightarrow> Aborts Excluded)
-    | VLit (LitString w') \<Rightarrow> (case v of VLit (LitString w) \<Rightarrow> Val (sublist w w') | _ \<Rightarrow> Aborts TypeError)
+    | VLit (LitString w') \<Rightarrow> (case v of VLit (LitString w) \<Rightarrow> Val (substring w w') | _ \<Rightarrow> Aborts TypeError)
     | _ \<Rightarrow> Aborts TypeError)"
-  by (cases v'; cases v; auto simp: sublist_def split: lit.split)
+  by (cases v'; cases v; auto split: lit.split)
 
 lemma contains_elems_code [code]:
   "contains_elems [] v = Val False"
@@ -75,13 +72,13 @@ begin
 
 function (sequential)
   run_expr  :: "nat \<Rightarrow> env \<Rightarrow> expr \<Rightarrow> val result fuelled" and
-  run_exprs :: "nat \<Rightarrow> env \<Rightarrow> expr list \<Rightarrow> val list result fuelled" and
+  run_exprs :: "nat \<Rightarrow> env \<Rightarrow> expr located list \<Rightarrow> val list result fuelled" and
   run_stmt  :: "nat \<Rightarrow> env \<Rightarrow> stmt \<Rightarrow> outcome fuelled" and
   run_elif  :: "nat \<Rightarrow> env \<Rightarrow> elif_block \<Rightarrow> outcome fuelled" and
-  run_quals :: "nat \<Rightarrow> env \<Rightarrow> qualifier list \<Rightarrow> env list result fuelled" and
-  run_gen   :: "nat \<Rightarrow> env \<Rightarrow> var \<Rightarrow> val list \<Rightarrow> qualifier list \<Rightarrow> env list result fuelled" and
-  run_comp  :: "nat \<Rightarrow> env list \<Rightarrow> expr \<Rightarrow> val list result fuelled" and
-  run_entries :: "nat \<Rightarrow> env list \<Rightarrow> expr \<Rightarrow> expr \<Rightarrow> (string \<times> val) list result fuelled"
+  run_quals :: "nat \<Rightarrow> env \<Rightarrow> qualifier located list \<Rightarrow> env list result fuelled" and
+  run_gen   :: "nat \<Rightarrow> env \<Rightarrow> var \<Rightarrow> val list \<Rightarrow> qualifier located list \<Rightarrow> env list result fuelled" and
+  run_comp  :: "nat \<Rightarrow> env list \<Rightarrow> expr located \<Rightarrow> val list result fuelled" and
+  run_entries :: "nat \<Rightarrow> env list \<Rightarrow> expr located \<Rightarrow> expr located \<Rightarrow> (str \<times> val) list result fuelled"
 where
 "run_expr 0 \<rho> e = OutOfFuel" |
 "run_expr (Suc n) \<rho> (ExprVar x) = 
@@ -91,23 +88,23 @@ where
   | None \<Rightarrow> Done (Aborts NameError))" |
 "run_expr (Suc n) \<rho> (ExprLiteral l) = Done (Val (VLit l))" |
 "run_expr (Suc n) \<rho> (ExprLambda xs e) = Done (Val Lam(\<rho>, xs, e))" |
-"run_expr (Suc n) \<rho> (ExprUnOp op e) = flet (run_expr n \<rho> e) (\<lambda>v. Done (unop_meaning op v))" |
+"run_expr (Suc n) \<rho> (ExprUnOp op e) = flet (run_expr n \<rho> (node e)) (\<lambda>v. Done (unop_meaning op v))" |
 "run_expr (Suc n) \<rho> (ExprBinOp op e e') =
-  flet (run_expr n \<rho> e) (\<lambda>v. flet (run_expr n \<rho> e') (\<lambda>v'. Done (binop_meaning op v v')))" |
+  flet (run_expr n \<rho> (node e)) (\<lambda>v. flet (run_expr n \<rho> (node e')) (\<lambda>v'. Done (binop_meaning op v v')))" |
 "run_expr (Suc n) \<rho> (ExprAnd e e') =
-  flet (run_expr n \<rho> e) (\<lambda>v. case as_bool v of
+  flet (run_expr n \<rho> (node e)) (\<lambda>v. case as_bool v of
     Some False \<Rightarrow> Done (Val false)
-  | Some True \<Rightarrow> run_expr n \<rho> e'
+  | Some True \<Rightarrow> run_expr n \<rho> (node e')
   | None \<Rightarrow> Done (Aborts Excluded))" |
 "run_expr (Suc n) \<rho> (ExprOr e e') =
-  flet (run_expr n \<rho> e) (\<lambda>v. case as_bool v of
+  flet (run_expr n \<rho> (node e)) (\<lambda>v. case as_bool v of
     Some True \<Rightarrow> Done (Val true)
-  | Some False \<Rightarrow> run_expr n \<rho> e'
+  | Some False \<Rightarrow> run_expr n \<rho> (node e')
   | None \<Rightarrow> Done (Aborts Excluded))" |
 "run_expr (Suc n) \<rho> (ExprCond e1 e e2) =
-  flet (run_expr n \<rho> e) (\<lambda>v. case as_bool v of
-    Some True \<Rightarrow> run_expr n \<rho> e1
-  | Some False \<Rightarrow> run_expr n \<rho> e2
+  flet (run_expr n \<rho> (node e)) (\<lambda>v. case as_bool v of
+    Some True \<Rightarrow> run_expr n \<rho> (node e1)
+  | Some False \<Rightarrow> run_expr n \<rho> (node e2)
   | None \<Rightarrow> Done (Aborts Excluded))" |
 "run_expr (Suc n) \<rho> (ExprList es) = flet (run_exprs n \<rho> es) (\<lambda>vs. Done (Val (VList vs)))" |
 "run_expr (Suc n) \<rho> (ExprTuple es) = flet (run_exprs n \<rho> es) (\<lambda>vs. Done (Val (VTuple vs)))" |
@@ -120,18 +117,18 @@ where
 "run_expr (Suc n) \<rho> (ExprDictComp e e' gs) =
   flet (run_quals n \<rho> gs) (\<lambda>\<rho>s. flet (run_entries n \<rho>s e e') (\<lambda>\<delta>. Done (Val (VDict (update [] \<delta>)))))" |
 "run_expr (Suc n) \<rho> (ExprSubscript e e') =
-  flet (run_expr n \<rho> e) (\<lambda>v. case class_of v of
+  flet (run_expr n \<rho> (node e)) (\<lambda>v. case class_of v of
     Some C \<Rightarrow> if type_args_of e' = None then Stuck else Done (Val (VClass C))
-  | None \<Rightarrow> flet (run_expr n \<rho> e') (\<lambda>v'. Done (getitem v v')))" |
+  | None \<Rightarrow> flet (run_expr n \<rho> (node e')) (\<lambda>v'. Done (getitem v v')))" |
 "run_expr (Suc n) \<rho> (ExprAttribute e x) =
-  flet (run_expr n \<rho> e) (\<lambda>v. case fields_of v of
+  flet (run_expr n \<rho> (node e)) (\<lambda>v. case fields_of v of
     Some xvs \<Rightarrow> (case map_of xvs x of Some u \<Rightarrow> Done (Val u) | None \<Rightarrow> Done (Aborts AttributeError))
   | None \<Rightarrow>
       (case module_env_of v of
          Some \<rho>' \<Rightarrow> (case fmlookup \<rho>' x of Some u \<Rightarrow> Done (Val u) | None \<Rightarrow> Done (Aborts AttributeError))
        | None \<Rightarrow> Done (Aborts Excluded)))" |
 "run_expr (Suc n) \<rho> (ExprCall e (es, kws)) =
-  flet (run_expr n \<rho> e) (\<lambda>v. case class_of v of
+  flet (run_expr n \<rho> (node e)) (\<lambda>v. case class_of v of
     Some C \<Rightarrow>
       flet (run_exprs n \<rho> (es @ map snd kws)) (\<lambda>us.
         case field_map C (take (length es) us) (zip (map fst kws) (drop (length es) us)) of
@@ -141,17 +138,17 @@ where
       if kws \<noteq> [] then Stuck else
       flet (run_exprs n \<rho> es) (\<lambda>us. case v of
         Lam(\<rho>', xs, e') \<Rightarrow>
-          if length xs = length us then run_expr n (\<rho>' \<otimes> fmap_of_list (zip xs us)) e' else Done (Aborts TypeError)
+          if length xs = length us then run_expr n (\<rho>' \<otimes> fmap_of_list (zip xs us)) (node e') else Done (Aborts TypeError)
       | Def(\<rho>', ds, j) \<Rightarrow>
           if j < length ds then
-            (case ds ! j of Def f \<alpha>s xps \<psi> s \<Rightarrow>
+            (case node (ds ! j) of Def f \<alpha>s xps \<psi> s \<Rightarrow>
               if length xps = length us then
                 (case scope VUnbound (map fst xps) s of
                   Some \<rho>s \<Rightarrow>
                     map_fuelled call_result
                       (run_stmt n
-                        (\<rho>' \<otimes> fmap_of_list (zip (map def_name ds) (map (\<lambda>i. Def(\<rho>', ds, i)) [0..<length ds]))
-                           \<otimes> fmap_of_list (zip (map fst xps) us) \<otimes> \<rho>s) s)
+                        (\<rho>' \<otimes> fmap_of_list (zip (map (def_name \<circ> node) ds) (map (\<lambda>i. Def(\<rho>', ds, i)) [0..<length ds]))
+                           \<otimes> fmap_of_list (zip (map fst xps) us) \<otimes> \<rho>s) (node s))
                 | None \<Rightarrow> Stuck)
               else Done (Aborts TypeError))
           else Stuck
@@ -161,59 +158,59 @@ where
 "run_exprs 0 \<rho> es = OutOfFuel" |
 "run_exprs (Suc n) \<rho> [] = Done (Val [])" |
 "run_exprs (Suc n) \<rho> (e # es) =
-  flet (run_expr n \<rho> e) (\<lambda>v. flet (run_exprs n \<rho> es) (\<lambda>vs. Done (Val (v # vs))))" |
+  flet (run_expr n \<rho> (node e)) (\<lambda>v. flet (run_exprs n \<rho> es) (\<lambda>vs. Done (Val (v # vs))))" |
 
 "run_stmt 0 \<rho> s = OutOfFuel" |
 "run_stmt (Suc n) \<rho> StmtPass = Done (Assigns \<epsilon>)" |
 "run_stmt (Suc n) \<rho> (StmtDeclare x \<psi>) = Done (Assigns \<epsilon>)" |
-"run_stmt (Suc n) \<rho> (StmtAssign x \<pi> e) = flet_outcome (run_expr n \<rho> e) (\<lambda>v. Done (Assigns (fmupd x v \<epsilon>)))" |
-"run_stmt (Suc n) \<rho> (StmtExpr e) = flet_outcome (run_expr n \<rho> e) (\<lambda>v. Done (Assigns \<epsilon>))" |
-"run_stmt (Suc n) \<rho> (StmtReturn (Some e)) = flet_outcome (run_expr n \<rho> e) (\<lambda>v. Done (Returns v))" |
+"run_stmt (Suc n) \<rho> (StmtAssign x \<pi> e) = flet_outcome (run_expr n \<rho> (node e)) (\<lambda>v. Done (Assigns (fmupd x v \<epsilon>)))" |
+"run_stmt (Suc n) \<rho> (StmtExpr e) = flet_outcome (run_expr n \<rho> (node e)) (\<lambda>v. Done (Assigns \<epsilon>))" |
+"run_stmt (Suc n) \<rho> (StmtReturn (Some e)) = flet_outcome (run_expr n \<rho> (node e)) (\<lambda>v. Done (Returns v))" |
 "run_stmt (Suc n) \<rho> (StmtReturn None) = Done (Returns (VLit LitNone))" |
 "run_stmt (Suc n) \<rho> (StmtMutualRegion ds) =
-  Done (Assigns (fmap_of_list (zip (map def_name ds) (map (\<lambda>i. Def(\<rho>, ds, i)) [0..<length ds]))))" |
+  Done (Assigns (fmap_of_list (zip (map (def_name \<circ> node) ds) (map (\<lambda>i. Def(\<rho>, ds, i)) [0..<length ds]))))" |
 "run_stmt (Suc n) \<rho> (StmtAssert e None) =
-  flet_outcome (run_expr n \<rho> e) (\<lambda>v. case as_bool v of
+  flet_outcome (run_expr n \<rho> (node e)) (\<lambda>v. case as_bool v of
     Some True \<Rightarrow> Done (Assigns \<epsilon>)
   | Some False \<Rightarrow> Done (Aborts\<^sub>o (AssertionError None))
   | None \<Rightarrow> Done (Aborts\<^sub>o Excluded))" |
 "run_stmt (Suc n) \<rho> (StmtAssert e (Some e')) =
-  flet_outcome (run_expr n \<rho> e) (\<lambda>v. case as_bool v of
+  flet_outcome (run_expr n \<rho> (node e)) (\<lambda>v. case as_bool v of
     Some True \<Rightarrow> Done (Assigns \<epsilon>)
   | Some False \<Rightarrow>
-      flet_outcome (run_expr n \<rho> e') (\<lambda>v'. case v' of
+      flet_outcome (run_expr n \<rho> (node e')) (\<lambda>v'. case v' of
         VLit (LitString w) \<Rightarrow> Done (Aborts\<^sub>o (AssertionError (Some w)))
       | _ \<Rightarrow> Done (Aborts\<^sub>o Excluded))
   | None \<Rightarrow> Done (Aborts\<^sub>o Excluded))" |
 "run_stmt (Suc n) \<rho> (StmtIf e s elifs else') =
-  flet_outcome (run_expr n \<rho> e) (\<lambda>v. case as_bool v of
-    Some True \<Rightarrow> run_stmt n \<rho> s
+  flet_outcome (run_expr n \<rho> (node e)) (\<lambda>v. case as_bool v of
+    Some True \<Rightarrow> run_stmt n \<rho> (node s)
   | Some False \<Rightarrow> run_elif n \<rho> (elifs, else')
   | None \<Rightarrow> Done (Aborts\<^sub>o Excluded))" |
-"run_stmt (Suc n) \<rho> (StmtSeq s s') = fseq (run_stmt n \<rho> s) (\<lambda>\<rho>'. run_stmt n (\<rho> \<otimes> \<rho>') s')" |
+"run_stmt (Suc n) \<rho> (StmtSeq s s') = fseq (run_stmt n \<rho> (node s)) (\<lambda>\<rho>'. run_stmt n (\<rho> \<otimes> \<rho>') (node s'))" |
 "run_stmt (Suc n) \<rho> (StmtMatch e cases) =
-  flet_outcome (run_expr n \<rho> e) (\<lambda>v. case dispatch \<rho> v cases of
-    Val (\<rho>', s') \<Rightarrow> map_fuelled (\<lambda>o. Assigns \<rho>' \<otimes>\<^sub>o o) (run_stmt n (\<rho> \<otimes> \<rho>') s')
+  flet_outcome (run_expr n \<rho> (node e)) (\<lambda>v. case dispatch \<rho> v cases of
+    Val (\<rho>', s') \<Rightarrow> map_fuelled (\<lambda>o. Assigns \<rho>' \<otimes>\<^sub>o o) (run_stmt n (\<rho> \<otimes> \<rho>') (node s'))
   | Aborts \<kappa> \<Rightarrow> Done (Aborts\<^sub>o \<kappa>))" |
 
 "run_elif 0 \<rho> eb = OutOfFuel" |
 "run_elif (Suc n) \<rho> ([], None) = Done (Assigns \<epsilon>)" |
-"run_elif (Suc n) \<rho> ([], Some s) = run_stmt n \<rho> s" |
+"run_elif (Suc n) \<rho> ([], Some s) = run_stmt n \<rho> (node s)" |
 "run_elif (Suc n) \<rho> ((e, s) # elifs, else') =
-  flet_outcome (run_expr n \<rho> e) (\<lambda>v. case as_bool v of
-    Some True \<Rightarrow> run_stmt n \<rho> s
+  flet_outcome (run_expr n \<rho> (node e)) (\<lambda>v. case as_bool v of
+    Some True \<Rightarrow> run_stmt n \<rho> (node s)
   | Some False \<Rightarrow> run_elif n \<rho> (elifs, else')
   | None \<Rightarrow> Done (Aborts\<^sub>o Excluded))" |
 
 "run_quals 0 \<rho> gs = OutOfFuel" |
 "run_quals (Suc n) \<rho> [] = Done (Val [\<rho>])" |
-"run_quals (Suc n) \<rho> (Guard e # gs) =
-  flet (run_expr n \<rho> e) (\<lambda>v. case as_bool v of
+"run_quals (Suc n) \<rho> (At p (Guard e) # gs) =
+  flet (run_expr n \<rho> (node e)) (\<lambda>v. case as_bool v of
     Some True \<Rightarrow> run_quals n \<rho> gs
   | Some False \<Rightarrow> Done (Val [])
   | None \<Rightarrow> Done (Aborts Excluded))" |
-"run_quals (Suc n) \<rho> (Generator x e # gs) =
-  flet (run_expr n \<rho> e) (\<lambda>v. case iter v of
+"run_quals (Suc n) \<rho> (At p (Generator x e) # gs) =
+  flet (run_expr n \<rho> (node e)) (\<lambda>v. case iter v of
     Some us \<Rightarrow> run_gen n \<rho> x us gs
   | None \<Rightarrow> Done (Aborts TypeError))" |
 
@@ -225,14 +222,14 @@ where
 "run_comp 0 \<rho>s e = OutOfFuel" |
 "run_comp (Suc n) [] e = Done (Val [])" |
 "run_comp (Suc n) (\<rho> # \<rho>s) e =
-  flet (run_expr n \<rho> e) (\<lambda>v. flet (run_comp n \<rho>s e) (\<lambda>vs. Done (Val (v # vs))))" |
+  flet (run_expr n \<rho> (node e)) (\<lambda>v. flet (run_comp n \<rho>s e) (\<lambda>vs. Done (Val (v # vs))))" |
 
 "run_entries 0 \<rho>s e e' = OutOfFuel" |
 "run_entries (Suc n) [] e e' = Done (Val [])" |
 "run_entries (Suc n) (\<rho> # \<rho>s) e e' =
-  flet (run_expr n \<rho> e) (\<lambda>k. case k of
+  flet (run_expr n \<rho> (node e)) (\<lambda>k. case k of
     VLit (LitString w) \<Rightarrow>
-      flet (run_expr n \<rho> e') (\<lambda>v. flet (run_entries n \<rho>s e e') (\<lambda>\<delta>. Done (Val ((w, v) # \<delta>))))
+      flet (run_expr n \<rho> (node e')) (\<lambda>v. flet (run_entries n \<rho>s e e') (\<lambda>\<delta>. Done (Val ((w, v) # \<delta>))))
   | _ \<Rightarrow> Done (Aborts Excluded))"
 by pat_completeness auto
 
@@ -249,14 +246,14 @@ lemmas eval_fun_induct =
    rule covers *)
 primrec run_top :: "nat \<Rightarrow> name \<Rightarrow> env \<Rightarrow> top_stmt \<Rightarrow> outcome fuelled"
 where
-"run_top n q \<rho> (Stmt s) = run_stmt n \<rho> s" |
+"run_top n q \<rho> (Stmt s) = run_stmt n \<rho> (node s)" |
 "run_top n q \<rho> (TopSeq t t') =
   (case run_top n q \<rho> t of
      Done (Assigns \<rho>') \<Rightarrow> map_fuelled (\<lambda>o. Assigns \<rho>' \<otimes>\<^sub>o o) (run_top n q (\<rho> \<otimes> \<rho>') t')
    | Done (Returns v) \<Rightarrow> Stuck
    | r \<Rightarrow> r)" |
 "run_top n q \<rho> (TypeDefs \<chi>s) =
-  Done (Assigns (fmap_of_list (map (\<lambda>j. (type_def_name (\<chi>s ! j), type_value q \<chi>s j)) [0..<length \<chi>s])))"
+  Done (Assigns (fmap_of_list (map (\<lambda>j. (type_def_name (node (\<chi>s ! j)), type_value q \<chi>s j)) [0..<length \<chi>s])))"
 
 end
 
@@ -266,7 +263,7 @@ begin
 (* Evaluator: each loading step consumes fuel, so an import cycle runs out of fuel, as it has no derivation; the
    statements of a module body run with the same fuel *)
 function (sequential) run_mod :: "nat \<Rightarrow> name \<Rightarrow> env result fuelled"
-and run_imports :: "nat \<Rightarrow> name \<Rightarrow> import list \<Rightarrow> env result fuelled"
+and run_imports :: "nat \<Rightarrow> name \<Rightarrow> import located list \<Rightarrow> env result fuelled"
 and run_sub     :: "nat \<Rightarrow> name \<Rightarrow> env \<Rightarrow> var list \<Rightarrow> env result fuelled"
 and run_imp     :: "nat \<Rightarrow> env \<Rightarrow> var \<Rightarrow> val result fuelled"
 and run_imps    :: "nat \<Rightarrow> env \<Rightarrow> var list \<Rightarrow> val list result fuelled"
@@ -293,10 +290,10 @@ where
 
 "run_imports 0 q \<iota>s = OutOfFuel" |
 "run_imports (Suc n) q [] = Done (Val \<epsilon>)" |
-"run_imports (Suc n) q (Import (x, xs) # \<iota>s) =
+"run_imports (Suc n) q (At p (Import (x, xs)) # \<iota>s) =
   flet (run_mod n (x, [])) (\<lambda>\<rho>. flet (run_sub n (x, []) \<rho> xs) (\<lambda>\<rho>''. flet (run_imports n q \<iota>s) (\<lambda>\<rho>'.
     Done (Val (fmupd x (VModLoaded (x, []) \<rho>'') \<epsilon> \<uplus>\<^sub>v \<rho>')))))" |
-"run_imports (Suc n) q (FromImport q' xs # \<iota>s) =
+"run_imports (Suc n) q (At p (FromImport q' xs) # \<iota>s) =
   flet (run_mods n (unique_to q' q)) (\<lambda>_. flet (run_mod n q') (\<lambda>\<rho>. flet (run_imps n \<rho> xs) (\<lambda>vs.
     flet (run_imports n q \<iota>s) (\<lambda>\<rho>''. Done (Val (fmap_of_list (zip xs vs) \<uplus>\<^sub>v \<rho>''))))))" |
 

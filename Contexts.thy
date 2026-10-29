@@ -3,23 +3,25 @@ theory Contexts
   imports Syntax "HOL-Library.List_Lexorder" "HOL-Library.Char_ord"
 begin
 
+(* Possibly unassigned entries carry a flag, set when the variable is declared in a branch, for the diagnostic
+   only *)
 datatype cxt_entry =
     Ty ty
   | DU ty
-  | PU ty
+  | PU ty bool
   | Unbound
   | ModStub name
   | ModChecked name "(var, cxt_entry) fmap"
-  | TypeAlias "(var, cxt_entry) fmap" name "type_def list" nat
+  | TypeAlias "(var, cxt_entry) fmap" name "type_def located list" nat
   | Type name
   | TypeVar
   | Scheme ty_scheme
-  | PUScheme ty_scheme
+  | PUScheme ty_scheme bool
   | PredefName
 
 type_synonym cxt = "(var, cxt_entry) fmap"
 
-datatype class_entry = ClassDef cxt name "type_def list" nat
+datatype class_entry = ClassDef cxt name "type_def located list" nat
 
 type_synonym class_table = "(name, class_entry) fmap"
 
@@ -40,28 +42,30 @@ where
    | Some PredefName \<Rightarrow> Some PredefName
    | _ \<Rightarrow> None)"
 
-definition range_class :: name where "range_class = snoc builtins ''range''"
+definition range_class :: name where "range_class = snoc builtins (var ''range'')"
 
-abbreviation name_binding :: "var \<times> cxt_entry" where "name_binding \<equiv> (''__name__'', Ty (TyPrim str))"
+abbreviation name_binding :: "var \<times> cxt_entry"
+where "name_binding \<equiv> (var ''__name__'', Ty (TyPrim str))"
 
 definition predefined :: "(name, cxt) fmap"
 where
 "predefined = fmap_of_list
   [(builtins, fmap_of_list
      ([name_binding,
-       (''print'', Ty (TyCallable [TyPrim object] (TyPrim NoneType))),
-       (''len'', Ty (TyCallable [TyPrim Sized] (TyPrim int))),
-       (''range'', Type range_class),
-       (''round'', Ty (TyCallable [TyPrim float] (TyPrim int)))]
+       (var ''print'', Ty (TyCallable [TyPrim object] (TyPrim NoneType))),
+       (var ''len'', Ty (TyCallable [TyPrim Sized] (TyPrim int))),
+       (var ''range'', Type range_class),
+       (var ''round'', Ty (TyCallable [TyPrim float] (TyPrim int)))]
       @ map (\<lambda>\<nu>. (prim_name \<nu>, PredefName)) [NoneType, object, bool, int, float, str]
-      @ [(''list'', PredefName), (''dict'', PredefName), (''tuple'', PredefName)])),
-   ((''sys'', []), fmap_of_list
-     [name_binding, (''argv'', Ty (TyList (TyPrim str))),
-      (''exit'', Ty (TyCallable [TyPrim int] (TyPrim Never)))]),
-   ((''typing'', []), fmap_of_list
-     [name_binding, (''Callable'', PredefName), (''Literal'', PredefName),
+      @ map (\<lambda>x. (var x, PredefName)) [''list'', ''dict'', ''tuple''])),
+   ((var ''sys'', []), fmap_of_list
+     [name_binding, (var ''argv'', Ty (TyList (TyPrim str))),
+      (var ''exit'', Ty (TyCallable [TyPrim int] (TyPrim Never)))]),
+   ((var ''typing'', []), fmap_of_list
+     [name_binding, (var ''Callable'', PredefName), (var ''Literal'', PredefName),
       (prim_name Never, PredefName), (prim_name Sized, PredefName)]),
-   ((''dataclasses'', []), fmap_of_list [name_binding, (''dataclass'', PredefName)])]"
+   ((var ''dataclasses'', []),
+    fmap_of_list [name_binding, (var ''dataclass'', PredefName)])]"
 
 (* Boxed plus of the specification isn't in Isabelle's symbol table *)
 function (sequential) extend_entry :: "cxt_entry \<Rightarrow> cxt_entry \<Rightarrow> cxt_entry"
@@ -84,7 +88,8 @@ where
 "predefined_classes =
   fmupd range_class
     (ClassDef (the (fmlookup predefined builtins)) builtins
-      [Dataclass ''range'' [] None [(''start'', TyExprPrim int), (''stop'', TyExprPrim int)]] 0)
+      [At no_pos (Dataclass (var ''range'') [] None
+        [(var ''start'', TyExprPrim int), (var ''stop'', TyExprPrim int)])] 0)
     fmempty"
 
 lemma sorted_list_of_fmap_lookup: "(k, v) \<in> set (sorted_list_of_fmap m) \<Longrightarrow> fmlookup m k = Some v"
@@ -94,7 +99,7 @@ lemma sorted_list_of_fmap_lookup: "(k, v) \<in> set (sorted_list_of_fmap m) \<Lo
 function (sequential) entry_aliases :: "cxt_entry \<Rightarrow> nat" and aliases :: "cxt \<Rightarrow> nat"
 where
 "entry_aliases (TypeAlias \<Gamma> _ \<chi>s _) =
-  length (filter (\<lambda>\<chi>. case \<chi> of TypeStmt _ _ _ \<Rightarrow> True | _ \<Rightarrow> False) \<chi>s) + aliases \<Gamma>" |
+  length (filter (\<lambda>\<chi>. case node \<chi> of TypeStmt _ _ _ \<Rightarrow> True | _ \<Rightarrow> False) \<chi>s) + aliases \<Gamma>" |
 "entry_aliases (ModChecked _ \<Gamma>) = aliases \<Gamma>" |
 "entry_aliases _ = 0" |
 "aliases \<Gamma> = sum_list (map (entry_aliases \<circ> snd) (sorted_list_of_fmap \<Gamma>))"

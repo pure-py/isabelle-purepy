@@ -5,6 +5,7 @@ PYTHON ?= uv run --no-project python
 ISABELLE_VERSION := $(shell cat .isabelle-version)
 CODEGEN := python/isabelle-python-codegen
 CODE := python/python_out/isabelle-purepy-python.Codegen/code
+GENERATED := src/purepy/generated
 
 default: build
 
@@ -16,11 +17,22 @@ check-version:
 codegen:
 	@test -e $(CODEGEN)/Python.thy -a ! -e $(CODEGEN)/.git || ./fetch-codegen.sh
 
+# Checks the proofs, then generates the type checker into $(GENERATED), a subpackage of purepy
 build: check-version codegen
+	@test "$$(cat .python-version)" = "$$(cat $(CODEGEN)/.python-version)" || \
+		{ echo "code generator targets Python $$(cat $(CODEGEN)/.python-version), not $$(cat .python-version)"; exit 1; }
 	$(PYTHON) theories.py --check
 	rm -rf python/python_out
 	$(ISABELLE) build -v -e -d $(CODEGEN) -D .
-	$(PYTHON) -m py_compile $$(find $(CODE) -name '*.py')
+	$(PYTHON) generated.py $(CODE) $(GENERATED)
+
+# Lint and conformance suite, under the generated type checker
+check-tests:
+	@test -e $(GENERATED) || { echo "$(GENERATED) not generated: make build"; exit 1; }
+	uv run --locked ./test/run-all.sh
+
+wheel: check-tests
+	rm -rf dist && uv build --wheel
 
 # Self-contained copy under DEST
 dist: codegen
@@ -31,4 +43,4 @@ dist: codegen
 	git -C $(CODEGEN) archive --format=tar HEAD | tar -x -C $(DEST)/$(CODEGEN)
 	rm -rf $(DEST)/.github $(DEST)/.claude $(DEST)/fetch-codegen.sh
 
-.PHONY: default check-version codegen build dist
+.PHONY: default check-version codegen build check-tests wheel dist

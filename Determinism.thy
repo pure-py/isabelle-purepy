@@ -41,8 +41,8 @@ inductive_cases ElifConsE: "\<rho>, ((e, s) # elifs, else') \<Rightarrow>\<^sub>
 inductive_cases ListCompE: "\<rho>, ExprListComp e gs \<Rightarrow>\<^sub>e r"
 inductive_cases DictCompE: "\<rho>, ExprDictComp e e' gs \<Rightarrow>\<^sub>e r"
 inductive_cases QualsNilE: "\<rho>, [] \<Rightarrow>\<^sub>q r"
-inductive_cases QualGuardE: "\<rho>, Guard e # gs \<Rightarrow>\<^sub>q r"
-inductive_cases QualGeneratorE: "\<rho>, Generator x e # gs \<Rightarrow>\<^sub>q r"
+inductive_cases QualGuardE: "\<rho>, At p (Guard e) # gs \<Rightarrow>\<^sub>q r"
+inductive_cases QualGeneratorE: "\<rho>, At p (Generator x e) # gs \<Rightarrow>\<^sub>q r"
 inductive_cases GenNilE: "\<rho>, x, [], gs \<Rightarrow>\<^sub>g\<^sub>e\<^sub>n r"
 inductive_cases GenConsE: "\<rho>, x, u # us, gs \<Rightarrow>\<^sub>g\<^sub>e\<^sub>n r"
 inductive_cases CompNilE: "[], e \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p r"
@@ -58,8 +58,8 @@ lemma determinism:
   and elif_det: "\<rho>, eb \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o' \<Longrightarrow> \<rho>, eb \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o'' \<Longrightarrow> o' = o''"
   and quals_det: "\<rho>, gs \<Rightarrow>\<^sub>q q \<Longrightarrow> \<rho>, gs \<Rightarrow>\<^sub>q q' \<Longrightarrow> q = q'"
   and gen_det: "\<rho>, x, us, gs \<Rightarrow>\<^sub>g\<^sub>e\<^sub>n q \<Longrightarrow> \<rho>, x, us, gs \<Rightarrow>\<^sub>g\<^sub>e\<^sub>n q' \<Longrightarrow> q = q'"
-  and comp_det: "\<rho>s, e \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p vr \<Longrightarrow> \<rho>s, e \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p vr' \<Longrightarrow> vr = vr'"
-  and entries_det: "\<rho>s, e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s dr \<Longrightarrow> \<rho>s, e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s dr' \<Longrightarrow> dr = dr'"
+  and comp_det: "\<rho>s, ec \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p vr \<Longrightarrow> \<rho>s, ec \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p vr' \<Longrightarrow> vr = vr'"
+  and entries_det: "\<rho>s, ec, ec' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s dr \<Longrightarrow> \<rho>s, ec, ec' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s dr' \<Longrightarrow> dr = dr'"
 proof (induction arbitrary: r' and rs' and o' and o'' and q' and q' and vr' and dr' rule: eval_expr_eval_exprs_eval_stmt_eval_elif_eval_quals_eval_gen_eval_comp_eval_entries.inducts[ih_names])
   case EvalVar
   then show ?case by (auto elim!: VarE)
@@ -254,7 +254,7 @@ next
     by (auto elim!: CallE dest: EvalCallFailArgs.IH)
 next
   case (EvalConstr \<rho> e C es kws us xus)
-  have callee: "\<rho>, e \<Rightarrow>\<^sub>e r \<Longrightarrow> r = Val (VClass C)" for r using EvalConstr.IH(1) by fastforce
+  have callee: "\<rho>, node e \<Rightarrow>\<^sub>e r \<Longrightarrow> r = Val (VClass C)" for r using EvalConstr.IH(1) by fastforce
   have args: "\<rho>, es @ map snd kws \<Rightarrow>\<^sub>e\<^sub>s r \<Longrightarrow> r = Val us" for r using EvalConstr.IH(2) by fastforce
   then have args_positional: "kws = [] \<Longrightarrow> \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s r \<Longrightarrow> r = Val us" for r by simp
   have object: "field_map C (take (length es) us) (zip (map fst kws) (drop (length es) us)) = Some yus \<Longrightarrow> xus = yus"
@@ -264,14 +264,14 @@ next
     by (auto elim!: CallKwE dest!: callee args args_positional intro: object)
 next
   case (EvalConstrArity \<rho> e C es kws us)
-  have callee: "\<rho>, e \<Rightarrow>\<^sub>e r \<Longrightarrow> r = Val (VClass C)" for r using EvalConstrArity.IH(1) by fastforce
+  have callee: "\<rho>, node e \<Rightarrow>\<^sub>e r \<Longrightarrow> r = Val (VClass C)" for r using EvalConstrArity.IH(1) by fastforce
   have args: "\<rho>, es @ map snd kws \<Rightarrow>\<^sub>e\<^sub>s r \<Longrightarrow> r = Val us" for r using EvalConstrArity.IH(2) by fastforce
   then have args_positional: "kws = [] \<Longrightarrow> \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s r \<Longrightarrow> r = Val us" for r by simp
   from EvalConstrArity.prems EvalConstrArity.hyps(3) show ?case
     by (auto elim!: CallKwE dest!: callee args args_positional)
 next
   case (EvalConstrFail \<rho> e C es kws \<kappa>)
-  have callee: "\<rho>, e \<Rightarrow>\<^sub>e r \<Longrightarrow> r = Val (VClass C)" for r using EvalConstrFail.IH(1) by fastforce
+  have callee: "\<rho>, node e \<Rightarrow>\<^sub>e r \<Longrightarrow> r = Val (VClass C)" for r using EvalConstrFail.IH(1) by fastforce
   have args: "\<rho>, es @ map snd kws \<Rightarrow>\<^sub>e\<^sub>s r \<Longrightarrow> r = Aborts \<kappa>" for r using EvalConstrFail.IH(2) by fastforce
   then have args_positional: "kws = [] \<Longrightarrow> \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s r \<Longrightarrow> r = Aborts \<kappa>" for r by simp
   from EvalConstrFail.prems show ?case
@@ -540,8 +540,8 @@ begin
 (* Inversion lemmas and determinism of loading, given that no module of the program is predefined *)
 inductive_cases ModE: "q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d r"
 inductive_cases ImportsNilE: "q, [] \<Rightarrow>\<^sub>i r"
-inductive_cases ImportE: "q, Import x # \<iota>s \<Rightarrow>\<^sub>i r"
-inductive_cases FromImportE: "q, FromImport q' xs # \<iota>s \<Rightarrow>\<^sub>i r"
+inductive_cases ImportE: "q, At p (Import x) # \<iota>s \<Rightarrow>\<^sub>i r"
+inductive_cases FromImportE: "q, At p (FromImport q' xs) # \<iota>s \<Rightarrow>\<^sub>i r"
 inductive_cases SubNilE: "q, \<rho>, [] \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b r"
 inductive_cases SubConsE: "q, \<rho>, x # xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b r"
 inductive_cases ImpE: "\<rho>, x \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p r"

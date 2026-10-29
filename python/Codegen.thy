@@ -3,6 +3,63 @@ theory Codegen
   imports "isabelle-purepy.Programs" "isabelle-purepy.Eval" "Python.Python_Setup"
 begin
 
+(* Floats as Python's float. Equality of representations, since HOL equality is reflexive; Python's == is given
+   by the semantics *)
+code_printing
+    type_constructor float \<rightharpoonup> (Python) "float"
+  | constant "HOL.equal :: float \<Rightarrow> float \<Rightarrow> bool" \<rightharpoonup> (Python) "(repr'(_') == repr'(_'))"
+
+(* Strings as Python's str *)
+code_printing
+    type_constructor str \<rightharpoonup> (Python) "str"
+  | constant "HOL.equal :: str \<Rightarrow> str \<Rightarrow> bool" \<rightharpoonup> (Python) "(_ == _)"
+  | constant "(\<le>) :: str \<Rightarrow> str \<Rightarrow> bool" \<rightharpoonup> (Python) "(_ <= _)"
+  | constant "(<) :: str \<Rightarrow> str \<Rightarrow> bool" \<rightharpoonup> (Python) "(_ < _)"
+  | constant substring \<rightharpoonup> (Python) "(_ in _)"
+
+(* Identifiers as Python's str *)
+code_printing
+    type_constructor var \<rightharpoonup> (Python) "str"
+  | constant "HOL.equal :: var \<Rightarrow> var \<Rightarrow> bool" \<rightharpoonup> (Python) "(_ == _)"
+  | constant "(\<le>) :: var \<Rightarrow> var \<Rightarrow> bool" \<rightharpoonup> (Python) "(_ <= _)"
+  | constant "(<) :: var \<Rightarrow> var \<Rightarrow> bool" \<rightharpoonup> (Python) "(_ < _)"
+  | constant var \<rightharpoonup> (Python) "\"\".join'(_')"
+
+(* The equations of the lifted string operations aren't executable, and their printings replace them *)
+declare [[code drop: substring str_of str_chars]]
+
+(* Strings written in the theories, and the characters of a string *)
+code_printing
+    constant str_of \<rightharpoonup> (Python) "\"\".join'(_')"
+  | constant str_chars \<rightharpoonup> (Python) "list'(_')"
+
+(* Float arithmetic as Python's, and the value of a float as an exact extended real, through a helper module *)
+code_printing
+    constant float_of_int \<rightharpoonup> (Python) "float'(_')"
+  | constant float_neg \<rightharpoonup> (Python) "(- _)"
+  | constant float_add \<rightharpoonup> (Python) "(_ + _)"
+  | constant float_sub \<rightharpoonup> (Python) "(_ - _)"
+  | constant float_mul \<rightharpoonup> (Python) "(_ * _)"
+  | constant float_div \<rightharpoonup> (Python) "(_ '/ _)"
+  | constant float_floordiv \<rightharpoonup> (Python) "(_ '/'/ _)"
+  | constant float_mod \<rightharpoonup> (Python) "(_ % _)"
+  | constant float_pow \<rightharpoonup> (Python) "(_ ** _)"
+  | constant float_value \<rightharpoonup> (Python) "'_'_import'_'_'(\"Purepy'_Floats\"').float'_value'(_')"
+  | code_module "Purepy_Floats.py" \<rightharpoonup> (Python)
+\<open>import math
+import Option
+import Extended_Real
+import Real
+import Rat
+
+def float_value(x):
+    if math.isnan(x):
+        return Option.None_()
+    if math.isinf(x):
+        return Option.Some(Extended_Real.PInfty() if x > 0 else Extended_Real.MInfty())
+    return Option.Some(Extended_Real.ereal_(Real.Ratreal(Rat.Frct(x.as_integer_ratio()))))
+\<close>
+
 code_pred subty .
 code_pred binop_overload .
 code_pred unop_overload .
@@ -19,7 +76,7 @@ lemma unop_overloads_code [code]:
 
 (* A definition or function in the evaluation locale has no code equation of its own *)
 declare evaluation.field_map_def [code] evaluation.match.simps [code]
-  evaluation.match_all.simps [code] evaluation.match_dict.simps [code] evaluation.dispatch.simps [code]
+  evaluation.match_all.simps [code] evaluation.match_dict.simps [code] evaluation.match_kws.simps [code] evaluation.dispatch.simps [code]
   evaluation.type_value_def [code] evaluation.run_top.simps [code]
 
 (* Natural numbers are target integers, so the evaluator's equations can't match the fuel against 0 and Suc. One
@@ -42,8 +99,8 @@ lemma run_fuel_code [code]:
   "evaluation.run_elif \<Sigma> n \<rho> eb = (if n = 0 then OutOfFuel else run_elif_step \<Sigma> (n - 1) \<rho> eb)"
   "evaluation.run_quals \<Sigma> n \<rho> gs = (if n = 0 then OutOfFuel else run_quals_step \<Sigma> (n - 1) \<rho> gs)"
   "evaluation.run_gen \<Sigma> n \<rho> x us gs = (if n = 0 then OutOfFuel else run_gen_step \<Sigma> (n - 1) \<rho> x us gs)"
-  "evaluation.run_comp \<Sigma> n \<rho>s e = (if n = 0 then OutOfFuel else run_comp_step \<Sigma> (n - 1) \<rho>s e)"
-  "evaluation.run_entries \<Sigma> n \<rho>s e e' = (if n = 0 then OutOfFuel else run_entries_step \<Sigma> (n - 1) \<rho>s e e')"
+  "evaluation.run_comp \<Sigma> n \<rho>s ec = (if n = 0 then OutOfFuel else run_comp_step \<Sigma> (n - 1) \<rho>s ec)"
+  "evaluation.run_entries \<Sigma> n \<rho>s ec ec' = (if n = 0 then OutOfFuel else run_entries_step \<Sigma> (n - 1) \<rho>s ec ec')"
   by (cases n; simp only: run_steps_def evaluation.run_expr.simps(1) evaluation.run_exprs.simps(1)
     evaluation.run_stmt.simps(1) evaluation.run_elif.simps(1) evaluation.run_quals.simps(1)
     evaluation.run_gen.simps(1) evaluation.run_comp.simps(1) evaluation.run_entries.simps(1)
