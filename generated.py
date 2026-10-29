@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Copy the generated modules into the package and make their imports of one another relative; delete with
-pure-py/isabelle-python-codegen#12"""
+"""Copy the generated modules into the package with relative imports; delete with pure-py/isabelle-python-codegen#12"""
 
 import pathlib
 import re
