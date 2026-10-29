@@ -13,7 +13,6 @@ from .syntax import (
     QualifiedName,
     Reason,
     parse_name,
-    proper_prefixes,
     qualified_name,
 )
 
@@ -33,6 +32,10 @@ def module_name(base_dir: pathlib.Path, path: pathlib.Path) -> Name | None:
     rel = path.relative_to(base_dir)
     parts = rel.parent.parts if rel.name == "__init__.py" else rel.with_suffix("").parts
     return parts if len(parts) > 0 else None
+
+
+def proper_prefixes(q: Name) -> list[Name]:
+    return [q[:i] for i in range(1, len(q))]
 
 
 def module_names(base_dir: pathlib.Path) -> set[Name]:

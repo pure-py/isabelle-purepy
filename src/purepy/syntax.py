@@ -33,10 +33,6 @@ def parse_name(name: str) -> Name:
     return tuple(name.split("."))
 
 
-def proper_prefixes(q: Name) -> list[Name]:
-    return [q[:i] for i in range(1, len(q))]
-
-
 def name(e: ast.expr) -> Name | None:
     match e:
         case ast.Name(id=x):
