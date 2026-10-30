@@ -76,9 +76,6 @@ After changing dependencies or metadata in `pyproject.toml`, run `uv lock` and c
 Run the `Release` GitHub Action manually. The version number of a release is that of the pinned
 `purepy-conformance` release.
 
-To take a new specification release, change the wheel URL in `pyproject.toml`, run `uv lock` and commit
-`pyproject.toml` and `uv.lock`.
-
 ## Theories
 
 <!-- theories -->
