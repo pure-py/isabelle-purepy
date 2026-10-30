@@ -57,7 +57,7 @@ jobs:
           name: site
           path: site
 
-  # Suite and type checker under other Python runtimes, from the site directory of the build job
+  # Suite and type checker under other Python runtimes
   runtimes:
     name: conformance suite (${{ matrix.runtime }})
     needs: build
