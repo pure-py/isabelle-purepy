@@ -47,11 +47,8 @@ After `make build`:
 make check-conformance
 ```
 
-The target runs mypy and ruff over the hand-written modules of the package, then the conformance suite of the
-specification under the generated type checker, which must pass; `make wheel` also builds the wheel under
-`dist/`. The suite and its runner come from the `purepy-conformance` package of the
-[pure-py-spec](https://github.com/pure-py/pure-py-spec) repository, pinned to a specification release in
-`pyproject.toml`.
+The conformance suite comes from the `purepy-conformance` package in the
+[pure-py-spec](https://github.com/pure-py/pure-py-spec) repository, at the release pinned in `pyproject.toml`.
 
 ## Development
 
