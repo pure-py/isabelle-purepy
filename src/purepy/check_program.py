@@ -1,20 +1,26 @@
 """Module discovery and checking of a program by the generated type checker"""
 
-import ast
 import pathlib
-from typing import Any
 
 from . import syntax
-from .generated import Finite_Map
-from .reasons import IllFormed, IllFormedModule
-from .translate import check, module_body, name
-from .type_syntax import Name, parse_name, proper_prefixes
+from .generated import Finite_Map, Option, Programs, Reasons
+from .generated.exit_codes import Exit
+from .messages import message
+from .syntax import (
+    ModuleBody,
+    Name,
+    Program,
+    QualifiedName,
+    Reason,
+    parse_name,
+    qualified_name,
+)
 
 MAIN = parse_name("__main__")
 
 
 def module_path(q: Name, base_dir: pathlib.Path) -> pathlib.Path:
-    stem = pathlib.Path(*q.parts)
+    stem = pathlib.Path(*q)
     for candidate in (base_dir / f"{stem}.py", base_dir / stem / "__init__.py"):
         if candidate.exists():
             return candidate
@@ -22,24 +28,14 @@ def module_path(q: Name, base_dir: pathlib.Path) -> pathlib.Path:
     return base_dir / stem
 
 
-def parse(path: pathlib.Path) -> ast.Module:
-    if path.is_dir():
-        return ast.Module(body=[], type_ignores=[])
-    source = path.read_text()
-    try:
-        m = syntax.parse(source, str(path))
-    except SyntaxError as e:
-        raise syntax.ParseError(e) from e
-    unsupported = syntax.check_syntax_module(m)
-    if unsupported is not None:
-        raise unsupported
-    return m
-
-
 def module_name(base_dir: pathlib.Path, path: pathlib.Path) -> Name | None:
     rel = path.relative_to(base_dir)
     parts = rel.parent.parts if rel.name == "__init__.py" else rel.with_suffix("").parts
-    return Name(parts) if len(parts) > 0 else None
+    return parts if len(parts) > 0 else None
+
+
+def proper_prefixes(q: Name) -> list[Name]:
+    return [q[:i] for i in range(1, len(q))]
 
 
 def module_names(base_dir: pathlib.Path) -> set[Name]:
@@ -49,63 +45,95 @@ def module_names(base_dir: pathlib.Path) -> set[Name]:
     return {p for q in names if q is not None for p in [q, *proper_prefixes(q)]}
 
 
-def parse_program(entry_path: pathlib.Path) -> dict[Name, ast.Module]:
-    """Modules by name, every module of the source tree parsed, the main module first"""
+# Module and reason of an ill-formed program
+type IllFormed = tuple[QualifiedName, Reason]
+type PurePyRejects = IllFormed | syntax.ParserRejects
+
+
+def parse_program(entry_path: pathlib.Path) -> Program:
+    """Entry module parsed first, so its errors take precedence"""
     base_dir = entry_path.parent
     names = sorted(module_names(base_dir), key=str)
-    return {
-        MAIN: parse_module(MAIN, entry_path),
-        **{q: parse_module(q, module_path(q, base_dir)) for q in names},
-    }
+    return program(
+        {
+            MAIN: parse_module(MAIN, entry_path),
+            **{q: parse_module(q, module_path(q, base_dir)) for q in names},
+        }
+    )
 
 
-def parse_module(q: Name, path: pathlib.Path) -> ast.Module:
+def parse_module(q: Name, path: pathlib.Path) -> ModuleBody:
+    """A package directory is an empty module"""
     try:
-        return parse(path)
-    except syntax.Unsupported as e:
+        return syntax.parse_module("" if path.is_dir() else path.read_text(), str(path), q)
+    except syntax.ParserRejects as e:
         e.module = q
         raise
 
 
-def translate_program(M: dict[Name, ast.Module]) -> Any:
-    return Finite_Map.fmap_of_list([(name(q), module_body(q, m)) for q, m in M.items()])
+def program(bodies: dict[Name, ModuleBody]) -> Program:
+    return Finite_Map.fmap_of_list([(qualified_name(q), body) for q, body in bodies.items()])
 
 
-def check_program(entry_path: pathlib.Path) -> IllFormed | syntax.Unsupported | None:
+def check(M: Program) -> IllFormed | None:
+    match Programs.check_program(M):
+        case Option.None_():
+            return None
+        case Option.Some((q, r)):
+            return (q, r)
+        case result:
+            raise AssertionError(f"unexpected result: {result}")
+
+
+def check_program(entry_path: pathlib.Path) -> PurePyRejects | None:
     try:
-        return check(translate_program(parse_program(entry_path)))
-    except syntax.Unsupported as e:
+        return check(parse_program(entry_path))
+    except syntax.ParserRejects as e:
         return e
 
 
-# Check of the module at path on its own, as a program without other modules
-def check_module(path: pathlib.Path) -> IllFormed | syntax.Unsupported | None:
+def check_module(path: pathlib.Path) -> PurePyRejects | None:
+    """Check the module at path as a program of one module"""
     try:
-        return check(translate_program({MAIN: parse_module(MAIN, path)}))
-    except syntax.Unsupported as e:
+        return check(program({MAIN: parse_module(MAIN, path)}))
+    except syntax.ParserRejects as e:
         return e
 
 
-# File of the module at fault, or of the entry module for a program-level error
-def error_path(result: IllFormed | syntax.Unsupported, entry_path: pathlib.Path) -> pathlib.Path:
-    q = result.module if isinstance(result, (IllFormedModule, syntax.Unsupported)) else None
+def exit_code(rejection: PurePyRejects | None) -> Exit:
+    match rejection:
+        case None:
+            return Exit.OK
+        case syntax.ParserRejects():
+            return Exit.NOT_ALLOWED
+        case _:
+            return Exit.ILL_FORMED
+
+
+def error_path(rejection: PurePyRejects, entry_path: pathlib.Path) -> pathlib.Path:
+    """File of the module at fault"""
+    match rejection:
+        case syntax.ParserRejects():
+            q = rejection.module
+        case ((x, xs), _):
+            q = (x, *xs)
     return entry_path if q is None or q == MAIN else module_path(q, entry_path.parent)
 
 
-def format_result(result: IllFormed | syntax.Unsupported | None, filename: str) -> str:
-    match result:
-        case syntax.Unsupported():
-            return syntax.format_result(result, filename)
+def format_rejection(rejection: PurePyRejects | None, filename: str) -> str:
+    match rejection:
         case None:
             return f"{filename}: ok"
-        case IllFormedModule():
-            return f"{filename}:{result.line}:{result.col}: {result.msg}"
-        case _:
-            return f"{filename}: {result.msg}"
+        case syntax.ParserRejects() if rejection.line is not None:
+            return f"{filename}:{rejection.line}:{rejection.col}: {rejection.msg}"
+        case syntax.ParserRejects():
+            return f"{filename}: {rejection.msg}"
+        case (_, Reasons.Located((line, col), r)):
+            return f"{filename}:{line}:{col}: {message(r)}"
+        case (_, r):
+            return f"{filename}: {message(r)}"
 
 
-def format_program_result(
-    result: IllFormed | syntax.Unsupported | None, entry_path: pathlib.Path
-) -> str:
-    path = entry_path if result is None else error_path(result, entry_path)
-    return format_result(result, str(path))
+def format_program_rejection(rejection: PurePyRejects | None, entry_path: pathlib.Path) -> str:
+    path = entry_path if rejection is None else error_path(rejection, entry_path)
+    return format_rejection(rejection, str(path))

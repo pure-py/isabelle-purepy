@@ -20,7 +20,7 @@ dev = [
 [tool.mypy]
 strict = true
 
-# Generated code, untyped, so its definitions are Any to the front end
+# Generated code untyped; not followed by mypy
 [[tool.mypy.overrides]]
 module = ["purepy.generated.*"]
 follow_imports = "skip"
