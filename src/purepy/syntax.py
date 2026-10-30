@@ -108,7 +108,7 @@ class SyntacticallyExcluded(ParserRejects):
         super().__init__(not_allowed(construct), *node_position(node))
 
 
-# Parse, marking each sequence pattern in square brackets as a list pattern, since Python's syntax tree doesn't
+# Parse, marking sequence patterns in square brackets as list patterns, since Python's syntax tree doesn't
 # record the brackets
 def parse(source: str, filename: str) -> ast.Module:
     m = ast.parse(source, filename=filename)
