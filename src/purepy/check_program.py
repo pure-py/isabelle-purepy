@@ -47,7 +47,7 @@ def module_names(base_dir: pathlib.Path) -> set[Name]:
 
 # Module and reason of an ill-formed program
 type IllFormed = tuple[QualifiedName, Reason]
-type Result = IllFormed | syntax.ParserRejects | None
+type PurePyRejects = IllFormed | syntax.ParserRejects
 
 
 # Entry module parsed first, so its errors take precedence
@@ -85,7 +85,7 @@ def check(M: Program) -> IllFormed | None:
             raise AssertionError(f"unexpected result: {result}")
 
 
-def check_program(entry_path: pathlib.Path) -> Result:
+def check_program(entry_path: pathlib.Path) -> PurePyRejects | None:
     try:
         return check(parse_program(entry_path))
     except syntax.ParserRejects as e:
@@ -93,15 +93,15 @@ def check_program(entry_path: pathlib.Path) -> Result:
 
 
 # Check the module at path as a program of one module
-def check_module(path: pathlib.Path) -> Result:
+def check_module(path: pathlib.Path) -> PurePyRejects | None:
     try:
         return check(program({MAIN: parse_module(MAIN, path)}))
     except syntax.ParserRejects as e:
         return e
 
 
-def exit_code(result: Result) -> Exit:
-    match result:
+def exit_code(rejection: PurePyRejects | None) -> Exit:
+    match rejection:
         case None:
             return Exit.OK
         case syntax.ParserRejects():
@@ -111,29 +111,29 @@ def exit_code(result: Result) -> Exit:
 
 
 # File of the module at fault
-def error_path(result: IllFormed | syntax.ParserRejects, entry_path: pathlib.Path) -> pathlib.Path:
-    match result:
+def error_path(rejection: PurePyRejects, entry_path: pathlib.Path) -> pathlib.Path:
+    match rejection:
         case syntax.ParserRejects():
-            q = result.module
+            q = rejection.module
         case ((x, xs), _):
             q = (x, *xs)
     return entry_path if q is None or q == MAIN else module_path(q, entry_path.parent)
 
 
-def format_result(result: Result, filename: str) -> str:
-    match result:
+def format_rejection(rejection: PurePyRejects | None, filename: str) -> str:
+    match rejection:
         case None:
             return f"{filename}: ok"
-        case syntax.ParserRejects() if result.line is not None:
-            return f"{filename}:{result.line}:{result.col}: {result.msg}"
+        case syntax.ParserRejects() if rejection.line is not None:
+            return f"{filename}:{rejection.line}:{rejection.col}: {rejection.msg}"
         case syntax.ParserRejects():
-            return f"{filename}: {result.msg}"
+            return f"{filename}: {rejection.msg}"
         case (_, Reasons.Located((line, col), r)):
             return f"{filename}:{line}:{col}: {message(r)}"
         case (_, r):
             return f"{filename}: {message(r)}"
 
 
-def format_program_result(result: Result, entry_path: pathlib.Path) -> str:
-    path = entry_path if result is None else error_path(result, entry_path)
-    return format_result(result, str(path))
+def format_program_rejection(rejection: PurePyRejects | None, entry_path: pathlib.Path) -> str:
+    path = entry_path if rejection is None else error_path(rejection, entry_path)
+    return format_rejection(rejection, str(path))
