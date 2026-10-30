@@ -42,11 +42,11 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Check the proofs and generate the type checker
+      - name: Check proofs and generate type checker
         timeout-minutes: 20
         run: make build ISABELLE=/home/isabelle/Isabelle/bin/isabelle
 
-      - name: Lint, run the conformance suite and build the wheel
+      - name: Lint, run conformance suite and build wheel
         run: make wheel
 
       - uses: actions/upload-artifact@v4
@@ -74,7 +74,7 @@ jobs:
           name: wheel
           path: dist
 
-      - name: Unpack the wheel and the conformance package
+      - name: Unpack wheel and conformance package
         run: |
           mkdir site
           unzip -q dist/*.whl -d site
