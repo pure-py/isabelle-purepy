@@ -24,6 +24,15 @@ lift_definition str_of :: "string \<Rightarrow> str"
   is "map of_char"
   by (rule code_point_list_of_string)
 
+(* Concatenation, and repetition n times, empty if n is not positive *)
+lift_definition str_append :: "str \<Rightarrow> str \<Rightarrow> str"
+  is "(@)"
+  by (auto simp: code_point_list_def)
+
+lift_definition str_repeat :: "int \<Rightarrow> str \<Rightarrow> str"
+  is "\<lambda>n ns. concat (replicate (nat n) ns)"
+  by (auto simp: code_point_list_def)
+
 (* The one-character strings of a string, in order *)
 lift_definition str_chars :: "str \<Rightarrow> str list"
   is "map (\<lambda>n. [n])"

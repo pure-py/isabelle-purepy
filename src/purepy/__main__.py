@@ -13,11 +13,12 @@ def main() -> None:
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--module", action="store_true")
     parser.add_argument("--fuel", type=int, default=DEFAULT_FUEL)
+    parser.add_argument("args", nargs="*", help="command-line arguments of the program run")
 
     args = parser.parse_args()
 
     if not args.check:
-        sys.exit(run_program(args.path, args.fuel))
+        sys.exit(run_program(args.path, args.args, args.fuel))
 
     result = check_module(args.path) if args.module else check_program(args.path)
     print(format_program_result(result, args.path))

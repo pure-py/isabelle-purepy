@@ -50,8 +50,8 @@ def report(kappa: Any) -> int:
             return 1
 
 
-def evaluate(sigma: Any, M: Any, fuel: int) -> int:
-    match Eval.run_program(sigma, M, fuel):
+def evaluate(sigma: Any, M: Any, argv: list[str], fuel: int) -> int:
+    match Eval.run_program(sigma, M, argv, fuel):
         case Eval.Done(kappa):
             return report(kappa)
         case Eval.Stuck():
@@ -64,8 +64,11 @@ def evaluate(sigma: Any, M: Any, fuel: int) -> int:
             raise AssertionError(f"unexpected result: {result}")
 
 
-def run_program(entry_path: pathlib.Path, fuel: int = DEFAULT_FUEL) -> int:
-    """Exit status of the program at entry_path. The interpreter recurses as deeply as derivations nest, so it
+def run_program(
+    entry_path: pathlib.Path, args: list[str] | None = None, fuel: int = DEFAULT_FUEL
+) -> int:
+    """Exit status of the program at entry_path, run with command-line arguments args, so that sys.argv is the
+    path followed by args. The interpreter recurses as deeply as derivations nest, so it
     runs in a thread with a large stack."""
     try:
         M = translate_program(parse_program(entry_path))
@@ -79,7 +82,11 @@ def run_program(entry_path: pathlib.Path, fuel: int = DEFAULT_FUEL) -> int:
     status: list[int] = [OUT_OF_FUEL]
     sys.setrecursionlimit(10**6)
     threading.stack_size(1 << 29)
-    thread = threading.Thread(target=lambda: status.__setitem__(0, evaluate(sigma, M, fuel)))
+    thread = threading.Thread(
+        target=lambda: status.__setitem__(
+            0, evaluate(sigma, M, [str(entry_path), *(args or [])], fuel)
+        )
+    )
     thread.start()
     thread.join()
     return status[0]

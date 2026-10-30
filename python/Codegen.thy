@@ -91,12 +91,14 @@ def output(v):
 \<close>
 
 (* The equations of the lifted string operations aren't executable, and their printings replace them *)
-declare [[code drop: substring str_of str_chars]]
+declare [[code drop: substring str_of str_chars str_append str_repeat]]
 
 (* Strings written in the theories, and the characters of a string *)
 code_printing
     constant str_of \<rightharpoonup> (Python) "\"\".join'(_')"
   | constant str_chars \<rightharpoonup> (Python) "list'(_')"
+  | constant str_append \<rightharpoonup> (Python) "(_ + _)"
+  | constant str_repeat \<rightharpoonup> (Python) "(_ * _)"
 
 (* Float arithmetic as Python's, and the value of a float as an exact extended real, through a helper module *)
 code_printing
@@ -180,21 +182,21 @@ lemmas run_step_code [code] =
 (* The same for loading, whose functions also take the program *)
 declare loading.submods_env_def [code] loading.run_program_def [code]
 
-definition run_mod_step where "run_mod_step \<Sigma> M n = loading.run_mod \<Sigma> M (Suc n)"
-definition run_imports_step where "run_imports_step \<Sigma> M n = loading.run_imports \<Sigma> M (Suc n)"
-definition run_sub_step where "run_sub_step \<Sigma> M n = loading.run_sub \<Sigma> M (Suc n)"
-definition run_imp_step where "run_imp_step \<Sigma> M n = loading.run_imp \<Sigma> M (Suc n)"
-definition run_imps_step where "run_imps_step \<Sigma> M n = loading.run_imps \<Sigma> M (Suc n)"
-definition run_mods_step where "run_mods_step \<Sigma> M n = loading.run_mods \<Sigma> M (Suc n)"
+definition run_mod_step where "run_mod_step \<Sigma> M A n = loading.run_mod \<Sigma> M A (Suc n)"
+definition run_imports_step where "run_imports_step \<Sigma> M A n = loading.run_imports \<Sigma> M A (Suc n)"
+definition run_sub_step where "run_sub_step \<Sigma> M A n = loading.run_sub \<Sigma> M A (Suc n)"
+definition run_imp_step where "run_imp_step \<Sigma> M A n = loading.run_imp \<Sigma> M A (Suc n)"
+definition run_imps_step where "run_imps_step \<Sigma> M A n = loading.run_imps \<Sigma> M A (Suc n)"
+definition run_mods_step where "run_mods_step \<Sigma> M A n = loading.run_mods \<Sigma> M A (Suc n)"
 lemmas run_loading_steps_def = run_mod_step_def run_imports_step_def run_sub_step_def run_imp_step_def run_imps_step_def run_mods_step_def
 
 lemma run_loading_fuel_code [code]:
-  "loading.run_mod \<Sigma> M n q = (if n = 0 then OutOfFuel else run_mod_step \<Sigma> M (n - 1) q)"
-  "loading.run_imports \<Sigma> M n q \<iota>s = (if n = 0 then OutOfFuel else run_imports_step \<Sigma> M (n - 1) q \<iota>s)"
-  "loading.run_sub \<Sigma> M n q \<rho> xs = (if n = 0 then OutOfFuel else run_sub_step \<Sigma> M (n - 1) q \<rho> xs)"
-  "loading.run_imp \<Sigma> M n \<rho> x = (if n = 0 then OutOfFuel else run_imp_step \<Sigma> M (n - 1) \<rho> x)"
-  "loading.run_imps \<Sigma> M n \<rho> xs = (if n = 0 then OutOfFuel else run_imps_step \<Sigma> M (n - 1) \<rho> xs)"
-  "loading.run_mods \<Sigma> M n qs = (if n = 0 then OutOfFuel else run_mods_step \<Sigma> M (n - 1) qs)"
+  "loading.run_mod \<Sigma> M A n q = (if n = 0 then OutOfFuel else run_mod_step \<Sigma> M A (n - 1) q)"
+  "loading.run_imports \<Sigma> M A n q \<iota>s = (if n = 0 then OutOfFuel else run_imports_step \<Sigma> M A (n - 1) q \<iota>s)"
+  "loading.run_sub \<Sigma> M A n q \<rho> xs = (if n = 0 then OutOfFuel else run_sub_step \<Sigma> M A (n - 1) q \<rho> xs)"
+  "loading.run_imp \<Sigma> M A n \<rho> x = (if n = 0 then OutOfFuel else run_imp_step \<Sigma> M A (n - 1) \<rho> x)"
+  "loading.run_imps \<Sigma> M A n \<rho> xs = (if n = 0 then OutOfFuel else run_imps_step \<Sigma> M A (n - 1) \<rho> xs)"
+  "loading.run_mods \<Sigma> M A n qs = (if n = 0 then OutOfFuel else run_mods_step \<Sigma> M A (n - 1) qs)"
   by (cases n; simp only: run_loading_steps_def loading.run_mod.simps(1) loading.run_imports.simps(1) loading.run_sub.simps(1) loading.run_imp.simps(1) loading.run_imps.simps(1) loading.run_mods.simps(1)
     simp_thms if_True if_False nat.distinct(2) diff_Suc_1)+
 

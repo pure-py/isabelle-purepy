@@ -244,6 +244,43 @@ where
     (Some y, Some y') \<Rightarrow> f y y'
   | _ \<Rightarrow> False)))) v v'"
 
+(* Ordering of two strings, by code point; None unless both operands are strings *)
+fun str_order :: "(str \<Rightarrow> str \<Rightarrow> bool) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result option"
+where
+"str_order f (VLit (LitString w)) v' =
+  (case v' of VLit (LitString w') \<Rightarrow> Some (Val (VLit (LitBool (f w w')))) | _ \<Rightarrow> None)" |
+"str_order f _ _ = None"
+
+(* Concatenation of two strings, lists or tuples; None for any other operands *)
+fun concat_seq :: "val \<Rightarrow> val \<Rightarrow> val option"
+where
+"concat_seq (VLit (LitString w)) v' = (case v' of VLit (LitString w') \<Rightarrow> Some (VLit (LitString (str_append w w'))) | _ \<Rightarrow> None)" |
+"concat_seq (VList vs) v' = (case v' of VList vs' \<Rightarrow> Some (VList (vs @ vs')) | _ \<Rightarrow> None)" |
+"concat_seq (VTuple vs) v' = (case v' of VTuple vs' \<Rightarrow> Some (VTuple (vs @ vs')) | _ \<Rightarrow> None)" |
+"concat_seq _ _ = None"
+
+(* Repetition of a string or a list, given the number of times *)
+fun repetition :: "val \<Rightarrow> (int \<Rightarrow> val) option"
+where
+"repetition (VLit (LitString w)) = Some (\<lambda>n. VLit (LitString (str_repeat n w)))" |
+"repetition (VList vs) = Some (\<lambda>n. VList (concat (replicate (nat n) vs)))" |
+"repetition _ = None"
+
+fun repeat_by :: "val \<Rightarrow> (int \<Rightarrow> val) \<Rightarrow> val result option"
+where
+"repeat_by (VLit (LitInt n)) f = Some (Val (f n))" |
+"repeat_by (VLit (LitBool _)) f = Some (Aborts Excluded)" |
+"repeat_by _ f = None"
+
+(* A string or a list and an integer, in either order, repeated; Excluded for a Boolean count; None for any other
+   operands *)
+definition repeat_seq :: "val \<Rightarrow> val \<Rightarrow> val result option"
+where
+"repeat_seq v v' =
+  (case repetition v of
+     Some f \<Rightarrow> repeat_by v' f
+   | None \<Rightarrow> (case repetition v' of Some f \<Rightarrow> repeat_by v f | None \<Rightarrow> None))"
+
 fun binop_meaning :: "bop \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
 where
 "binop_meaning BOpEq v v' =
@@ -254,13 +291,13 @@ where
    else mlet (eq v v') (\<lambda>b. Val (VLit (LitBool (\<not> b)))))" |
 "binop_meaning BOpIn v v' = mlet (contains v' v) (\<lambda>b. Val (VLit (LitBool b)))" |
 "binop_meaning BOpNotIn v v' = mlet (contains v' v) (\<lambda>b. Val (VLit (LitBool (\<not> b))))" |
-"binop_meaning BOpLt v v' = compare (<) v v'" |
-"binop_meaning BOpLeq v v' = compare (\<le>) v v'" |
-"binop_meaning BOpGt v v' = compare (>) v v'" |
-"binop_meaning BOpGeq v v' = compare (\<ge>) v v'" |
-"binop_meaning BOpAdd v v' = arith (+) float_add v v'" |
+"binop_meaning BOpLt v v' = (case str_order (<) v v' of Some r \<Rightarrow> r | None \<Rightarrow> compare (<) v v')" |
+"binop_meaning BOpLeq v v' = (case str_order (\<le>) v v' of Some r \<Rightarrow> r | None \<Rightarrow> compare (\<le>) v v')" |
+"binop_meaning BOpGt v v' = (case str_order (>) v v' of Some r \<Rightarrow> r | None \<Rightarrow> compare (>) v v')" |
+"binop_meaning BOpGeq v v' = (case str_order (\<ge>) v v' of Some r \<Rightarrow> r | None \<Rightarrow> compare (\<ge>) v v')" |
+"binop_meaning BOpAdd v v' = (case concat_seq v v' of Some u \<Rightarrow> Val u | None \<Rightarrow> arith (+) float_add v v')" |
 "binop_meaning BOpSub v v' = arith (-) float_sub v v'" |
-"binop_meaning BOpMul v v' = arith (*) float_mul v v'" |
+"binop_meaning BOpMul v v' = (case repeat_seq v v' of Some r \<Rightarrow> r | None \<Rightarrow> arith (*) float_mul v v')" |
 "binop_meaning BOpDiv v v' =
   (if number_value v' = Some 0 then Aborts ZeroDivisionError
    else number_op (\<lambda>x x'. Val (VLit (LitFloat (float_div x x')))) v v')" |
@@ -726,11 +763,11 @@ EvalTypes:
 end
 
 
-(* Environments of the predefined modules: each binds __name__ to the name of the module and each member to its
-   value; sys.argv, which the spec gives no value, is left out *)
-definition predefined_env :: "(name, env) fmap"
+(* Environments of the predefined modules, given the command-line arguments: each binds __name__ to the name of the
+   module and each member to its value *)
+definition predefined_env_with :: "str list \<Rightarrow> (name, env) fmap"
 where
-"predefined_env =
+"predefined_env_with A =
   (let name = \<lambda>x. (var ''__name__'', VLit (LitString (str_of x))) in
    fmap_of_list
     [(builtins, fmap_of_list
@@ -738,7 +775,8 @@ where
          (var ''range'', VClass range_class), (var ''round'', VPrim PrimRound)]
         @ map (\<lambda>y. (y, VOpaque (snoc builtins y)))
             (map prim_name [NoneType, object, bool, int, float, str] @ map var [''list'', ''dict'', ''tuple'']))),
-     ((var ''sys'', []), fmap_of_list [name ''sys'', (var ''exit'', VPrim PrimExit)]),
+     ((var ''sys'', []), fmap_of_list
+       [name ''sys'', (var ''argv'', VList (map (\<lambda>w. VLit (LitString w)) A)), (var ''exit'', VPrim PrimExit)]),
      ((var ''typing'', []), fmap_of_list
        (name ''typing'' # map (\<lambda>y. (y, VOpaque (var ''typing'', [y])))
           [var ''Callable'', var ''Literal'', prim_name Never, prim_name Sized])),
@@ -782,10 +820,13 @@ lemma stub_of_Some: "stub_of v = Some q \<longleftrightarrow> v = VModStub q"
 lemma stub_of_None: "stub_of v = None \<longleftrightarrow> \<not> is_stub v"
   by (cases v) auto
 
-(* The program, ambient in loading as in the spec *)
+(* The program and its command-line arguments, ambient in loading as in the spec *)
 locale loading = evaluation +
   fixes M :: program
+    and A :: "str list"
 begin
+
+abbreviation predefined_env :: "(name, env) fmap" where "predefined_env \<equiv> predefined_env_with A"
 
 (* Environment that binds each submodule of q to a stub; the predefined modules have no submodules *)
 definition submods_env :: "name \<Rightarrow> env"
