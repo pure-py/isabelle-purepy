@@ -84,15 +84,14 @@ class ParserRejects(Exception):
         super().__init__(msg)
 
 
-# Line and column of node, or None if node doesn't have a position, like a function's arguments
 def node_position(node: ast.AST) -> tuple[int | None, int | None]:
+    """Line and column of node, or None if node doesn't have a position, like a function's arguments"""
     return getattr(node, "lineno", None), getattr(node, "col_offset", None)
 
 
-# Rejection shared with Python: a syntax error from Python's parser, or a condition of the syntax such as
-# distinct parameters
 class PythonRejects(ParserRejects):
-    pass
+    """Rejection shared with Python: a syntax error from Python's parser, or a condition of the syntax such
+    as distinct parameters"""
 
 
 def python_rejects(e: SyntaxError) -> PythonRejects:
@@ -108,9 +107,9 @@ class SyntacticallyExcluded(ParserRejects):
         super().__init__(not_allowed(construct), *node_position(node))
 
 
-# Parse, marking sequence patterns in square brackets as list patterns, since Python's syntax tree doesn't
-# record the brackets
 def parse(source: str, filename: str) -> ast.Module:
+    """Parse, marking sequence patterns in square brackets as list patterns, since Python's syntax tree
+    doesn't record the brackets"""
     m = ast.parse(source, filename=filename)
     for node_ in ast.walk(m):
         if isinstance(node_, ast.MatchSequence):
@@ -445,8 +444,8 @@ def qualifiers(gs: list[ast.comprehension]) -> list[Qualifier]:
     return [q for g in gs for q in qualifier(g)]
 
 
-# Generator located at its variable, since Python's syntax tree doesn't give the generator a position
 def qualifier(g: ast.comprehension) -> list[Qualifier]:
+    """Generator located at its variable, since Python's syntax tree doesn't give the generator a position"""
     match g:
         case ast.comprehension(is_async=1):
             raise SyntacticallyExcluded(g, "async comprehensions")

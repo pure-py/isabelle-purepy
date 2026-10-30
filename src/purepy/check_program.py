@@ -50,8 +50,8 @@ type IllFormed = tuple[QualifiedName, Reason]
 type PurePyRejects = IllFormed | syntax.ParserRejects
 
 
-# Entry module parsed first, so its errors take precedence
 def parse_program(entry_path: pathlib.Path) -> Program:
+    """Entry module parsed first, so its errors take precedence"""
     base_dir = entry_path.parent
     names = sorted(module_names(base_dir), key=str)
     return program(
@@ -62,8 +62,8 @@ def parse_program(entry_path: pathlib.Path) -> Program:
     )
 
 
-# A package directory is an empty module
 def parse_module(q: Name, path: pathlib.Path) -> ModuleBody:
+    """A package directory is an empty module"""
     try:
         return syntax.parse_module("" if path.is_dir() else path.read_text(), str(path), q)
     except syntax.ParserRejects as e:
@@ -92,8 +92,8 @@ def check_program(entry_path: pathlib.Path) -> PurePyRejects | None:
         return e
 
 
-# Check the module at path as a program of one module
 def check_module(path: pathlib.Path) -> PurePyRejects | None:
+    """Check the module at path as a program of one module"""
     try:
         return check(program({MAIN: parse_module(MAIN, path)}))
     except syntax.ParserRejects as e:
@@ -110,8 +110,8 @@ def exit_code(rejection: PurePyRejects | None) -> Exit:
             return Exit.ILL_FORMED
 
 
-# File of the module at fault
 def error_path(rejection: PurePyRejects, entry_path: pathlib.Path) -> pathlib.Path:
+    """File of the module at fault"""
     match rejection:
         case syntax.ParserRejects():
             q = rejection.module
