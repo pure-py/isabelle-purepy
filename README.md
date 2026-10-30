@@ -47,8 +47,7 @@ After `make build`:
 make check-conformance
 ```
 
-The conformance suite comes from the `purepy-conformance` package in the
-[pure-py-spec](https://github.com/pure-py/pure-py-spec) repository, at the release pinned in `pyproject.toml`.
+The conformance suite comes from the pinned specification.
 
 ## Development
 
