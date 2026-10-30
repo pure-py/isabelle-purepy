@@ -105,7 +105,7 @@ def exit_code(result: Result) -> Exit:
         case None:
             return Exit.OK
         case syntax.ParserRejects():
-            return Exit(result.exit_code)
+            return Exit.NOT_ALLOWED
         case _:
             return Exit.ILL_FORMED
 

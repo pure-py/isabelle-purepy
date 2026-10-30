@@ -1,4 +1,5 @@
 import ast
+from collections.abc import Sequence
 from functools import reduce
 from itertools import takewhile
 from typing import Any
@@ -72,53 +73,57 @@ SYMBOL: dict[type, str] = {
 }
 
 
+# Rejection by the parser, the column of the taxonomy; the subclasses are its rows, by Python's verdict
 class ParserRejects(Exception):
-    exit_code: int  # overridden by subclass
     msg: str
     module: Name | None = None
 
-    def __init__(self, node: ast.AST, msg: str):
-        self.line: int | None = getattr(node, "lineno", None)
-        self.col: int | None = getattr(node, "col_offset", None)
+    def __init__(self, msg: str, line: int | None, col: int | None):
         self.msg = msg
+        self.line = line
+        self.col = col
         super().__init__(msg)
+
+
+# Position of node, absent for a node Python doesn't locate, such as the arguments of a function
+def node_position(node: ast.AST) -> tuple[int | None, int | None]:
+    return getattr(node, "lineno", None), getattr(node, "col_offset", None)
+
+
+# Program Python also rejects: a syntax error from its parser, or a condition of the syntax its compiler
+# also checks, such as distinctness of parameters
+class PythonRejects(ParserRejects):
+    pass
+
+
+def python_rejects(e: SyntaxError) -> PythonRejects:
+    return PythonRejects(e.msg, e.lineno, None if e.offset is None else e.offset - 1)
 
 
 def not_allowed(construct: str) -> str:
     return f"{construct} not allowed in PurePy"
 
 
+# Program Python accepts, with a construct outside PurePy's syntax at node
 class SyntacticallyExcluded(ParserRejects):
-    exit_code = 1
-
     def __init__(self, node: ast.AST, construct: str):
-        super().__init__(node, not_allowed(construct))
-
-
-class ParseError(ParserRejects):
-    exit_code = 1
-
-    def __init__(self, e: SyntaxError):
-        self.line = e.lineno
-        self.col = None if e.offset is None else e.offset - 1
-        self.end_line = e.end_lineno
-        self.end_col = None if e.end_offset is None else e.end_offset - 1
-        self.msg = f"parse error: {e.msg}"
-        Exception.__init__(self, self.msg)
+        super().__init__(not_allowed(construct), *node_position(node))
 
 
 # Each sequence pattern is marked as a list or not, since the tree doesn't record the brackets
-# Compiling applies Python's checks beyond its grammar, such as distinctness of parameters and a return
-# being inside a function, which the mapping relies on
 def parse(source: str, filename: str) -> ast.Module:
     m = ast.parse(source, filename=filename)
-    compile(m, filename, "exec")
     for node_ in ast.walk(m):
         if isinstance(node_, ast.MatchSequence):
             segment = ast.get_source_segment(source, node_)
             assert segment is not None
             setattr(node_, "list", segment.startswith("["))  # noqa: B010
     return m
+
+
+def duplicate[T](xs: Sequence[T]) -> T | None:
+    """An element occurring twice in xs, if any"""
+    return next((x for i, x in enumerate(xs) if x in xs[:i]), None)
 
 
 def option(x: Any) -> Any:
@@ -335,7 +340,11 @@ def expr_node(e: ast.expr) -> Expr:
         case ast.Call(func=f, args=es, keywords=ks):
             f_ = expr(f)
             es_ = [expr(e_) for e_ in es]
-            return Syntax.ExprCall(f_, (es_, [keyword(k) for k in ks]))
+            ks_ = [keyword(k) for k in ks]
+            dup = duplicate([k.arg for k in ks])
+            if dup is not None:
+                raise PythonRejects(f"duplicate keyword argument {dup}", *node_position(e))
+            return Syntax.ExprCall(f_, (es_, ks_))
         case ast.Dict(keys=ks, values=vs):
             if any(k is None for k in ks):
                 raise SyntacticallyExcluded(e, "dictionary unpacking")
@@ -427,6 +436,9 @@ def params(args: ast.arguments) -> list[ast.arg]:
         raise SyntacticallyExcluded(args, "default arguments")
     if len(args.posonlyargs) > 0:
         raise SyntacticallyExcluded(args, "positional-only arguments")
+    dup = duplicate([a.arg for a in args.args])
+    if dup is not None:
+        raise PythonRejects(f"duplicate parameter {dup}", *node_position(args))
     return args.args
 
 
@@ -446,6 +458,21 @@ def qualifier(g: ast.comprehension) -> list[Qualifier]:
             ]
         case _:
             raise SyntacticallyExcluded(g, "unpacking in comprehensions")
+
+
+def bound(pattern: ast.pattern) -> list[Var]:
+    """Variables bound by pattern, in order and with repetitions"""
+    match pattern:
+        case ast.MatchValue() | ast.MatchSingleton():
+            return []
+        case ast.MatchAs(pattern=p, name=x):
+            return (bound(p) if p is not None else []) + ([x] if x else [])
+        case ast.MatchSequence(patterns=ps) | ast.MatchMapping(patterns=ps):
+            return [x for p in ps for x in bound(p)]
+        case ast.MatchClass(patterns=ps, kwd_patterns=ps_):
+            return [x for p in list(ps) + list(ps_) for x in bound(p)]
+        case _:
+            raise AssertionError(f"unexpected pattern: {type(pattern).__name__}")
 
 
 def pat(p: ast.pattern) -> Pat:
@@ -480,13 +507,22 @@ def pat_node(p: ast.pattern) -> Pat:
             q = name(c)
             assert q is not None  # other heads rejected by Python
             ps_ = [pat(p_) for p_ in ps]
-            return Syntax.PatConstr(
-                qualified_name(q), (ps_, [(x, pat(q_)) for x, q_ in zip(xs, qs)])
-            )
+            qs_ = [pat(q_) for q_ in qs]
+            dup = duplicate(xs)
+            if dup is not None:
+                raise PythonRejects(
+                    f"duplicate keyword {dup} in constructor pattern", *node_position(p)
+                )
+            return Syntax.PatConstr(qualified_name(q), (ps_, list(zip(xs, qs_))))
         case ast.MatchMapping(rest=str()):
             raise SyntacticallyExcluded(p, "rest capture in dictionary patterns")
         case ast.MatchMapping(keys=ks, patterns=ps):
             ws = [key(k) for k in ks]
+            dup = duplicate(ws)
+            if dup is not None:
+                raise PythonRejects(
+                    f"duplicate key '{dup}' in dictionary pattern", *node_position(p)
+                )
             return Syntax.PatDict([(w, pat(q)) for w, q in zip(ws, ps)])
         case ast.MatchOr():
             raise SyntacticallyExcluded(p, "or-patterns")
@@ -566,6 +602,10 @@ def stmt_node(s: ast.stmt) -> Stmt:
             raise SyntacticallyExcluded(s, "global")
         case ast.Nonlocal():
             raise SyntacticallyExcluded(s, "nonlocal")
+        case ast.Break():
+            raise SyntacticallyExcluded(s, "break")
+        case ast.Continue():
+            raise SyntacticallyExcluded(s, "continue")
         case _:
             raise SyntacticallyExcluded(s, f"{type(s).__name__} statement")
 
@@ -574,6 +614,9 @@ def match_case(b: ast.match_case) -> tuple[Pat, Stmt]:
     if b.guard is not None:
         raise SyntacticallyExcluded(b, "case guards")
     p = pat(b.pattern)
+    dup = duplicate(bound(b.pattern))
+    if dup is not None:
+        raise PythonRejects(f"duplicate variable {dup} in pattern", *node_position(b.pattern))
     return (p, seq(b.body))
 
 
@@ -629,7 +672,11 @@ def func(d: ast.stmt) -> Func:
 
 
 def type_params(node: ast.FunctionDef | ast.ClassDef | ast.TypeAlias) -> list[str]:
-    return [type_param(param) for param in node.type_params]
+    alphas = [type_param(param) for param in node.type_params]
+    dup = duplicate(alphas)
+    if dup is not None:
+        raise PythonRejects(f"duplicate type parameter {dup}", *node_position(node))
+    return alphas
 
 
 def type_param(param: ast.type_param) -> str:
@@ -724,8 +771,25 @@ def top_item(item: Statement) -> TopStmt:
             return Syntax.TypeDefs([type_def(chi) for chi in item])
         case ast.stmt() if is_import(item):
             raise SyntacticallyExcluded(item, "import after another statement")
+        case ast.stmt() if len(returns_outside_function(item)) > 0:
+            raise PythonRejects(
+                "return outside a function", *node_position(returns_outside_function(item)[0])
+            )
         case _:
             return Syntax.Stmt(item_stmt(item))
+
+
+def returns_outside_function(s: ast.stmt) -> list[ast.Return]:
+    """Return statements of a top-level statement s"""
+    match s:
+        case ast.Return():
+            return [s]
+        case ast.If(body=ss, orelse=ss_):
+            return [r for s_ in ss + ss_ for r in returns_outside_function(s_)]
+        case ast.Match(cases=cases):
+            return [r for case in cases for s_ in case.body for r in returns_outside_function(s_)]
+        case _:
+            return []
 
 
 def import_(iota: ast.stmt) -> Import:
@@ -769,5 +833,5 @@ def parse_module(source: str, filename: str, q: Name) -> ModuleBody:
     try:
         m = parse(source, filename)
     except SyntaxError as e:
-        raise ParseError(e) from e
+        raise python_rejects(e) from e
     return module_body(q, m)
