@@ -11,18 +11,18 @@ import sys
 import tempfile
 from collections.abc import Iterator, Sequence
 
-from purepy.conformance import (
+from purepy_conformance import (
     EXCEPTION_EXPECTED,
     EXPECTED,
     MAIN,
     STATUS_EXPECTED,
-    SYNTACTIC_ONLY,
     PurePyOutcome,
     PythonOutcome,
     Runner,
     run,
     suite,
 )
+
 from purepy.run_program import UNDEFINED
 
 
@@ -36,7 +36,7 @@ def alone(path: pathlib.Path) -> Iterator[pathlib.Path]:
 
 class PurePyRunner(Runner):
     def __init__(self) -> None:
-        super().__init__(None)  # not run under Python
+        super().__init__([sys.executable, "-m", "purepy", "--check"], None)  # not run under Python
 
     def interpret(
         self, path: pathlib.Path, python: PythonOutcome, purepy: PurePyOutcome
@@ -68,8 +68,6 @@ class PurePyRunner(Runner):
     def run_test(self, suite: pathlib.Path, test: pathlib.Path) -> list[str]:
         failures = super().run_test(suite, test)
         dirs = test.relative_to(suite).parts[:-1]
-        if dirs[0] == SYNTACTIC_ONLY:
-            return failures
         python, purepy = PythonOutcome(dirs[0]), PurePyOutcome(dirs[1])
         if purepy not in (PurePyOutcome.AGREES, PurePyOutcome.UNDEFINED):
             return failures
