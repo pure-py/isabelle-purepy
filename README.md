@@ -14,9 +14,6 @@ Install the [Isabelle](https://isabelle.in.tum.de/) release named in `.isabelle-
 make build
 ```
 
-The generated Python is written to `src/purepy/generated/`, a subpackage of `purepy` which is not committed.
-The build fails unless the code generator targets the Python version in `.python-version`.
-
 To browse the theories with the prover running, open the session directory in the bundled editor:
 
 ```bash
