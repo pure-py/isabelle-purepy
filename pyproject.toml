@@ -9,11 +9,11 @@ requires-python = ">=3.12"
 
 [project.scripts]
 purepy = "purepy.__main__:main"
-purepy-conformance = "purepy.conformance:main"
 
 [dependency-groups]
 dev = [
     "mypy>=2.3.1",
+    "purepy-conformance @ https://github.com/pure-py/pure-py-spec/releases/download/v0.23.2/purepy_conformance-0.23.2-py3-none-any.whl",
     "ruff>=0.16.2",
 ]
 
@@ -27,7 +27,7 @@ follow_imports = "skip"
 
 [tool.ruff]
 line-length = 100
-extend-exclude = ["src/purepy/conformance-suite", "src/purepy/generated"]
+extend-exclude = ["src/purepy/generated"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/purepy"]
