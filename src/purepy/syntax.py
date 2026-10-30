@@ -73,7 +73,6 @@ SYMBOL: dict[type, str] = {
 }
 
 
-# Rejection by the parser, the column of the taxonomy; the subclasses are its rows, by Python's verdict
 class ParserRejects(Exception):
     msg: str
     module: Name | None = None
@@ -85,13 +84,13 @@ class ParserRejects(Exception):
         super().__init__(msg)
 
 
-# Position of node, absent for a node Python doesn't locate, such as the arguments of a function
+# Line and column of node, or None if node doesn't have a position, like a function's arguments
 def node_position(node: ast.AST) -> tuple[int | None, int | None]:
     return getattr(node, "lineno", None), getattr(node, "col_offset", None)
 
 
-# Program Python also rejects: a syntax error from its parser, or a condition of the syntax its compiler
-# also checks, such as distinctness of parameters
+# Rejection shared with Python: a syntax error from Python's parser, or a condition of the syntax such as
+# distinct parameters
 class PythonRejects(ParserRejects):
     pass
 
@@ -104,7 +103,6 @@ def not_allowed(construct: str) -> str:
     return f"{construct} not allowed in PurePy"
 
 
-# Program Python accepts, with a construct outside PurePy's syntax at node
 class SyntacticallyExcluded(ParserRejects):
     def __init__(self, node: ast.AST, construct: str):
         super().__init__(not_allowed(construct), *node_position(node))
