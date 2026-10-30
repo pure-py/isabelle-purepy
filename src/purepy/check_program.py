@@ -1,10 +1,10 @@
 """Module discovery and checking of a program by the generated type checker"""
 
 import pathlib
-from enum import IntEnum
 
 from . import syntax
 from .generated import Finite_Map, Option, Programs, Reasons
+from .generated.exit_codes import Exit
 from .messages import message
 from .syntax import (
     ModuleBody,
@@ -98,14 +98,6 @@ def check_module(path: pathlib.Path) -> PurePyRejects | None:
         return check(program({MAIN: parse_module(MAIN, path)}))
     except syntax.ParserRejects as e:
         return e
-
-
-class Exit(IntEnum):
-    """Exit codes expected by the conformance runner"""
-
-    OK = 0
-    NOT_ALLOWED = 1
-    ILL_FORMED = 3
 
 
 def exit_code(rejection: PurePyRejects | None) -> Exit:

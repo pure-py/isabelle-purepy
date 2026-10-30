@@ -25,6 +25,7 @@ build: check-version codegen
 	rm -rf python/python_out
 	$(ISABELLE) build -v -e -d $(CODEGEN) -D .
 	$(PYTHON) generated.py $(CODE) $(GENERATED)
+	uv run --locked python exit_codes.py $(GENERATED)/exit_codes.py
 
 # Lint and conformance suite, under the generated type checker
 check-conformance:
