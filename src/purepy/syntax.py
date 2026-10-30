@@ -108,7 +108,8 @@ class SyntacticallyExcluded(ParserRejects):
         super().__init__(not_allowed(construct), *node_position(node))
 
 
-# Each sequence pattern is marked as a list or not, since the tree doesn't record the brackets
+# Parse, marking each sequence pattern in square brackets as a list pattern, since Python's syntax tree doesn't
+# record the brackets
 def parse(source: str, filename: str) -> ast.Module:
     m = ast.parse(source, filename=filename)
     for node_ in ast.walk(m):
@@ -440,11 +441,11 @@ def params(args: ast.arguments) -> list[ast.arg]:
     return args.args
 
 
-# A generator is located at its target, since the parsed form has no position for the generator itself
 def qualifiers(gs: list[ast.comprehension]) -> list[Qualifier]:
     return [q for g in gs for q in qualifier(g)]
 
 
+# Generator located at its variable, since Python's syntax tree doesn't give the generator a position
 def qualifier(g: ast.comprehension) -> list[Qualifier]:
     match g:
         case ast.comprehension(is_async=1):
