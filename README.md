@@ -2,7 +2,8 @@
 
 [![build](https://github.com/pure-py/isabelle-purepy/actions/workflows/build.yml/badge.svg)](https://github.com/pure-py/isabelle-purepy/actions/workflows/build.yml)
 
-Mechanisation of the PurePy specification in Isabelle/HOL and the `purepy` type checker generated from it.
+This repository holds the Isabelle/HOL mechanisation of the PurePy specification and the `purepy` type checker
+generated from the mechanisation.
 
 ## Building
 
