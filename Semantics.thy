@@ -128,6 +128,17 @@ where
 "opaque_builtin (VOpaque (x, [y])) = ((x, []) = builtins)" |
 "opaque_builtin _ = False"
 
+(* The integers of a range object, from start up to but not including stop; None for any other value *)
+fun range_seq :: "val \<Rightarrow> int list option"
+where
+"range_seq (VObject C xvs) =
+  (if C = range_class then
+     (case (map_of xvs (var ''start''), map_of xvs (var ''stop'')) of
+        (Some (VLit (LitInt m)), Some (VLit (LitInt n))) \<Rightarrow> Some [m..n - 1]
+      | _ \<Rightarrow> None)
+   else None)" |
+"range_seq _ = None"
+
 (* Literals by value; a Boolean and a number, which Python compares numerically, give Undef *)
 fun eq_lit :: "lit \<Rightarrow> lit \<Rightarrow> bool result"
 where
@@ -145,7 +156,8 @@ where
 "eq_lit _ _ = Val False"
 
 (* By the form of the first value, then of the second: patterns on both would make pattern completion over the
-   values very slow. Undefined between two functions, closures or primitives, which Python compares by identity *)
+   values very slow. Ranges by their sequences, so that range(0, -1) == range(0, -2); undefined between two
+   functions, closures or primitives, which Python compares by identity *)
 fun eq :: "val \<Rightarrow> val \<Rightarrow> bool result" and eq_elems :: "val list \<Rightarrow> val list \<Rightarrow> bool result"
 where
 "eq (VLit l) v' = (case v' of VLit l' \<Rightarrow> eq_lit l l' | _ \<Rightarrow> Val False)" |
@@ -158,7 +170,12 @@ where
        else Val False
    | _ \<Rightarrow> Val False)" |
 "eq (VObject C xvs) v' =
-  (case v' of VObject D yvs \<Rightarrow> if C = D then eq_elems (map snd xvs) (map snd yvs) else Val False | _ \<Rightarrow> Val False)" |
+  (case v' of
+     VObject D yvs \<Rightarrow>
+       if C \<noteq> D then Val False
+       else if C = range_class then Val (range_seq (VObject C xvs) = range_seq (VObject D yvs))
+       else eq_elems (map snd xvs) (map snd yvs)
+   | _ \<Rightarrow> Val False)" |
 "eq v v' = (if (is_closure v \<or> is_prim v) \<and> (is_closure v' \<or> is_prim v') then Aborts Undef else Val False)" |
 
 "eq_elems [] [] = Val True" |
@@ -174,6 +191,7 @@ where
 "contains (VDict \<delta>) (VLit (LitString w)) = Val (w \<in> set (map fst \<delta>))" |
 "contains (VDict \<delta>) _ = Aborts Excluded" |
 "contains (VLit (LitString w')) (VLit (LitString w)) = Val (substring w w')" |
+"contains (VObject C xvs) v = (if C = range_class then Aborts Excluded else Aborts TypeError)" |
 "contains _ _ = Aborts TypeError" |
 
 "contains_elems [] v = Val False" |
@@ -298,7 +316,7 @@ where
 fun iter :: "val \<Rightarrow> val list option"
 where
 "iter (VDict \<delta>) = Some (map (\<lambda>(w, _). VLit (LitString w)) \<delta>)" |
-"iter v = elems v"
+"iter v = (case range_seq v of Some ns \<Rightarrow> Some (map (\<lambda>n. VLit (LitInt n)) ns) | None \<Rightarrow> elems v)"
 
 (* Nearest integer, ties to even *)
 definition round_even :: "real \<Rightarrow> int"
@@ -338,6 +356,7 @@ where
   (case v' of
      VLit (LitString w) \<Rightarrow> (case map_of \<delta> w of Some v \<Rightarrow> Val v | None \<Rightarrow> Aborts KeyError)
    | _ \<Rightarrow> Aborts Excluded)" |
+"getitem (VObject C xvs) v' = (if C = range_class then Aborts Excluded else Aborts TypeError)" |
 "getitem v v' =
   (case (elems v, v') of
      (Some vs, VLit (LitInt n)) \<Rightarrow>
@@ -421,6 +440,8 @@ where
 "match \<rho> (PatList ps) (VTuple vs) = MatchAborts Excluded" |
 "match \<rho> (PatTuple ps) (VTuple vs) = (if length ps = length vs then match_all \<rho> ps vs else NoMatch)" |
 "match \<rho> (PatTuple ps) (VList vs) = MatchAborts Excluded" |
+"match \<rho> (PatList ps) (VObject C xvs) = (if C = range_class then MatchAborts Excluded else NoMatch)" |
+"match \<rho> (PatTuple ps) (VObject C xvs) = (if C = range_class then MatchAborts Excluded else NoMatch)" |
 "match \<rho> (PatDict kps) (VDict \<delta>) =
   (if set (map fst kps) \<subseteq> set (map fst \<delta>) then match_dict \<rho> kps \<delta> else NoMatch)" |
 "match \<rho> (PatConstr (x, xs) (ps, kps)) v =

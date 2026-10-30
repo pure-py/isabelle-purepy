@@ -39,6 +39,7 @@ lemma contains_code [code]:
     | VTuple vs \<Rightarrow> contains_elems vs v
     | VDict \<delta> \<Rightarrow> (case v of VLit (LitString w) \<Rightarrow> Val (w \<in> set (map fst \<delta>)) | _ \<Rightarrow> Aborts Excluded)
     | VLit (LitString w') \<Rightarrow> (case v of VLit (LitString w) \<Rightarrow> Val (substring w w') | _ \<Rightarrow> Aborts TypeError)
+    | VObject C xvs \<Rightarrow> if C = range_class then Aborts Excluded else Aborts TypeError
     | _ \<Rightarrow> Aborts TypeError)"
   by (cases v'; cases v; auto split: lit.split)
 
