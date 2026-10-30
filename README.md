@@ -2,8 +2,8 @@
 
 [![build](https://github.com/pure-py/isabelle-purepy/actions/workflows/build.yml/badge.svg)](https://github.com/pure-py/isabelle-purepy/actions/workflows/build.yml)
 
-Mechanisation of the PurePy specification in Isabelle/HOL, the `purepy` type checker generated from it, and the
-conformance suite of the specification.
+This repository holds the Isabelle/HOL mechanisation of the PurePy specification and the `purepy` type checker
+generated from the mechanisation.
 
 ## Building
 
@@ -14,9 +14,6 @@ Install the [Isabelle](https://isabelle.in.tum.de/) release named in `.isabelle-
 make build
 ```
 
-The generated Python is written to `src/purepy/generated/`, inside the `purepy` package, and is not committed.
-The build fails unless the code generator targets the Python version in `.python-version`.
-
 To browse the theories with the prover running, open the session directory in the bundled editor:
 
 ```bash
@@ -25,10 +22,8 @@ To browse the theories with the prover running, open the session directory in th
 
 ## Type checker (`purepy`)
 
-`src/purepy/` holds the `purepy` package: the parser, built on Python's `ast`, which maps a module to the
-generated syntax and rejects what lies outside PurePy; the messages for the generated reasons; and module
-discovery and output formatting, around the generated type checker. The conformance suite is shipped in the
-package.
+The `purepy` package in `src/purepy/` contains the generated type checker and the code which runs it on source
+files.
 
 Install the wheel attached to the latest [release](https://github.com/pure-py/isabelle-purepy/releases) as a
 standalone command-line tool with `uv tool install <wheel URL>`. Then check a single module, or a whole program
@@ -46,44 +41,10 @@ From a checkout, after `make build`, the same checks run with `uv run --locked p
 After `make build`:
 
 ```bash
-make check-tests
+make check-conformance
 ```
 
-The target runs mypy and ruff, then the conformance suite under the generated type checker,
-which must pass; `make wheel` also builds the wheel under `dist/`. The suite installed with the package runs
-with `purepy-conformance`; `purepy-conformance --help` lists its options.
-
-Tests in `src/purepy/conformance-suite/` are organised by the outcome under Python and the outcome under
-PurePy, following the grid in the conformance section of the specification; the runner derives every
-assertion from the path. A test of one module is a `.py` file with expectation files as siblings
-(`.expected`, `.error.expected`, `.exception.expected`, `.status.expected`); a test of a program of several
-modules is a directory holding `main.py`, the expectation files of `main.py` and the other modules.
-
-The outcome under Python is one of:
-
-- `python-rejects/`: Python raises `SyntaxError` before running the program
-- `python-raises/`: Python raises another exception while running the program
-- `python-succeeds/`: Python runs the program with the expected output
-
-The outcome under PurePy is one of:
-
-- `parser-rejects/`: rejected by the parser
-- `typing-rejects/`: rejected by the type checker
-- `undefined/`: well-formed, and the run aborts with termination kind `undef`
-- `agrees/`: well-formed, and the run yields the same result as under Python, including the same exception
-
-The directory `python-succeeds/agrees/mypy-bug/` holds tests rejected by mypy because of a behaviour reported as a
-mypy bug; every other test in `python-succeeds/agrees/` type-checks under mypy. The tests in `syntactic-only/`
-construct a form as an AST, because Python source cannot express the form, and check that PurePy rejects it.
-
-A test has `.expected` under `python-succeeds/` and `.exception.expected` elsewhere, naming `SyntaxError` exactly
-under `python-rejects/`, so a misfiled test fails. A test that exits with a nonzero status through `sys.exit`
-states the status in `.status.expected`.
-
-Every test under `typing-rejects/`, `undefined/` and `agrees/` names a rule of the specification on its first line,
-as `# rule: name`. Under `typing-rejects/` the rule is the one with a premise or side condition that fails for the
-program. Under `undefined/` and `agrees/` the rule is the one yielding the result. The specification repository
-checks the rule names and the mypy claims against each release.
+The conformance suite comes from the pinned specification.
 
 ## Development
 
@@ -96,7 +57,7 @@ uv sync --locked
 Format the sources:
 
 ```bash
-uv run --locked ruff format ./src/purepy ./test/run-all.py
+uv run --locked ruff format ./src/purepy ./test/check-conformance.py
 ```
 
 After changing dependencies or metadata in `pyproject.toml`, run `uv lock` and commit `pyproject.toml` and
@@ -104,10 +65,8 @@ After changing dependencies or metadata in `pyproject.toml`, run `uv lock` and c
 
 ## Release workflow
 
-Run the `Release` GitHub Action manually with a version in the form `x.y.z` (for example, `0.24.0`). The action
-updates and commits the package version on `main`, creates and pushes the tag `v0.24.0`, checks the proofs,
-generates the type checker, runs the conformance suite and creates the GitHub Release for the tag with the
-wheel of the `purepy` package attached. The specification repository depends on the latest release.
+Run the `Release` GitHub Action manually. The version number of a release is that of the pinned
+`purepy-conformance` release.
 
 ## Theories
 

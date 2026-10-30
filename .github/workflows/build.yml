@@ -42,19 +42,22 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Check the proofs and generate the type checker
+      - name: Check proofs and generate type checker
         timeout-minutes: 20
         run: make build ISABELLE=/home/isabelle/Isabelle/bin/isabelle
 
-      - name: Lint, run the conformance suite and build the wheel
+      - name: Lint, run conformance suite and build wheel
         run: make wheel
+
+      - name: Install type checker and conformance package into site
+        run: uv pip install --target site dist/*.whl "$(uv export --locked --only-group dev --no-hashes --no-emit-project | grep '^purepy-conformance ')"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: wheel
-          path: dist/*.whl
+          name: site
+          path: site
 
-  # The suite's tests, and the type checker, under other Python runtimes
+  # Suite and type checker under other Python runtimes
   runtimes:
     name: conformance suite (${{ matrix.runtime }})
     needs: build
@@ -71,13 +74,8 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: wheel
-          path: dist
-
-      - name: Unpack the wheel
-        run: |
-          mkdir site
-          unzip -q dist/*.whl -d site
+          name: site
+          path: site
 
       - name: Set up GraalPy
         if: matrix.runtime == 'GraalPy'
@@ -100,10 +98,10 @@ jobs:
         if: matrix.runtime == 'GraalPy'
         env:
           PYTHONPATH: ${{ github.workspace }}/site
-        run: test/run-all.sh python --no-lint
+        run: test/check-conformance.sh python --no-lint
 
       - name: Run tests with Pyodide
         if: matrix.runtime == 'Pyodide'
         env:
           PYTHONPATH: ${{ github.workspace }}/site
-        run: test/run-all.sh "$PYODIDE_PYTHON" --no-lint
+        run: test/check-conformance.sh "$PYODIDE_PYTHON" --no-lint
