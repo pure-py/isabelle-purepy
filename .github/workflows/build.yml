@@ -49,12 +49,15 @@ jobs:
       - name: Lint, run conformance suite and build wheel
         run: make wheel
 
+      - name: Install type checker and conformance package into site
+        run: uv pip install --target site dist/*.whl "$(uv export --locked --only-group dev --no-hashes --no-emit-project | grep '^purepy-conformance ')"
+
       - uses: actions/upload-artifact@v4
         with:
-          name: wheel
-          path: dist/*.whl
+          name: site
+          path: site
 
-  # Suite and type checker under other Python runtimes, from the unpacked wheels
+  # Suite and type checker under other Python runtimes, from the site directory of the build job
   runtimes:
     name: conformance suite (${{ matrix.runtime }})
     needs: build
@@ -71,15 +74,8 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: wheel
-          path: dist
-
-      - name: Unpack wheel and conformance package
-        run: |
-          mkdir site
-          unzip -q dist/*.whl -d site
-          curl -sSL -o conformance.whl "$(sed -n 's|.*"purepy-conformance @ \(https://[^"]*\.whl\)".*|\1|p' pyproject.toml)"
-          unzip -q conformance.whl -d site
+          name: site
+          path: site
 
       - name: Set up GraalPy
         if: matrix.runtime == 'GraalPy'
