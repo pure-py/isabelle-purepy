@@ -2,8 +2,7 @@
 
 [![build](https://github.com/pure-py/isabelle-purepy/actions/workflows/build.yml/badge.svg)](https://github.com/pure-py/isabelle-purepy/actions/workflows/build.yml)
 
-Mechanisation of the PurePy specification in Isabelle/HOL, the `purepy` type checker generated from it, and the
-conformance suite of the specification.
+Mechanisation of the PurePy specification in Isabelle/HOL and the `purepy` type checker generated from it.
 
 ## Building
 
@@ -52,7 +51,7 @@ The target runs mypy and ruff over the hand-written modules of the package, then
 specification under the generated type checker, which must pass; `make wheel` also builds the wheel under
 `dist/`. The suite and its runner come from the `purepy-conformance` package of the
 [pure-py-spec](https://github.com/pure-py/pure-py-spec) repository, pinned to a specification release in
-`pyproject.toml`; the type checker is released at the version of the specification it passes.
+`pyproject.toml`.
 
 ## Development
 
