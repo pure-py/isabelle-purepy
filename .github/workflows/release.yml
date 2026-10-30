@@ -28,7 +28,7 @@ jobs:
         id: version
         run: |
           SPEC="$(sed -n 's|.*/purepy_conformance-\([0-9.]*\)-py3-none-any\.whl.*|\1|p' pyproject.toml)"
-          test -n "$SPEC" || { echo "pyproject.toml pins no purepy-conformance release"; exit 1; }
+          test -n "$SPEC" || { echo "pyproject.toml does not pin a purepy-conformance release"; exit 1; }
           git fetch --tags origin
           VERSION="$SPEC"
           N=0
