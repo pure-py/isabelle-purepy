@@ -24,9 +24,8 @@ To browse the theories with the prover running, open the session directory in th
 
 ## Type checker (`purepy`)
 
-`src/purepy/` holds the `purepy` package: the parser, built on Python's `ast`, the translation of parsed
-programs into the generated syntax and generated reasons into messages, module discovery and output
-formatting, around the generated type checker.
+The `purepy` package in `src/purepy/` contains the generated type checker and the code which runs it on source
+files.
 
 Install the wheel attached to the latest [release](https://github.com/pure-py/isabelle-purepy/releases) as a
 standalone command-line tool with `uv tool install <wheel URL>`. Then check a single module, or a whole program
