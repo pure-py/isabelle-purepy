@@ -52,6 +52,13 @@ The target runs mypy and ruff over the front end, then the conformance suite und
 which must pass; `make wheel` also builds the wheel under `dist/`. The suite installed with the package runs
 with `purepy-conformance`; `purepy-conformance --help` lists its options.
 
+The evaluator tests in `test/evaluator/` run the generated reference interpreter on syntax built directly,
+without the type checker, so that they also reach the aborting cases the type system rules out:
+
+```bash
+uv run --locked ./test/evaluator/run.py
+```
+
 Tests in `src/purepy/conformance-suite/` are organised by the outcome under Python and the outcome under
 PurePy, following the grid in the conformance section of the specification; the runner derives every
 assertion from the path. A test of one module is a `.py` file with expectation files as siblings
