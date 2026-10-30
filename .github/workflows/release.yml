@@ -1,8 +1,7 @@
 name: Release
 
-# The version is that of the specification whose conformance suite the type checker passes, read from the
-# pinned purepy-conformance release, with a post-release suffix for a further release against the same
-# specification.
+# Version from the pinned purepy-conformance release: that of the specification the type checker passes, with a
+# post-release suffix for a further release against the same specification
 on:
   workflow_dispatch:
 

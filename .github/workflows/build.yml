@@ -54,7 +54,7 @@ jobs:
           name: wheel
           path: dist/*.whl
 
-  # The suite's tests, and the type checker, under other Python runtimes, from the unpacked wheels
+  # Suite and type checker under other Python runtimes, from the unpacked wheels
   runtimes:
     name: conformance suite (${{ matrix.runtime }})
     needs: build
