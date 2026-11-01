@@ -78,11 +78,11 @@ Run the `Release` GitHub Action manually. The version number of a release is tha
 | `Strings.thy`        | Strings and identifiers as lists of Unicode code points                        |
 | `Positions.thy`      | Syntax nodes with their positions in the source                                |
 | `Syntax.thy`         | Abstract syntax and syntactic analyses                                         |
-| `Semantics.thy`      | Values, results and evaluation judgements                                      |
-| `Correctness.thy`    | Inversion lemmas and determinism of evaluation                                 |
-| `Contexts.thy`       | Context entries, class tables, name resolution, predefined modules             |
+| `Contexts.thy`       | Context entries, class tables, name resolution, predefined modules, programs   |
 | `Reasons.thy`        | Reasons for ill-formedness                                                     |
 | `Types.thy`          | Type resolution, substitution and class definitions                            |
+| `Semantics.thy`      | Values, results and evaluation judgements                                      |
+| `Determinism.thy`    | Inversion lemmas and determinism of evaluation                                 |
 | `Subtyping.thy`      | Subtyping, join and meet; element, subscript and attribute types               |
 | `Shapes.thy`         | Heads and shapes for pattern matching; head and shape typing; shapes of a type |
 | `Patterns.thy`       | Pattern checking; matched and remaining types of patterns                      |

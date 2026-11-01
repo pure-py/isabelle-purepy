@@ -8,11 +8,11 @@ session "isabelle-purepy" = HOL +
     Strings
     Positions
     Syntax
-    Semantics
-    Correctness
     Contexts
     Reasons
     Types
+    Semantics
+    Determinism
     Subtyping
     Shapes
     Patterns
