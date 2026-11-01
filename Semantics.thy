@@ -3,7 +3,7 @@ theory Semantics
     imports Types "HOL-Library.Finite_Map"
 begin
 
-(* Free o for outcomes, as in the spec *)
+(* Free o for outcomes *)
 no_notation (ASCII) comp (infixl \<open>o\<close> 55)
 
 (* Predefined functions, each standing for its meaning prim_meaning *)
@@ -380,7 +380,7 @@ attribute_setup ih_names = \<open>
   end
 \<close>
 
-(* The class table, ambient in evaluation as in the spec *)
+(* The class table, ambient in evaluation *)
 locale evaluation = fixes \<Sigma> :: class_table
 begin
 
@@ -711,7 +711,7 @@ end
 
 
 (* Environments of the predefined modules: each binds __name__ to the name of the module and each member to its
-   value; print and sys.argv, which the spec gives no value, are left out *)
+   value, except for print and sys.argv, which have no value *)
 definition \<P>\<^sub>e\<^sub>n\<^sub>v :: "(name, env) fmap"
 where
 "\<P>\<^sub>e\<^sub>n\<^sub>v =
@@ -767,7 +767,7 @@ lemma stub_of_Some: "stub_of v = Some q \<longleftrightarrow> v = VModStub q"
 lemma stub_of_None: "stub_of v = None \<longleftrightarrow> \<not> is_stub v"
   by (cases v) auto
 
-(* The program, ambient in loading as in the spec *)
+(* The program, ambient in loading *)
 locale loading = evaluation +
   fixes \<M> :: program
 begin
@@ -780,7 +780,7 @@ where
 abbreviation builtins_env :: env where "builtins_env \<equiv> the (fmlookup \<P>\<^sub>e\<^sub>n\<^sub>v builtins)"
 
 (* Loading of a module, an import prefix, a submodule chain and an imported name, with lists of modules loaded
-   for their aborts and of imported names, which the spec writes with premises for each element *)
+   for their aborts and of imported names *)
 inductive
   eval_mod     :: "name \<Rightarrow> env result \<Rightarrow> bool"                     ("_ \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d _" [60,60] 60) and
   eval_imports :: "name \<Rightarrow> import located list \<Rightarrow> env result \<Rightarrow> bool"       ("_, _ \<Rightarrow>\<^sub>i _" [60,0,60] 60) and
