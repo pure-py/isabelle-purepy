@@ -7,7 +7,7 @@ begin
 no_notation (ASCII) comp (infixl \<open>o\<close> 55)
 
 (* Predefined functions, each standing for its meaning prim_meaning *)
-datatype prim = PrimLen | PrimRound | PrimExit
+datatype prim = PrimLen | PrimPrint | PrimRound | PrimExit
 
 datatype val =
       VLit lit
@@ -327,6 +327,7 @@ fun prim_meaning :: "prim \<Rightarrow> val list \<Rightarrow> val result"
 where
 "prim_meaning PrimLen [v] =
   (case iter v of Some vs \<Rightarrow> Val (VLit (LitInt (of_nat (length vs)))) | None \<Rightarrow> Aborts TypeError)" |
+"prim_meaning PrimPrint [v] = Val (VLit LitNone)" |
 "prim_meaning PrimRound [VLit (LitBool _)] = Aborts Excluded" |
 "prim_meaning PrimRound [VLit (LitInt n)] = Val (VLit (LitInt n))" |
 "prim_meaning PrimRound [VLit (LitFloat x)] =
@@ -711,19 +712,19 @@ end
 
 
 (* Environments of the predefined modules: each binds __name__ to the name of the module and each member to its
-   value, except for print and sys.argv, which have no value *)
+   value. Output and command-line arguments aren't modelled, so print returns None and sys.argv is empty *)
 definition \<P>\<^sub>e\<^sub>n\<^sub>v :: "(name, env) fmap"
 where
 "\<P>\<^sub>e\<^sub>n\<^sub>v =
   (let name = \<lambda>x. (var ''__name__'', VLit (LitString (str_of x))) in
    fmap_of_list
     [(builtins, fmap_of_list
-       ([name ''builtins'', (var ''len'', VPrim PrimLen), (var ''range'', VClass range_class),
-         (var ''round'', VPrim PrimRound)]
+       ([name ''builtins'', (var ''len'', VPrim PrimLen), (var ''print'', VPrim PrimPrint),
+         (var ''range'', VClass range_class), (var ''round'', VPrim PrimRound)]
         @ map (\<lambda>y. (y, VOpaque (snoc builtins y)))
             (map prim_name [NoneType, object, bool, int, float, str]
              @ map var [''list'', ''dict'', ''tuple'']))),
-     ((var ''sys'', []), fmap_of_list [name ''sys'', (var ''exit'', VPrim PrimExit)]),
+     ((var ''sys'', []), fmap_of_list [name ''sys'', (var ''argv'', VList []), (var ''exit'', VPrim PrimExit)]),
      ((var ''typing'', []), fmap_of_list
        (name ''typing'' # map (\<lambda>y. (y, VOpaque (var ''typing'', [y])))
           [var ''Callable'', var ''Literal'', prim_name Never, prim_name Sized])),
