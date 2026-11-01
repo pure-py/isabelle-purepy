@@ -2,8 +2,7 @@ import argparse
 import pathlib
 import sys
 
-from .check_program import check_module, check_program, format_program_result
-from .conformance import Exit
+from .check_program import check_module, check_program, exit_code, format_program_rejection
 
 
 def main() -> None:
@@ -17,9 +16,9 @@ def main() -> None:
     if not args.check:
         parser.error("running programs not yet implemented")
 
-    result = check_module(args.path) if args.module else check_program(args.path)
-    print(format_program_result(result, args.path))
-    sys.exit(Exit.OK if result is None else result.exit_code)
+    rejection = check_module(args.path) if args.module else check_program(args.path)
+    print(format_program_rejection(rejection, args.path))
+    sys.exit(exit_code(rejection))
 
 
 if __name__ == "__main__":

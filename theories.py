@@ -10,7 +10,7 @@ BEGIN, END = "<!-- theories -->\n", "\n<!-- /theories -->"
 
 def theories() -> list[pathlib.Path]:
     paths = []
-    for session in re.split(r"^session ", (HERE / "ROOT").read_text(), flags=re.M)[1:]:
+    for session in re.split(r"^session ", (HERE / "ROOT").read_text(), flags=re.MULTILINE)[1:]:
         directory = re.match(r'"[^"]+"(?: in "([^"]+)")?', session).group(1) or "."
         for line in session.split("theories\n", 1)[1].splitlines():
             if not re.fullmatch(r"\s+\w+", line):
