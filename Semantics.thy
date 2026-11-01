@@ -731,8 +731,8 @@ where
      ((var ''dataclasses'', []), fmap_of_list
        [name ''dataclasses'', (var ''dataclass'', VOpaque (var ''dataclasses'', [var ''dataclass'']))])])"
 
-(* Extension of environments, as for contexts: a loaded module takes precedence over a stub of it, and two
-   loads of a module combine *)
+(* Extension of environments, as for contexts: a loaded module takes precedence over a stub of the same module,
+   and two loads of a module combine *)
 function (sequential) extend_val :: "val \<Rightarrow> val \<Rightarrow> val"
 and extend_env :: "env \<Rightarrow> env \<Rightarrow> env" (infixl "\<uplus>\<^sub>v" 65)
 where
