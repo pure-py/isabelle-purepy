@@ -539,7 +539,7 @@ end
 context loading
 begin
 
-(* Inversion lemmas and determinism of loading, given that the domains of \<M> and \<P> are disjoint *)
+(* Inversion lemmas and determinism of loading *)
 inductive_cases ModE: "q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d r"
 inductive_cases ImportsNilE: "q, [] \<Rightarrow>\<^sub>i r"
 inductive_cases ImportE: "q, At p (Import x) # \<iota>s \<Rightarrow>\<^sub>i r"

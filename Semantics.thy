@@ -846,7 +846,7 @@ where
 EvalProgram: "main \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> \<Longrightarrow> eval_program (SystemExit 0)" |
 EvalProgramAbort: "main \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Aborts \<kappa> \<Longrightarrow> eval_program \<kappa>"
 
-(* The domains of \<M> and \<P> are disjoint, as well-formedness of programs requires *)
+(* Required by well-formedness of programs *)
 context
   assumes disjoint: "fmdom \<M> |\<inter>| fmdom \<P>\<^sub>e\<^sub>n\<^sub>v = {||}"
 begin
