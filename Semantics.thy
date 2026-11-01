@@ -67,11 +67,11 @@ where
 "Returns v \<otimes>\<^sub>o o = Returns v" |
 "Aborts\<^sub>o \<kappa> \<otimes>\<^sub>o o = Aborts\<^sub>o \<kappa>"
 
-fun call_result :: "outcome \<Rightarrow> val result"
+fun result_of :: "outcome \<Rightarrow> val result"
 where
-"call_result (Returns v) = Val v" |
-"call_result (Assigns \<rho>) = Val (VLit LitNone)" |
-"call_result (Aborts\<^sub>o \<kappa>) = Aborts \<kappa>"
+"result_of (Returns v) = Val v" |
+"result_of (Assigns \<rho>) = Val (VLit LitNone)" |
+"result_of (Aborts\<^sub>o \<kappa>) = Aborts \<kappa>"
 
 fun is_class :: "val \<Rightarrow> bool"
 where
@@ -92,11 +92,6 @@ fun fields_of :: "val \<Rightarrow> (var \<times> val) list option"
 where
 "fields_of (VObject _ xvs) = Some xvs" |
 "fields_of _ = None"
-
-(* Type arguments of a subscript e[\<psi>s], read from its index *)
-definition type_args_of :: "expr located \<Rightarrow> ty_expr list option"
-where
-"type_args_of e' = those (map type_expr_of (subscript_args e'))"
 
 fun is_closure :: "val \<Rightarrow> bool"
 where
@@ -120,10 +115,34 @@ where
 "module_env_of _ = None"
 
 (* Opaque value of a predefined class of builtins, such as int, which Python matches by an instance test *)
-fun opaque_builtin :: "val \<Rightarrow> bool"
+fun is_opaque_builtin :: "val \<Rightarrow> bool"
 where
-"opaque_builtin (VOpaque (x, [y])) = ((x, []) = builtins)" |
-"opaque_builtin _ = False"
+"is_opaque_builtin (VOpaque (x, [y])) = ((x, []) = builtins)" |
+"is_opaque_builtin _ = False"
+
+fun is_bool :: "val \<Rightarrow> bool"
+where
+"is_bool (VLit (LitBool _)) = True" |
+"is_bool _ = False"
+
+fun is_nan_val :: "val \<Rightarrow> bool"
+where
+"is_nan_val (VLit (LitFloat x)) = is_nan x" |
+"is_nan_val _ = False"
+
+(* Float of an int or float value; None otherwise *)
+fun as_float :: "val \<Rightarrow> float option"
+where
+"as_float (VLit (LitInt n)) = Some (float_of_int n)" |
+"as_float (VLit (LitFloat x)) = Some x" |
+"as_float _ = None"
+
+(* Value of a number as an extended real; None for nan and for a non-number *)
+fun as_number :: "val \<Rightarrow> ereal option"
+where
+"as_number (VLit (LitInt n)) = Some (ereal (real_of_int n))" |
+"as_number (VLit (LitFloat x)) = float_value x" |
+"as_number _ = None"
 
 (* Literals by value; a Boolean and a number, which Python compares numerically, give Undef *)
 fun eq_lit :: "lit \<Rightarrow> lit \<Rightarrow> bool result"
@@ -181,29 +200,52 @@ where
 "contains_elems [] v = Val False" |
 "contains_elems (v' # vs) v = (if eq v v' = Val False then contains_elems vs v else eq v v')"
 
-fun is_bool :: "val \<Rightarrow> bool"
+fun elems :: "val \<Rightarrow> val list option"
 where
-"is_bool (VLit (LitBool _)) = True" |
-"is_bool _ = False"
+"elems (VList vs) = Some vs" |
+"elems (VTuple vs) = Some vs" |
+"elems (VLit (LitString w)) = Some (map (\<lambda>c. VLit (LitString c)) (str_chars w))" |
+"elems _ = None"
 
-fun is_nan_val :: "val \<Rightarrow> bool"
+(* Elements drawn by a generator: the keys of a dictionary, and the elements of a sequence otherwise *)
+fun iter :: "val \<Rightarrow> val list option"
 where
-"is_nan_val (VLit (LitFloat x)) = is_nan x" |
-"is_nan_val _ = False"
+"iter (VDict \<delta>) = Some (map (\<lambda>(w, _). VLit (LitString w)) \<delta>)" |
+"iter v = elems v"
 
-(* Float of an int or float value; None otherwise *)
-fun as_float :: "val \<Rightarrow> float option"
+fun getitem :: "val \<Rightarrow> val \<Rightarrow> val result"
 where
-"as_float (VLit (LitInt n)) = Some (float_of_int n)" |
-"as_float (VLit (LitFloat x)) = Some x" |
-"as_float _ = None"
+"getitem (VDict \<delta>) v' =
+  (case v' of
+     VLit (LitString w) \<Rightarrow> (case map_of \<delta> w of Some v \<Rightarrow> Val v | None \<Rightarrow> Aborts KeyError)
+   | _ \<Rightarrow> Aborts Excluded)" |
+"getitem (VObject C _) _ = Aborts (if C = range_class then Excluded else TypeError)" |
+"getitem v v' =
+  (case (elems v, v') of
+     (Some vs, VLit (LitInt n)) \<Rightarrow>
+       let m = of_nat (length vs) :: int in
+       if 0 \<le> n \<and> n < m then Val (vs ! nat n)
+       else if - m \<le> n \<and> n < 0 then Val (vs ! nat (m + n))
+       else Aborts IndexError
+   | (Some vs, VLit (LitBool _)) \<Rightarrow> Aborts Excluded
+   | _ \<Rightarrow> Aborts TypeError)"
 
-(* Value of a number as an extended real; None for nan and for a non-number *)
-fun number_value :: "val \<Rightarrow> ereal option"
+fun setitem :: "(str \<times> val) list \<Rightarrow> str \<Rightarrow> val \<Rightarrow> (str \<times> val) list"
 where
-"number_value (VLit (LitInt n)) = Some (ereal (real_of_int n))" |
-"number_value (VLit (LitFloat x)) = float_value x" |
-"number_value _ = None"
+"setitem [] w v = [(w, v)]" |
+"setitem ((w', v') # \<delta>) w v = (if w = w' then (w, v) # \<delta> else (w', v') # setitem \<delta> w v)"
+
+fun update :: "(str \<times> val) list \<Rightarrow> (str \<times> val) list \<Rightarrow> (str \<times> val) list"
+where
+"update \<delta> [] = \<delta>" |
+"update \<delta> ((w, v) # \<delta>') = update (setitem \<delta> w v) \<delta>'"
+
+(* Entries from keys and values in alternation; None if a key is not a string *)
+fun dict_entries :: "val list \<Rightarrow> (str \<times> val) list option"
+where
+"dict_entries [] = Some []" |
+"dict_entries (VLit (LitString w) # v # vs) = map_option (Cons (w, v)) (dict_entries vs)" |
+"dict_entries _ = None"
 
 (* Apply g to two numbers as floats; excluded for a Boolean operand *)
 fun number_op :: "(float \<Rightarrow> float \<Rightarrow> val result) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
@@ -225,7 +267,7 @@ fun compare :: "(ereal \<Rightarrow> ereal \<Rightarrow> bool) \<Rightarrow> (st
 where
 "compare f g (VLit (LitString w)) (VLit (LitString w')) = Val (VLit (LitBool (g w w')))" |
 "compare f g v v' =
-  number_op (\<lambda>_ _. Val (VLit (LitBool (case (number_value v, number_value v') of
+  number_op (\<lambda>_ _. Val (VLit (LitBool (case (as_number v, as_number v') of
     (Some y, Some y') \<Rightarrow> f y y'
   | _ \<Rightarrow> False)))) v v'"
 
@@ -247,18 +289,18 @@ where
 "binop_meaning BOpSub v v' = arith (-) float_sub v v'" |
 "binop_meaning BOpMul v v' = arith (*) float_mul v v'" |
 "binop_meaning BOpDiv v v' =
-  (if number_value v' = Some 0 then Aborts ZeroDivisionError
+  (if as_number v' = Some 0 then Aborts ZeroDivisionError
    else number_op (\<lambda>x x'. Val (VLit (LitFloat (float_div x x')))) v v')" |
 "binop_meaning BOpFloorDiv v v' =
-  (if number_value v' = Some 0 then Aborts ZeroDivisionError else arith (div) float_floordiv v v')" |
+  (if as_number v' = Some 0 then Aborts ZeroDivisionError else arith (div) float_floordiv v v')" |
 "binop_meaning BOpMod v v' =
-  (if number_value v' = Some 0 then Aborts ZeroDivisionError else arith (mod) float_mod v v')" |
+  (if as_number v' = Some 0 then Aborts ZeroDivisionError else arith (mod) float_mod v v')" |
 "binop_meaning BOpPow (VLit (LitInt n)) (VLit (LitInt n')) =
   (if n' \<ge> 0 then Val (VLit (LitInt (n ^ nat n')))
    else if n = 0 then Aborts ZeroDivisionError
    else Val (VLit (LitFloat (float_pow (float_of_int n) (float_of_int n')))))" |
 "binop_meaning BOpPow v v' =
-  (if number_value v = Some 0 \<and> (\<exists>y. number_value v' = Some y \<and> y < 0) then Aborts ZeroDivisionError
+  (if as_number v = Some 0 \<and> (\<exists>y. as_number v' = Some y \<and> y < 0) then Aborts ZeroDivisionError
    else number_op (\<lambda>x x'. Val (VLit (LitFloat (float_pow x x')))) v v')" |
 "binop_meaning _ _ _ = Aborts TypeError"
 
@@ -272,36 +314,6 @@ where
 "unop_meaning UOpNot _ = Aborts Excluded" |
 "unop_meaning _ (VLit (LitBool _)) = Aborts Excluded" |
 "unop_meaning _ _ = Aborts TypeError"
-
-fun setitem :: "(str \<times> val) list \<Rightarrow> str \<Rightarrow> val \<Rightarrow> (str \<times> val) list"
-where
-"setitem [] w v = [(w, v)]" |
-"setitem ((w', v') # \<delta>) w v = (if w = w' then (w, v) # \<delta> else (w', v') # setitem \<delta> w v)"
-
-fun update :: "(str \<times> val) list \<Rightarrow> (str \<times> val) list \<Rightarrow> (str \<times> val) list"
-where
-"update \<delta> [] = \<delta>" |
-"update \<delta> ((w, v) # \<delta>') = update (setitem \<delta> w v) \<delta>'"
-
-(* Entries from keys and values in alternation; None if a key is not a string *)
-fun dict_entries :: "val list \<Rightarrow> (str \<times> val) list option"
-where
-"dict_entries [] = Some []" |
-"dict_entries (VLit (LitString w) # v # vs) = map_option (Cons (w, v)) (dict_entries vs)" |
-"dict_entries _ = None"
-
-fun elems :: "val \<Rightarrow> val list option"
-where
-"elems (VList vs) = Some vs" |
-"elems (VTuple vs) = Some vs" |
-"elems (VLit (LitString w)) = Some (map (\<lambda>c. VLit (LitString c)) (str_chars w))" |
-"elems _ = None"
-
-(* Elements drawn by a generator: the keys of a dictionary, and the elements of a sequence otherwise *)
-fun iter :: "val \<Rightarrow> val list option"
-where
-"iter (VDict \<delta>) = Some (map (\<lambda>(w, _). VLit (LitString w)) \<delta>)" |
-"iter v = elems v"
 
 (* Nearest integer, ties to even *)
 definition round_even :: "real \<Rightarrow> int"
@@ -331,23 +343,6 @@ where
 "prim_meaning PrimExit [v] = Aborts Excluded" |
 "prim_meaning _ _ = Aborts TypeError"
 
-fun getitem :: "val \<Rightarrow> val \<Rightarrow> val result"
-where
-"getitem (VDict \<delta>) v' =
-  (case v' of
-     VLit (LitString w) \<Rightarrow> (case map_of \<delta> w of Some v \<Rightarrow> Val v | None \<Rightarrow> Aborts KeyError)
-   | _ \<Rightarrow> Aborts Excluded)" |
-"getitem (VObject C _) _ = Aborts (if C = range_class then Excluded else TypeError)" |
-"getitem v v' =
-  (case (elems v, v') of
-     (Some vs, VLit (LitInt n)) \<Rightarrow>
-       let m = of_nat (length vs) :: int in
-       if 0 \<le> n \<and> n < m then Val (vs ! nat n)
-       else if - m \<le> n \<and> n < 0 then Val (vs ! nat (m + n))
-       else Aborts IndexError
-   | (Some vs, VLit (LitBool _)) \<Rightarrow> Aborts Excluded
-   | _ \<Rightarrow> Aborts TypeError)"
-
 (* Value denoted by a name: a simple name looked up directly, a qualified name in the environment of the loaded
    module denoted by its prefix; None if the prefix denotes a module stub or a value other than a module *)
 fun resolve_path :: "val option \<Rightarrow> var list \<Rightarrow> val option"
@@ -362,7 +357,7 @@ where
 
 datatype match_result = Match env | NoMatch | MatchAborts termination_kind
 
-fun compose_match :: "match_result \<Rightarrow> match_result \<Rightarrow> match_result" (infixl "\<otimes>\<^sub>m" 100)
+fun seq_compose_match :: "match_result \<Rightarrow> match_result \<Rightarrow> match_result" (infixl "\<otimes>\<^sub>m" 100)
 where
 "Match \<rho> \<otimes>\<^sub>m Match \<rho>' = Match (\<rho> \<otimes> \<rho>')" |
 "Match \<rho> \<otimes>\<^sub>m m = m" |
@@ -431,7 +426,7 @@ where
        case resolve \<rho> (x, xs) of
          None \<Rightarrow> MatchAborts AttributeError
        | Some u \<Rightarrow>
-       if opaque_builtin u then MatchAborts Excluded else
+       if is_opaque_builtin u then MatchAborts Excluded else
        case class_of u of
          None \<Rightarrow> MatchAborts TypeError
        | Some C \<Rightarrow>
@@ -469,6 +464,11 @@ where
 
 abbreviation true :: val where "true \<equiv> VLit (LitBool True)"
 abbreviation false :: val where "false \<equiv> VLit (LitBool False)"
+
+(* Type arguments of a subscript e[\<psi>s], read from its index *)
+definition type_args_of :: "expr located \<Rightarrow> ty_expr list option"
+where
+"type_args_of e' = those (map type_expr_of (subscript_args e'))"
 
 type_synonym elif_block = "(expr located \<times> stmt located) list \<times> stmt located option"
 
@@ -567,7 +567,7 @@ EvalCallDef:
   ; \<rho>' \<otimes> fmap_of_list (zip (map (def_name \<circ> node) ds) vs) \<otimes> fmap_of_list (zip (map fst xps) us) \<otimes> \<rho>s,
       node s \<Rightarrow>\<^sub>s o
   ; j < length ds
-  \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e (es, []) \<Rightarrow>\<^sub>e call_result o" |
+  \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e (es, []) \<Rightarrow>\<^sub>e result_of o" |
 EvalCallDefArity:
   "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val Def(\<rho>', ds, j)
   ; node (ds ! j) = Def f \<alpha>s xps \<psi> s
