@@ -174,6 +174,7 @@ where
 "contains (VDict \<delta>) (VLit (LitString w)) = Val (w \<in> set (map fst \<delta>))" |
 "contains (VDict \<delta>) _ = Aborts Excluded" |
 "contains (VLit (LitString w')) (VLit (LitString w)) = Val (substring w w')" |
+"contains (VObject C _) _ = Aborts (if C = range_class then Excluded else TypeError)" |
 "contains _ _ = Aborts TypeError" |
 
 "contains_elems [] v = Val False" |
@@ -218,10 +219,11 @@ where
 "arith f g (VLit (LitInt n)) (VLit (LitInt n')) = Val (VLit (LitInt (f n n')))" |
 "arith f g v v' = number_op (\<lambda>x x'. Val (VLit (LitFloat (g x x')))) v v'"
 
-(* Compare two numbers by value; false if either is nan *)
-fun compare :: "(ereal \<Rightarrow> ereal \<Rightarrow> bool) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
+(* Compare two strings lexicographically by code point, and two numbers by value; false if either number is nan *)
+fun compare :: "(ereal \<Rightarrow> ereal \<Rightarrow> bool) \<Rightarrow> (str \<Rightarrow> str \<Rightarrow> bool) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
 where
-"compare f v v' =
+"compare f g (VLit (LitString w)) (VLit (LitString w')) = Val (VLit (LitBool (g w w')))" |
+"compare f g v v' =
   number_op (\<lambda>_ _. Val (VLit (LitBool (case (number_value v, number_value v') of
     (Some y, Some y') \<Rightarrow> f y y'
   | _ \<Rightarrow> False)))) v v'"
@@ -236,10 +238,10 @@ where
    else mlet (eq v v') (\<lambda>b. Val (VLit (LitBool (\<not> b)))))" |
 "binop_meaning BOpIn v v' = mlet (contains v' v) (\<lambda>b. Val (VLit (LitBool b)))" |
 "binop_meaning BOpNotIn v v' = mlet (contains v' v) (\<lambda>b. Val (VLit (LitBool (\<not> b))))" |
-"binop_meaning BOpLt v v' = compare (<) v v'" |
-"binop_meaning BOpLeq v v' = compare (\<le>) v v'" |
-"binop_meaning BOpGt v v' = compare (>) v v'" |
-"binop_meaning BOpGeq v v' = compare (\<ge>) v v'" |
+"binop_meaning BOpLt v v' = compare (<) (<) v v'" |
+"binop_meaning BOpLeq v v' = compare (\<le>) (\<le>) v v'" |
+"binop_meaning BOpGt v v' = compare (>) (>) v v'" |
+"binop_meaning BOpGeq v v' = compare (\<ge>) (\<ge>) v v'" |
 "binop_meaning BOpAdd v v' = arith (+) float_add v v'" |
 "binop_meaning BOpSub v v' = arith (-) float_sub v v'" |
 "binop_meaning BOpMul v v' = arith (*) float_mul v v'" |
@@ -332,6 +334,7 @@ where
   (case v' of
      VLit (LitString w) \<Rightarrow> (case map_of \<delta> w of Some v \<Rightarrow> Val v | None \<Rightarrow> Aborts KeyError)
    | _ \<Rightarrow> Aborts Excluded)" |
+"getitem (VObject C _) _ = Aborts (if C = range_class then Excluded else TypeError)" |
 "getitem v v' =
   (case (elems v, v') of
      (Some vs, VLit (LitInt n)) \<Rightarrow>
