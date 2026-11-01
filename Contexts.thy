@@ -47,9 +47,9 @@ definition range_class :: name where "range_class = snoc builtins (var ''range''
 abbreviation name_binding :: "var \<times> cxt_entry"
 where "name_binding \<equiv> (var ''__name__'', Ty (TyPrim str))"
 
-definition predefined :: "(name, cxt) fmap"
+definition \<P> :: "(name, cxt) fmap"
 where
-"predefined = fmap_of_list
+"\<P> = fmap_of_list
   [(builtins, fmap_of_list
      ([name_binding,
        (var ''print'', Ty (TyCallable [TyPrim object] (TyPrim NoneType))),
@@ -87,7 +87,7 @@ definition predefined_classes :: class_table
 where
 "predefined_classes =
   fmupd range_class
-    (ClassDef (the (fmlookup predefined builtins)) builtins
+    (ClassDef (the (fmlookup \<P> builtins)) builtins
       [At no_pos (Dataclass (var ''range'') [] None
         [(var ''start'', TyExprPrim int), (var ''stop'', TyExprPrim int)])] 0)
     fmempty"
@@ -128,15 +128,15 @@ type_synonym program = "(name, module_body) fmap"
 context includes fmap.lifting
 begin
 lift_definition submods :: "program \<Rightarrow> name \<Rightarrow> cxt"
-  is "\<lambda>M q x. if snoc q x \<in> dom M then Some (ModStub (snoc q x)) else None"
+  is "\<lambda>\<M> q x. if snoc q x \<in> dom \<M> then Some (ModStub (snoc q x)) else None"
 proof -
-  fix M :: "name \<Rightarrow> module_body option" and q
-  let ?S = "\<lambda>x. if snoc q x \<in> dom M then Some (ModStub (snoc q x)) else None"
-  assume "finite (dom M)"
-  have "dom ?S \<subseteq> (\<lambda>q'. snd (the (unsnoc q'))) ` dom M"
+  fix \<M> :: "name \<Rightarrow> module_body option" and q
+  let ?S = "\<lambda>x. if snoc q x \<in> dom \<M> then Some (ModStub (snoc q x)) else None"
+  assume "finite (dom \<M>)"
+  have "dom ?S \<subseteq> (\<lambda>q'. snd (the (unsnoc q'))) ` dom \<M>"
     by (auto simp: dom_def image_iff intro: rev_image_eqI)
   then show "finite (dom ?S)"
-    using \<open>finite (dom M)\<close> by (blast intro: finite_subset finite_imageI)
+    using \<open>finite (dom \<M>)\<close> by (blast intro: finite_subset finite_imageI)
 qed
 end
 

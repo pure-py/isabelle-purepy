@@ -539,7 +539,7 @@ end
 context loading
 begin
 
-(* Inversion lemmas and determinism of loading, given that no module of the program is predefined *)
+(* Inversion lemmas and determinism of loading, given that the domains of \<M> and \<P> are disjoint *)
 inductive_cases ModE: "q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d r"
 inductive_cases ImportsNilE: "q, [] \<Rightarrow>\<^sub>i r"
 inductive_cases ImportE: "q, At p (Import x) # \<iota>s \<Rightarrow>\<^sub>i r"
@@ -554,7 +554,7 @@ inductive_cases ModsConsE: "q # qs \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s
 inductive_cases ProgramE: "eval_program \<kappa>"
 
 context
-  assumes disjoint: "fmdom M |\<inter>| fmdom predefined_env = {||}"
+  assumes disjoint: "fmdom \<M> |\<inter>| fmdom \<P>\<^sub>e\<^sub>n\<^sub>v = {||}"
 begin
 
 lemma imp_stub_cases:

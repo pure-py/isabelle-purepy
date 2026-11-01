@@ -715,9 +715,9 @@ end
 
 (* Environments of the predefined modules: each binds __name__ to the name of the module and each member to its
    value; print and sys.argv, which the spec gives no value, are left out *)
-definition predefined_env :: "(name, env) fmap"
+definition \<P>\<^sub>e\<^sub>n\<^sub>v :: "(name, env) fmap"
 where
-"predefined_env =
+"\<P>\<^sub>e\<^sub>n\<^sub>v =
   (let name = \<lambda>x. (var ''__name__'', VLit (LitString (str_of x))) in
    fmap_of_list
     [(builtins, fmap_of_list
@@ -772,15 +772,15 @@ lemma stub_of_None: "stub_of v = None \<longleftrightarrow> \<not> is_stub v"
 
 (* The program, ambient in loading as in the spec *)
 locale loading = evaluation +
-  fixes M :: program
+  fixes \<M> :: program
 begin
 
 (* Environment that binds each submodule of q to a stub; the predefined modules have no submodules *)
 definition submods_env :: "name \<Rightarrow> env"
 where
-"submods_env q = fmmap (\<lambda>\<theta>. case \<theta> of ModStub q' \<Rightarrow> VModStub q' | _ \<Rightarrow> VUnbound) (submods M q)"
+"submods_env q = fmmap (\<lambda>\<theta>. case \<theta> of ModStub q' \<Rightarrow> VModStub q' | _ \<Rightarrow> VUnbound) (submods \<M> q)"
 
-abbreviation builtins_env :: env where "builtins_env \<equiv> the (fmlookup predefined_env builtins)"
+abbreviation builtins_env :: env where "builtins_env \<equiv> the (fmlookup \<P>\<^sub>e\<^sub>n\<^sub>v builtins)"
 
 (* Loading of a module, an import prefix, a submodule chain and an imported name, with lists of modules loaded
    for their aborts and of imported names, which the spec writes with premises for each element *)
@@ -792,14 +792,14 @@ inductive
   eval_imps    :: "env \<Rightarrow> var list \<Rightarrow> val list result \<Rightarrow> bool"    ("_, _ \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s _" [60,0,60] 60) and
   eval_mods    :: "name list \<Rightarrow> unit result \<Rightarrow> bool"                ("_ \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s _" [60,60] 60)
 where
-EvalPredefined: "fmlookup predefined_env q = Some \<rho> \<Longrightarrow> q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho>" |
+EvalPredefined: "fmlookup \<P>\<^sub>e\<^sub>n\<^sub>v q = Some \<rho> \<Longrightarrow> q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho>" |
 EvalModule:
-  "\<lbrakk> fmlookup M q = Some (ModuleBody \<iota>s t) ; q, \<iota>s \<Rightarrow>\<^sub>i Val \<rho>' ; scope VUnbound (declares \<iota>s) t = Some \<rho>s
+  "\<lbrakk> fmlookup \<M> q = Some (ModuleBody \<iota>s t) ; q, \<iota>s \<Rightarrow>\<^sub>i Val \<rho>' ; scope VUnbound (declares \<iota>s) t = Some \<rho>s
   ; q, builtins_env \<otimes> \<rho>' \<otimes> \<rho>s, t \<Rightarrow>\<^sub>t Assigns \<rho>''
   \<rbrakk> \<Longrightarrow> q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val (submods_env q \<otimes> \<rho>'')" |
-EvalModuleFail: "\<lbrakk> fmlookup M q = Some (ModuleBody \<iota>s t) ; q, \<iota>s \<Rightarrow>\<^sub>i Aborts \<kappa> \<rbrakk> \<Longrightarrow> q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Aborts \<kappa>" |
+EvalModuleFail: "\<lbrakk> fmlookup \<M> q = Some (ModuleBody \<iota>s t) ; q, \<iota>s \<Rightarrow>\<^sub>i Aborts \<kappa> \<rbrakk> \<Longrightarrow> q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Aborts \<kappa>" |
 EvalModuleFailBody:
-  "\<lbrakk> fmlookup M q = Some (ModuleBody \<iota>s t) ; q, \<iota>s \<Rightarrow>\<^sub>i Val \<rho>' ; scope VUnbound (declares \<iota>s) t = Some \<rho>s
+  "\<lbrakk> fmlookup \<M> q = Some (ModuleBody \<iota>s t) ; q, \<iota>s \<Rightarrow>\<^sub>i Val \<rho>' ; scope VUnbound (declares \<iota>s) t = Some \<rho>s
   ; q, builtins_env \<otimes> \<rho>' \<otimes> \<rho>s, t \<Rightarrow>\<^sub>t Aborts\<^sub>o \<kappa>
   \<rbrakk> \<Longrightarrow> q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Aborts \<kappa>" |
 
@@ -848,16 +848,16 @@ where
 EvalProgram: "main \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> \<Longrightarrow> eval_program (SystemExit 0)" |
 EvalProgramAbort: "main \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Aborts \<kappa> \<Longrightarrow> eval_program \<kappa>"
 
-(* No module of the program is predefined, as well-formedness of programs requires *)
+(* The domains of \<M> and \<P> are disjoint, as well-formedness of programs requires *)
 context
-  assumes disjoint: "fmdom M |\<inter>| fmdom predefined_env = {||}"
+  assumes disjoint: "fmdom \<M> |\<inter>| fmdom \<P>\<^sub>e\<^sub>n\<^sub>v = {||}"
 begin
 
-lemma predefined_not_module: "fmlookup predefined_env q = Some \<rho> \<Longrightarrow> fmlookup M q = Some b \<Longrightarrow> False"
+lemma predefined_not_module: "fmlookup \<P>\<^sub>e\<^sub>n\<^sub>v q = Some \<rho> \<Longrightarrow> fmlookup \<M> q = Some b \<Longrightarrow> False"
   using disjoint by (auto dest!: fmdomI)
 
-lemma module_not_predefined: "fmlookup M q = Some b \<Longrightarrow> fmlookup predefined_env q = None"
-  by (cases "fmlookup predefined_env q") (use predefined_not_module[of q _ b] in auto)
+lemma module_not_predefined: "fmlookup \<M> q = Some b \<Longrightarrow> fmlookup \<P>\<^sub>e\<^sub>n\<^sub>v q = None"
+  by (cases "fmlookup \<P>\<^sub>e\<^sub>n\<^sub>v q") (use predefined_not_module[of q _ b] in auto)
 
 end
 
