@@ -6,9 +6,6 @@ begin
 (* Free o for outcomes, as in the spec *)
 no_notation (ASCII) comp (infixl \<open>o\<close> 55)
 
-(* Free o for outcomes, as in the spec *)
-no_notation (ASCII) comp (infixl \<open>o\<close> 55)
-
 (* Predefined functions, each standing for its meaning prim_meaning *)
 datatype prim = PrimLen | PrimRound | PrimExit
 
