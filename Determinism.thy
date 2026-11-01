@@ -60,7 +60,8 @@ lemma determinism:
   and gen_det: "\<rho>, x, us, gs \<Rightarrow>\<^sub>g\<^sub>e\<^sub>n q \<Longrightarrow> \<rho>, x, us, gs \<Rightarrow>\<^sub>g\<^sub>e\<^sub>n q' \<Longrightarrow> q = q'"
   and comp_det: "\<rho>s, ec \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p vr \<Longrightarrow> \<rho>s, ec \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p vr' \<Longrightarrow> vr = vr'"
   and entries_det: "\<rho>s, ec, ec' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s dr \<Longrightarrow> \<rho>s, ec, ec' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s dr' \<Longrightarrow> dr = dr'"
-proof (induction arbitrary: r' and rs' and o' and o'' and q' and q' and vr' and dr' rule: eval_expr_eval_exprs_eval_stmt_eval_elif_eval_quals_eval_gen_eval_comp_eval_entries.inducts[ih_names])
+proof (induction arbitrary: r' and rs' and o' and o'' and q' and q' and vr' and dr'
+    rule: eval_expr_eval_exprs_eval_stmt_eval_elif_eval_quals_eval_gen_eval_comp_eval_entries.inducts[ih_names])
   case EvalVar
   then show ?case by (auto elim!: VarE)
 next
@@ -257,7 +258,8 @@ next
   have callee: "\<rho>, node e \<Rightarrow>\<^sub>e r \<Longrightarrow> r = Val (VClass C)" for r using EvalConstr.IH(1) by fastforce
   have args: "\<rho>, es @ map snd kws \<Rightarrow>\<^sub>e\<^sub>s r \<Longrightarrow> r = Val us" for r using EvalConstr.IH(2) by fastforce
   then have args_positional: "kws = [] \<Longrightarrow> \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s r \<Longrightarrow> r = Val us" for r by simp
-  have object: "field_map C (take (length es) us) (zip (map fst kws) (drop (length es) us)) = Some yus \<Longrightarrow> xus = yus"
+  have object:
+    "field_map C (take (length es) us) (zip (map fst kws) (drop (length es) us)) = Some yus \<Longrightarrow> xus = yus"
     for yus
     using EvalConstr.hyps(3) by simp
   from EvalConstr.prems EvalConstr.hyps(3) show ?case
@@ -567,9 +569,12 @@ theorem loading_det:
     and imp_det: "\<rho>, x \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p vr \<Longrightarrow> \<rho>, x \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p vr' \<Longrightarrow> vr = vr'"
     and imps_det: "\<rho>, xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s vsr \<Longrightarrow> \<rho>, xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s vsr' \<Longrightarrow> vsr = vsr'"
     and mods_det: "qs \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s ur \<Longrightarrow> qs \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s ur' \<Longrightarrow> ur = ur'"
-proof (induction arbitrary: r' and r' and r' and vr' and vsr' and ur' rule: eval_mod_eval_imports_eval_sub_eval_imp_eval_imps_eval_mods.inducts[ih_names])
+proof (induction arbitrary: r' and r' and r' and vr' and vsr' and ur'
+    rule: eval_mod_eval_imports_eval_sub_eval_imp_eval_imps_eval_mods.inducts[ih_names])
   case EvalPredefined
-  from EvalPredefined.prems EvalPredefined.hyps show ?case by (auto elim!: ModE dest: predefined_not_module[OF disjoint] module_not_predefined[OF disjoint] simp: stub_of_Some)
+  from EvalPredefined.prems EvalPredefined.hyps show ?case
+    by (auto elim!: ModE dest: predefined_not_module[OF disjoint] module_not_predefined[OF disjoint]
+      simp: stub_of_Some)
 next
   case (EvalModule q \<iota>s t \<rho>' \<rho>s \<rho>'')
   have prefix: "q, \<iota>s \<Rightarrow>\<^sub>i r \<Longrightarrow> r = Val \<rho>'" for r using EvalModule.IH by fastforce
@@ -579,7 +584,10 @@ next
     by (auto elim!: ModE dest!: prefix top dest: predefined_not_module[OF disjoint])
 next
   case EvalModuleFail
-  from EvalModuleFail.prems EvalModuleFail.hyps show ?case by (auto elim!: ModE dest: EvalModuleFail.IH predefined_not_module[OF disjoint] module_not_predefined[OF disjoint] simp: stub_of_Some)
+  from EvalModuleFail.prems EvalModuleFail.hyps show ?case
+    by (auto elim!: ModE
+      dest: EvalModuleFail.IH predefined_not_module[OF disjoint] module_not_predefined[OF disjoint]
+      simp: stub_of_Some)
 next
   case (EvalModuleFailBody q \<iota>s t \<rho>' \<rho>s \<kappa>)
   have prefix: "q, \<iota>s \<Rightarrow>\<^sub>i r \<Longrightarrow> r = Val \<rho>'" for r using EvalModuleFailBody.IH by fastforce
@@ -592,61 +600,76 @@ next
   from EvalImportsNil.prems show ?case by (auto elim!: ImportsNilE simp: stub_of_Some)
 next
   case EvalImport
-  from EvalImport.prems EvalImport.hyps show ?case by (auto elim!: ImportE dest: EvalImport.IH simp: stub_of_Some)
+  from EvalImport.prems EvalImport.hyps show ?case
+    by (auto elim!: ImportE dest: EvalImport.IH simp: stub_of_Some)
 next
   case EvalImportFail
-  from EvalImportFail.prems EvalImportFail.hyps show ?case by (auto elim!: ImportE dest: EvalImportFail.IH simp: stub_of_Some)
+  from EvalImportFail.prems EvalImportFail.hyps show ?case
+    by (auto elim!: ImportE dest: EvalImportFail.IH simp: stub_of_Some)
 next
   case EvalImportFailChain
-  from EvalImportFailChain.prems EvalImportFailChain.hyps show ?case by (auto elim!: ImportE dest: EvalImportFailChain.IH simp: stub_of_Some)
+  from EvalImportFailChain.prems EvalImportFailChain.hyps show ?case
+    by (auto elim!: ImportE dest: EvalImportFailChain.IH simp: stub_of_Some)
 next
   case EvalFromImport
-  from EvalFromImport.prems EvalFromImport.hyps show ?case by (auto elim!: FromImportE dest: EvalFromImport.IH simp: stub_of_Some)
+  from EvalFromImport.prems EvalFromImport.hyps show ?case
+    by (auto elim!: FromImportE dest: EvalFromImport.IH simp: stub_of_Some)
 next
   case EvalFromImportFail
-  from EvalFromImportFail.prems EvalFromImportFail.hyps show ?case by (auto elim!: FromImportE dest: EvalFromImportFail.IH simp: stub_of_Some)
+  from EvalFromImportFail.prems EvalFromImportFail.hyps show ?case
+    by (auto elim!: FromImportE dest: EvalFromImportFail.IH simp: stub_of_Some)
 next
   case EvalFromImportFailContaining
-  from EvalFromImportFailContaining.prems EvalFromImportFailContaining.hyps show ?case by (auto elim!: FromImportE dest: EvalFromImportFailContaining.IH simp: stub_of_Some)
+  from EvalFromImportFailContaining.prems EvalFromImportFailContaining.hyps show ?case
+    by (auto elim!: FromImportE dest: EvalFromImportFailContaining.IH simp: stub_of_Some)
 next
   case EvalFromImportFailMember
-  from EvalFromImportFailMember.prems EvalFromImportFailMember.hyps show ?case by (auto elim!: FromImportE dest: EvalFromImportFailMember.IH simp: stub_of_Some)
+  from EvalFromImportFailMember.prems EvalFromImportFailMember.hyps show ?case
+    by (auto elim!: FromImportE dest: EvalFromImportFailMember.IH simp: stub_of_Some)
 next
   case EvalSubmodulesNil
   from EvalSubmodulesNil.prems show ?case by (auto elim!: SubNilE simp: stub_of_Some)
 next
   case EvalSubmodulesCons
-  from EvalSubmodulesCons.prems EvalSubmodulesCons.hyps show ?case by (auto elim!: SubConsE dest: EvalSubmodulesCons.IH simp: stub_of_Some)
+  from EvalSubmodulesCons.prems EvalSubmodulesCons.hyps show ?case
+    by (auto elim!: SubConsE dest: EvalSubmodulesCons.IH simp: stub_of_Some)
 next
   case EvalSubmodulesFail
-  from EvalSubmodulesFail.prems EvalSubmodulesFail.hyps show ?case by (auto elim!: SubConsE dest: EvalSubmodulesFail.IH simp: stub_of_Some)
+  from EvalSubmodulesFail.prems EvalSubmodulesFail.hyps show ?case
+    by (auto elim!: SubConsE dest: EvalSubmodulesFail.IH simp: stub_of_Some)
 next
   case EvalImpMember
   from EvalImpMember.prems EvalImpMember.hyps show ?case by (auto elim!: ImpE simp: stub_of_Some)
 next
   case EvalImpSubmodule
-  from imp_stub_cases[OF EvalImpSubmodule.prems EvalImpSubmodule.hyps(1)] show ?case by (auto dest: EvalImpSubmodule.IH)
+  from imp_stub_cases[OF EvalImpSubmodule.prems EvalImpSubmodule.hyps(1)] show ?case
+    by (auto dest: EvalImpSubmodule.IH)
 next
   case EvalImpSubmoduleFail
-  from imp_stub_cases[OF EvalImpSubmoduleFail.prems EvalImpSubmoduleFail.hyps(1)] show ?case by (auto dest: EvalImpSubmoduleFail.IH)
+  from imp_stub_cases[OF EvalImpSubmoduleFail.prems EvalImpSubmoduleFail.hyps(1)] show ?case
+    by (auto dest: EvalImpSubmoduleFail.IH)
 next
   case EvalImpsNil
   from EvalImpsNil.prems show ?case by (auto elim!: ImpsNilE simp: stub_of_Some)
 next
   case EvalImpsCons
-  from EvalImpsCons.prems EvalImpsCons.hyps show ?case by (auto elim!: ImpsConsE dest: EvalImpsCons.IH simp: stub_of_Some)
+  from EvalImpsCons.prems EvalImpsCons.hyps show ?case
+    by (auto elim!: ImpsConsE dest: EvalImpsCons.IH simp: stub_of_Some)
 next
   case EvalImpsFail
-  from EvalImpsFail.prems EvalImpsFail.hyps show ?case by (auto elim!: ImpsConsE dest: EvalImpsFail.IH simp: stub_of_Some)
+  from EvalImpsFail.prems EvalImpsFail.hyps show ?case
+    by (auto elim!: ImpsConsE dest: EvalImpsFail.IH simp: stub_of_Some)
 next
   case EvalModsNil
   from EvalModsNil.prems show ?case by (auto elim!: ModsNilE simp: stub_of_Some)
 next
   case EvalModsCons
-  from EvalModsCons.prems EvalModsCons.hyps show ?case by (auto elim!: ModsConsE dest: EvalModsCons.IH simp: stub_of_Some)
+  from EvalModsCons.prems EvalModsCons.hyps show ?case
+    by (auto elim!: ModsConsE dest: EvalModsCons.IH simp: stub_of_Some)
 next
   case EvalModsFail
-  from EvalModsFail.prems EvalModsFail.hyps show ?case by (auto elim!: ModsConsE dest: EvalModsFail.IH simp: stub_of_Some)
+  from EvalModsFail.prems EvalModsFail.hyps show ?case
+    by (auto elim!: ModsConsE dest: EvalModsFail.IH simp: stub_of_Some)
 qed
 
 theorem program_det: "eval_program \<kappa> \<Longrightarrow> eval_program \<kappa>' \<Longrightarrow> \<kappa> = \<kappa>'"

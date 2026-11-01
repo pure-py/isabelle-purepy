@@ -134,7 +134,8 @@ where
 "eq_lit (LitInt n) (LitInt n') = Val (n = n')" |
 "eq_lit (LitInt n) (LitFloat x') = Val (float_value x' = Some (ereal (real_of_int n)))" |
 "eq_lit (LitFloat x) (LitInt n') = Val (float_value x = Some (ereal (real_of_int n')))" |
-"eq_lit (LitFloat x) (LitFloat x') = (if is_nan x \<and> is_nan x' then Aborts Undef else Val (float_value x = float_value x'))" |
+"eq_lit (LitFloat x) (LitFloat x') =
+  (if is_nan x \<and> is_nan x' then Aborts Undef else Val (float_value x = float_value x'))" |
 "eq_lit (LitString w) (LitString w') = Val (w = w')" |
 "eq_lit (LitBool b) (LitBool b') = Val (b = b')" |
 "eq_lit LitNone LitNone = Val True" |
@@ -144,8 +145,9 @@ where
 "eq_lit (LitFloat _) (LitBool _) = Aborts Undef" |
 "eq_lit _ _ = Val False"
 
-(* By the form of the first value, then of the second: patterns on both would make pattern completion over the
-   values very slow. Undefined between two functions, closures or primitives, which Python compares by identity *)
+(* By the form of the first value, then of the second: patterns on both would make pattern completion over
+   the values very slow. Undefined between two functions, closures or primitives, which Python compares by
+   identity *)
 fun eq :: "val \<Rightarrow> val \<Rightarrow> bool result" and eq_elems :: "val list \<Rightarrow> val list \<Rightarrow> bool result"
 where
 "eq (VLit l) v' = (case v' of VLit l' \<Rightarrow> eq_lit l l' | _ \<Rightarrow> Val False)" |
@@ -158,7 +160,9 @@ where
        else Val False
    | _ \<Rightarrow> Val False)" |
 "eq (VObject C xvs) v' =
-  (case v' of VObject D yvs \<Rightarrow> if C = D then eq_elems (map snd xvs) (map snd yvs) else Val False | _ \<Rightarrow> Val False)" |
+  (case v' of
+     VObject D yvs \<Rightarrow> if C = D then eq_elems (map snd xvs) (map snd yvs) else Val False
+   | _ \<Rightarrow> Val False)" |
 "eq v v' = (if (is_closure v \<or> is_prim v) \<and> (is_closure v' \<or> is_prim v') then Aborts Undef else Val False)" |
 
 "eq_elems [] [] = Val True" |
@@ -219,7 +223,7 @@ where
 "arith f g (VLit (LitInt n)) (VLit (LitInt n')) = Val (VLit (LitInt (f n n')))" |
 "arith f g v v' = number_op (\<lambda>x x'. Val (VLit (LitFloat (g x x')))) v v'"
 
-(* Compare two strings lexicographically by code point, and two numbers by value; false if either number is nan *)
+(* Compare strings lexicographically by code point and numbers by value; false if either number is nan *)
 fun compare :: "(ereal \<Rightarrow> ereal \<Rightarrow> bool) \<Rightarrow> (str \<Rightarrow> str \<Rightarrow> bool) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
 where
 "compare f g (VLit (LitString w)) (VLit (LitString w')) = Val (VLit (LitBool (g w w')))" |
@@ -312,7 +316,8 @@ where
 (* Meanings of the predefined functions *)
 fun prim_meaning :: "prim \<Rightarrow> val list \<Rightarrow> val result"
 where
-"prim_meaning PrimLen [v] = (case iter v of Some vs \<Rightarrow> Val (VLit (LitInt (of_nat (length vs)))) | None \<Rightarrow> Aborts TypeError)" |
+"prim_meaning PrimLen [v] =
+  (case iter v of Some vs \<Rightarrow> Val (VLit (LitInt (of_nat (length vs)))) | None \<Rightarrow> Aborts TypeError)" |
 "prim_meaning PrimRound [VLit (LitBool _)] = Aborts Excluded" |
 "prim_meaning PrimRound [VLit (LitInt n)] = Val (VLit (LitInt n))" |
 "prim_meaning PrimRound [VLit (LitFloat x)] =
@@ -321,7 +326,8 @@ where
    | Some (ereal r) \<Rightarrow> Val (VLit (LitInt (round_even r)))
    | Some _ \<Rightarrow> Aborts OverflowError)" |
 "prim_meaning PrimRound [v, v'] =
-  (if (as_float v \<noteq> None \<or> is_bool v) \<and> (case v' of VLit (LitInt _) \<Rightarrow> True | VLit (LitBool _) \<Rightarrow> True | VLit LitNone \<Rightarrow> True | _ \<Rightarrow> False)
+  (if (as_float v \<noteq> None \<or> is_bool v) \<and>
+      (case v' of VLit (LitInt _) \<Rightarrow> True | VLit (LitBool _) \<Rightarrow> True | VLit LitNone \<Rightarrow> True | _ \<Rightarrow> False)
    then Aborts Excluded else Aborts TypeError)" |
 "prim_meaning PrimExit [VLit (LitInt n)] = Aborts (SystemExit n)" |
 "prim_meaning PrimExit [] = Aborts Excluded" |
@@ -366,9 +372,9 @@ where
 "NoMatch \<otimes>\<^sub>m m = NoMatch" |
 "MatchAborts \<kappa> \<otimes>\<^sub>m m = MatchAborts \<kappa>"
 
-(* Names a case hypothesis IH when it contains an induction predicate, and hyps otherwise, as for a rule without
-   parameters. The induction method also takes the free variables among the conclusion's arguments for predicates,
-   which makes every premise mentioning \<Sigma> an IH. *)
+(* Names a case hypothesis IH when it contains an induction predicate, and hyps otherwise, as for a rule
+   without parameters. The induction method also takes the free variables among the conclusion's arguments for
+   predicates, which makes every premise mentioning \<Sigma> an IH. *)
 attribute_setup ih_names = \<open>
   let
     fun is_ih t = exists_subterm (fn u => (case strip_comb u of (Var _, _ :: _) => true | _ => false)) t
@@ -396,13 +402,13 @@ where
    then Some (zip (take n xs) us @ map (\<lambda>y. (y, the (map_of kvs y))) (drop n xs))
    else None)"
 
-(* The head of a constructor pattern resolves as in Python: NameError if its first name is unbound, AttributeError if
-   a later name is not found, Excluded if it denotes a predefined class of builtins, which Python matches by an
-   instance test, and TypeError if it denotes any other value which is not a class.
-   Sub-patterns of a class C match the fields of an object whose class has C among its ancestors: positional ones in
-   field order, then keyword ones as written; TypeError for excess positional sub-patterns, a keyword sub-pattern for
-   a field already matched by position, or a positional sub-pattern of range, as in Python; Excluded if they otherwise
-   do not cover the fields of C exactly *)
+(* The head of a constructor pattern resolves as in Python: NameError if its first name is unbound,
+   AttributeError if a later name is not found, Excluded if it denotes a predefined class of builtins, which
+   Python matches by an instance test, and TypeError if it denotes any other value which is not a class.
+   Sub-patterns of a class C match the fields of an object whose class has C among its ancestors: positional
+   ones in field order, then keyword ones as written; TypeError for excess positional sub-patterns, a keyword
+   sub-pattern for a field already matched by position, or a positional sub-pattern of range, as in Python;
+   Excluded if they otherwise do not cover the fields of C exactly *)
 fun match :: "env \<Rightarrow> pat \<Rightarrow> val \<Rightarrow> match_result"
   and match_all :: "env \<Rightarrow> pat located list \<Rightarrow> val list \<Rightarrow> match_result"
   and match_dict :: "env \<Rightarrow> (str \<times> pat located) list \<Rightarrow> (str \<times> val) list \<Rightarrow> match_result"
@@ -440,7 +446,8 @@ where
                   let ys = field_names \<Sigma> C; n = length ps in
                   if field_map C ps kps \<noteq> None \<and> set ys \<subseteq> set (map fst zvs)
                   then match_all \<rho> ps (map (\<lambda>y. the (map_of zvs y)) (take n ys)) \<otimes>\<^sub>m match_kws \<rho> kps zvs
-                  else if length ys < n \<or> (\<exists>y \<in> set (map fst kps). y \<in> set (take n ys)) then MatchAborts TypeError
+                  else if length ys < n \<or> (\<exists>y \<in> set (map fst kps). y \<in> set (take n ys))
+                  then MatchAborts TypeError
                   else MatchAborts Excluded
             | _ \<Rightarrow> NoMatch))" |
 "match \<rho> _ _ = NoMatch" |
@@ -537,7 +544,8 @@ EvalAttrObjectMissing:
 EvalAttrModule:
   "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val (VModLoaded q' \<rho>') ; fmlookup \<rho>' x = Some v \<rbrakk> \<Longrightarrow> \<rho>, ExprAttribute e x \<Rightarrow>\<^sub>e Val v" |
 EvalAttrModuleMissing:
-  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val (VModLoaded q' \<rho>') ; fmlookup \<rho>' x = None \<rbrakk> \<Longrightarrow> \<rho>, ExprAttribute e x \<Rightarrow>\<^sub>e Aborts AttributeError" |
+  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val (VModLoaded q' \<rho>') ; fmlookup \<rho>' x = None \<rbrakk>
+  \<Longrightarrow> \<rho>, ExprAttribute e x \<Rightarrow>\<^sub>e Aborts AttributeError" |
 EvalAttrNonObject:
   "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; \<not> is_object v ; \<not> is_loaded_module v \<rbrakk> \<Longrightarrow> \<rho>, ExprAttribute e x \<Rightarrow>\<^sub>e Aborts Excluded" |
 EvalAttrFail: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, ExprAttribute e x \<Rightarrow>\<^sub>e Aborts \<kappa>" |
@@ -559,7 +567,8 @@ EvalCallDef:
   ; \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Val us
   ; length xps = length us
   ; scope VUnbound (map fst xps) s = Some \<rho>s
-  ; \<rho>' \<otimes> fmap_of_list (zip (map (def_name \<circ> node) ds) vs) \<otimes> fmap_of_list (zip (map fst xps) us) \<otimes> \<rho>s, node s \<Rightarrow>\<^sub>s o
+  ; \<rho>' \<otimes> fmap_of_list (zip (map (def_name \<circ> node) ds) vs) \<otimes> fmap_of_list (zip (map fst xps) us) \<otimes> \<rho>s,
+      node s \<Rightarrow>\<^sub>s o
   ; j < length ds
   \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e (es, []) \<Rightarrow>\<^sub>e call_result o" |
 EvalCallDefArity:
@@ -684,11 +693,12 @@ EvalEntriesFailValue:
 
 lemmas eval_rules = eval_expr_eval_exprs_eval_stmt_eval_elif_eval_quals_eval_gen_eval_comp_eval_entries.intros
 
-(* Value of the name declared by definition i of a mutual type region of module q: as in the spec, the context entry
-   of the definition, an alias value recording the region in place of the context entry's context *)
+(* Value of the name declared by definition i of a mutual type region of module q: as in the spec, the context
+   entry of the definition, an alias value recording the region in place of the context entry's context *)
 definition type_value :: "name \<Rightarrow> type_def located list \<Rightarrow> nat \<Rightarrow> val"
 where
-"type_value q \<chi>s i = (case node (\<chi>s ! i) of Dataclass c _ _ _ \<Rightarrow> VClass (snoc q c) | TypeStmt _ _ _ \<Rightarrow> VTypeAlias q \<chi>s i)"
+"type_value q \<chi>s i =
+  (case node (\<chi>s ! i) of Dataclass c _ _ _ \<Rightarrow> VClass (snoc q c) | TypeStmt _ _ _ \<Rightarrow> VTypeAlias q \<chi>s i)"
 
 (* Top-level statement t of module q *)
 inductive eval_top :: "name \<Rightarrow> env \<Rightarrow> top_stmt \<Rightarrow> outcome \<Rightarrow> bool"  ("_, _, _ \<Rightarrow>\<^sub>t _" [60,60,0,60] 60)
@@ -697,7 +707,8 @@ EvalTopStmt: "\<rho>, node s \<Rightarrow>\<^sub>s o \<Longrightarrow> q, \<rho>
 EvalTopSeq: "\<lbrakk> q, \<rho>, t \<Rightarrow>\<^sub>t Assigns \<rho>' ; q, \<rho> \<otimes> \<rho>', t' \<Rightarrow>\<^sub>t o \<rbrakk> \<Longrightarrow> q, \<rho>, TopSeq t t' \<Rightarrow>\<^sub>t Assigns \<rho>' \<otimes>\<^sub>o o" |
 EvalTopSeqFail: "q, \<rho>, t \<Rightarrow>\<^sub>t Aborts\<^sub>o \<kappa> \<Longrightarrow> q, \<rho>, TopSeq t t' \<Rightarrow>\<^sub>t Aborts\<^sub>o \<kappa>" |
 EvalTypes:
-  "q, \<rho>, TypeDefs \<chi>s \<Rightarrow>\<^sub>t Assigns (fmap_of_list (map (\<lambda>j. (type_def_name (node (\<chi>s ! j)), type_value q \<chi>s j)) [0..<length \<chi>s]))"
+  "q, \<rho>, TypeDefs \<chi>s \<Rightarrow>\<^sub>t
+   Assigns (fmap_of_list (map (\<lambda>j. (type_def_name (node (\<chi>s ! j)), type_value q \<chi>s j)) [0..<length \<chi>s]))"
 
 end
 
@@ -713,7 +724,8 @@ where
        ([name ''builtins'', (var ''len'', VPrim PrimLen), (var ''range'', VClass range_class),
          (var ''round'', VPrim PrimRound)]
         @ map (\<lambda>y. (y, VOpaque (snoc builtins y)))
-            (map prim_name [NoneType, object, bool, int, float, str] @ map var [''list'', ''dict'', ''tuple'']))),
+            (map prim_name [NoneType, object, bool, int, float, str]
+             @ map var [''list'', ''dict'', ''tuple'']))),
      ((var ''sys'', []), fmap_of_list [name ''sys'', (var ''exit'', VPrim PrimExit)]),
      ((var ''typing'', []), fmap_of_list
        (name ''typing'' # map (\<lambda>y. (y, VOpaque (var ''typing'', [y])))
@@ -770,8 +782,8 @@ where
 
 abbreviation builtins_env :: env where "builtins_env \<equiv> the (fmlookup predefined_env builtins)"
 
-(* Loading of a module, an import prefix, a submodule chain and an imported name, with lists of modules loaded for
-   their aborts and of imported names, which the spec writes with premises for each element *)
+(* Loading of a module, an import prefix, a submodule chain and an imported name, with lists of modules loaded
+   for their aborts and of imported names, which the spec writes with premises for each element *)
 inductive
   eval_mod     :: "name \<Rightarrow> env result \<Rightarrow> bool"                     ("_ \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d _" [60,60] 60) and
   eval_imports :: "name \<Rightarrow> import located list \<Rightarrow> env result \<Rightarrow> bool"       ("_, _ \<Rightarrow>\<^sub>i _" [60,0,60] 60) and
