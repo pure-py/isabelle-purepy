@@ -122,7 +122,7 @@ where
 "scheme_of_name \<Gamma> e = (case entry_of \<Gamma> e of Some (Scheme \<pi>) \<Rightarrow> Some \<pi> | _ \<Rightarrow> None)"
 
 
-(* Programs, and submodule stubs of a module *)
+(* Programs, and the stubs of the submodules of a module *)
 type_synonym program = "(name, module_body) fmap"
 
 context includes fmap.lifting

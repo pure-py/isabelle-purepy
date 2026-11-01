@@ -6,7 +6,7 @@ begin
 (* Free o for outcomes *)
 no_notation (ASCII) comp (infixl \<open>o\<close> 55)
 
-(* Predefined functions, each standing for its meaning *)
+(* Predefined functions, each standing for its meaning prim_meaning *)
 datatype prim = PrimLen | PrimPrint | PrimRound | PrimExit
 
 datatype val =
@@ -365,7 +365,7 @@ where
 "NoMatch \<otimes>\<^sub>m m = NoMatch" |
 "MatchAborts \<kappa> \<otimes>\<^sub>m m = MatchAborts \<kappa>"
 
-(* Name a case hypothesis IH when it contains an induction predicate, and hyps otherwise, as for a rule
+(* Names a case hypothesis IH when it contains an induction predicate, and hyps otherwise, as for a rule
    without parameters. The induction method also takes the free variables among the conclusion's arguments for
    predicates, which makes every premise mentioning \<Sigma> an IH. *)
 attribute_setup ih_names = \<open>
@@ -698,7 +698,7 @@ where
 "type_value q \<chi>s i =
   (case node (\<chi>s ! i) of Dataclass c _ _ _ \<Rightarrow> VClass (snoc q c) | TypeStmt _ _ _ \<Rightarrow> VTypeAlias q \<chi>s i)"
 
-(* Evaluation of top-level statement t of module q *)
+(* Top-level statement t of module q *)
 inductive eval_top :: "name \<Rightarrow> env \<Rightarrow> top_stmt \<Rightarrow> outcome \<Rightarrow> bool"  ("_, _, _ \<Rightarrow>\<^sub>t _" [60,60,0,60] 60)
 where
 EvalTopStmt: "\<rho>, node s \<Rightarrow>\<^sub>s o \<Longrightarrow> q, \<rho>, Stmt s \<Rightarrow>\<^sub>t o" |
@@ -840,8 +840,7 @@ EvalModsNil: "[] \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s Val ()" |
 EvalModsCons: "\<lbrakk> q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> ; qs \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s r \<rbrakk> \<Longrightarrow> q # qs \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s r" |
 EvalModsFail: "q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Aborts \<kappa> \<Longrightarrow> q # qs \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s Aborts \<kappa>"
 
-(* Termination kind of the program: exit with 0 if __main__ loads, and otherwise the termination kind of
-   loading *)
+(* A program exits with 0 if __main__ loads, and otherwise with the termination kind of loading *)
 inductive eval_program :: "termination_kind \<Rightarrow> bool"
 where
 EvalProgram: "main \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> \<Longrightarrow> eval_program (SystemExit 0)" |
