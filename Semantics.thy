@@ -780,8 +780,8 @@ where
 
 abbreviation builtins_env :: env where "builtins_env \<equiv> the (fmlookup \<P>\<^sub>e\<^sub>n\<^sub>v builtins)"
 
-(* Loading of a module, an import prefix, a submodule chain and an imported name, with lists of modules loaded
-   for their aborts and of imported names *)
+(* Loading of a module, of imports, of a submodule chain, of one or several imported names, and of the modules
+   containing the target of a from-import, where only an abort matters *)
 inductive
   eval_mod     :: "name \<Rightarrow> env result \<Rightarrow> bool"                     ("_ \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d _" [60,60] 60) and
   eval_imports :: "name \<Rightarrow> import located list \<Rightarrow> env result \<Rightarrow> bool"       ("_, _ \<Rightarrow>\<^sub>i _" [60,0,60] 60) and
