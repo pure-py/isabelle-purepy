@@ -205,7 +205,7 @@ where
 "number_value (VLit (LitFloat x)) = float_value x" |
 "number_value _ = None"
 
-(* Apply g to two numbers as floats; Excluded for a Boolean operand *)
+(* Apply g to two numbers as floats; excluded for a Boolean operand *)
 fun number_op :: "(float \<Rightarrow> float \<Rightarrow> val result) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
 where
 "number_op g v v' =
@@ -405,7 +405,7 @@ where
    Sub-patterns of a class C match the fields of an object whose class has C among its ancestors: positional
    ones in field order, then keyword ones as written; TypeError for excess positional sub-patterns, a keyword
    sub-pattern for a field already matched by position, or a positional sub-pattern of range, as in Python;
-   Excluded if they otherwise do not cover the fields of C exactly *)
+   excluded if they otherwise do not cover the fields of C exactly *)
 fun match :: "env \<Rightarrow> pat \<Rightarrow> val \<Rightarrow> match_result"
   and match_all :: "env \<Rightarrow> pat located list \<Rightarrow> val list \<Rightarrow> match_result"
   and match_dict :: "env \<Rightarrow> (str \<times> pat located) list \<Rightarrow> (str \<times> val) list \<Rightarrow> match_result"
