@@ -60,7 +60,7 @@ where
 
 adhoc_overloading mlet \<rightleftharpoons> mlet_result mlet_outcome
 
-fun compose :: "outcome \<Rightarrow> outcome \<Rightarrow> outcome" (infixl "\<otimes>\<^sub>o" 100)
+fun seq_compose :: "outcome \<Rightarrow> outcome \<Rightarrow> outcome" (infixl "\<otimes>\<^sub>o" 100)
 where
 "Assigns \<rho> \<otimes>\<^sub>o Assigns \<rho>' = Assigns (\<rho> \<otimes> \<rho>')" |
 "Assigns \<rho> \<otimes>\<^sub>o o = o" |
