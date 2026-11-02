@@ -2,9 +2,13 @@
 unparsed to Python source"""
 
 import ast
+import builtins
+import importlib
+import sys
 from functools import reduce
 
 from .generated import Option, Reasons, Syntax
+from .generated.conformance import Classification, excluded
 from .syntax import (
     BOP_AST,
     PRIMITIVE,
@@ -18,8 +22,42 @@ from .syntax import (
     Reason,
     Ty,
     node,
-    not_allowed,
 )
+
+BY_DESIGN = Classification.BY_DESIGN
+FOR_NOW = Classification.FOR_NOW
+BUILTINS = set(dir(builtins))
+# Built-ins excluded by design: mutation, iteration and reflection
+BY_DESIGN_BUILTINS = {
+    "setattr",
+    "delattr",
+    "id",
+    "iter",
+    "next",
+    "eval",
+    "exec",
+    "getattr",
+    "globals",
+    "locals",
+    "vars",
+    "__import__",
+}
+PREDEFINED_MODULES = {"sys", "typing", "dataclasses"}
+BY_DESIGN_MEMBERS = {("typing", "Any"), ("typing", "cast")}
+# Mutating methods of list and dict
+MUTATING = {
+    "append",
+    "extend",
+    "insert",
+    "remove",
+    "pop",
+    "clear",
+    "sort",
+    "reverse",
+    "update",
+    "popitem",
+    "setdefault",
+}
 
 
 def unparse_name(q: QualifiedName) -> str:
@@ -165,7 +203,73 @@ def unparse_pat(p: Pat) -> str:
             raise AssertionError(f"unexpected pattern: {p}")
 
 
+def builtin_type(tau: Ty) -> type | None:
+    """Python type of the values of a built-in type, which has the attributes Python gives that type"""
+    match tau:
+        case Syntax.TyList(_):
+            return list
+        case Syntax.TyDict(_):
+            return dict
+        case Syntax.TyTuple(_):
+            return tuple
+        case Syntax.TyPrim(nu):
+            return {"bool": bool, "int": int, "float": float, "str": str}.get(PRIMITIVE[type(nu)])
+        case Syntax.TyLiteral(ell):
+            return type(lit_value(ell))
+        case _:
+            return None
+
+
+def callee_name(e: Expr) -> str | None:
+    """Dotted name of a callee, if it is one"""
+    match node(e):
+        case Syntax.ExprVar(x):
+            return str(x)
+        case Syntax.ExprAttribute(e_, x):
+            q = callee_name(e_)
+            return None if q is None else f"{q}.{x}"
+        case _:
+            return None
+
+
+def excluded_feature(r: Reason) -> tuple[str, Classification] | None:
+    """Excluded Python feature rejected for reason r, with its classification; None if r is a plain
+    ill-formedness"""
+    match r:
+        case Reasons.Located(_, r_):
+            return excluded_feature(r_)
+        case Reasons.PrintInFunction():
+            return ("print inside function", FOR_NOW)
+        case Reasons.UndefinedVariable(x) if x in BUILTINS:
+            return (f"'{x}'", BY_DESIGN if x in BY_DESIGN_BUILTINS else FOR_NOW)
+        case Reasons.UnknownModule((x, _) as q) if x in sys.stdlib_module_names:
+            return (f"module '{unparse_name(q)}'", FOR_NOW)
+        case Reasons.UnknownMember(x, q) if (
+            m := unparse_name(q)
+        ) in PREDEFINED_MODULES and hasattr(importlib.import_module(m), x):
+            return (f"'{m}.{x}'", BY_DESIGN if (m, x) in BY_DESIGN_MEMBERS else FOR_NOW)
+        case Reasons.NoAttributes(tau, x) if (t := builtin_type(tau)) is not None and hasattr(t, x):
+            return (
+                f"'{t.__name__}.{x}'",
+                BY_DESIGN if t in (list, dict) and x in MUTATING else FOR_NOW,
+            )
+        case Reasons.CallArityMismatch(e, 1, 2) if callee_name(e) == "round":
+            return ("round with second argument", FOR_NOW)
+        case Reasons.CallArityMismatch(e, 1, 0) if callee_name(e) in ("sys.exit", "exit"):
+            return ("sys.exit with no arguments", FOR_NOW)
+        case _:
+            return None
+
+
+def classification(r: Reason) -> Classification | None:
+    feature = excluded_feature(r)
+    return None if feature is None else feature[1]
+
+
 def message(r: Reason) -> str:
+    feature = excluded_feature(r)
+    if feature is not None:
+        return str(excluded(*feature))
     match r:
         case Reasons.DuplicateField(x, c):
             return f"duplicate field '{x}' in class '{c}'"
@@ -240,8 +344,6 @@ def message(r: Reason) -> str:
             return f"member '{x}' of module '{unparse_name(q)}' is not definitely assigned"
         case Reasons.TopLevelAssertFalse():
             return "module body definitely reaches 'assert False'"
-        case Reasons.PrintInFunction():
-            return not_allowed("print inside function")
         case Reasons.UnknownModule(q):
             return f"unknown module '{unparse_name(q)}'"
         case Reasons.DuplicateImportedName(x):
@@ -278,7 +380,7 @@ def message(r: Reason) -> str:
             return f"values of type {unparse_type(tau)} cannot be called"
         case Reasons.KeywordArgumentsNotConstructor():
             return "keyword arguments in a call other than a constructor call"
-        case Reasons.CallArityMismatch(m, n):
+        case Reasons.CallArityMismatch(_, m, n):
             return f"call expects {m} arguments, given {n}"
         case Reasons.NoneResult():
             return "call returning None used as an expression"
@@ -298,7 +400,7 @@ def message(r: Reason) -> str:
             return "cannot infer type of this expression"
         case Reasons.UnknownField(c, x):
             return f"class '{c}' has no field '{x}'"
-        case Reasons.NoAttributes(tau):
+        case Reasons.NoAttributes(tau, _):
             return f"values of type {unparse_type(tau)} have no attributes"
         case Reasons.BareReturn(tau):
             return f"bare return in function with result type {unparse_type(tau)}"
