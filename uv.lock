@@ -260,16 +260,16 @@ dev = [
 [package.metadata.requires-dev]
 dev = [
     { name = "mypy", specifier = ">=2.3.1" },
-    { name = "purepy-conformance", url = "https://github.com/pure-py/pure-py-spec/releases/download/v0.24.1/purepy_conformance-0.24.1-py3-none-any.whl" },
+    { name = "purepy-conformance", url = "https://github.com/pure-py/pure-py-spec/releases/download/v0.24.3/purepy_conformance-0.24.3-py3-none-any.whl" },
     { name = "ruff", specifier = ">=0.16.2" },
 ]
 
 [[package]]
 name = "purepy-conformance"
-version = "0.24.1"
-source = { url = "https://github.com/pure-py/pure-py-spec/releases/download/v0.24.1/purepy_conformance-0.24.1-py3-none-any.whl" }
+version = "0.24.3"
+source = { url = "https://github.com/pure-py/pure-py-spec/releases/download/v0.24.3/purepy_conformance-0.24.3-py3-none-any.whl" }
 wheels = [
-    { url = "https://github.com/pure-py/pure-py-spec/releases/download/v0.24.1/purepy_conformance-0.24.1-py3-none-any.whl", hash = "sha256:9927f61cd462b661b5854456d4c3492c3b1ddbf645626a135fa18c2e41f38f9b" },
+    { url = "https://github.com/pure-py/pure-py-spec/releases/download/v0.24.3/purepy_conformance-0.24.3-py3-none-any.whl", hash = "sha256:2778452f06b10773a5020dab059613d27a27659903057edcf5e4c016fee9cd0a" },
 ]
 
 [[package]]
