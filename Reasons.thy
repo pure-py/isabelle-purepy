@@ -38,6 +38,7 @@ datatype reason =
   | SubmoduleNotImported name
   | UnassignedMember var name
   | TopLevelAssertFalse
+  | PrintInFunction
   | UnknownModule name
   | DuplicateImportedName var
   | UnknownMember var name

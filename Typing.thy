@@ -138,6 +138,22 @@ where
    map_sum (\<lambda>r. let r' = synth_failure ms in if unlocated r' = NotSynthesised then r else r') id
      (type_args_of (type_args_seq \<Sigma> \<alpha>s (map fst \<sigma>\<tau>s) (map (projr \<circ> snd) \<sigma>\<tau>s)) \<alpha>s))"
 
+(* Operator resolution extended by elimination of a union among the operand types, left first *)
+fun resolve_binop_union :: "class_table \<Rightarrow> bop \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> ty option"
+where
+"resolve_binop_union \<Sigma> op \<sigma> \<sigma>' =
+  (case resolve_binop \<Sigma> op \<sigma> \<sigma>' of
+     Some \<tau> \<Rightarrow> Some \<tau>
+   | None \<Rightarrow>
+       (case (\<sigma>, \<sigma>') of
+          (TyUnion \<sigma>\<^sub>1 \<sigma>\<^sub>2, _) \<Rightarrow> do {
+            \<tau> \<leftarrow> resolve_binop_union \<Sigma> op \<sigma>\<^sub>1 \<sigma>'; \<tau>' \<leftarrow> resolve_binop_union \<Sigma> op \<sigma>\<^sub>2 \<sigma>'; Some (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>')
+          }
+        | (_, TyUnion \<sigma>\<^sub>1' \<sigma>\<^sub>2') \<Rightarrow> do {
+            \<tau> \<leftarrow> resolve_binop_union \<Sigma> op \<sigma> \<sigma>\<^sub>1'; \<tau>' \<leftarrow> resolve_binop_union \<Sigma> op \<sigma> \<sigma>\<^sub>2'; Some (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>')
+          }
+        | _ \<Rightarrow> None))"
+
 function (sequential)
   synth_expr :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty may_fail" and
   synth_expr_at :: "class_table \<Rightarrow> cxt \<Rightarrow> expr located \<Rightarrow> ty may_fail" and
@@ -182,7 +198,7 @@ where
 "synth_expr \<Sigma> \<Gamma> (ExprBinOp op e e') = do {
    \<sigma> \<leftarrow> synth_expr_at \<Sigma> \<Gamma> e;
    \<sigma>' \<leftarrow> synth_expr_at \<Sigma> \<Gamma> e';
-   or_else (NoBinaryOverload op \<sigma> \<sigma>') (resolve_binop \<Sigma> op \<sigma> \<sigma>')
+   or_else (NoBinaryOverload op \<sigma> \<sigma>') (resolve_binop_union \<Sigma> op \<sigma> \<sigma>')
  }" |
 "synth_expr \<Sigma> \<Gamma> (ExprUnOp op e) =
   (if op = UOpNeg \<and> numeric_literal (node e) then Fail undefined
@@ -434,6 +450,8 @@ where
     | _ \<Rightarrow> do { synth_expr_at \<Sigma> \<Gamma> e; Ok () });
    Ok (Assigns\<^sub>R fmempty None)
  }" |
+"check_stmt \<Sigma> \<Gamma> \<zeta> (StmtPrint e) =
+  do { ensure (\<zeta> = None) PrintInFunction; synth_expr_at \<Sigma> \<Gamma> e; Ok (Assigns\<^sub>R fmempty None) }" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssert e e') =
   (let false_literal = (node e = ExprLiteral (LitBool False)) in do {
      (if false_literal then Ok () else check_expr_at \<Sigma> \<Gamma> e (TyPrim bool));
