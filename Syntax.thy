@@ -114,6 +114,7 @@ datatype stmt =
   | StmtDeclare var ty_expr
   | StmtAssign var "ty_expr option" "expr located"
   | StmtExpr "expr located"
+  | StmtPrint "expr located"
   | StmtAssert "expr located" "expr located option"
   | StmtReturn "expr located option"
   | StmtIf "expr located" "stmt located" "(expr located \<times> stmt located) list" "stmt located option"

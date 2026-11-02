@@ -329,6 +329,8 @@ def expr(e: ast.expr) -> Expr:
 
 def expr_node(e: ast.expr) -> Expr:
     match e:
+        case ast.Name(id="print"):
+            raise SyntacticallyExcluded(e, "print within expression")
         case ast.Name(id=x):
             return Syntax.ExprVar(x)
         case ast.Constant(value=v):
@@ -561,6 +563,16 @@ def stmt_node(s: ast.stmt) -> Stmt:
             return Syntax.StmtAssign(x, Option.Some(psi), expr(e))
         case ast.AnnAssign():
             raise SyntacticallyExcluded(s, "assignment target other than a simple name")
+        case ast.Expr(value=ast.Call(func=ast.Name(id="print"), args=es, keywords=ks)):
+            match es, ks:
+                case [e], []:
+                    return Syntax.StmtPrint(expr(e))
+                case _, [_, *_]:
+                    raise SyntacticallyExcluded(s, "print with keyword arguments")
+                case [], _:
+                    raise SyntacticallyExcluded(s, "print with no arguments")
+                case _:
+                    raise SyntacticallyExcluded(s, "print with several arguments")
         case ast.Expr(value=e):
             return Syntax.StmtExpr(expr(e))
         case ast.Assert(test=e, msg=e_):

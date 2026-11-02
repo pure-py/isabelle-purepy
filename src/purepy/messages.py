@@ -18,6 +18,7 @@ from .syntax import (
     Reason,
     Ty,
     node,
+    not_allowed,
 )
 
 
@@ -239,6 +240,8 @@ def message(r: Reason) -> str:
             return f"member '{x}' of module '{unparse_name(q)}' is not definitely assigned"
         case Reasons.TopLevelAssertFalse():
             return "module body definitely reaches 'assert False'"
+        case Reasons.PrintInFunction():
+            return not_allowed("print inside function")
         case Reasons.UnknownModule(q):
             return f"unknown module '{unparse_name(q)}'"
         case Reasons.DuplicateImportedName(x):

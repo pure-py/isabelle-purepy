@@ -450,6 +450,8 @@ where
     | _ \<Rightarrow> do { synth_expr_at \<Sigma> \<Gamma> e; Ok () });
    Ok (Assigns\<^sub>R fmempty None)
  }" |
+"check_stmt \<Sigma> \<Gamma> \<zeta> (StmtPrint e) =
+  do { ensure (\<zeta> = None) PrintInFunction; synth_expr_at \<Sigma> \<Gamma> e; Ok (Assigns\<^sub>R fmempty None) }" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssert e e') =
   (let false_literal = (node e = ExprLiteral (LitBool False)) in do {
      (if false_literal then Ok () else check_expr_at \<Sigma> \<Gamma> e (TyPrim bool));
