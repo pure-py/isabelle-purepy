@@ -182,6 +182,6 @@ where
   do { \<tau> \<leftarrow> attribute_type \<Sigma> \<sigma> x; \<tau>' \<leftarrow> attribute_type \<Sigma> \<sigma>' x; Ok (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>') }" |
 "attribute_type \<Sigma> (TyClass C \<sigma>s) x =
   or_else (UnknownField (short_name C) x) (map_of (instantiate (fields \<Sigma> C) \<sigma>s) x)" |
-"attribute_type \<Sigma> \<sigma> _ = Fail (NoAttributes \<sigma>)"
+"attribute_type \<Sigma> \<sigma> x = Fail (NoAttributes \<sigma> x)"
 
 end

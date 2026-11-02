@@ -108,11 +108,12 @@ where
    if Y = {} then Ok () else Fail (Located (pos_of (hd gs)) (CapturedGeneratorVariable (Min Y))))"
 
 definition lambda_args ::
-  "var list \<Rightarrow> (var \<times> expr located) list \<Rightarrow> expr located list \<Rightarrow> ty may_fail list \<Rightarrow> cxt may_fail"
+  "expr located \<Rightarrow> var list \<Rightarrow> (var \<times> expr located) list \<Rightarrow> expr located list \<Rightarrow> ty may_fail list
+   \<Rightarrow> cxt may_fail"
 where
-"lambda_args xs kws es \<sigma>s = do {
+"lambda_args e xs kws es \<sigma>s = do {
    ensure (kws = []) KeywordArgumentsNotConstructor;
-   ensure (length xs = length es) (CallArityMismatch (length xs) (length es));
+   ensure (length xs = length es) (CallArityMismatch e (length xs) (length es));
    \<tau>s \<leftarrow> those_sum \<sigma>s;
    params_cxt xs \<tau>s
  }"
@@ -160,12 +161,14 @@ function (sequential)
   elements_join :: "class_table \<Rightarrow> cxt \<Rightarrow> expr located list \<Rightarrow> ty may_fail" and
   callee :: "class_table \<Rightarrow> cxt \<Rightarrow> expr located \<Rightarrow> expr located list \<Rightarrow> ty may_fail" and
   synth_call ::
-    "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow> (var \<times> expr located) list \<Rightarrow> expr located list \<Rightarrow> ty may_fail" and
+    "class_table \<Rightarrow> cxt \<Rightarrow> expr located \<Rightarrow> ty \<Rightarrow> (var \<times> expr located) list \<Rightarrow> expr located list
+     \<Rightarrow> ty may_fail" and
   check_expr :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> unit may_fail" and
   check_expr_at :: "class_table \<Rightarrow> cxt \<Rightarrow> expr located \<Rightarrow> ty \<Rightarrow> unit may_fail" and
   check_expr' :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> unit may_fail option" and
   check_args ::
-    "class_table \<Rightarrow> cxt \<Rightarrow> (var \<times> expr located) list \<Rightarrow> expr located list \<Rightarrow> ty list \<Rightarrow> unit may_fail" and
+    "class_table \<Rightarrow> cxt \<Rightarrow> expr located \<Rightarrow> (var \<times> expr located) list \<Rightarrow> expr located list \<Rightarrow> ty list
+     \<Rightarrow> unit may_fail" and
   quals :: "class_table \<Rightarrow> cxt \<Rightarrow> qualifier located list \<Rightarrow> cxt may_fail"
 where
 "synth_expr \<Sigma> \<Gamma> (ExprVar x) = (case fmlookup \<Gamma> x of Some (Ty \<tau>) \<Rightarrow> Ok \<tau> | \<theta> \<Rightarrow> Fail (var_reason x \<theta>))" |
@@ -173,7 +176,7 @@ where
 "synth_expr \<Sigma> \<Gamma> (ExprCall e (es, kws)) =
   (case lambda_of (node e) of
      Some (xs, e') \<Rightarrow> do {
-       \<Delta> \<leftarrow> lambda_args xs kws es (map (synth_expr_at \<Sigma> \<Gamma>) es); synth_expr_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e'
+       \<Delta> \<leftarrow> lambda_args e xs kws es (map (synth_expr_at \<Sigma> \<Gamma>) es); synth_expr_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e'
      }
    | None \<Rightarrow>
      (case constructor_class \<Sigma> \<Gamma> e of
@@ -194,7 +197,7 @@ where
                 }
             }
         }
-      | None \<Rightarrow> do { \<sigma> \<leftarrow> callee \<Sigma> \<Gamma> e es; synth_call \<Sigma> \<Gamma> \<sigma> kws es }))" |
+      | None \<Rightarrow> do { \<sigma> \<leftarrow> callee \<Sigma> \<Gamma> e es; synth_call \<Sigma> \<Gamma> e \<sigma> kws es }))" |
 "synth_expr \<Sigma> \<Gamma> (ExprBinOp op e e') = do {
    \<sigma> \<leftarrow> synth_expr_at \<Sigma> \<Gamma> e;
    \<sigma>' \<leftarrow> synth_expr_at \<Sigma> \<Gamma> e';
@@ -260,14 +263,14 @@ where
    | Some _ \<Rightarrow> undefined
    | None \<Rightarrow> synth_expr_at \<Sigma> \<Gamma> e)" |
 
-"synth_call \<Sigma> \<Gamma> (TyUnion \<sigma> \<sigma>') kws es =
-  do { \<tau> \<leftarrow> synth_call \<Sigma> \<Gamma> \<sigma> kws es; \<tau>' \<leftarrow> synth_call \<Sigma> \<Gamma> \<sigma>' kws es; Ok (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>') }" |
-"synth_call \<Sigma> \<Gamma> (TyCallable \<sigma>s \<tau>) kws es = do {
-   check_args \<Sigma> \<Gamma> kws es \<sigma>s;
+"synth_call \<Sigma> \<Gamma> e (TyUnion \<sigma> \<sigma>') kws es =
+  do { \<tau> \<leftarrow> synth_call \<Sigma> \<Gamma> e \<sigma> kws es; \<tau>' \<leftarrow> synth_call \<Sigma> \<Gamma> e \<sigma>' kws es; Ok (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>') }" |
+"synth_call \<Sigma> \<Gamma> e (TyCallable \<sigma>s \<tau>) kws es = do {
+   check_args \<Sigma> \<Gamma> e kws es \<sigma>s;
    ensure (\<tau> \<noteq> TyPrim NoneType) (MypyCompatibility NoneResult);
    Ok \<tau>
  }" |
-"synth_call \<Sigma> \<Gamma> \<sigma> _ _ = Fail (NotCallable \<sigma>)" |
+"synth_call \<Sigma> \<Gamma> _ \<sigma> _ _ = Fail (NotCallable \<sigma>)" |
 
 "elements_join \<Sigma> \<Gamma> es =
   (let \<sigma>s = map (synth_expr_at \<Sigma> \<Gamma>) es; \<tau> = joins \<Sigma> (map (base_type \<circ> projr) (filter (Not \<circ> isl) \<sigma>s)) in
@@ -297,7 +300,7 @@ where
 "check_expr' \<Sigma> \<Gamma> (ExprCall e (es, kws)) \<tau> =
   (case lambda_of (node e) of
      Some (xs, e') \<Rightarrow> Some (do {
-       \<Delta> \<leftarrow> lambda_args xs kws es (map (synth_expr_at \<Sigma> \<Gamma>) es); check_expr_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e' \<tau>
+       \<Delta> \<leftarrow> lambda_args e xs kws es (map (synth_expr_at \<Sigma> \<Gamma>) es); check_expr_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e' \<tau>
      })
    | None \<Rightarrow> None)" |
 "check_expr' \<Sigma> \<Gamma> (ExprList es) \<tau> =
@@ -333,9 +336,9 @@ where
    | _ \<Rightarrow> None)" |
 "check_expr' \<Sigma> \<Gamma> e \<tau> = var_scheme \<Sigma> \<Gamma> e \<tau>" |
 
-"check_args \<Sigma> \<Gamma> kws es \<sigma>s = do {
+"check_args \<Sigma> \<Gamma> e kws es \<sigma>s = do {
    ensure (kws = []) KeywordArgumentsNotConstructor;
-   ensure (length \<sigma>s = length es) (CallArityMismatch (length \<sigma>s) (length es));
+   ensure (length \<sigma>s = length es) (CallArityMismatch e (length \<sigma>s) (length es));
    all_sum (map2 (check_expr_at \<Sigma> \<Gamma>) es \<sigma>s)
  }" |
 
@@ -356,12 +359,12 @@ by (relation "measures [\<lambda>x. case x of
    | Inl (Inl (Inr (_, _, e))) \<Rightarrow> Suc (size (node e))
    | Inl (Inr (Inl (_, _, es))) \<Rightarrow> size_list (\<lambda>e. Suc (size (node e))) es
    | Inl (Inr (Inr (Inl (_, _, e, es)))) \<Rightarrow> Suc (size (node e)) + size_list (\<lambda>e. Suc (size (node e))) es
-   | Inl (Inr (Inr (Inr (_, _, _, kws, es)))) \<Rightarrow>
+   | Inl (Inr (Inr (Inr (_, _, _, _, kws, es)))) \<Rightarrow>
        size_list (\<lambda>e. Suc (size (node e))) es + size_list (\<lambda>p. Suc (Suc (size (node (snd p))))) kws
    | Inr (Inl (Inl (_, _, e, _))) \<Rightarrow> size e
    | Inr (Inl (Inr (_, _, e, _))) \<Rightarrow> Suc (size (node e))
    | Inr (Inr (Inl (_, _, e, _))) \<Rightarrow> size e
-   | Inr (Inr (Inr (Inl (_, _, kws, es, _)))) \<Rightarrow>
+   | Inr (Inr (Inr (Inl (_, _, _, kws, es, _)))) \<Rightarrow>
        size_list (\<lambda>e. Suc (size (node e))) es + size_list (\<lambda>p. Suc (Suc (size (node (snd p))))) kws
    | Inr (Inr (Inr (Inr (_, _, gs)))) \<Rightarrow> size_list (\<lambda>g. Suc (size (node g))) gs,
    \<lambda>x. case x of
@@ -373,7 +376,7 @@ by (relation "measures [\<lambda>x. case x of
    | Inr (Inr (Inl _)) \<Rightarrow> 1
    | Inr (Inr (Inr (Inl _))) \<Rightarrow> 3
    | Inr (Inr (Inr (Inr _))) \<Rightarrow> 0,
-   \<lambda>x. case x of Inl (Inr (Inr (Inr (_, _, \<tau>, _, _)))) \<Rightarrow> size \<tau> | _ \<Rightarrow> 0]")
+   \<lambda>x. case x of Inl (Inr (Inr (Inr (_, _, _, \<tau>, _, _)))) \<Rightarrow> size \<tau> | _ \<Rightarrow> 0]")
    (auto dest!: nth_mem constructor_args_elem lambda_of_size elim!: in_set_zipE
      dest: size_node_snd_elem size_node_snd_elem' size_node_elem size_node_pair_fst_elem size_node_pair_snd_elem
      intro: size_list_estimation' size_list_elem
@@ -396,12 +399,13 @@ where
 
 (* Check a call statement with callee type \<sigma>, where a result of None is allowed *)
 fun check_call_stmt ::
-  "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow> (var \<times> expr located) list \<Rightarrow> expr located list \<Rightarrow> unit may_fail"
+  "class_table \<Rightarrow> cxt \<Rightarrow> expr located \<Rightarrow> ty \<Rightarrow> (var \<times> expr located) list \<Rightarrow> expr located list
+   \<Rightarrow> unit may_fail"
 where
-"check_call_stmt \<Sigma> \<Gamma> (TyUnion \<sigma> \<sigma>') kws es =
-  do { check_call_stmt \<Sigma> \<Gamma> \<sigma> kws es; check_call_stmt \<Sigma> \<Gamma> \<sigma>' kws es }" |
-"check_call_stmt \<Sigma> \<Gamma> (TyCallable \<sigma>s (TyPrim NoneType)) kws es = check_args \<Sigma> \<Gamma> kws es \<sigma>s" |
-"check_call_stmt \<Sigma> \<Gamma> \<sigma> kws es = do { synth_call \<Sigma> \<Gamma> \<sigma> kws es; Ok () }"
+"check_call_stmt \<Sigma> \<Gamma> e (TyUnion \<sigma> \<sigma>') kws es =
+  do { check_call_stmt \<Sigma> \<Gamma> e \<sigma> kws es; check_call_stmt \<Sigma> \<Gamma> e \<sigma>' kws es }" |
+"check_call_stmt \<Sigma> \<Gamma> e (TyCallable \<sigma>s (TyPrim NoneType)) kws es = check_args \<Sigma> \<Gamma> e kws es \<sigma>s" |
+"check_call_stmt \<Sigma> \<Gamma> e \<sigma> kws es = do { synth_call \<Sigma> \<Gamma> e \<sigma> kws es; Ok () }"
 
 (* Failure for the first assignment target of xs which isn't in X, declared or a pattern variable of Y, located
    at its assignment *)
@@ -445,7 +449,7 @@ where
    (case node e of
       ExprCall e' (es, kws) \<Rightarrow>
         if lambda_of (node e') = None \<and> class_of_name \<Gamma> (node e') = None
-        then do { \<sigma> \<leftarrow> callee \<Sigma> \<Gamma> e' es; check_call_stmt \<Sigma> \<Gamma> \<sigma> kws es }
+        then do { \<sigma> \<leftarrow> callee \<Sigma> \<Gamma> e' es; check_call_stmt \<Sigma> \<Gamma> e' \<sigma> kws es }
         else do { synth_expr_at \<Sigma> \<Gamma> e; Ok () }
     | _ \<Rightarrow> do { synth_expr_at \<Sigma> \<Gamma> e; Ok () });
    Ok (Assigns\<^sub>R fmempty None)
