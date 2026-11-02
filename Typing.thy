@@ -138,7 +138,7 @@ where
    map_sum (\<lambda>r. let r' = synth_failure ms in if unlocated r' = NotSynthesised then r else r') id
      (type_args_of (type_args_seq \<Sigma> \<alpha>s (map fst \<sigma>\<tau>s) (map (projr \<circ> snd) \<sigma>\<tau>s)) \<alpha>s))"
 
-(* Operator resolution extended by elimination of a union among the operand types, the left one first *)
+(* Operator resolution extended by elimination of a union among the operand types, left first *)
 fun resolve_binop_union :: "class_table \<Rightarrow> bop \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> ty option"
 where
 "resolve_binop_union \<Sigma> op \<sigma> \<sigma>' =
