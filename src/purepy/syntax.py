@@ -32,7 +32,7 @@ type ModuleBody = Any
 type Program = Any
 type Reason = Any
 # Name as a tuple of variables, because a generated name contains a list and so is not hashable; delete once
-# names are a datatype (#24)
+# names are a datatype (pure-py/isabelle-purepy#24)
 type Name = tuple[Var, ...]
 
 
