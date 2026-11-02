@@ -11,8 +11,7 @@ from .generated import Option, Positions, Syntax
 BY_DESIGN = Classification.BY_DESIGN
 FOR_NOW = Classification.FOR_NOW
 
-# Sorts of the mechanisation, Any until the generator annotates them: #7, Type annotations in generated code,
-# https://github.com/pure-py/isabelle-python-codegen/issues/7
+# Sorts of the mechanisation, for signatures; Any, since the generated code carries no type annotations
 type Var = str
 type Pos = tuple[int, int]
 type Located = Any
@@ -31,8 +30,8 @@ type TopStmt = Any
 type ModuleBody = Any
 type Program = Any
 type Reason = Any
-# Name as a tuple of variables, hashable unlike the generated form; delete with #24, Names as a datatype,
-# https://github.com/pure-py/isabelle-purepy/issues/24
+# Name as a tuple of variables, since the generated pair of a variable and a list is not hashable; delete once
+# names are a datatype
 type Name = tuple[Var, ...]
 
 
