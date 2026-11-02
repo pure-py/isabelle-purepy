@@ -105,7 +105,7 @@ def python_rejects(e: SyntaxError) -> PythonRejects:
 
 
 class SyntacticallyExcluded(ParserRejects):
-    """Rejection of a Python feature excluded by design or, by default, from this version"""
+    """Rejection by the parser of an excluded Python feature, with its classification"""
 
     def __init__(self, node: ast.AST, construct: str, classification: Classification = FOR_NOW):
         super().__init__(excluded(construct, classification), *node_position(node))
