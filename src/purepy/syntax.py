@@ -11,7 +11,8 @@ from .generated import Option, Positions, Syntax
 BY_DESIGN = Classification.BY_DESIGN
 FOR_NOW = Classification.FOR_NOW
 
-# Sorts of the mechanisation, for signatures; Any, since the generated code carries no type annotations
+# Sorts of the mechanisation as synonyms for Any, for now, because the generated code is not annotated
+# (pure-py/isabelle-python-codegen#7)
 type Var = str
 type Pos = tuple[int, int]
 type Located = Any
@@ -30,8 +31,8 @@ type TopStmt = Any
 type ModuleBody = Any
 type Program = Any
 type Reason = Any
-# Name as a tuple of variables, since the generated pair of a variable and a list is not hashable; delete once
-# names are a datatype
+# Name as a tuple of variables, because the generated form of a name, a variable with a list, is not hashable;
+# delete once names are a datatype (#24)
 type Name = tuple[Var, ...]
 
 
