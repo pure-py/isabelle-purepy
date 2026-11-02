@@ -4,8 +4,9 @@ from functools import reduce
 from itertools import takewhile
 from typing import Any
 
+from purepy_conformance import Classification, excluded
+
 from .generated import Option, Positions, Syntax
-from .generated.conformance import Classification, excluded
 
 BY_DESIGN = Classification.BY_DESIGN
 FOR_NOW = Classification.FOR_NOW

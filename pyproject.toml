@@ -6,6 +6,9 @@ build-backend = "hatchling.build"
 name = "purepy"
 version = "0.23.2"
 requires-python = ">=3.12"
+dependencies = [
+    "purepy-conformance @ https://github.com/pure-py/pure-py-spec/releases/download/v0.24.3/purepy_conformance-0.24.3-py3-none-any.whl",
+]
 
 [project.scripts]
 purepy = "purepy.__main__:main"
@@ -13,7 +16,6 @@ purepy = "purepy.__main__:main"
 [dependency-groups]
 dev = [
     "mypy>=2.3.1",
-    "purepy-conformance @ https://github.com/pure-py/pure-py-spec/releases/download/v0.24.3/purepy_conformance-0.24.3-py3-none-any.whl",
     "ruff>=0.16.2",
 ]
 
@@ -28,6 +30,10 @@ follow_imports = "skip"
 [tool.ruff]
 line-length = 100
 extend-exclude = ["src/purepy/generated"]
+
+# Dependency on a release asset of the specification
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/purepy"]

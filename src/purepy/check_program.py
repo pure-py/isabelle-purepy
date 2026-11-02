@@ -2,9 +2,10 @@
 
 import pathlib
 
+from purepy_conformance import Classification, Exit
+
 from . import syntax
 from .generated import Finite_Map, Option, Programs, Reasons
-from .generated.conformance import Classification, Exit
 from .messages import classification, message
 from .syntax import (
     ModuleBody,

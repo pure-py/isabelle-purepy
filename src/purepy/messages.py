@@ -7,8 +7,9 @@ import importlib
 import sys
 from functools import reduce
 
+from purepy_conformance import Classification, excluded
+
 from .generated import Option, Reasons, Syntax
-from .generated.conformance import Classification, excluded
 from .syntax import (
     BOP_AST,
     PRIMITIVE,

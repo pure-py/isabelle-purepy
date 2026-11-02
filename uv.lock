@@ -247,20 +247,22 @@ wheels = [
 name = "purepy"
 version = "0.23.2"
 source = { editable = "." }
+dependencies = [
+    { name = "purepy-conformance" },
+]
 
 [package.dev-dependencies]
 dev = [
     { name = "mypy" },
-    { name = "purepy-conformance" },
     { name = "ruff" },
 ]
 
 [package.metadata]
+requires-dist = [{ name = "purepy-conformance", url = "https://github.com/pure-py/pure-py-spec/releases/download/v0.24.3/purepy_conformance-0.24.3-py3-none-any.whl" }]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "mypy", specifier = ">=2.3.1" },
-    { name = "purepy-conformance", url = "https://github.com/pure-py/pure-py-spec/releases/download/v0.24.3/purepy_conformance-0.24.3-py3-none-any.whl" },
     { name = "ruff", specifier = ">=0.16.2" },
 ]
 
