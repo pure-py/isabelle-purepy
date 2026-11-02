@@ -291,10 +291,9 @@ def ty_exprs(es: list[ast.expr]) -> list[TyExpr] | None:
     return None if any(psi is None for psi in psis) else psis
 
 
-def annotation_classification(e: ast.expr) -> Classification:
-    """Classification of an annotation outside the type expressions: by design, unless of a form excluded from
-    this version"""
-    for_now = any(
+def excluded_for_now(e: ast.expr) -> bool:
+    """Whether an annotation outside the type expressions has a form excluded from this version"""
+    return any(
         (isinstance(n, ast.Constant) and (isinstance(n.value, (str, bytes)) or n.value is Ellipsis))
         or (
             isinstance(n, ast.Subscript)
@@ -304,7 +303,6 @@ def annotation_classification(e: ast.expr) -> Classification:
         )
         for n in ast.walk(e)
     )
-    return FOR_NOW if for_now else BY_DESIGN
 
 
 def annotation(e: ast.expr | None) -> TyExpr:
@@ -312,7 +310,9 @@ def annotation(e: ast.expr | None) -> TyExpr:
     psi = ty_expr(e)
     if psi is None:
         raise SyntacticallyExcluded(
-            e, "annotation that is not a type expression", annotation_classification(e)
+            e,
+            "annotation that is not a type expression",
+            FOR_NOW if excluded_for_now(e) else BY_DESIGN,
         )
     return psi
 
