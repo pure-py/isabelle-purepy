@@ -80,7 +80,7 @@ SYMBOL: dict[type, str] = {
 class ParserRejects(Exception):
     msg: str
     module: Name | None = None
-    classification: Classification | None = None  # of the excluded Python feature, if one
+    classification: Classification | None = None  # None for a Python syntax error
 
     def __init__(self, msg: str, line: int | None, col: int | None):
         self.msg = msg
@@ -104,7 +104,7 @@ def python_rejects(e: SyntaxError) -> PythonRejects:
 
 
 class SyntacticallyExcluded(ParserRejects):
-    """Rejection of an excluded Python feature, excluded from this version unless classified by design"""
+    """Rejection of a Python feature excluded by design or, by default, from this version"""
 
     def __init__(self, node: ast.AST, construct: str, classification: Classification = FOR_NOW):
         super().__init__(excluded(construct, classification), *node_position(node))
@@ -291,10 +291,10 @@ def ty_exprs(es: list[ast.expr]) -> list[TyExpr] | None:
     return None if any(psi is None for psi in psis) else psis
 
 
-def future_annotation(e: ast.expr) -> bool:
-    """Whether an annotation outside the type expressions has a form excluded from this version: a string,
-    bytes or ellipsis, or Literal with several values"""
-    return any(
+def annotation_classification(e: ast.expr) -> Classification:
+    """Classification of an annotation outside the type expressions: by design, unless of a form excluded from
+    this version"""
+    for_now = any(
         (isinstance(n, ast.Constant) and (isinstance(n.value, (str, bytes)) or n.value is Ellipsis))
         or (
             isinstance(n, ast.Subscript)
@@ -304,6 +304,7 @@ def future_annotation(e: ast.expr) -> bool:
         )
         for n in ast.walk(e)
     )
+    return FOR_NOW if for_now else BY_DESIGN
 
 
 def annotation(e: ast.expr | None) -> TyExpr:
@@ -311,9 +312,7 @@ def annotation(e: ast.expr | None) -> TyExpr:
     psi = ty_expr(e)
     if psi is None:
         raise SyntacticallyExcluded(
-            e,
-            "annotation that is not a type expression",
-            FOR_NOW if future_annotation(e) else BY_DESIGN,
+            e, "annotation that is not a type expression", annotation_classification(e)
         )
     return psi
 

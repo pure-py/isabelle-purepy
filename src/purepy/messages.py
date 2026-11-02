@@ -27,8 +27,9 @@ from .syntax import (
 BY_DESIGN = Classification.BY_DESIGN
 FOR_NOW = Classification.FOR_NOW
 BUILTINS = set(dir(builtins))
-# Built-ins excluded by design: mutation, iteration and reflection
-BY_DESIGN_BUILTINS = {
+PREDEFINED_MODULES = {"sys", "typing", "dataclasses"}
+# Built-ins, module members and type attributes excluded by design, by qualified name
+EXCLUDED_BY_DESIGN = {
     "setattr",
     "delattr",
     "id",
@@ -41,22 +42,21 @@ BY_DESIGN_BUILTINS = {
     "locals",
     "vars",
     "__import__",
-}
-PREDEFINED_MODULES = {"sys", "typing", "dataclasses"}
-BY_DESIGN_MEMBERS = {("typing", "Any"), ("typing", "cast")}
-# Mutating methods of list and dict
-MUTATING = {
-    "append",
-    "extend",
-    "insert",
-    "remove",
-    "pop",
-    "clear",
-    "sort",
-    "reverse",
-    "update",
-    "popitem",
-    "setdefault",
+    "typing.Any",
+    "typing.cast",
+    "list.append",
+    "list.extend",
+    "list.insert",
+    "list.remove",
+    "list.pop",
+    "list.clear",
+    "list.sort",
+    "list.reverse",
+    "dict.update",
+    "dict.pop",
+    "dict.popitem",
+    "dict.clear",
+    "dict.setdefault",
 }
 
 
@@ -204,7 +204,7 @@ def unparse_pat(p: Pat) -> str:
 
 
 def builtin_type(tau: Ty) -> type | None:
-    """Python type of the values of a built-in type, which has the attributes Python gives that type"""
+    """Python class of the values of a built-in type; None for other types"""
     match tau:
         case Syntax.TyList(_):
             return list
@@ -221,7 +221,7 @@ def builtin_type(tau: Ty) -> type | None:
 
 
 def callee_name(e: Expr) -> str | None:
-    """Dotted name of a callee, if it is one"""
+    """Callee as a dotted name; None for any other expression"""
     match node(e):
         case Syntax.ExprVar(x):
             return str(x)
@@ -232,27 +232,29 @@ def callee_name(e: Expr) -> str | None:
             return None
 
 
+def excluded_name(name: str) -> tuple[str, Classification]:
+    """Qualified name of an excluded built-in, module member or type attribute, with its classification"""
+    return (f"'{name}'", BY_DESIGN if name in EXCLUDED_BY_DESIGN else FOR_NOW)
+
+
 def excluded_feature(r: Reason) -> tuple[str, Classification] | None:
-    """Excluded Python feature rejected for reason r, with its classification; None if r is a plain
-    ill-formedness"""
+    """Excluded Python feature rejected by r, with its classification; None if r rejects a use of an included
+    feature"""
     match r:
         case Reasons.Located(_, r_):
             return excluded_feature(r_)
         case Reasons.PrintInFunction():
             return ("print inside function", FOR_NOW)
         case Reasons.UndefinedVariable(x) if x in BUILTINS:
-            return (f"'{x}'", BY_DESIGN if x in BY_DESIGN_BUILTINS else FOR_NOW)
+            return excluded_name(x)
         case Reasons.UnknownModule((x, _) as q) if x in sys.stdlib_module_names:
             return (f"module '{unparse_name(q)}'", FOR_NOW)
         case Reasons.UnknownMember(x, q) if (
             m := unparse_name(q)
         ) in PREDEFINED_MODULES and hasattr(importlib.import_module(m), x):
-            return (f"'{m}.{x}'", BY_DESIGN if (m, x) in BY_DESIGN_MEMBERS else FOR_NOW)
+            return excluded_name(f"{m}.{x}")
         case Reasons.NoAttributes(tau, x) if (t := builtin_type(tau)) is not None and hasattr(t, x):
-            return (
-                f"'{t.__name__}.{x}'",
-                BY_DESIGN if t in (list, dict) and x in MUTATING else FOR_NOW,
-            )
+            return excluded_name(f"{t.__name__}.{x}")
         case Reasons.CallArityMismatch(e, 1, 2) if callee_name(e) == "round":
             return ("round with second argument", FOR_NOW)
         case Reasons.CallArityMismatch(e, 1, 0) if callee_name(e) in ("sys.exit", "exit"):
