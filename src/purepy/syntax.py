@@ -374,12 +374,10 @@ def expr_node(e: ast.expr) -> Expr:
             )
         case ast.UnaryOp(op=op, operand=e_):
             return Syntax.ExprUnOp(UOP[type(op)](), expr(e_))
-        case ast.BoolOp(values=[_, _, _, *_]):
-            raise SyntacticallyExcluded(e, "chained boolean operator")
-        case ast.BoolOp(op=ast.And(), values=[e_, e__]):
-            return Syntax.ExprAnd(expr(e_), expr(e__))
-        case ast.BoolOp(op=ast.Or(), values=[e_, e__]):
-            return Syntax.ExprOr(expr(e_), expr(e__))
+        case ast.BoolOp(op=op, values=es):
+            # Chain grouped to the left, with each nested operator at the position of the chain
+            bool_op = Syntax.ExprAnd if isinstance(op, ast.And) else Syntax.ExprOr
+            return node(reduce(lambda e_, e__: at(e, bool_op(e_, e__)), map(expr, es)))
         case ast.IfExp(test=e_, body=e1, orelse=e2):
             e_t = expr(e_)
             return Syntax.ExprCond(expr(e1), e_t, expr(e2))
