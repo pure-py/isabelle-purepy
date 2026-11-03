@@ -143,7 +143,7 @@ where
 "as_float (VLit (LitFloat x)) = Some x" |
 "as_float _ = None"
 
-(* Value of a number as an extended real; None for nan and for a non-number *)
+(* Value of a number as an extended real; None for nan or a non-number *)
 fun as_number :: "val \<Rightarrow> ereal option"
 where
 "as_number (VLit (LitInt n)) = Some (ereal (real_of_int n))" |
