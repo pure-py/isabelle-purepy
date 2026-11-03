@@ -192,18 +192,18 @@ where
    else if eq v v' = Val True then eq_elems vs vs' else eq v v')" |
 "eq_elems _ _ = Val False"
 
-fun contains :: "val \<Rightarrow> val \<Rightarrow> bool result" and contains_elems :: "val list \<Rightarrow> val \<Rightarrow> bool result"
+fun in_op :: "val \<Rightarrow> val \<Rightarrow> bool result" and in_elems :: "val \<Rightarrow> val list \<Rightarrow> bool result"
 where
-"contains (VList vs) v = contains_elems vs v" |
-"contains (VTuple vs) v = contains_elems vs v" |
-"contains (VDict \<delta>) (VLit (LitString w)) = Val (w \<in> set (map fst \<delta>))" |
-"contains (VDict \<delta>) _ = Aborts Excluded" |
-"contains (VLit (LitString w')) (VLit (LitString w)) = Val (substring w w')" |
-"contains (VObject C _) _ = Aborts (if C = range_class then Excluded else TypeError)" |
-"contains _ _ = Aborts TypeError" |
+"in_op v (VList vs) = in_elems v vs" |
+"in_op v (VTuple vs) = in_elems v vs" |
+"in_op (VLit (LitString w)) (VDict \<delta>) = Val (w \<in> set (map fst \<delta>))" |
+"in_op _ (VDict \<delta>) = Aborts Excluded" |
+"in_op (VLit (LitString w)) (VLit (LitString w')) = Val (substring w w')" |
+"in_op _ (VObject C _) = Aborts (if C = range_class then Excluded else TypeError)" |
+"in_op _ _ = Aborts TypeError" |
 
-"contains_elems [] v = Val False" |
-"contains_elems (v' # vs) v = (if eq v v' = Val False then contains_elems vs v else eq v v')"
+"in_elems v [] = Val False" |
+"in_elems v (v' # vs) = (if eq v v' = Val False then in_elems v vs else eq v v')"
 
 fun elems :: "val \<Rightarrow> val list option"
 where
@@ -283,8 +283,8 @@ where
 "binop_meaning BOpNeq v v' =
   (if is_nan_val v \<and> is_nan_val v' then Val (VLit (LitBool True))
    else mlet (eq v v') (\<lambda>b. Val (VLit (LitBool (\<not> b)))))" |
-"binop_meaning BOpIn v v' = mlet (contains v' v) (\<lambda>b. Val (VLit (LitBool b)))" |
-"binop_meaning BOpNotIn v v' = mlet (contains v' v) (\<lambda>b. Val (VLit (LitBool (\<not> b))))" |
+"binop_meaning BOpIn v v' = mlet (in_op v v') (\<lambda>b. Val (VLit (LitBool b)))" |
+"binop_meaning BOpNotIn v v' = mlet (in_op v v') (\<lambda>b. Val (VLit (LitBool (\<not> b))))" |
 "binop_meaning BOpLt v v' = compare (<) (<) v v'" |
 "binop_meaning BOpLeq v v' = compare (\<le>) (\<le>) v v'" |
 "binop_meaning BOpGt v v' = compare (>) (>) v v'" |
