@@ -31,3 +31,9 @@ session "isabelle-purepy-python" in "python" = "isabelle-purepy" +
   theories
     Codegen
   export_files (in "python_out") "*:**"
+
+session "isabelle-purepy-soundness" in "soundness" = "isabelle-purepy" +
+  description "type soundness"
+  options [timeout = 1200, quick_and_dirty]
+  theories
+    Soundness
