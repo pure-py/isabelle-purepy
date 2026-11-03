@@ -23,7 +23,7 @@ datatype val =
     | VTypeAlias name "type_def located list" nat
     | VUnbound
     | VPrim prim
-    | VOpaque name
+    | VPredef name
 
 type_synonym env = "(var, val) fmap"
 abbreviation \<epsilon> :: env where "\<epsilon> \<equiv> fmempty"
@@ -123,7 +123,7 @@ where
 (* Opaque value of a predefined class of builtins, such as int, which Python matches by an instance test *)
 fun is_opaque_builtin :: "val \<Rightarrow> bool"
 where
-"is_opaque_builtin (VOpaque (x, [y])) = ((x, []) = builtins)" |
+"is_opaque_builtin (VPredef (x, [y])) = ((x, []) = builtins)" |
 "is_opaque_builtin _ = False"
 
 fun is_bool :: "val \<Rightarrow> bool"
@@ -714,15 +714,15 @@ where
     [(builtins, fmap_of_list
        ([name ''builtins'', (var ''len'', VPrim PrimLen), (var ''range'', VClass range_class),
          (var ''round'', VPrim PrimRound)]
-        @ map (\<lambda>y. (y, VOpaque (snoc builtins y)))
+        @ map (\<lambda>y. (y, VPredef (snoc builtins y)))
             (map prim_name [NoneType, object, bool, int, float, str]
              @ map var [''list'', ''dict'', ''tuple'']))),
      ((var ''sys'', []), fmap_of_list [name ''sys'', (var ''argv'', VList []), (var ''exit'', VPrim PrimExit)]),
      ((var ''typing'', []), fmap_of_list
-       (name ''typing'' # map (\<lambda>y. (y, VOpaque (var ''typing'', [y])))
+       (name ''typing'' # map (\<lambda>y. (y, VPredef (var ''typing'', [y])))
           [var ''Callable'', var ''Literal'', prim_name Never, prim_name Sized])),
      ((var ''dataclasses'', []), fmap_of_list
-       [name ''dataclasses'', (var ''dataclass'', VOpaque (var ''dataclasses'', [var ''dataclass'']))])])"
+       [name ''dataclasses'', (var ''dataclass'', VPredef (var ''dataclasses'', [var ''dataclass'']))])])"
 
 function (sequential) extend_val :: "val \<Rightarrow> val \<Rightarrow> val"
 and extend_env :: "env \<Rightarrow> env \<Rightarrow> env" (infixl "\<uplus>\<^sub>v" 65)
