@@ -2,10 +2,11 @@
 
 import pathlib
 
+from purepy_conformance import Classification, Exit
+
 from . import syntax
 from .generated import Finite_Map, Option, Programs, Reasons
-from .generated.exit_codes import Exit
-from .messages import message
+from .messages import classification, message
 from .syntax import (
     ModuleBody,
     Name,
@@ -104,8 +105,12 @@ def exit_code(rejection: PurePyRejects | None) -> Exit:
     match rejection:
         case None:
             return Exit.OK
+        case syntax.ParserRejects(classification=Classification.FOR_NOW):
+            return Exit.EXCLUDED_FOR_NOW
         case syntax.ParserRejects():
             return Exit.NOT_ALLOWED
+        case (_, r) if classification(r) == Classification.FOR_NOW:
+            return Exit.EXCLUDED_FOR_NOW
         case _:
             return Exit.ILL_FORMED
 

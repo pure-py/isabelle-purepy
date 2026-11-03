@@ -49,8 +49,8 @@ jobs:
       - name: Lint, run conformance suite and build wheel
         run: make wheel
 
-      - name: Install type checker and conformance package into site
-        run: uv pip install --target site dist/*.whl "$(uv export --locked --only-group dev --no-hashes --no-emit-project | grep '^purepy-conformance ')"
+      - name: Install type checker, with the conformance package, into site
+        run: uv pip install --target site dist/*.whl
 
       - uses: actions/upload-artifact@v4
         with:
