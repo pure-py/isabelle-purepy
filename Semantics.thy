@@ -6,7 +6,7 @@ begin
 (* Free o for outcomes *)
 no_notation (ASCII) comp (infixl \<open>o\<close> 55)
 
-(* Predefined functions, each standing for its meaning prim_meaning *)
+(* Predefined functions, each standing for its meaning *)
 datatype prim = PrimLen | PrimRound | PrimExit
 
 datatype val =
@@ -150,7 +150,7 @@ where
 "as_number (VLit (LitFloat x)) = float_value x" |
 "as_number _ = None"
 
-(* Literals by value; a Boolean and a number, which Python compares numerically, give Undef *)
+(* Equality of literals by value; undefined between a Boolean and a number, which Python compares numerically *)
 fun eq_lit :: "lit \<Rightarrow> lit \<Rightarrow> bool result"
 where
 "eq_lit (LitInt n) (LitInt n') = Val (n = n')" |
@@ -167,9 +167,8 @@ where
 "eq_lit (LitFloat _) (LitBool _) = Aborts Undef" |
 "eq_lit _ _ = Val False"
 
-(* By the form of the first value, then of the second: patterns on both would make pattern completion over
-   the values very slow. Undefined between two functions, closures or primitives, which Python compares by
-   identity *)
+(* Cases on the form of the first value, then of the second, since patterns on both make pattern completion over
+   the values very slow *)
 fun eq :: "val \<Rightarrow> val \<Rightarrow> bool result" and eq_elems :: "val list \<Rightarrow> val list \<Rightarrow> bool result"
 where
 "eq (VLit l) v' = (case v' of VLit l' \<Rightarrow> eq_lit l l' | _ \<Rightarrow> Val False)" |
@@ -213,7 +212,6 @@ where
 "elems (VLit (LitString w)) = Some (map (\<lambda>c. VLit (LitString c)) (str_chars w))" |
 "elems _ = None"
 
-(* Elements drawn by a generator: the keys of a dictionary, and the elements of a sequence otherwise *)
 fun iter :: "val \<Rightarrow> val list option"
 where
 "iter (VDict \<delta>) = Some (map (\<lambda>(w, _). VLit (LitString w)) \<delta>)" |
@@ -349,8 +347,6 @@ where
 "prim_meaning PrimExit [v] = Aborts Excluded" |
 "prim_meaning _ _ = Aborts TypeError"
 
-(* Value denoted by a name: a simple name looked up directly, a qualified name in the environment of the loaded
-   module denoted by its prefix; None if the prefix denotes a module stub or a value other than a module *)
 fun resolve_path :: "val option \<Rightarrow> var list \<Rightarrow> val option"
 where
 "resolve_path v [] = v" |
@@ -370,7 +366,7 @@ where
 "NoMatch \<otimes>\<^sub>m m = NoMatch" |
 "MatchAborts \<kappa> \<otimes>\<^sub>m m = MatchAborts \<kappa>"
 
-(* Names a case hypothesis IH when it contains an induction predicate, and hyps otherwise, as for a rule
+(* Name a case hypothesis IH when it contains an induction predicate, and hyps otherwise, following a rule
    without parameters. The induction method also takes the free variables among the conclusion's arguments for
    predicates, which makes every premise mentioning \<Sigma> an IH. *)
 attribute_setup ih_names = \<open>
@@ -390,8 +386,6 @@ attribute_setup ih_names = \<open>
 locale evaluation = fixes \<Sigma> :: class_table
 begin
 
-(* Argument or sub-pattern for each field of C: positional ones fill the fields in order, keyword ones match by
-   name; None unless they cover the fields exactly *)
 definition field_map :: "name \<Rightarrow> 'a list \<Rightarrow> (var \<times> 'a) list \<Rightarrow> (var \<times> 'a) list option"
 where
 "field_map C us kvs =
@@ -467,7 +461,7 @@ where
 abbreviation true :: val where "true \<equiv> VLit (LitBool True)"
 abbreviation false :: val where "false \<equiv> VLit (LitBool False)"
 
-(* Type arguments of a subscript e[\<psi>s], read from its index *)
+(* Type arguments of a subscript, read from its index *)
 definition type_args_of :: "expr located \<Rightarrow> ty_expr list option"
 where
 "type_args_of e' = those (map type_expr_of (subscript_args e'))"
@@ -700,7 +694,6 @@ where
 "type_value q \<chi>s i =
   (case node (\<chi>s ! i) of Dataclass c _ _ _ \<Rightarrow> VClass (snoc q c) | TypeStmt _ _ _ \<Rightarrow> VTypeAlias q \<chi>s i)"
 
-(* Top-level statement t of module q *)
 inductive eval_top :: "name \<Rightarrow> env \<Rightarrow> top_stmt \<Rightarrow> outcome \<Rightarrow> bool"  ("_, _, _ \<Rightarrow>\<^sub>t _" [60,60,0,60] 60)
 where
 EvalTopStmt: "\<rho>, node s \<Rightarrow>\<^sub>s o \<Longrightarrow> q, \<rho>, Stmt s \<Rightarrow>\<^sub>t o" |
@@ -732,8 +725,6 @@ where
      ((var ''dataclasses'', []), fmap_of_list
        [name ''dataclasses'', (var ''dataclass'', VOpaque (var ''dataclasses'', [var ''dataclass'']))])])"
 
-(* Extension of environments, as for contexts: a loaded module takes precedence over a stub of the same module,
-   and two loads of a module combine *)
 function (sequential) extend_val :: "val \<Rightarrow> val \<Rightarrow> val"
 and extend_env :: "env \<Rightarrow> env \<Rightarrow> env" (infixl "\<uplus>\<^sub>v" 65)
 where
@@ -841,7 +832,6 @@ EvalModsNil: "[] \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s Val ()" |
 EvalModsCons: "\<lbrakk> q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> ; qs \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s r \<rbrakk> \<Longrightarrow> q # qs \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s r" |
 EvalModsFail: "q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Aborts \<kappa> \<Longrightarrow> q # qs \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s Aborts \<kappa>"
 
-(* A program exits with 0 if __main__ loads, and otherwise with the termination kind of loading *)
 inductive eval_program :: "termination_kind \<Rightarrow> bool"
 where
 EvalProgram: "main \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> \<Longrightarrow> eval_program (SystemExit 0)" |
