@@ -427,13 +427,17 @@ where
 "overloads BOpNotIn =
   [bounds (TyPrim object) (TyPrim object) (\<lambda>v v'. bool_val (mlet (in_op v v') (\<lambda>b. Val (\<not> b))))]" |
 "overloads BOpLt =
-  [bounds (TyPrim float) (TyPrim float) (compare_numbers (<)), bounds (TyPrim str) (TyPrim str) (compare_strings (<))]" |
+  [bounds (TyPrim float) (TyPrim float) (compare_numbers (<)),
+   bounds (TyPrim str) (TyPrim str) (compare_strings (<))]" |
 "overloads BOpLeq =
-  [bounds (TyPrim float) (TyPrim float) (compare_numbers (\<le>)), bounds (TyPrim str) (TyPrim str) (compare_strings (\<le>))]" |
+  [bounds (TyPrim float) (TyPrim float) (compare_numbers (\<le>)),
+   bounds (TyPrim str) (TyPrim str) (compare_strings (\<le>))]" |
 "overloads BOpGt =
-  [bounds (TyPrim float) (TyPrim float) (compare_numbers (>)), bounds (TyPrim str) (TyPrim str) (compare_strings (>))]" |
+  [bounds (TyPrim float) (TyPrim float) (compare_numbers (>)),
+   bounds (TyPrim str) (TyPrim str) (compare_strings (>))]" |
 "overloads BOpGeq =
-  [bounds (TyPrim float) (TyPrim float) (compare_numbers (\<ge>)), bounds (TyPrim str) (TyPrim str) (compare_strings (\<ge>))]" |
+  [bounds (TyPrim float) (TyPrim float) (compare_numbers (\<ge>)),
+   bounds (TyPrim str) (TyPrim str) (compare_strings (\<ge>))]" |
 "overloads BOpAdd =
   [bounds (TyPrim int) (TyPrim int) (int_arith (+)), bounds (TyPrim float) (TyPrim float) (float_arith float_add),
    bounds (TyPrim str) (TyPrim str) concat_str, bounds (TyList (TyPrim object)) (TyList (TyPrim object)) concat_list,
