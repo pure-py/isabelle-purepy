@@ -1,4 +1,5 @@
 session "isabelle-purepy" = HOL +
+  description "mechanisation in Isabelle"
   options [timeout = 1200]
   sessions
     "HOL-Library"
