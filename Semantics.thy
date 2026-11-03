@@ -276,16 +276,16 @@ where
 abbreviation bool_val :: "bool result \<Rightarrow> val result"
 where "bool_val r \<equiv> mlet r (\<lambda>b. Val (VLit (LitBool b)))"
 
-(* Numeric order by f; False if either operand is nan *)
-definition numeric_order :: "(ereal \<Rightarrow> ereal \<Rightarrow> bool) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
+(* Compare two numbers by f; False if either is nan *)
+definition compare_numbers :: "(ereal \<Rightarrow> ereal \<Rightarrow> bool) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
 where
-"numeric_order f v v' =
+"compare_numbers f v v' =
   Val (VLit (LitBool (case (as_number v, as_number v') of (Some y, Some y') \<Rightarrow> f y y' | _ \<Rightarrow> False)))"
 
-(* Lexicographic order on code points by f *)
-definition string_order :: "(str \<Rightarrow> str \<Rightarrow> bool) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
+(* Compare two strings by f, lexicographically on code points *)
+definition compare_strings :: "(str \<Rightarrow> str \<Rightarrow> bool) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
 where
-"string_order f v v' = Val (VLit (LitBool (f (the_str v) (the_str v'))))"
+"compare_strings f v v' = Val (VLit (LitBool (f (the_str v) (the_str v'))))"
 
 (* Integer arithmetic by f *)
 definition int_arith :: "(int \<Rightarrow> int \<Rightarrow> int) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
@@ -445,13 +445,13 @@ where
 "overloads BOpNotIn =
   [bounds (TyPrim object) (TyPrim object) (\<lambda>v v'. bool_val (mlet (in_op v v') (\<lambda>b. Val (\<not> b))))]" |
 "overloads BOpLt =
-  [bounds (TyPrim float) (TyPrim float) (numeric_order (<)), bounds (TyPrim str) (TyPrim str) (string_order (<))]" |
+  [bounds (TyPrim float) (TyPrim float) (compare_numbers (<)), bounds (TyPrim str) (TyPrim str) (compare_strings (<))]" |
 "overloads BOpLeq =
-  [bounds (TyPrim float) (TyPrim float) (numeric_order (\<le>)), bounds (TyPrim str) (TyPrim str) (string_order (\<le>))]" |
+  [bounds (TyPrim float) (TyPrim float) (compare_numbers (\<le>)), bounds (TyPrim str) (TyPrim str) (compare_strings (\<le>))]" |
 "overloads BOpGt =
-  [bounds (TyPrim float) (TyPrim float) (numeric_order (>)), bounds (TyPrim str) (TyPrim str) (string_order (>))]" |
+  [bounds (TyPrim float) (TyPrim float) (compare_numbers (>)), bounds (TyPrim str) (TyPrim str) (compare_strings (>))]" |
 "overloads BOpGeq =
-  [bounds (TyPrim float) (TyPrim float) (numeric_order (\<ge>)), bounds (TyPrim str) (TyPrim str) (string_order (\<ge>))]" |
+  [bounds (TyPrim float) (TyPrim float) (compare_numbers (\<ge>)), bounds (TyPrim str) (TyPrim str) (compare_strings (\<ge>))]" |
 "overloads BOpAdd =
   [bounds (TyPrim int) (TyPrim int) (int_arith (+)), bounds (TyPrim float) (TyPrim float) (float_arith float_add),
    bounds (TyPrim str) (TyPrim str) concat_str, bounds (TyList (TyPrim object)) (TyList (TyPrim object)) concat_list,
