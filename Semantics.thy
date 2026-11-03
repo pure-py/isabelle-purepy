@@ -610,7 +610,7 @@ EvalDeclare: "\<rho>, StmtDeclare x \<psi> \<Rightarrow>\<^sub>s assigns\<^sub>o
 EvalAssign: "\<rho>, node e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtAssign x \<pi> e \<Rightarrow>\<^sub>s mlet r (\<lambda>v. assigns\<^sub>o (fmupd x v \<epsilon>))" |
 EvalExprStmt: "\<rho>, node e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtExpr e \<Rightarrow>\<^sub>s mlet r (\<lambda>v. assigns\<^sub>o \<epsilon>)" |
 EvalPrint: "\<rho>, node e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtPrint e \<Rightarrow>\<^sub>s mlet r (\<lambda>v. ([v], Assigns \<epsilon>))" |
-EvalReturn: "\<rho>, node e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtReturn (Some e) \<Rightarrow>\<^sub>s mlet r (\<lambda>v. returns\<^sub>o v)" |
+EvalReturn: "\<rho>, node e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtReturn (Some e) \<Rightarrow>\<^sub>s mlet r returns\<^sub>o" |
 EvalReturnNone: "\<rho>, StmtReturn None \<Rightarrow>\<^sub>s returns\<^sub>o (VLit LitNone)" |
 EvalDefs:
   "vs = map (\<lambda>i. Def(\<rho>, ds, i)) [0..<length ds]
