@@ -21,7 +21,7 @@ jobs:
         run: echo "isabelle=$(cat .isabelle-version)" >> "$GITHUB_OUTPUT"
 
   build:
-    name: proofs, type checker and conformance suite
+    name: proof checking, type checker generation and conformance under CPython
     needs: version
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -59,7 +59,7 @@ jobs:
 
   # Suite and type checker under other Python runtimes
   runtimes:
-    name: conformance suite (${{ matrix.runtime }})
+    name: type checker conformance under ${{ matrix.runtime }}
     needs: build
     runs-on: ubuntu-latest
     strategy:
