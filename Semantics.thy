@@ -266,7 +266,6 @@ where
 "update \<delta> [] = \<delta>" |
 "update \<delta> ((w, v) # \<delta>') = update (setitem \<delta> w v) \<delta>'"
 
-(* Entries from keys and values in alternation; None if a key is not a string *)
 fun dict_entries :: "val list \<Rightarrow> (str \<times> val) list option"
 where
 "dict_entries [] = Some []" |
@@ -276,38 +275,31 @@ where
 abbreviation bool_val :: "bool result \<Rightarrow> val result"
 where "bool_val r \<equiv> mlet r (\<lambda>b. Val (VLit (LitBool b)))"
 
-(* Compare two numbers by f; False if either is nan *)
 definition compare_numbers :: "(ereal \<Rightarrow> ereal \<Rightarrow> bool) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
 where
 "compare_numbers f v v' =
   Val (VLit (LitBool (case (as_number v, as_number v') of (Some y, Some y') \<Rightarrow> f y y' | _ \<Rightarrow> False)))"
 
-(* Compare two strings by f, lexicographically on code points *)
 definition compare_strings :: "(str \<Rightarrow> str \<Rightarrow> bool) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
 where
 "compare_strings f v v' = Val (VLit (LitBool (f (the_str v) (the_str v'))))"
 
-(* Integer arithmetic by f *)
 definition int_arith :: "(int \<Rightarrow> int \<Rightarrow> int) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
 where
 "int_arith f v v' = Val (VLit (LitInt (f (the_int v) (the_int v'))))"
 
-(* Integer division by f; ZeroDivisionError for a zero divisor *)
 definition int_division :: "(int \<Rightarrow> int \<Rightarrow> int) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
 where
 "int_division f v v' = (if the_int v' = 0 then Aborts ZeroDivisionError else int_arith f v v')"
 
-(* Float arithmetic by g, with an integer operand converted *)
 definition float_arith :: "(float \<Rightarrow> float \<Rightarrow> float) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
 where
 "float_arith g v v' = Val (VLit (LitFloat (g (the (as_float v)) (the (as_float v')))))"
 
-(* Float division by g; ZeroDivisionError for a zero divisor *)
 definition float_division :: "(float \<Rightarrow> float \<Rightarrow> float) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
 where
 "float_division g v v' = (if as_number v' = Some 0 then Aborts ZeroDivisionError else float_arith g v v')"
 
-(* Integer power; a float for a negative exponent, after ZeroDivisionError for a zero base *)
 definition int_power :: "val \<Rightarrow> val \<Rightarrow> val result"
 where
 "int_power v v' =
@@ -315,7 +307,6 @@ where
    else if the_int v = 0 then Aborts ZeroDivisionError
    else float_arith float_pow v v')"
 
-(* Float power; ZeroDivisionError for a zero base and a negative exponent *)
 definition float_power :: "val \<Rightarrow> val \<Rightarrow> val result"
 where
 "float_power v v' =
@@ -334,7 +325,6 @@ definition concat_tuple :: "val \<Rightarrow> val \<Rightarrow> val result"
 where
 "concat_tuple v v' = Val (VTuple (the_elems v @ the_elems v'))"
 
-(* Repetition of v by the integer v', or none if v' is negative *)
 definition repeat_str :: "val \<Rightarrow> val \<Rightarrow> val result"
 where
 "repeat_str v v' = Val (VLit (LitString (str_concat (replicate (nat (the_int v')) (the_str v)))))"
@@ -414,14 +404,12 @@ attribute_setup ih_names = \<open>
 locale evaluation = fixes \<Sigma> :: class_table
 begin
 
-(* Whether an overload with operand bound \<tau> applies to v *)
 definition applies :: "ty \<Rightarrow> val \<Rightarrow> bool"
 where
 "applies \<tau> v = (\<Sigma> \<turnstile> type_of v <: \<tau>)"
 
 type_synonym overload = "(val \<Rightarrow> val \<Rightarrow> bool) \<times> (val \<Rightarrow> val \<Rightarrow> val result)"
 
-(* Overload with operand bounds \<tau> and \<tau>' and meaning f *)
 definition bounds :: "ty \<Rightarrow> ty \<Rightarrow> (val \<Rightarrow> val \<Rightarrow> val result) \<Rightarrow> overload"
 where
 "bounds \<tau> \<tau>' f = ((\<lambda>v v'. applies \<tau> v \<and> applies \<tau>' v'), f)"
@@ -431,7 +419,8 @@ definition tuple_bounds :: "(val \<Rightarrow> val \<Rightarrow> val result) \<R
 where
 "tuple_bounds f = ((\<lambda>v v'. case (v, v') of (VTuple _, VTuple _) \<Rightarrow> True | _ \<Rightarrow> False), f)"
 
-(* Run-time overloads of each binary operator, in order of specificity *)
+(* Run-time overloads of each binary operator, in order of specificity, so that the first which applies is the
+   most specific *)
 fun overloads :: "bop \<Rightarrow> overload list"
 where
 "overloads BOpEq =
@@ -473,7 +462,6 @@ where
 "overloads BOpPow = [bounds (TyPrim int) (TyPrim int) int_power, bounds (TyPrim float) (TyPrim float) float_power]" |
 "overloads BOpBitOr = []"
 
-(* Result of the first overload which applies, the most specific; Excluded if none applies *)
 fun select :: "overload list \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
 where
 "select [] v v' = Aborts Excluded" |
@@ -483,7 +471,6 @@ definition binop_meaning :: "bop \<Rightarrow> val \<Rightarrow> val \<Rightarro
 where
 "binop_meaning op v v' = select (overloads op) v v'"
 
-(* Run-time overload of each unary operator; Excluded if it doesn't apply *)
 fun unop_meaning :: "uop \<Rightarrow> val \<Rightarrow> val result"
 where
 "unop_meaning UOpNot v =
