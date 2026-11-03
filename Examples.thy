@@ -55,4 +55,28 @@ qed
 
 end
 
+definition ex_print :: stmt
+where "ex_print =
+  StmtSeq (At no_pos (StmtPrint (At no_pos (ExprLiteral (LitInt 1)))))
+          (At no_pos (StmtPrint (At no_pos (ExprLiteral (LitInt 2)))))"
+
+context evaluation
+begin
+
+lemma ex_print_eval: "\<epsilon>, ex_print \<Rightarrow>\<^sub>s ([VLit (LitInt 1), VLit (LitInt 2)], Assigns \<epsilon>)"
+proof -
+  have print: "\<rho>, StmtPrint (At no_pos (ExprLiteral (LitInt n))) \<Rightarrow>\<^sub>s ([VLit (LitInt n)], Assigns \<epsilon>)" for \<rho> n
+  proof -
+    have "\<rho>, StmtPrint (At no_pos (ExprLiteral (LitInt n)))
+      \<Rightarrow>\<^sub>s mlet (Val (VLit (LitInt n))) (\<lambda>v. ([v], Assigns \<epsilon>))"
+      by (rule EvalPrint) (simp add: EvalLiteral)
+    then show ?thesis by simp
+  qed
+  have "\<epsilon>, ex_print \<Rightarrow>\<^sub>s ([VLit (LitInt 1)], Assigns \<epsilon>) \<otimes>\<^sub>o ([VLit (LitInt 2)], Assigns \<epsilon>)"
+    unfolding ex_print_def by (rule EvalSeq) (simp_all add: print)
+  then show ?thesis by simp
+qed
+
+end
+
 end
