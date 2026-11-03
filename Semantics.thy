@@ -172,7 +172,6 @@ where
 "the_elems (VList vs) = vs" |
 "the_elems (VTuple vs) = vs"
 
-(* Equality of literals by value; undefined between a Boolean and a number, which Python compares numerically *)
 fun eq_lit :: "lit \<Rightarrow> lit \<Rightarrow> bool result"
 where
 "eq_lit (LitInt n) (LitInt n') = Val (n = n')" |
