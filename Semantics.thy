@@ -1,360 +1,7 @@
-(* Values, results and evaluation judgements *)
+(* Evaluation judgements *)
 theory Semantics
-    imports Types "HOL-Library.Finite_Map"
+    imports Values
 begin
-
-(* Free o for outcomes *)
-no_notation (ASCII) comp (infixl \<open>o\<close> 55)
-
-(* Predefined functions, each standing for its meaning prim_meaning *)
-datatype prim = PrimLen | PrimPrint | PrimRound | PrimExit
-
-datatype val =
-      VLit lit
-    | VList "val list"
-    | VTuple "val list"
-    | VDict "(str \<times> val) list"
-    | VClass name
-    | VObject name "(var \<times> val) list"
-    | VLamClosure "(var, val) fmap" "var list" "expr located"  ("Lam'(_, _, _')")
-    | VDefClosure "(var, val) fmap" "func located list" nat  ("Def'(_, _, _')")
-    | VModStub name
-    | VModLoaded name "(var, val) fmap"
-    | VTypeAlias name "type_def located list" nat
-    | VUnbound
-    | VPrim prim
-    | VOpaque name
-
-type_synonym env = "(var, val) fmap"
-abbreviation \<epsilon> :: env where "\<epsilon> \<equiv> fmempty"
-
-datatype termination_kind =
-    TypeError
-  | IndexError
-  | KeyError
-  | OverflowError
-  | ValueError
-  | ZeroDivisionError
-  | AssertionError "str option"
-  | AttributeError
-  | NameError
-  | SystemExit int
-  | Undef
-  | Excluded
-
-datatype 'a result = Val 'a | Aborts termination_kind
-
-datatype outcome = Assigns env | Returns val | Aborts\<^sub>o termination_kind
-
-consts mlet :: "'a result \<Rightarrow> ('a \<Rightarrow> 'b) \<Rightarrow> 'b"
-
-fun mlet_result :: "'a result \<Rightarrow> ('a \<Rightarrow> 'b result) \<Rightarrow> 'b result"
-where
-"mlet_result (Val v) f = f v" |
-"mlet_result (Aborts \<kappa>) f = Aborts \<kappa>"
-
-fun mlet_outcome :: "'a result \<Rightarrow> ('a \<Rightarrow> outcome) \<Rightarrow> outcome"
-where
-"mlet_outcome (Val v) f = f v" |
-"mlet_outcome (Aborts \<kappa>) f = Aborts\<^sub>o \<kappa>"
-
-adhoc_overloading mlet \<rightleftharpoons> mlet_result mlet_outcome
-
-fun seq_compose :: "outcome \<Rightarrow> outcome \<Rightarrow> outcome" (infixl "\<otimes>\<^sub>o" 100)
-where
-"Assigns \<rho> \<otimes>\<^sub>o Assigns \<rho>' = Assigns (\<rho> \<otimes> \<rho>')" |
-"Assigns \<rho> \<otimes>\<^sub>o o = o" |
-"Returns v \<otimes>\<^sub>o o = Returns v" |
-"Aborts\<^sub>o \<kappa> \<otimes>\<^sub>o o = Aborts\<^sub>o \<kappa>"
-
-fun result_of :: "outcome \<Rightarrow> val result"
-where
-"result_of (Returns v) = Val v" |
-"result_of (Assigns \<rho>) = Val (VLit LitNone)" |
-"result_of (Aborts\<^sub>o \<kappa>) = Aborts \<kappa>"
-
-fun is_class :: "val \<Rightarrow> bool"
-where
-"is_class (VClass _) = True" |
-"is_class _ = False"
-
-fun class_of :: "val \<Rightarrow> name option"
-where
-"class_of (VClass C) = Some C" |
-"class_of _ = None"
-
-fun is_object :: "val \<Rightarrow> bool"
-where
-"is_object (VObject _ _) = True" |
-"is_object _ = False"
-
-fun fields_of :: "val \<Rightarrow> (var \<times> val) list option"
-where
-"fields_of (VObject _ xvs) = Some xvs" |
-"fields_of _ = None"
-
-fun is_closure :: "val \<Rightarrow> bool"
-where
-"is_closure Lam(_, _, _) = True" |
-"is_closure Def(_, _, _) = True" |
-"is_closure _ = False"
-
-fun is_prim :: "val \<Rightarrow> bool"
-where
-"is_prim (VPrim _) = True" |
-"is_prim _ = False"
-
-fun is_loaded_module :: "val \<Rightarrow> bool"
-where
-"is_loaded_module (VModLoaded _ _) = True" |
-"is_loaded_module _ = False"
-
-fun module_env_of :: "val \<Rightarrow> (var, val) fmap option"
-where
-"module_env_of (VModLoaded _ \<rho>) = Some \<rho>" |
-"module_env_of _ = None"
-
-(* Opaque value of a predefined class of builtins, such as int, which Python matches by an instance test *)
-fun is_opaque_builtin :: "val \<Rightarrow> bool"
-where
-"is_opaque_builtin (VOpaque (x, [y])) = ((x, []) = builtins)" |
-"is_opaque_builtin _ = False"
-
-fun is_bool :: "val \<Rightarrow> bool"
-where
-"is_bool (VLit (LitBool _)) = True" |
-"is_bool _ = False"
-
-fun is_nan_val :: "val \<Rightarrow> bool"
-where
-"is_nan_val (VLit (LitFloat x)) = is_nan x" |
-"is_nan_val _ = False"
-
-(* Float of an int or float value; None otherwise *)
-fun as_float :: "val \<Rightarrow> float option"
-where
-"as_float (VLit (LitInt n)) = Some (float_of_int n)" |
-"as_float (VLit (LitFloat x)) = Some x" |
-"as_float _ = None"
-
-(* Value of a number as an extended real; None for nan and for a non-number *)
-fun as_number :: "val \<Rightarrow> ereal option"
-where
-"as_number (VLit (LitInt n)) = Some (ereal (real_of_int n))" |
-"as_number (VLit (LitFloat x)) = float_value x" |
-"as_number _ = None"
-
-(* Literals by value; a Boolean and a number, which Python compares numerically, give Undef *)
-fun eq_lit :: "lit \<Rightarrow> lit \<Rightarrow> bool result"
-where
-"eq_lit (LitInt n) (LitInt n') = Val (n = n')" |
-"eq_lit (LitInt n) (LitFloat x') = Val (float_value x' = Some (ereal (real_of_int n)))" |
-"eq_lit (LitFloat x) (LitInt n') = Val (float_value x = Some (ereal (real_of_int n')))" |
-"eq_lit (LitFloat x) (LitFloat x') =
-  (if is_nan x \<and> is_nan x' then Aborts Undef else Val (float_value x = float_value x'))" |
-"eq_lit (LitString w) (LitString w') = Val (w = w')" |
-"eq_lit (LitBool b) (LitBool b') = Val (b = b')" |
-"eq_lit LitNone LitNone = Val True" |
-"eq_lit (LitBool _) (LitInt _) = Aborts Undef" |
-"eq_lit (LitBool _) (LitFloat _) = Aborts Undef" |
-"eq_lit (LitInt _) (LitBool _) = Aborts Undef" |
-"eq_lit (LitFloat _) (LitBool _) = Aborts Undef" |
-"eq_lit _ _ = Val False"
-
-(* By the form of the first value, then of the second: patterns on both would make pattern completion over
-   the values very slow. Undefined between two functions, closures or primitives, which Python compares by
-   identity *)
-fun eq :: "val \<Rightarrow> val \<Rightarrow> bool result" and eq_elems :: "val list \<Rightarrow> val list \<Rightarrow> bool result"
-where
-"eq (VLit l) v' = (case v' of VLit l' \<Rightarrow> eq_lit l l' | _ \<Rightarrow> Val False)" |
-"eq (VList vs) v' = (case v' of VList vs' \<Rightarrow> eq_elems vs vs' | _ \<Rightarrow> Val False)" |
-"eq (VTuple vs) v' = (case v' of VTuple vs' \<Rightarrow> eq_elems vs vs' | _ \<Rightarrow> Val False)" |
-"eq (VDict \<delta>) v' =
-  (case v' of
-     VDict \<delta>' \<Rightarrow>
-       if set (map fst \<delta>) = set (map fst \<delta>') then eq_elems (map snd \<delta>) (map (the \<circ> map_of \<delta>') (map fst \<delta>))
-       else Val False
-   | _ \<Rightarrow> Val False)" |
-"eq (VObject C xvs) v' =
-  (case v' of
-     VObject D yvs \<Rightarrow> if C = D then eq_elems (map snd xvs) (map snd yvs) else Val False
-   | _ \<Rightarrow> Val False)" |
-"eq v v' = (if (is_closure v \<or> is_prim v) \<and> (is_closure v' \<or> is_prim v') then Aborts Undef else Val False)" |
-
-"eq_elems [] [] = Val True" |
-"eq_elems (v # vs) (v' # vs') =
-  (if length vs \<noteq> length vs' then Val False
-   else if eq v v' = Val True then eq_elems vs vs' else eq v v')" |
-"eq_elems _ _ = Val False"
-
-fun contains :: "val \<Rightarrow> val \<Rightarrow> bool result" and contains_elems :: "val list \<Rightarrow> val \<Rightarrow> bool result"
-where
-"contains (VList vs) v = contains_elems vs v" |
-"contains (VTuple vs) v = contains_elems vs v" |
-"contains (VDict \<delta>) (VLit (LitString w)) = Val (w \<in> set (map fst \<delta>))" |
-"contains (VDict \<delta>) _ = Aborts Excluded" |
-"contains (VLit (LitString w')) (VLit (LitString w)) = Val (substring w w')" |
-"contains (VObject C _) _ = Aborts (if C = range_class then Excluded else TypeError)" |
-"contains _ _ = Aborts TypeError" |
-
-"contains_elems [] v = Val False" |
-"contains_elems (v' # vs) v = (if eq v v' = Val False then contains_elems vs v else eq v v')"
-
-fun elems :: "val \<Rightarrow> val list option"
-where
-"elems (VList vs) = Some vs" |
-"elems (VTuple vs) = Some vs" |
-"elems (VLit (LitString w)) = Some (map (\<lambda>c. VLit (LitString c)) (str_chars w))" |
-"elems _ = None"
-
-(* Elements drawn by a generator: the keys of a dictionary, and the elements of a sequence otherwise *)
-fun iter :: "val \<Rightarrow> val list option"
-where
-"iter (VDict \<delta>) = Some (map (\<lambda>(w, _). VLit (LitString w)) \<delta>)" |
-"iter v = elems v"
-
-fun getitem :: "val \<Rightarrow> val \<Rightarrow> val result"
-where
-"getitem (VDict \<delta>) v' =
-  (case v' of
-     VLit (LitString w) \<Rightarrow> (case map_of \<delta> w of Some v \<Rightarrow> Val v | None \<Rightarrow> Aborts KeyError)
-   | _ \<Rightarrow> Aborts Excluded)" |
-"getitem (VObject C _) _ = Aborts (if C = range_class then Excluded else TypeError)" |
-"getitem v v' =
-  (case (elems v, v') of
-     (Some vs, VLit (LitInt n)) \<Rightarrow>
-       let m = of_nat (length vs) :: int in
-       if 0 \<le> n \<and> n < m then Val (vs ! nat n)
-       else if - m \<le> n \<and> n < 0 then Val (vs ! nat (m + n))
-       else Aborts IndexError
-   | (Some vs, VLit (LitBool _)) \<Rightarrow> Aborts Excluded
-   | _ \<Rightarrow> Aborts TypeError)"
-
-fun setitem :: "(str \<times> val) list \<Rightarrow> str \<Rightarrow> val \<Rightarrow> (str \<times> val) list"
-where
-"setitem [] w v = [(w, v)]" |
-"setitem ((w', v') # \<delta>) w v = (if w = w' then (w, v) # \<delta> else (w', v') # setitem \<delta> w v)"
-
-fun update :: "(str \<times> val) list \<Rightarrow> (str \<times> val) list \<Rightarrow> (str \<times> val) list"
-where
-"update \<delta> [] = \<delta>" |
-"update \<delta> ((w, v) # \<delta>') = update (setitem \<delta> w v) \<delta>'"
-
-(* Entries from keys and values in alternation; None if a key is not a string *)
-fun dict_entries :: "val list \<Rightarrow> (str \<times> val) list option"
-where
-"dict_entries [] = Some []" |
-"dict_entries (VLit (LitString w) # v # vs) = map_option (Cons (w, v)) (dict_entries vs)" |
-"dict_entries _ = None"
-
-(* Apply g to two numbers as floats; excluded for a Boolean operand *)
-fun number_op :: "(float \<Rightarrow> float \<Rightarrow> val result) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
-where
-"number_op g v v' =
-  (if is_bool v \<or> is_bool v' then Aborts Excluded
-   else case (as_float v, as_float v') of
-     (Some x, Some x') \<Rightarrow> g x x'
-   | _ \<Rightarrow> Aborts TypeError)"
-
-(* Apply f to two integers, g to two numbers otherwise *)
-fun arith :: "(int \<Rightarrow> int \<Rightarrow> int) \<Rightarrow> (float \<Rightarrow> float \<Rightarrow> float) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
-where
-"arith f g (VLit (LitInt n)) (VLit (LitInt n')) = Val (VLit (LitInt (f n n')))" |
-"arith f g v v' = number_op (\<lambda>x x'. Val (VLit (LitFloat (g x x')))) v v'"
-
-(* Compare strings lexicographically by code point and numbers by value; false if either number is nan *)
-fun compare :: "(ereal \<Rightarrow> ereal \<Rightarrow> bool) \<Rightarrow> (str \<Rightarrow> str \<Rightarrow> bool) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
-where
-"compare f g (VLit (LitString w)) (VLit (LitString w')) = Val (VLit (LitBool (g w w')))" |
-"compare f g v v' =
-  number_op (\<lambda>_ _. Val (VLit (LitBool (case (as_number v, as_number v') of
-    (Some y, Some y') \<Rightarrow> f y y'
-  | _ \<Rightarrow> False)))) v v'"
-
-fun binop_meaning :: "bop \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
-where
-"binop_meaning BOpEq v v' =
-  (if is_nan_val v \<and> is_nan_val v' then Val (VLit (LitBool False))
-   else mlet (eq v v') (\<lambda>b. Val (VLit (LitBool b))))" |
-"binop_meaning BOpNeq v v' =
-  (if is_nan_val v \<and> is_nan_val v' then Val (VLit (LitBool True))
-   else mlet (eq v v') (\<lambda>b. Val (VLit (LitBool (\<not> b)))))" |
-"binop_meaning BOpIn v v' = mlet (contains v' v) (\<lambda>b. Val (VLit (LitBool b)))" |
-"binop_meaning BOpNotIn v v' = mlet (contains v' v) (\<lambda>b. Val (VLit (LitBool (\<not> b))))" |
-"binop_meaning BOpLt v v' = compare (<) (<) v v'" |
-"binop_meaning BOpLeq v v' = compare (\<le>) (\<le>) v v'" |
-"binop_meaning BOpGt v v' = compare (>) (>) v v'" |
-"binop_meaning BOpGeq v v' = compare (\<ge>) (\<ge>) v v'" |
-"binop_meaning BOpAdd v v' = arith (+) float_add v v'" |
-"binop_meaning BOpSub v v' = arith (-) float_sub v v'" |
-"binop_meaning BOpMul v v' = arith (*) float_mul v v'" |
-"binop_meaning BOpDiv v v' =
-  (if as_number v' = Some 0 then Aborts ZeroDivisionError
-   else number_op (\<lambda>x x'. Val (VLit (LitFloat (float_div x x')))) v v')" |
-"binop_meaning BOpFloorDiv v v' =
-  (if as_number v' = Some 0 then Aborts ZeroDivisionError else arith (div) float_floordiv v v')" |
-"binop_meaning BOpMod v v' =
-  (if as_number v' = Some 0 then Aborts ZeroDivisionError else arith (mod) float_mod v v')" |
-"binop_meaning BOpPow (VLit (LitInt n)) (VLit (LitInt n')) =
-  (if n' \<ge> 0 then Val (VLit (LitInt (n ^ nat n')))
-   else if n = 0 then Aborts ZeroDivisionError
-   else Val (VLit (LitFloat (float_pow (float_of_int n) (float_of_int n')))))" |
-"binop_meaning BOpPow v v' =
-  (if as_number v = Some 0 \<and> (\<exists>y. as_number v' = Some y \<and> y < 0) then Aborts ZeroDivisionError
-   else number_op (\<lambda>x x'. Val (VLit (LitFloat (float_pow x x')))) v v')" |
-"binop_meaning _ _ _ = Aborts TypeError"
-
-fun unop_meaning :: "uop \<Rightarrow> val \<Rightarrow> val result"
-where
-"unop_meaning UOpNot (VLit (LitBool b)) = Val (VLit (LitBool (\<not> b)))" |
-"unop_meaning UOpPos (VLit (LitInt n)) = Val (VLit (LitInt n))" |
-"unop_meaning UOpPos (VLit (LitFloat x)) = Val (VLit (LitFloat x))" |
-"unop_meaning UOpNeg (VLit (LitInt n)) = Val (VLit (LitInt (- n)))" |
-"unop_meaning UOpNeg (VLit (LitFloat x)) = Val (VLit (LitFloat (float_neg x)))" |
-"unop_meaning UOpNot _ = Aborts Excluded" |
-"unop_meaning _ (VLit (LitBool _)) = Aborts Excluded" |
-"unop_meaning _ _ = Aborts TypeError"
-
-(* Nearest integer, ties to even *)
-definition round_even :: "real \<Rightarrow> int"
-where
-"round_even x =
-  (let n = \<lfloor>x\<rfloor>; d = x - real_of_int n in
-   if d < 1 / 2 then n else if 1 / 2 < d then n + 1 else if even n then n else n + 1)"
-
-(* Meanings of the predefined functions *)
-fun prim_meaning :: "prim \<Rightarrow> val list \<Rightarrow> val result"
-where
-"prim_meaning PrimLen [v] =
-  (case iter v of Some vs \<Rightarrow> Val (VLit (LitInt (of_nat (length vs)))) | None \<Rightarrow> Aborts TypeError)" |
-"prim_meaning PrimPrint [v] = Val (VLit LitNone)" |
-"prim_meaning PrimRound [VLit (LitBool _)] = Aborts Excluded" |
-"prim_meaning PrimRound [VLit (LitInt n)] = Val (VLit (LitInt n))" |
-"prim_meaning PrimRound [VLit (LitFloat x)] =
-  (case float_value x of
-     None \<Rightarrow> Aborts ValueError
-   | Some (ereal r) \<Rightarrow> Val (VLit (LitInt (round_even r)))
-   | Some _ \<Rightarrow> Aborts OverflowError)" |
-"prim_meaning PrimRound [v, v'] =
-  (if (as_float v \<noteq> None \<or> is_bool v) \<and>
-      (case v' of VLit (LitInt _) \<Rightarrow> True | VLit (LitBool _) \<Rightarrow> True | VLit LitNone \<Rightarrow> True | _ \<Rightarrow> False)
-   then Aborts Excluded else Aborts TypeError)" |
-"prim_meaning PrimExit [VLit (LitInt n)] = Aborts (SystemExit n)" |
-"prim_meaning PrimExit [] = Aborts Excluded" |
-"prim_meaning PrimExit [v] = Aborts Excluded" |
-"prim_meaning _ _ = Aborts TypeError"
-
-(* Value denoted by a name: a simple name looked up directly, a qualified name in the environment of the loaded
-   module denoted by its prefix; None if the prefix denotes a module stub or a value other than a module *)
-fun resolve_path :: "val option \<Rightarrow> var list \<Rightarrow> val option"
-where
-"resolve_path v [] = v" |
-"resolve_path (Some (VModLoaded _ \<rho>')) (y # ys) = resolve_path (fmlookup \<rho>' y) ys" |
-"resolve_path _ _ = None"
-
-definition resolve :: "env \<Rightarrow> name \<Rightarrow> val option"
-where
-"resolve \<rho> q = resolve_path (fmlookup \<rho> (fst q)) (snd q)"
 
 datatype match_result = Match env | NoMatch | MatchAborts termination_kind
 
@@ -365,7 +12,7 @@ where
 "NoMatch \<otimes>\<^sub>m m = NoMatch" |
 "MatchAborts \<kappa> \<otimes>\<^sub>m m = MatchAborts \<kappa>"
 
-(* Names a case hypothesis IH when it contains an induction predicate, and hyps otherwise, as for a rule
+(* Name a case hypothesis IH when it contains an induction predicate, and hyps otherwise, following a rule
    without parameters. The induction method also takes the free variables among the conclusion's arguments for
    predicates, which makes every premise mentioning \<Sigma> an IH. *)
 attribute_setup ih_names = \<open>
@@ -381,12 +28,9 @@ attribute_setup ih_names = \<open>
   end
 \<close>
 
-(* The class table, ambient in evaluation *)
-locale evaluation = fixes \<Sigma> :: class_table
+context evaluation
 begin
 
-(* Argument or sub-pattern for each field of C: positional ones fill the fields in order, keyword ones match by
-   name; None unless they cover the fields exactly *)
 definition field_map :: "name \<Rightarrow> 'a list \<Rightarrow> (var \<times> 'a) list \<Rightarrow> (var \<times> 'a) list option"
 where
 "field_map C us kvs =
@@ -395,17 +39,12 @@ where
    then Some (zip (take n xs) us @ map (\<lambda>y. (y, the (map_of kvs y))) (drop n xs))
    else None)"
 
-(* The head of a constructor pattern resolves as in Python: NameError if its first name is unbound,
-   AttributeError if a later name is not found, Excluded if it denotes a predefined class of builtins, which
-   Python matches by an instance test, and TypeError if it denotes any other value which is not a class.
-   Sub-patterns of a class C match the fields of an object whose class has C among its ancestors: positional
-   ones in field order, then keyword ones as written; TypeError for excess positional sub-patterns, a keyword
-   sub-pattern for a field already matched by position, or a positional sub-pattern of range, as in Python;
-   excluded if they otherwise do not cover the fields of C exactly *)
-fun match :: "env \<Rightarrow> pat \<Rightarrow> val \<Rightarrow> match_result"
+function (sequential) match :: "env \<Rightarrow> pat \<Rightarrow> val \<Rightarrow> match_result"
   and match_all :: "env \<Rightarrow> pat located list \<Rightarrow> val list \<Rightarrow> match_result"
   and match_dict :: "env \<Rightarrow> (str \<times> pat located) list \<Rightarrow> (str \<times> val) list \<Rightarrow> match_result"
   and match_kws :: "env \<Rightarrow> (var \<times> pat located) list \<Rightarrow> (var \<times> val) list \<Rightarrow> match_result"
+  and match_fields ::
+    "env \<Rightarrow> name \<Rightarrow> pat located list \<Rightarrow> (var \<times> pat located) list \<Rightarrow> (var \<times> val) list \<Rightarrow> match_result"
 where
 "match \<rho> (PatLiteral l) v =
   (if is_bool (VLit l) \<and> as_float v \<noteq> None then NoMatch
@@ -420,29 +59,17 @@ where
 "match \<rho> (PatDict kps) (VDict \<delta>) =
   (if set (map fst kps) \<subseteq> set (map fst \<delta>) then match_dict \<rho> kps \<delta> else NoMatch)" |
 "match \<rho> (PatConstr (x, xs) (ps, kps)) v =
-  (case fmlookup \<rho> x of
-     None \<Rightarrow> MatchAborts NameError
-   | Some VUnbound \<Rightarrow> MatchAborts NameError
-   | Some _ \<Rightarrow>
-       case resolve \<rho> (x, xs) of
-         None \<Rightarrow> MatchAborts AttributeError
-       | Some u \<Rightarrow>
-       if is_opaque_builtin u then MatchAborts Excluded else
-       case class_of u of
-         None \<Rightarrow> MatchAborts TypeError
-       | Some C \<Rightarrow>
-           (case v of
-              VObject D zvs \<Rightarrow>
-                if C \<notin> set (ancestors \<Sigma> D) then NoMatch
-                else if C = range_class then MatchAborts (if ps = [] then Excluded else TypeError)
-                else
-                  let ys = field_names \<Sigma> C; n = length ps in
-                  if field_map C ps kps \<noteq> None \<and> set ys \<subseteq> set (map fst zvs)
-                  then match_all \<rho> ps (map (\<lambda>y. the (map_of zvs y)) (take n ys)) \<otimes>\<^sub>m match_kws \<rho> kps zvs
-                  else if length ys < n \<or> (\<exists>y \<in> set (map fst kps). y \<in> set (take n ys))
-                  then MatchAborts TypeError
-                  else MatchAborts Excluded
-            | _ \<Rightarrow> NoMatch))" |
+  (case do {
+      u \<leftarrow> or_else NameError (fmlookup \<rho> x);
+      ensure (u \<noteq> VUnbound) NameError;
+      u' \<leftarrow> or_else AttributeError (resolve \<rho> (x, xs));
+      ensure (\<not> is_opaque_builtin u') Excluded;
+      or_else TypeError (class_of u') }
+   of Fail \<kappa> \<Rightarrow> MatchAborts \<kappa>
+    | Ok C \<Rightarrow>
+        (case v of
+           VObject D zvs \<Rightarrow> if C \<in> set (ancestors \<Sigma> D) then match_fields \<rho> C ps kps zvs else NoMatch
+         | _ \<Rightarrow> NoMatch))" |
 "match \<rho> _ _ = NoMatch" |
 
 "match_all \<rho> (p # ps) (v # vs) = match \<rho> (node p) v \<otimes>\<^sub>m match_all \<rho> ps vs" |
@@ -452,7 +79,20 @@ where
 "match_dict \<rho> [] \<delta> = Match \<epsilon>" |
 
 "match_kws \<rho> ((y, p) # kps) zvs = match \<rho> (node p) (the (map_of zvs y)) \<otimes>\<^sub>m match_kws \<rho> kps zvs" |
-"match_kws \<rho> [] zvs = Match \<epsilon>"
+"match_kws \<rho> [] zvs = Match \<epsilon>" |
+
+"match_fields \<rho> C ps kps zvs =
+  (if C = range_class then MatchAborts (if ps = [] then Excluded else TypeError)
+   else
+     let ys = field_names \<Sigma> C; n = length ps in
+     if field_map C ps kps \<noteq> None \<and> set ys \<subseteq> set (map fst zvs)
+     then match_all \<rho> ps (map (\<lambda>y. the (map_of zvs y)) (take n ys)) \<otimes>\<^sub>m match_kws \<rho> kps zvs
+     else if length ys < n \<or> (\<exists>y \<in> set (map fst kps). y \<in> set (take n ys))
+     then MatchAborts TypeError
+     else MatchAborts Excluded)"
+by pat_completeness auto
+
+termination by size_change
 
 fun dispatch :: "env \<Rightarrow> val \<Rightarrow> (pat located \<times> stmt located) list \<Rightarrow> (env \<times> stmt located) result"
 where
@@ -466,7 +106,7 @@ where
 abbreviation true :: val where "true \<equiv> VLit (LitBool True)"
 abbreviation false :: val where "false \<equiv> VLit (LitBool False)"
 
-(* Type arguments of a subscript e[\<psi>s], read from its index *)
+(* Type arguments of a subscript, read from its index *)
 definition type_args_of :: "expr located \<Rightarrow> ty_expr list option"
 where
 "type_args_of e' = those (map type_expr_of (subscript_args e'))"
@@ -566,9 +206,9 @@ EvalCallDef:
   ; length xps = length us
   ; scope VUnbound (map fst xps) s = Some \<rho>s
   ; \<rho>' \<otimes> fmap_of_list (zip (map (def_name \<circ> node) ds) vs) \<otimes> fmap_of_list (zip (map fst xps) us) \<otimes> \<rho>s,
-      node s \<Rightarrow>\<^sub>s o
+      node s \<Rightarrow>\<^sub>s ([], \<omega>)
   ; j < length ds
-  \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e (es, []) \<Rightarrow>\<^sub>e result_of o" |
+  \<rbrakk> \<Longrightarrow> \<rho>, ExprCall e (es, []) \<Rightarrow>\<^sub>e result_of \<omega>" |
 EvalCallDefArity:
   "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val Def(\<rho>', ds, j)
   ; node (ds ! j) = Def f \<alpha>s xps \<psi> s
@@ -600,58 +240,59 @@ EvalExprsCons: "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; \<rho>, e
   \<Longrightarrow> \<rho>, e # es \<Rightarrow>\<^sub>e\<^sub>s mlet r (\<lambda>vs. Val (v # vs))" |
 EvalExprsFail: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, e # es \<Rightarrow>\<^sub>e\<^sub>s Aborts \<kappa>" |
 
-EvalPass: "\<rho>, StmtPass \<Rightarrow>\<^sub>s Assigns \<epsilon>" |
-EvalDeclare: "\<rho>, StmtDeclare x \<psi> \<Rightarrow>\<^sub>s Assigns \<epsilon>" |
-EvalAssign: "\<rho>, node e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtAssign x \<pi> e \<Rightarrow>\<^sub>s mlet r (\<lambda>v. Assigns (fmupd x v \<epsilon>))" |
-EvalExprStmt: "\<rho>, node e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtExpr e \<Rightarrow>\<^sub>s mlet r (\<lambda>v. Assigns \<epsilon>)" |
-EvalReturn: "\<rho>, node e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtReturn (Some e) \<Rightarrow>\<^sub>s mlet r (\<lambda>v. Returns v)" |
-EvalReturnNone: "\<rho>, StmtReturn None \<Rightarrow>\<^sub>s Returns (VLit LitNone)" |
+EvalPass: "\<rho>, StmtPass \<Rightarrow>\<^sub>s assigns\<^sub>o \<epsilon>" |
+EvalDeclare: "\<rho>, StmtDeclare x \<psi> \<Rightarrow>\<^sub>s assigns\<^sub>o \<epsilon>" |
+EvalAssign: "\<rho>, node e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtAssign x \<pi> e \<Rightarrow>\<^sub>s mlet r (\<lambda>v. assigns\<^sub>o (fmupd x v \<epsilon>))" |
+EvalExprStmt: "\<rho>, node e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtExpr e \<Rightarrow>\<^sub>s mlet r (\<lambda>v. assigns\<^sub>o \<epsilon>)" |
+EvalPrint: "\<rho>, node e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtPrint e \<Rightarrow>\<^sub>s mlet r (\<lambda>v. ([v], Assigns \<epsilon>))" |
+EvalReturn: "\<rho>, node e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtReturn (Some e) \<Rightarrow>\<^sub>s mlet r returns\<^sub>o" |
+EvalReturnNone: "\<rho>, StmtReturn None \<Rightarrow>\<^sub>s returns\<^sub>o (VLit LitNone)" |
 EvalDefs:
   "vs = map (\<lambda>i. Def(\<rho>, ds, i)) [0..<length ds]
-  \<Longrightarrow> \<rho>, StmtMutualRegion ds \<Rightarrow>\<^sub>s Assigns (fmap_of_list (zip (map (def_name \<circ> node) ds) vs))" |
-EvalAssert: "\<rho>, node e \<Rightarrow>\<^sub>e Val true \<Longrightarrow> \<rho>, StmtAssert e None \<Rightarrow>\<^sub>s Assigns \<epsilon>" |
-EvalAssertFalse: "\<rho>, node e \<Rightarrow>\<^sub>e Val false \<Longrightarrow> \<rho>, StmtAssert e None \<Rightarrow>\<^sub>s Aborts\<^sub>o (AssertionError None)" |
-EvalAssertFail: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtAssert e None \<Rightarrow>\<^sub>s Aborts\<^sub>o \<kappa>" |
+  \<Longrightarrow> \<rho>, StmtMutualRegion ds \<Rightarrow>\<^sub>s assigns\<^sub>o (fmap_of_list (zip (map (def_name \<circ> node) ds) vs))" |
+EvalAssert: "\<rho>, node e \<Rightarrow>\<^sub>e Val true \<Longrightarrow> \<rho>, StmtAssert e None \<Rightarrow>\<^sub>s assigns\<^sub>o \<epsilon>" |
+EvalAssertFalse: "\<rho>, node e \<Rightarrow>\<^sub>e Val false \<Longrightarrow> \<rho>, StmtAssert e None \<Rightarrow>\<^sub>s aborts\<^sub>o (AssertionError None)" |
+EvalAssertFail: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtAssert e None \<Rightarrow>\<^sub>s aborts\<^sub>o \<kappa>" |
 EvalAssertNonBool:
-  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; v \<notin> {true, false} \<rbrakk> \<Longrightarrow> \<rho>, StmtAssert e None \<Rightarrow>\<^sub>s Aborts\<^sub>o Excluded" |
-EvalAssertMsg: "\<rho>, node e \<Rightarrow>\<^sub>e Val true \<Longrightarrow> \<rho>, StmtAssert e (Some e') \<Rightarrow>\<^sub>s Assigns \<epsilon>" |
+  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; v \<notin> {true, false} \<rbrakk> \<Longrightarrow> \<rho>, StmtAssert e None \<Rightarrow>\<^sub>s aborts\<^sub>o Excluded" |
+EvalAssertMsg: "\<rho>, node e \<Rightarrow>\<^sub>e Val true \<Longrightarrow> \<rho>, StmtAssert e (Some e') \<Rightarrow>\<^sub>s assigns\<^sub>o \<epsilon>" |
 EvalAssertMsgFalse: "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val false ; \<rho>, node e' \<Rightarrow>\<^sub>e Val (VLit (LitString w)) \<rbrakk>
-  \<Longrightarrow> \<rho>, StmtAssert e (Some e') \<Rightarrow>\<^sub>s Aborts\<^sub>o (AssertionError (Some w))" |
+  \<Longrightarrow> \<rho>, StmtAssert e (Some e') \<Rightarrow>\<^sub>s aborts\<^sub>o (AssertionError (Some w))" |
 EvalAssertMsgFalseFail: "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val false ; \<rho>, node e' \<Rightarrow>\<^sub>e Aborts \<kappa> \<rbrakk>
-  \<Longrightarrow> \<rho>, StmtAssert e (Some e') \<Rightarrow>\<^sub>s Aborts\<^sub>o \<kappa>" |
-EvalAssertMsgFail: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtAssert e (Some e') \<Rightarrow>\<^sub>s Aborts\<^sub>o \<kappa>" |
+  \<Longrightarrow> \<rho>, StmtAssert e (Some e') \<Rightarrow>\<^sub>s aborts\<^sub>o \<kappa>" |
+EvalAssertMsgFail: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtAssert e (Some e') \<Rightarrow>\<^sub>s aborts\<^sub>o \<kappa>" |
 EvalAssertMsgNonBool:
-  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; v \<notin> {true, false} \<rbrakk> \<Longrightarrow> \<rho>, StmtAssert e (Some e') \<Rightarrow>\<^sub>s Aborts\<^sub>o Excluded" |
+  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; v \<notin> {true, false} \<rbrakk> \<Longrightarrow> \<rho>, StmtAssert e (Some e') \<Rightarrow>\<^sub>s aborts\<^sub>o Excluded" |
 EvalAssertMsgNonStr:
   "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val false ; \<rho>, node e' \<Rightarrow>\<^sub>e Val v ; \<forall>w. v \<noteq> VLit (LitString w) \<rbrakk>
-  \<Longrightarrow> \<rho>, StmtAssert e (Some e') \<Rightarrow>\<^sub>s Aborts\<^sub>o Excluded" |
+  \<Longrightarrow> \<rho>, StmtAssert e (Some e') \<Rightarrow>\<^sub>s aborts\<^sub>o Excluded" |
 EvalIfTrue: "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val true ; \<rho>, node s \<Rightarrow>\<^sub>s o \<rbrakk>
   \<Longrightarrow> \<rho>, StmtIf e s elifs else' \<Rightarrow>\<^sub>s o" |
 EvalIfFalse: "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val false ; \<rho>, (elifs, else') \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o \<rbrakk>
   \<Longrightarrow> \<rho>, StmtIf e s elifs else' \<Rightarrow>\<^sub>s o" |
-EvalIfFail: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtIf e s elifs else' \<Rightarrow>\<^sub>s Aborts\<^sub>o \<kappa>" |
+EvalIfFail: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtIf e s elifs else' \<Rightarrow>\<^sub>s aborts\<^sub>o \<kappa>" |
 EvalIfNonBool:
-  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; v \<notin> {true, false} \<rbrakk> \<Longrightarrow> \<rho>, StmtIf e s elifs else' \<Rightarrow>\<^sub>s Aborts\<^sub>o Excluded" |
+  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; v \<notin> {true, false} \<rbrakk> \<Longrightarrow> \<rho>, StmtIf e s elifs else' \<Rightarrow>\<^sub>s aborts\<^sub>o Excluded" |
 EvalMatch:
   "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; dispatch \<rho> v cases = Val (\<rho>', s') ; \<rho> \<otimes> \<rho>', node s' \<Rightarrow>\<^sub>s o \<rbrakk>
-  \<Longrightarrow> \<rho>, StmtMatch e cases \<Rightarrow>\<^sub>s Assigns \<rho>' \<otimes>\<^sub>o o" |
-EvalMatchFail: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtMatch e cases \<Rightarrow>\<^sub>s Aborts\<^sub>o \<kappa>" |
+  \<Longrightarrow> \<rho>, StmtMatch e cases \<Rightarrow>\<^sub>s assigns\<^sub>o \<rho>' \<otimes>\<^sub>o o" |
+EvalMatchFail: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtMatch e cases \<Rightarrow>\<^sub>s aborts\<^sub>o \<kappa>" |
 EvalMatchAbort:
-  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; dispatch \<rho> v cases = Aborts \<kappa> \<rbrakk> \<Longrightarrow> \<rho>, StmtMatch e cases \<Rightarrow>\<^sub>s Aborts\<^sub>o \<kappa>" |
-EvalSeq: "\<lbrakk> \<rho>, node s \<Rightarrow>\<^sub>s Assigns \<rho>' ; \<rho> \<otimes> \<rho>', node s' \<Rightarrow>\<^sub>s o \<rbrakk>
-  \<Longrightarrow> \<rho>, StmtSeq s s' \<Rightarrow>\<^sub>s Assigns \<rho>' \<otimes>\<^sub>o o" |
-EvalSeqReturn: "\<rho>, node s \<Rightarrow>\<^sub>s Returns v \<Longrightarrow> \<rho>, StmtSeq s s' \<Rightarrow>\<^sub>s Returns v" |
-EvalSeqFail: "\<rho>, node s \<Rightarrow>\<^sub>s Aborts\<^sub>o \<kappa> \<Longrightarrow> \<rho>, StmtSeq s s' \<Rightarrow>\<^sub>s Aborts\<^sub>o \<kappa>" |
+  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; dispatch \<rho> v cases = Aborts \<kappa> \<rbrakk> \<Longrightarrow> \<rho>, StmtMatch e cases \<Rightarrow>\<^sub>s aborts\<^sub>o \<kappa>" |
+EvalSeq: "\<lbrakk> \<rho>, node s \<Rightarrow>\<^sub>s (us, Assigns \<rho>') ; \<rho> \<otimes> \<rho>', node s' \<Rightarrow>\<^sub>s o \<rbrakk>
+  \<Longrightarrow> \<rho>, StmtSeq s s' \<Rightarrow>\<^sub>s (us, Assigns \<rho>') \<otimes>\<^sub>o o" |
+EvalSeqReturn: "\<rho>, node s \<Rightarrow>\<^sub>s (us, Returns v) \<Longrightarrow> \<rho>, StmtSeq s s' \<Rightarrow>\<^sub>s (us, Returns v)" |
+EvalSeqFail: "\<rho>, node s \<Rightarrow>\<^sub>s (us, Aborts\<^sub>\<omega> \<kappa>) \<Longrightarrow> \<rho>, StmtSeq s s' \<Rightarrow>\<^sub>s (us, Aborts\<^sub>\<omega> \<kappa>)" |
 
-EvalIfNone: "\<rho>, ([], None) \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f Assigns \<epsilon>" |
+EvalIfNone: "\<rho>, ([], None) \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f assigns\<^sub>o \<epsilon>" |
 EvalElse: "\<rho>, node s \<Rightarrow>\<^sub>s o \<Longrightarrow> \<rho>, ([], Some s) \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o" |
 EvalElifTrue: "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val true ; \<rho>, node s \<Rightarrow>\<^sub>s o \<rbrakk>
   \<Longrightarrow> \<rho>, ((e, s) # elifs, else') \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o" |
 EvalElifFalse: "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val false ; \<rho>, (elifs, else') \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o \<rbrakk>
   \<Longrightarrow> \<rho>, ((e, s) # elifs, else') \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o" |
-EvalElifFail: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, ((e, s) # elifs, else') \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f Aborts\<^sub>o \<kappa>" |
+EvalElifFail: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, ((e, s) # elifs, else') \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f aborts\<^sub>o \<kappa>" |
 EvalElifNonBool:
-  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; v \<notin> {true, false} \<rbrakk> \<Longrightarrow> \<rho>, ((e, s) # elifs, else') \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f Aborts\<^sub>o Excluded" |
+  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; v \<notin> {true, false} \<rbrakk> \<Longrightarrow> \<rho>, ((e, s) # elifs, else') \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f aborts\<^sub>o Excluded" |
 
 EvalQualsNil: "\<rho>, [] \<Rightarrow>\<^sub>q Val [\<rho>]" |
 EvalQualGuardTrue: "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val true ; \<rho>, gs \<Rightarrow>\<^sub>q r \<rbrakk> \<Longrightarrow> \<rho>, At p (Guard e) # gs \<Rightarrow>\<^sub>q r" |
@@ -698,41 +339,37 @@ where
 "type_value q \<chi>s i =
   (case node (\<chi>s ! i) of Dataclass c _ _ _ \<Rightarrow> VClass (snoc q c) | TypeStmt _ _ _ \<Rightarrow> VTypeAlias q \<chi>s i)"
 
-(* Top-level statement t of module q *)
 inductive eval_top :: "name \<Rightarrow> env \<Rightarrow> top_stmt \<Rightarrow> outcome \<Rightarrow> bool"  ("_, _, _ \<Rightarrow>\<^sub>t _" [60,60,0,60] 60)
 where
 EvalTopStmt: "\<rho>, node s \<Rightarrow>\<^sub>s o \<Longrightarrow> q, \<rho>, Stmt s \<Rightarrow>\<^sub>t o" |
-EvalTopSeq: "\<lbrakk> q, \<rho>, t \<Rightarrow>\<^sub>t Assigns \<rho>' ; q, \<rho> \<otimes> \<rho>', t' \<Rightarrow>\<^sub>t o \<rbrakk> \<Longrightarrow> q, \<rho>, TopSeq t t' \<Rightarrow>\<^sub>t Assigns \<rho>' \<otimes>\<^sub>o o" |
-EvalTopSeqFail: "q, \<rho>, t \<Rightarrow>\<^sub>t Aborts\<^sub>o \<kappa> \<Longrightarrow> q, \<rho>, TopSeq t t' \<Rightarrow>\<^sub>t Aborts\<^sub>o \<kappa>" |
+EvalTopSeq:
+  "\<lbrakk> q, \<rho>, t \<Rightarrow>\<^sub>t (us, Assigns \<rho>') ; q, \<rho> \<otimes> \<rho>', t' \<Rightarrow>\<^sub>t o \<rbrakk> \<Longrightarrow> q, \<rho>, TopSeq t t' \<Rightarrow>\<^sub>t (us, Assigns \<rho>') \<otimes>\<^sub>o o" |
+EvalTopSeqFail: "q, \<rho>, t \<Rightarrow>\<^sub>t (us, Aborts\<^sub>\<omega> \<kappa>) \<Longrightarrow> q, \<rho>, TopSeq t t' \<Rightarrow>\<^sub>t (us, Aborts\<^sub>\<omega> \<kappa>)" |
 EvalTypes:
   "q, \<rho>, TypeDefs \<chi>s \<Rightarrow>\<^sub>t
-   Assigns (fmap_of_list (map (\<lambda>j. (type_def_name (node (\<chi>s ! j)), type_value q \<chi>s j)) [0..<length \<chi>s]))"
+   assigns\<^sub>o (fmap_of_list (map (\<lambda>j. (type_def_name (node (\<chi>s ! j)), type_value q \<chi>s j)) [0..<length \<chi>s]))"
 
 end
 
-
-(* Environments of the predefined modules: each binds __name__ to the name of the module and each member to its
-   value. Output and command-line arguments aren't modelled, so print returns None and sys.argv is empty *)
-definition \<P>\<^sub>e\<^sub>n\<^sub>v :: "(name, env) fmap"
+definition \<E> :: "str list \<Rightarrow> (name, env) fmap"
 where
-"\<P>\<^sub>e\<^sub>n\<^sub>v =
+"\<E> \<A> =
   (let name = \<lambda>x. (var ''__name__'', VLit (LitString (str_of x))) in
    fmap_of_list
     [(builtins, fmap_of_list
-       ([name ''builtins'', (var ''len'', VPrim PrimLen), (var ''print'', VPrim PrimPrint),
-         (var ''range'', VClass range_class), (var ''round'', VPrim PrimRound)]
-        @ map (\<lambda>y. (y, VOpaque (snoc builtins y)))
+       ([name ''builtins'', (var ''len'', VPrim PrimLen), (var ''range'', VClass range_class),
+         (var ''round'', VPrim PrimRound)]
+        @ map (\<lambda>y. (y, VPredef (snoc builtins y)))
             (map prim_name [NoneType, object, bool, int, float, str]
              @ map var [''list'', ''dict'', ''tuple'']))),
-     ((var ''sys'', []), fmap_of_list [name ''sys'', (var ''argv'', VList []), (var ''exit'', VPrim PrimExit)]),
+     ((var ''sys'', []), fmap_of_list
+       [name ''sys'', (var ''argv'', VList (map (VLit \<circ> LitString) \<A>)), (var ''exit'', VPrim PrimExit)]),
      ((var ''typing'', []), fmap_of_list
-       (name ''typing'' # map (\<lambda>y. (y, VOpaque (var ''typing'', [y])))
+       (name ''typing'' # map (\<lambda>y. (y, VPredef (var ''typing'', [y])))
           [var ''Callable'', var ''Literal'', prim_name Never, prim_name Sized])),
      ((var ''dataclasses'', []), fmap_of_list
-       [name ''dataclasses'', (var ''dataclass'', VOpaque (var ''dataclasses'', [var ''dataclass'']))])])"
+       [name ''dataclasses'', (var ''dataclass'', VPredef (var ''dataclasses'', [var ''dataclass'']))])])"
 
-(* Extension of environments, as for contexts: a loaded module takes precedence over a stub of the same module,
-   and two loads of a module combine *)
 function (sequential) extend_val :: "val \<Rightarrow> val \<Rightarrow> val"
 and extend_env :: "env \<Rightarrow> env \<Rightarrow> env" (infixl "\<uplus>\<^sub>v" 65)
 where
@@ -752,112 +389,78 @@ by (relation "measure (\<lambda>p. case p of Inl (v, _) \<Rightarrow> size v | I
 
 declare extend_env.simps [simp del]
 
-fun stub_of :: "val \<Rightarrow> name option"
+fun member :: "(name, env) fmap \<Rightarrow> env \<Rightarrow> var \<Rightarrow> val"
 where
-"stub_of (VModStub q) = Some q" |
-"stub_of _ = None"
+"member \<L> \<rho> x = (case the (fmlookup \<rho> x) of VModStub q \<Rightarrow> VModLoaded q (the (fmlookup \<L> q)) | v \<Rightarrow> v)"
 
-fun is_stub :: "val \<Rightarrow> bool"
+fun submod_env :: "(name, env) fmap \<Rightarrow> name \<Rightarrow> var list \<Rightarrow> env"
 where
-"is_stub (VModStub _) = True" |
-"is_stub _ = False"
+"submod_env \<L> q [] = the (fmlookup \<L> q)" |
+"submod_env \<L> q (x # xs) =
+   the (fmlookup \<L> q) \<uplus>\<^sub>v fmupd x (VModLoaded (snoc q x) (submod_env \<L> (snoc q x) xs)) \<epsilon>"
 
-lemma stub_of_Some: "stub_of v = Some q \<longleftrightarrow> v = VModStub q"
-  by (cases v) auto
+fun import_env :: "(name, env) fmap \<Rightarrow> import \<Rightarrow> env"
+where
+"import_env \<L> (Import (x, xs)) = fmupd x (VModLoaded (x, []) (submod_env \<L> (x, []) xs)) \<epsilon>" |
+"import_env \<L> (FromImport q xs) = fmap_of_list (map (\<lambda>x. (x, member \<L> (the (fmlookup \<L> q)) x)) xs)"
 
-lemma stub_of_None: "stub_of v = None \<longleftrightarrow> \<not> is_stub v"
-  by (cases v) auto
+fun imports_env :: "(name, env) fmap \<Rightarrow> import located list \<Rightarrow> env"
+where
+"imports_env \<L> [] = \<epsilon>" |
+"imports_env \<L> (\<iota> # \<iota>s) = import_env \<L> (node \<iota>) \<uplus>\<^sub>v imports_env \<L> \<iota>s"
 
-(* The program, ambient in loading *)
 locale loading = evaluation +
   fixes \<M> :: program
 begin
 
-(* Environment that binds each submodule of q to a stub; the predefined modules have no submodules *)
+function
+  loads :: "name list \<Rightarrow> name list \<Rightarrow> name list" and
+  submod_loads :: "name list \<Rightarrow> name \<Rightarrow> var list \<Rightarrow> name list" and
+  imports_loads :: "name list \<Rightarrow> name \<Rightarrow> import located list \<Rightarrow> name list" and
+  import_loads :: "name list \<Rightarrow> name \<Rightarrow> import \<Rightarrow> name list"
+where
+"loads qs [] = qs" |
+"loads qs (q # qs') =
+   (if q \<in> set qs \<or> q |\<in>| fmdom \<P> then loads qs qs'
+    else case the (fmlookup \<M> q) of ModuleBody \<iota>s t \<Rightarrow> loads (imports_loads qs q \<iota>s @ [q]) qs')" |
+
+"submod_loads qs q [] = qs" |
+"submod_loads qs q (x # xs) =
+   (if snoc q x |\<in>| fmdom \<M> \<and> x \<notin> set (declares (the (fmlookup \<M> q)))
+    then submod_loads (loads qs [snoc q x]) q xs
+    else submod_loads qs q xs)" |
+
+"imports_loads qs q [] = qs" |
+"imports_loads qs q (\<iota> # \<iota>s) = imports_loads (import_loads qs q (node \<iota>)) q \<iota>s" |
+
+"import_loads qs q (Import q') = loads qs (proper_prefixes q' @ [q'])" |
+"import_loads qs q (FromImport q' xs) = submod_loads (loads qs (unique_to q' q @ [q'])) q' xs"
+by pat_completeness auto
+
+(* Environment that binds each submodule of q to a stub *)
 definition submods_env :: "name \<Rightarrow> env"
 where
 "submods_env q = fmmap (\<lambda>\<theta>. case \<theta> of ModStub q' \<Rightarrow> VModStub q' | _ \<Rightarrow> VUnbound) (submods \<M> q)"
 
-abbreviation builtins_env :: env where "builtins_env \<equiv> the (fmlookup \<P>\<^sub>e\<^sub>n\<^sub>v builtins)"
-
-(* Loading of a module, of imports, of a submodule chain, of one or several imported names, and of the modules
-   containing the target of a from-import, where only an abort matters *)
-inductive
-  eval_mod     :: "name \<Rightarrow> env result \<Rightarrow> bool"                     ("_ \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d _" [60,60] 60) and
-  eval_imports :: "name \<Rightarrow> import located list \<Rightarrow> env result \<Rightarrow> bool"       ("_, _ \<Rightarrow>\<^sub>i _" [60,0,60] 60) and
-  eval_sub     :: "name \<Rightarrow> env \<Rightarrow> var list \<Rightarrow> env result \<Rightarrow> bool" ("_, _, _ \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b _" [60,60,0,60] 60) and
-  eval_imp     :: "env \<Rightarrow> var \<Rightarrow> val result \<Rightarrow> bool"              ("_, _ \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p _" [60,0,60] 60) and
-  eval_imps    :: "env \<Rightarrow> var list \<Rightarrow> val list result \<Rightarrow> bool"    ("_, _ \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s _" [60,0,60] 60) and
-  eval_mods    :: "name list \<Rightarrow> unit result \<Rightarrow> bool"                ("_ \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s _" [60,60] 60)
+inductive eval_mod :: "name \<Rightarrow> (name, env) fmap \<Rightarrow> outcome \<Rightarrow> bool"  ("_, _ \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d _" [60,60,60] 60)
 where
-EvalPredefined: "fmlookup \<P>\<^sub>e\<^sub>n\<^sub>v q = Some \<rho> \<Longrightarrow> q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho>" |
 EvalModule:
-  "\<lbrakk> fmlookup \<M> q = Some (ModuleBody \<iota>s t) ; q, \<iota>s \<Rightarrow>\<^sub>i Val \<rho>' ; scope VUnbound (declares \<iota>s) t = Some \<rho>s
-  ; q, builtins_env \<otimes> \<rho>' \<otimes> \<rho>s, t \<Rightarrow>\<^sub>t Assigns \<rho>''
-  \<rbrakk> \<Longrightarrow> q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val (submods_env q \<otimes> \<rho>'')" |
-EvalModuleFail: "\<lbrakk> fmlookup \<M> q = Some (ModuleBody \<iota>s t) ; q, \<iota>s \<Rightarrow>\<^sub>i Aborts \<kappa> \<rbrakk> \<Longrightarrow> q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Aborts \<kappa>" |
-EvalModuleFailBody:
-  "\<lbrakk> fmlookup \<M> q = Some (ModuleBody \<iota>s t) ; q, \<iota>s \<Rightarrow>\<^sub>i Val \<rho>' ; scope VUnbound (declares \<iota>s) t = Some \<rho>s
-  ; q, builtins_env \<otimes> \<rho>' \<otimes> \<rho>s, t \<Rightarrow>\<^sub>t Aborts\<^sub>o \<kappa>
-  \<rbrakk> \<Longrightarrow> q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Aborts \<kappa>" |
+  "\<lbrakk> fmlookup \<M> q = Some (ModuleBody \<iota>s t) ; scope VUnbound (declares \<iota>s) t = Some \<rho>s
+  ; q, the (fmlookup \<L> builtins) \<otimes> imports_env \<L> \<iota>s \<otimes> \<rho>s, t \<Rightarrow>\<^sub>t o
+  \<rbrakk> \<Longrightarrow> q, \<L> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d o"
 
-EvalImportsNil: "q, [] \<Rightarrow>\<^sub>i Val \<epsilon>" |
-EvalImport:
-  "\<lbrakk> (x, []) \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> ; (x, []), \<rho>, xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b Val \<rho>'' ; q, \<iota>s \<Rightarrow>\<^sub>i r \<rbrakk>
-  \<Longrightarrow> q, At p (Import (x, xs)) # \<iota>s \<Rightarrow>\<^sub>i mlet r (\<lambda>\<rho>'. Val (fmupd x (VModLoaded (x, []) \<rho>'') \<epsilon> \<uplus>\<^sub>v \<rho>'))" |
-EvalImportFail: "(x, []) \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Aborts \<kappa> \<Longrightarrow> q, At p (Import (x, xs)) # \<iota>s \<Rightarrow>\<^sub>i Aborts \<kappa>" |
-EvalImportFailChain:
-  "\<lbrakk> (x, []) \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> ; (x, []), \<rho>, xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b Aborts \<kappa> \<rbrakk> \<Longrightarrow> q, At p (Import (x, xs)) # \<iota>s \<Rightarrow>\<^sub>i Aborts \<kappa>" |
-EvalFromImport:
-  "\<lbrakk> unique_to q' q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s Val () ; q' \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> ; \<rho>, xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s Val vs ; q, \<iota>s \<Rightarrow>\<^sub>i r \<rbrakk>
-  \<Longrightarrow> q, At p (FromImport q' xs) # \<iota>s \<Rightarrow>\<^sub>i mlet r (\<lambda>\<rho>''. Val (fmap_of_list (zip xs vs) \<uplus>\<^sub>v \<rho>''))" |
-EvalFromImportFail:
-  "\<lbrakk> unique_to q' q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s Val () ; q' \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Aborts \<kappa> \<rbrakk> \<Longrightarrow> q, At p (FromImport q' xs) # \<iota>s \<Rightarrow>\<^sub>i Aborts \<kappa>" |
-EvalFromImportFailContaining:
-  "unique_to q' q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s Aborts \<kappa> \<Longrightarrow> q, At p (FromImport q' xs) # \<iota>s \<Rightarrow>\<^sub>i Aborts \<kappa>" |
-EvalFromImportFailMember:
-  "\<lbrakk> unique_to q' q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s Val () ; q' \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> ; \<rho>, xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s Aborts \<kappa> \<rbrakk>
-  \<Longrightarrow> q, At p (FromImport q' xs) # \<iota>s \<Rightarrow>\<^sub>i Aborts \<kappa>" |
-
-EvalSubmodulesNil: "q, \<rho>, [] \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b Val \<rho>" |
-EvalSubmodulesCons:
-  "\<lbrakk> snoc q x \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho>' ; snoc q x, \<rho>', xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b r \<rbrakk>
-  \<Longrightarrow> q, \<rho>, x # xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b mlet r (\<lambda>\<rho>''. Val (\<rho> \<uplus>\<^sub>v fmupd x (VModLoaded (snoc q x) \<rho>'') \<epsilon>))" |
-EvalSubmodulesFail: "snoc q x \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Aborts \<kappa> \<Longrightarrow> q, \<rho>, x # xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b Aborts \<kappa>" |
-
-EvalImpMember: "\<lbrakk> fmlookup \<rho> x = Some v ; \<not> is_stub v \<rbrakk> \<Longrightarrow> \<rho>, x \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p Val v" |
-EvalImpSubmodule:
-  "\<lbrakk> fmlookup \<rho> x = Some (VModStub q') ; q' \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho>' \<rbrakk> \<Longrightarrow> \<rho>, x \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p Val (VModLoaded q' \<rho>')" |
-EvalImpSubmoduleFail:
-  "\<lbrakk> fmlookup \<rho> x = Some (VModStub q') ; q' \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Aborts \<kappa> \<rbrakk> \<Longrightarrow> \<rho>, x \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p Aborts \<kappa>" |
-
-EvalImpsNil: "\<rho>, [] \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s Val []" |
-EvalImpsCons:
-  "\<lbrakk> \<rho>, x \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p Val v ; \<rho>, xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s r \<rbrakk> \<Longrightarrow> \<rho>, x # xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s mlet r (\<lambda>vs. Val (v # vs))" |
-EvalImpsFail: "\<rho>, x \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p Aborts \<kappa> \<Longrightarrow> \<rho>, x # xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s Aborts \<kappa>" |
-
-EvalModsNil: "[] \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s Val ()" |
-EvalModsCons: "\<lbrakk> q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> ; qs \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s r \<rbrakk> \<Longrightarrow> q # qs \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s r" |
-EvalModsFail: "q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Aborts \<kappa> \<Longrightarrow> q # qs \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s Aborts \<kappa>"
-
-(* A program exits with 0 if __main__ loads, and otherwise with the termination kind of loading *)
-inductive eval_program :: "termination_kind \<Rightarrow> bool"
+inductive eval_mods :: "name list \<Rightarrow> (name, env) fmap \<Rightarrow> outcome \<Rightarrow> bool"  ("_, _ \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s _" [60,60,60] 60)
 where
-EvalProgram: "main \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> \<Longrightarrow> eval_program (SystemExit 0)" |
-EvalProgramAbort: "main \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Aborts \<kappa> \<Longrightarrow> eval_program \<kappa>"
+EvalModsNil: "[], \<L> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s assigns\<^sub>o \<epsilon>" |
+EvalModsCons:
+  "\<lbrakk> q, \<L> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d (vs, Assigns \<rho>) ; qs, fmupd q (submods_env q \<otimes> \<rho>) \<L> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s o \<rbrakk>
+  \<Longrightarrow> q # qs, \<L> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s (vs, Assigns \<epsilon>) \<otimes>\<^sub>o o" |
+EvalModsFail: "q, \<L> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d (vs, Aborts\<^sub>\<omega> \<kappa>) \<Longrightarrow> q # qs, \<L> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s (vs, Aborts\<^sub>\<omega> \<kappa>)"
 
-(* Required by well-formedness of programs *)
-context
-  assumes disjoint: "fmdom \<M> |\<inter>| fmdom \<P>\<^sub>e\<^sub>n\<^sub>v = {||}"
-begin
-
-lemma predefined_not_module: "fmlookup \<P>\<^sub>e\<^sub>n\<^sub>v q = Some \<rho> \<Longrightarrow> fmlookup \<M> q = Some b \<Longrightarrow> False"
-  using disjoint by (auto dest!: fmdomI)
-
-lemma module_not_predefined: "fmlookup \<M> q = Some b \<Longrightarrow> fmlookup \<P>\<^sub>e\<^sub>n\<^sub>v q = None"
-  by (cases "fmlookup \<P>\<^sub>e\<^sub>n\<^sub>v q") (use predefined_not_module[of q _ b] in auto)
-
-end
+inductive eval_program :: "str list \<Rightarrow> val list \<Rightarrow> termination_kind \<Rightarrow> bool"
+where
+EvalProgram: "loads [] [main], \<E> \<A> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s (vs, Assigns \<rho>) \<Longrightarrow> eval_program \<A> vs (SystemExit 0)" |
+EvalProgramAbort: "loads [] [main], \<E> \<A> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s (vs, Aborts\<^sub>\<omega> \<kappa>) \<Longrightarrow> eval_program \<A> vs \<kappa>"
 
 end
 

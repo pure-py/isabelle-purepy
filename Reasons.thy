@@ -38,6 +38,7 @@ datatype reason =
   | SubmoduleNotImported name
   | UnassignedMember var name
   | TopLevelAssertFalse
+  | PrintInFunction
   | UnknownModule name
   | DuplicateImportedName var
   | UnknownMember var name
@@ -53,7 +54,7 @@ datatype reason =
   | NoUnaryOverload uop ty
   | NotCallable ty
   | KeywordArgumentsNotConstructor
-  | CallArityMismatch nat nat
+  | CallArityMismatch "expr located" nat nat
   | NoneResult
   | TypeMismatch ty ty
   | LambdaTypeMismatch ty "nat option"
@@ -62,7 +63,7 @@ datatype reason =
   | NotIterable ty
   | NotSynthesised
   | UnknownField var var
-  | NoAttributes ty
+  | NoAttributes ty var
   | BareReturn ty
   | MissingReturn var ty
   | ImportCycle "name list"

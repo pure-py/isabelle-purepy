@@ -39,7 +39,12 @@ def main() -> None:
         if lint.failed:
             sys.exit(1)
     purepy_conformance.main(
-        ["--type-checker", f"{sys.executable} -m purepy --check", *conformance_args]
+        [
+            "--type-checker",
+            f"{sys.executable} -m purepy --check",
+            "--check-messages",
+            *conformance_args,
+        ]
     )
 
 

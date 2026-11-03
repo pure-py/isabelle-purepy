@@ -12,6 +12,7 @@ session "isabelle-purepy" = HOL +
     Contexts
     Reasons
     Types
+    Values
     Semantics
     Determinism
     Subtyping

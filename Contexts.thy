@@ -52,7 +52,6 @@ where
 "\<P> = fmap_of_list
   [(builtins, fmap_of_list
      ([name_binding,
-       (var ''print'', Ty (TyCallable [TyPrim object] (TyPrim NoneType))),
        (var ''len'', Ty (TyCallable [TyPrim Sized] (TyPrim int))),
        (var ''range'', Type range_class),
        (var ''round'', Ty (TyCallable [TyPrim float] (TyPrim int)))]
