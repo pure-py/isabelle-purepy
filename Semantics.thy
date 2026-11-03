@@ -420,20 +420,17 @@ where
 "match \<rho> (PatDict kps) (VDict \<delta>) =
   (if set (map fst kps) \<subseteq> set (map fst \<delta>) then match_dict \<rho> kps \<delta> else NoMatch)" |
 "match \<rho> (PatConstr (x, xs) (ps, kps)) v =
-  (case fmlookup \<rho> x of
-     None \<Rightarrow> MatchAborts NameError
-   | Some VUnbound \<Rightarrow> MatchAborts NameError
-   | Some _ \<Rightarrow>
-       case resolve \<rho> (x, xs) of
-         None \<Rightarrow> MatchAborts AttributeError
-       | Some u \<Rightarrow>
-       if is_opaque_builtin u then MatchAborts Excluded else
-       case class_of u of
-         None \<Rightarrow> MatchAborts TypeError
-       | Some C \<Rightarrow>
-           (case v of
-              VObject D zvs \<Rightarrow> if C \<in> set (ancestors \<Sigma> D) then match_fields \<rho> C ps kps zvs else NoMatch
-            | _ \<Rightarrow> NoMatch))" |
+  (case do {
+      u \<leftarrow> or_else NameError (fmlookup \<rho> x);
+      ensure (u \<noteq> VUnbound) NameError;
+      u' \<leftarrow> or_else AttributeError (resolve \<rho> (x, xs));
+      ensure (\<not> is_opaque_builtin u') Excluded;
+      or_else TypeError (class_of u') }
+   of Fail \<kappa> \<Rightarrow> MatchAborts \<kappa>
+    | Ok C \<Rightarrow>
+        (case v of
+           VObject D zvs \<Rightarrow> if C \<in> set (ancestors \<Sigma> D) then match_fields \<rho> C ps kps zvs else NoMatch
+         | _ \<Rightarrow> NoMatch))" |
 "match \<rho> _ _ = NoMatch" |
 
 "match_all \<rho> (p # ps) (v # vs) = match \<rho> (node p) v \<otimes>\<^sub>m match_all \<rho> ps vs" |
