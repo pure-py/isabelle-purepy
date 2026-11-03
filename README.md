@@ -81,7 +81,8 @@ Run the `Release` GitHub Action manually. The version number of a release is tha
 | `Contexts.thy`       | Context entries, class tables, name resolution, predefined modules, programs   |
 | `Reasons.thy`        | Reasons for ill-formedness                                                     |
 | `Types.thy`          | Type resolution, substitution and class definitions                            |
-| `Semantics.thy`      | Values, results and evaluation judgements                                      |
+| `Values.thy`         | Values, results and functions on values                                        |
+| `Semantics.thy`      | Evaluation judgements                                                          |
 | `Determinism.thy`    | Inversion lemmas and determinism of evaluation                                 |
 | `Subtyping.thy`      | Subtyping, join and meet; element, subscript and attribute types               |
 | `Shapes.thy`         | Heads and shapes for pattern matching; head and shape typing; shapes of a type |
