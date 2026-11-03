@@ -13,7 +13,7 @@ begin
 lemma subty_literal_int [simp]: "\<Sigma> \<turnstile> TyLiteral (LitInt n) <: TyPrim int"
   by (rule SubtyLiteral) (simp add: SubtyRefl)
 
-lemmas overload_simps = binop_meaning_def bounds_def int_arith_def
+lemmas overload_simps = binop_meaning_def overload_def int_arith_def
 
 lemma ex_add_eval: "\<epsilon>, ex_add \<Rightarrow>\<^sub>e Val (VLit (LitInt 30))"
 proof -
