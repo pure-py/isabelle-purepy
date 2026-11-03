@@ -413,7 +413,6 @@ locale loading = evaluation +
   fixes \<M> :: program
 begin
 
-(* Partial, since loading diverges on an import cycle, excluded by well-formedness *)
 function
   loads :: "name list \<Rightarrow> name list \<Rightarrow> name list" and
   submod_loads :: "name list \<Rightarrow> name \<Rightarrow> var list \<Rightarrow> name list" and
