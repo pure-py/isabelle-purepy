@@ -713,8 +713,7 @@ EvalTypes:
 
 end
 
-(* Environments of the predefined modules: each binds __name__ to the name of the module and each member to its
-   value. Command-line arguments aren't modelled, so sys.argv is empty *)
+(* sys.argv is empty until the predefined environments take the command-line arguments as a parameter *)
 definition \<P>\<^sub>e\<^sub>n\<^sub>v :: "(name, env) fmap"
 where
 "\<P>\<^sub>e\<^sub>n\<^sub>v =
