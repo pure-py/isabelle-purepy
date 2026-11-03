@@ -48,6 +48,10 @@ datatype completion = Assigns env | Returns val | Aborts\<^sub>\<omega> terminat
 
 type_synonym outcome = "val list \<times> completion"
 
+abbreviation assigns\<^sub>o :: "env \<Rightarrow> outcome" where "assigns\<^sub>o \<rho> \<equiv> ([], Assigns \<rho>)"
+abbreviation returns\<^sub>o :: "val \<Rightarrow> outcome" where "returns\<^sub>o v \<equiv> ([], Returns v)"
+abbreviation aborts\<^sub>o :: "termination_kind \<Rightarrow> outcome" where "aborts\<^sub>o \<kappa> \<equiv> ([], Aborts\<^sub>\<omega> \<kappa>)"
+
 consts mlet :: "'a result \<Rightarrow> ('a \<Rightarrow> 'b) \<Rightarrow> 'b"
 
 fun mlet_result :: "'a result \<Rightarrow> ('a \<Rightarrow> 'b result) \<Rightarrow> 'b result"
@@ -58,7 +62,7 @@ where
 fun mlet_outcome :: "'a result \<Rightarrow> ('a \<Rightarrow> outcome) \<Rightarrow> outcome"
 where
 "mlet_outcome (Val v) f = f v" |
-"mlet_outcome (Aborts \<kappa>) f = ([], Aborts\<^sub>\<omega> \<kappa>)"
+"mlet_outcome (Aborts \<kappa>) f = aborts\<^sub>o \<kappa>"
 
 adhoc_overloading mlet \<rightleftharpoons> mlet_result mlet_outcome
 
@@ -601,59 +605,59 @@ EvalExprsCons: "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; \<rho>, e
   \<Longrightarrow> \<rho>, e # es \<Rightarrow>\<^sub>e\<^sub>s mlet r (\<lambda>vs. Val (v # vs))" |
 EvalExprsFail: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, e # es \<Rightarrow>\<^sub>e\<^sub>s Aborts \<kappa>" |
 
-EvalPass: "\<rho>, StmtPass \<Rightarrow>\<^sub>s ([], Assigns \<epsilon>)" |
-EvalDeclare: "\<rho>, StmtDeclare x \<psi> \<Rightarrow>\<^sub>s ([], Assigns \<epsilon>)" |
-EvalAssign: "\<rho>, node e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtAssign x \<pi> e \<Rightarrow>\<^sub>s mlet r (\<lambda>v. ([], Assigns (fmupd x v \<epsilon>)))" |
-EvalExprStmt: "\<rho>, node e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtExpr e \<Rightarrow>\<^sub>s mlet r (\<lambda>v. ([], Assigns \<epsilon>))" |
+EvalPass: "\<rho>, StmtPass \<Rightarrow>\<^sub>s assigns\<^sub>o \<epsilon>" |
+EvalDeclare: "\<rho>, StmtDeclare x \<psi> \<Rightarrow>\<^sub>s assigns\<^sub>o \<epsilon>" |
+EvalAssign: "\<rho>, node e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtAssign x \<pi> e \<Rightarrow>\<^sub>s mlet r (\<lambda>v. assigns\<^sub>o (fmupd x v \<epsilon>))" |
+EvalExprStmt: "\<rho>, node e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtExpr e \<Rightarrow>\<^sub>s mlet r (\<lambda>v. assigns\<^sub>o \<epsilon>)" |
 EvalPrint: "\<rho>, node e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtPrint e \<Rightarrow>\<^sub>s mlet r (\<lambda>v. ([v], Assigns \<epsilon>))" |
-EvalReturn: "\<rho>, node e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtReturn (Some e) \<Rightarrow>\<^sub>s mlet r (\<lambda>v. ([], Returns v))" |
-EvalReturnNone: "\<rho>, StmtReturn None \<Rightarrow>\<^sub>s ([], Returns (VLit LitNone))" |
+EvalReturn: "\<rho>, node e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, StmtReturn (Some e) \<Rightarrow>\<^sub>s mlet r (\<lambda>v. returns\<^sub>o v)" |
+EvalReturnNone: "\<rho>, StmtReturn None \<Rightarrow>\<^sub>s returns\<^sub>o (VLit LitNone)" |
 EvalDefs:
   "vs = map (\<lambda>i. Def(\<rho>, ds, i)) [0..<length ds]
-  \<Longrightarrow> \<rho>, StmtMutualRegion ds \<Rightarrow>\<^sub>s ([], Assigns (fmap_of_list (zip (map (def_name \<circ> node) ds) vs)))" |
-EvalAssert: "\<rho>, node e \<Rightarrow>\<^sub>e Val true \<Longrightarrow> \<rho>, StmtAssert e None \<Rightarrow>\<^sub>s ([], Assigns \<epsilon>)" |
-EvalAssertFalse: "\<rho>, node e \<Rightarrow>\<^sub>e Val false \<Longrightarrow> \<rho>, StmtAssert e None \<Rightarrow>\<^sub>s ([], Aborts\<^sub>\<omega> (AssertionError None))" |
-EvalAssertFail: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtAssert e None \<Rightarrow>\<^sub>s ([], Aborts\<^sub>\<omega> \<kappa>)" |
+  \<Longrightarrow> \<rho>, StmtMutualRegion ds \<Rightarrow>\<^sub>s assigns\<^sub>o (fmap_of_list (zip (map (def_name \<circ> node) ds) vs))" |
+EvalAssert: "\<rho>, node e \<Rightarrow>\<^sub>e Val true \<Longrightarrow> \<rho>, StmtAssert e None \<Rightarrow>\<^sub>s assigns\<^sub>o \<epsilon>" |
+EvalAssertFalse: "\<rho>, node e \<Rightarrow>\<^sub>e Val false \<Longrightarrow> \<rho>, StmtAssert e None \<Rightarrow>\<^sub>s aborts\<^sub>o (AssertionError None)" |
+EvalAssertFail: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtAssert e None \<Rightarrow>\<^sub>s aborts\<^sub>o \<kappa>" |
 EvalAssertNonBool:
-  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; v \<notin> {true, false} \<rbrakk> \<Longrightarrow> \<rho>, StmtAssert e None \<Rightarrow>\<^sub>s ([], Aborts\<^sub>\<omega> Excluded)" |
-EvalAssertMsg: "\<rho>, node e \<Rightarrow>\<^sub>e Val true \<Longrightarrow> \<rho>, StmtAssert e (Some e') \<Rightarrow>\<^sub>s ([], Assigns \<epsilon>)" |
+  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; v \<notin> {true, false} \<rbrakk> \<Longrightarrow> \<rho>, StmtAssert e None \<Rightarrow>\<^sub>s aborts\<^sub>o Excluded" |
+EvalAssertMsg: "\<rho>, node e \<Rightarrow>\<^sub>e Val true \<Longrightarrow> \<rho>, StmtAssert e (Some e') \<Rightarrow>\<^sub>s assigns\<^sub>o \<epsilon>" |
 EvalAssertMsgFalse: "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val false ; \<rho>, node e' \<Rightarrow>\<^sub>e Val (VLit (LitString w)) \<rbrakk>
-  \<Longrightarrow> \<rho>, StmtAssert e (Some e') \<Rightarrow>\<^sub>s ([], Aborts\<^sub>\<omega> (AssertionError (Some w)))" |
+  \<Longrightarrow> \<rho>, StmtAssert e (Some e') \<Rightarrow>\<^sub>s aborts\<^sub>o (AssertionError (Some w))" |
 EvalAssertMsgFalseFail: "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val false ; \<rho>, node e' \<Rightarrow>\<^sub>e Aborts \<kappa> \<rbrakk>
-  \<Longrightarrow> \<rho>, StmtAssert e (Some e') \<Rightarrow>\<^sub>s ([], Aborts\<^sub>\<omega> \<kappa>)" |
-EvalAssertMsgFail: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtAssert e (Some e') \<Rightarrow>\<^sub>s ([], Aborts\<^sub>\<omega> \<kappa>)" |
+  \<Longrightarrow> \<rho>, StmtAssert e (Some e') \<Rightarrow>\<^sub>s aborts\<^sub>o \<kappa>" |
+EvalAssertMsgFail: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtAssert e (Some e') \<Rightarrow>\<^sub>s aborts\<^sub>o \<kappa>" |
 EvalAssertMsgNonBool:
-  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; v \<notin> {true, false} \<rbrakk> \<Longrightarrow> \<rho>, StmtAssert e (Some e') \<Rightarrow>\<^sub>s ([], Aborts\<^sub>\<omega> Excluded)" |
+  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; v \<notin> {true, false} \<rbrakk> \<Longrightarrow> \<rho>, StmtAssert e (Some e') \<Rightarrow>\<^sub>s aborts\<^sub>o Excluded" |
 EvalAssertMsgNonStr:
   "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val false ; \<rho>, node e' \<Rightarrow>\<^sub>e Val v ; \<forall>w. v \<noteq> VLit (LitString w) \<rbrakk>
-  \<Longrightarrow> \<rho>, StmtAssert e (Some e') \<Rightarrow>\<^sub>s ([], Aborts\<^sub>\<omega> Excluded)" |
+  \<Longrightarrow> \<rho>, StmtAssert e (Some e') \<Rightarrow>\<^sub>s aborts\<^sub>o Excluded" |
 EvalIfTrue: "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val true ; \<rho>, node s \<Rightarrow>\<^sub>s o \<rbrakk>
   \<Longrightarrow> \<rho>, StmtIf e s elifs else' \<Rightarrow>\<^sub>s o" |
 EvalIfFalse: "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val false ; \<rho>, (elifs, else') \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o \<rbrakk>
   \<Longrightarrow> \<rho>, StmtIf e s elifs else' \<Rightarrow>\<^sub>s o" |
-EvalIfFail: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtIf e s elifs else' \<Rightarrow>\<^sub>s ([], Aborts\<^sub>\<omega> \<kappa>)" |
+EvalIfFail: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtIf e s elifs else' \<Rightarrow>\<^sub>s aborts\<^sub>o \<kappa>" |
 EvalIfNonBool:
-  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; v \<notin> {true, false} \<rbrakk> \<Longrightarrow> \<rho>, StmtIf e s elifs else' \<Rightarrow>\<^sub>s ([], Aborts\<^sub>\<omega> Excluded)" |
+  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; v \<notin> {true, false} \<rbrakk> \<Longrightarrow> \<rho>, StmtIf e s elifs else' \<Rightarrow>\<^sub>s aborts\<^sub>o Excluded" |
 EvalMatch:
   "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; dispatch \<rho> v cases = Val (\<rho>', s') ; \<rho> \<otimes> \<rho>', node s' \<Rightarrow>\<^sub>s o \<rbrakk>
-  \<Longrightarrow> \<rho>, StmtMatch e cases \<Rightarrow>\<^sub>s ([], Assigns \<rho>') \<otimes>\<^sub>o o" |
-EvalMatchFail: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtMatch e cases \<Rightarrow>\<^sub>s ([], Aborts\<^sub>\<omega> \<kappa>)" |
+  \<Longrightarrow> \<rho>, StmtMatch e cases \<Rightarrow>\<^sub>s assigns\<^sub>o \<rho>' \<otimes>\<^sub>o o" |
+EvalMatchFail: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtMatch e cases \<Rightarrow>\<^sub>s aborts\<^sub>o \<kappa>" |
 EvalMatchAbort:
-  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; dispatch \<rho> v cases = Aborts \<kappa> \<rbrakk> \<Longrightarrow> \<rho>, StmtMatch e cases \<Rightarrow>\<^sub>s ([], Aborts\<^sub>\<omega> \<kappa>)" |
+  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; dispatch \<rho> v cases = Aborts \<kappa> \<rbrakk> \<Longrightarrow> \<rho>, StmtMatch e cases \<Rightarrow>\<^sub>s aborts\<^sub>o \<kappa>" |
 EvalSeq: "\<lbrakk> \<rho>, node s \<Rightarrow>\<^sub>s (us, Assigns \<rho>') ; \<rho> \<otimes> \<rho>', node s' \<Rightarrow>\<^sub>s o \<rbrakk>
   \<Longrightarrow> \<rho>, StmtSeq s s' \<Rightarrow>\<^sub>s (us, Assigns \<rho>') \<otimes>\<^sub>o o" |
 EvalSeqReturn: "\<rho>, node s \<Rightarrow>\<^sub>s (us, Returns v) \<Longrightarrow> \<rho>, StmtSeq s s' \<Rightarrow>\<^sub>s (us, Returns v)" |
 EvalSeqFail: "\<rho>, node s \<Rightarrow>\<^sub>s (us, Aborts\<^sub>\<omega> \<kappa>) \<Longrightarrow> \<rho>, StmtSeq s s' \<Rightarrow>\<^sub>s (us, Aborts\<^sub>\<omega> \<kappa>)" |
 
-EvalIfNone: "\<rho>, ([], None) \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f ([], Assigns \<epsilon>)" |
+EvalIfNone: "\<rho>, ([], None) \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f assigns\<^sub>o \<epsilon>" |
 EvalElse: "\<rho>, node s \<Rightarrow>\<^sub>s o \<Longrightarrow> \<rho>, ([], Some s) \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o" |
 EvalElifTrue: "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val true ; \<rho>, node s \<Rightarrow>\<^sub>s o \<rbrakk>
   \<Longrightarrow> \<rho>, ((e, s) # elifs, else') \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o" |
 EvalElifFalse: "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val false ; \<rho>, (elifs, else') \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o \<rbrakk>
   \<Longrightarrow> \<rho>, ((e, s) # elifs, else') \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f o" |
-EvalElifFail: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, ((e, s) # elifs, else') \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f ([], Aborts\<^sub>\<omega> \<kappa>)" |
+EvalElifFail: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, ((e, s) # elifs, else') \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f aborts\<^sub>o \<kappa>" |
 EvalElifNonBool:
-  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; v \<notin> {true, false} \<rbrakk> \<Longrightarrow> \<rho>, ((e, s) # elifs, else') \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f ([], Aborts\<^sub>\<omega> Excluded)" |
+  "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; v \<notin> {true, false} \<rbrakk> \<Longrightarrow> \<rho>, ((e, s) # elifs, else') \<Rightarrow>\<^sub>e\<^sub>l\<^sub>i\<^sub>f aborts\<^sub>o Excluded" |
 
 EvalQualsNil: "\<rho>, [] \<Rightarrow>\<^sub>q Val [\<rho>]" |
 EvalQualGuardTrue: "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val true ; \<rho>, gs \<Rightarrow>\<^sub>q r \<rbrakk> \<Longrightarrow> \<rho>, At p (Guard e) # gs \<Rightarrow>\<^sub>q r" |
@@ -709,7 +713,7 @@ EvalTopSeq:
 EvalTopSeqFail: "q, \<rho>, t \<Rightarrow>\<^sub>t (us, Aborts\<^sub>\<omega> \<kappa>) \<Longrightarrow> q, \<rho>, TopSeq t t' \<Rightarrow>\<^sub>t (us, Aborts\<^sub>\<omega> \<kappa>)" |
 EvalTypes:
   "q, \<rho>, TypeDefs \<chi>s \<Rightarrow>\<^sub>t
-   ([], Assigns (fmap_of_list (map (\<lambda>j. (type_def_name (node (\<chi>s ! j)), type_value q \<chi>s j)) [0..<length \<chi>s])))"
+   assigns\<^sub>o (fmap_of_list (map (\<lambda>j. (type_def_name (node (\<chi>s ! j)), type_value q \<chi>s j)) [0..<length \<chi>s]))"
 
 end
 
