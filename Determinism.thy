@@ -30,6 +30,7 @@ inductive_cases PassE: "\<rho>, StmtPass \<Rightarrow>\<^sub>s o"
 inductive_cases DeclareE: "\<rho>, StmtDeclare x \<psi> \<Rightarrow>\<^sub>s o"
 inductive_cases AssignE: "\<rho>, StmtAssign x \<pi> e \<Rightarrow>\<^sub>s o"
 inductive_cases ExprStmtE: "\<rho>, StmtExpr e \<Rightarrow>\<^sub>s o"
+inductive_cases PrintE: "\<rho>, StmtPrint e \<Rightarrow>\<^sub>s o"
 inductive_cases ReturnE: "\<rho>, StmtReturn e \<Rightarrow>\<^sub>s o"
 inductive_cases DefsE: "\<rho>, StmtMutualRegion ds \<Rightarrow>\<^sub>s o"
 inductive_cases AssertE: "\<rho>, StmtAssert e e' \<Rightarrow>\<^sub>s o"
@@ -209,16 +210,17 @@ next
   from EvalCallLambdaArity.prems EvalCallLambdaArity.hyps show ?case
     by (auto elim!: CallE dest: EvalCallLambdaArity.IH)
 next
-  case (EvalCallDef \<rho> e \<rho>' ds j f \<alpha>s xps \<psi> s vs es us \<rho>s o)
+  case (EvalCallDef \<rho> e \<rho>' ds j f \<alpha>s xps \<psi> s vs es us \<rho>s \<omega>)
   from EvalCallDef.prems show ?case
   proof (cases rule: CallE)
-    case (CallDef \<rho>'' ds' j' f' \<alpha>s' xps' \<psi>' s' us' \<rho>s' o')
+    case (CallDef \<rho>'' ds' j' f' \<alpha>s' xps' \<psi>' s' us' \<rho>s' \<omega>')
     from EvalCallDef.IH(1)[OF CallDef(2)] have "\<rho>'' = \<rho>'" "ds' = ds" "j' = j" by auto
     with EvalCallDef.hyps(2) CallDef(3) have "xps' = xps" "s' = s" by auto
     moreover from EvalCallDef.IH(2)[OF CallDef(4)] have "us' = us" by simp
     moreover from calculation EvalCallDef.hyps(6) CallDef(6) have "\<rho>s' = \<rho>s" by simp
-    ultimately have "o' = o"
-      using EvalCallDef.IH(3) CallDef(7) \<open>\<rho>'' = \<rho>'\<close> \<open>ds' = ds\<close> EvalCallDef.hyps(3) by simp
+    ultimately have "\<omega>' = \<omega>"
+      using CallDef(7) \<open>\<rho>'' = \<rho>'\<close> \<open>ds' = ds\<close>
+      by (auto dest!: EvalCallDef.IH(3)[unfolded EvalCallDef.hyps(3)])
     with CallDef(1) show ?thesis by simp
   next
     case (CallDefArity \<rho>'' ds' j' f' \<alpha>s' xps' \<psi>' s' us')
@@ -231,7 +233,7 @@ next
   case (EvalCallDefArity \<rho> e \<rho>' ds j f \<alpha>s xps \<psi> s es us)
   from EvalCallDefArity.prems show ?case
   proof (cases rule: CallE)
-    case (CallDef \<rho>'' ds' j' f' \<alpha>s' xps' \<psi>' s' us' \<rho>s' o')
+    case (CallDef \<rho>'' ds' j' f' \<alpha>s' xps' \<psi>' s' us' \<rho>s' \<omega>')
     from EvalCallDefArity.IH(1)[OF CallDef(2)] have "ds' = ds" "j' = j" by auto
     with EvalCallDefArity.hyps(2) CallDef(3) have "xps' = xps" by auto
     moreover from EvalCallDefArity.IH(2)[OF CallDef(4)] have "us' = us" by simp
@@ -303,6 +305,10 @@ next
   case EvalExprStmt
   from EvalExprStmt.prems EvalExprStmt.hyps show ?case
     by (auto elim!: ExprStmtE dest: EvalExprStmt.IH)
+next
+  case EvalPrint
+  from EvalPrint.prems EvalPrint.hyps show ?case
+    by (auto elim!: PrintE dest: EvalPrint.IH)
 next
   case EvalReturn
   from EvalReturn.prems EvalReturn.hyps show ?case
@@ -576,9 +582,9 @@ proof (induction arbitrary: r' and r' and r' and vr' and vsr' and ur'
     by (auto elim!: ModE dest: predefined_not_module[OF disjoint] module_not_predefined[OF disjoint]
       simp: stub_of_Some)
 next
-  case (EvalModule q \<iota>s t \<rho>' \<rho>s \<rho>'')
+  case (EvalModule q \<iota>s t \<rho>' \<rho>s vs \<rho>'')
   have prefix: "q, \<iota>s \<Rightarrow>\<^sub>i r \<Longrightarrow> r = Val \<rho>'" for r using EvalModule.IH by fastforce
-  have top: "q, builtins_env \<otimes> \<rho>' \<otimes> \<rho>s, t \<Rightarrow>\<^sub>t ob \<Longrightarrow> ob = Assigns \<rho>''" for ob
+  have top: "q, builtins_env \<otimes> \<rho>' \<otimes> \<rho>s, t \<Rightarrow>\<^sub>t ob \<Longrightarrow> ob = (vs, Assigns \<rho>'')" for ob
     using top_det[OF EvalModule.hyps(4)] by simp
   from EvalModule.prems EvalModule.hyps(1,3) show ?case
     by (auto elim!: ModE dest!: prefix top dest: predefined_not_module[OF disjoint])
@@ -589,9 +595,9 @@ next
       dest: EvalModuleFail.IH predefined_not_module[OF disjoint] module_not_predefined[OF disjoint]
       simp: stub_of_Some)
 next
-  case (EvalModuleFailBody q \<iota>s t \<rho>' \<rho>s \<kappa>)
+  case (EvalModuleFailBody q \<iota>s t \<rho>' \<rho>s vs \<kappa>)
   have prefix: "q, \<iota>s \<Rightarrow>\<^sub>i r \<Longrightarrow> r = Val \<rho>'" for r using EvalModuleFailBody.IH by fastforce
-  have top: "q, builtins_env \<otimes> \<rho>' \<otimes> \<rho>s, t \<Rightarrow>\<^sub>t ob \<Longrightarrow> ob = Aborts\<^sub>o \<kappa>" for ob
+  have top: "q, builtins_env \<otimes> \<rho>' \<otimes> \<rho>s, t \<Rightarrow>\<^sub>t ob \<Longrightarrow> ob = (vs, Aborts\<^sub>\<omega> \<kappa>)" for ob
     using top_det[OF EvalModuleFailBody.hyps(4)] by simp
   from EvalModuleFailBody.prems EvalModuleFailBody.hyps(1,3) show ?case
     by (auto elim!: ModE dest!: prefix top dest: predefined_not_module[OF disjoint])
