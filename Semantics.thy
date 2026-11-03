@@ -382,7 +382,6 @@ attribute_setup ih_names = \<open>
   end
 \<close>
 
-(* The class table, ambient in evaluation *)
 locale evaluation = fixes \<Sigma> :: class_table
 begin
 
@@ -760,7 +759,6 @@ lemma stub_of_Some: "stub_of v = Some q \<longleftrightarrow> v = VModStub q"
 lemma stub_of_None: "stub_of v = None \<longleftrightarrow> \<not> is_stub v"
   by (cases v) auto
 
-(* The program, ambient in loading *)
 locale loading = evaluation +
   fixes \<M> :: program
 begin
