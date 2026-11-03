@@ -188,8 +188,7 @@ where
 "eq_lit (LitFloat _) (LitBool _) = Aborts Undef" |
 "eq_lit _ _ = Val False"
 
-(* Cases on the form of the first value, then of the second, since patterns on both make pattern completion over
-   the values very slow *)
+(* Cases on first value, then second; otherwise pattern matching is slow *)
 fun eq :: "val \<Rightarrow> val \<Rightarrow> bool result" and eq_elems :: "val list \<Rightarrow> val list \<Rightarrow> bool result"
 where
 "eq (VLit l) v' = (case v' of VLit l' \<Rightarrow> eq_lit l l' | _ \<Rightarrow> Val False)" |
