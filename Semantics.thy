@@ -407,7 +407,7 @@ definition overload :: "ty \<Rightarrow> ty \<Rightarrow> (val \<Rightarrow> val
 where
 "overload \<tau> \<tau>' f = ((\<lambda>v v'. \<Sigma> \<turnstile> type_of v <: \<tau> \<and> \<Sigma> \<turnstile> type_of v' <: \<tau>'), f)"
 
-(* Overload at tuple bounds of every length, as one *)
+(* Overload for tuple operands of any length, since a tuple type fixes the length *)
 definition tuple_overload :: "(val \<Rightarrow> val \<Rightarrow> val result) \<Rightarrow> overload"
 where
 "tuple_overload f = ((\<lambda>v v'. case (v, v') of (VTuple _, VTuple _) \<Rightarrow> True | _ \<Rightarrow> False), f)"
