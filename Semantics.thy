@@ -412,8 +412,7 @@ definition tuple_bounds :: "(val \<Rightarrow> val \<Rightarrow> val result) \<R
 where
 "tuple_bounds f = ((\<lambda>v v'. case (v, v') of (VTuple _, VTuple _) \<Rightarrow> True | _ \<Rightarrow> False), f)"
 
-(* Run-time overloads of each binary operator, in order of specificity, so that the first which applies is the
-   most specific *)
+(* Run-time overloads of each binary operator, most specific first *)
 fun overloads :: "bop \<Rightarrow> overload list"
 where
 "overloads BOpEq =
