@@ -336,7 +336,6 @@ where
 "negate (VLit (LitInt n)) = VLit (LitInt (- n))" |
 "negate (VLit (LitFloat x)) = VLit (LitFloat (float_neg x))"
 
-(* Nearest integer, ties to even *)
 definition round_even :: "real \<Rightarrow> int"
 where
 "round_even x =
