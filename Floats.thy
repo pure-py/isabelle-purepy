@@ -5,7 +5,7 @@ begin
 
 typedecl float
 
-(* Value as an extended real; None for nan *)
+(* Value as an extended real, so that infinities compare and test against zero like other values; None for nan *)
 consts float_value :: "float \<Rightarrow> ereal option"
 
 (* Arithmetic of Python's float, left uninterpreted since type soundness doesn't depend on the results *)
