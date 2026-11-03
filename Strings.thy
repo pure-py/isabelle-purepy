@@ -19,6 +19,14 @@ setup_lifting type_definition_str
 lift_definition substring :: "str \<Rightarrow> str \<Rightarrow> bool"
   is "\<lambda>ns ns'. \<exists>ms ms'. ns' = ms @ ns @ ms'" .
 
+lift_definition str_append :: "str \<Rightarrow> str \<Rightarrow> str"
+  is "(@)"
+  by (auto simp: code_point_list_def)
+
+lift_definition str_concat :: "str list \<Rightarrow> str"
+  is concat
+  by (auto simp: code_point_list_def list.pred_set)
+
 (* String written in a theory *)
 lift_definition str_of :: "string \<Rightarrow> str"
   is "map of_char"

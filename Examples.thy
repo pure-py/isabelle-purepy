@@ -10,11 +10,16 @@ where "ex_add =
 context evaluation
 begin
 
+lemma subty_literal_int [simp]: "\<Sigma> \<turnstile> TyLiteral (LitInt n) <: TyPrim int"
+  by (rule SubtyLiteral) (simp add: SubtyRefl)
+
+lemmas overload_simps = binop_meaning_def bounds_def applies_def int_arith_def
+
 lemma ex_add_eval: "\<epsilon>, ex_add \<Rightarrow>\<^sub>e Val (VLit (LitInt 30))"
 proof -
   have "\<epsilon>, ex_add \<Rightarrow>\<^sub>e mlet (Val (VLit (LitInt 20))) (binop_meaning BOpAdd (VLit (LitInt 10)))"
     unfolding ex_add_def by (rule EvalBinOp) (simp_all add: EvalLiteral)
-  then show ?thesis by simp
+  then show ?thesis by (simp add: overload_simps)
 qed
 
 end
@@ -48,7 +53,7 @@ proof -
     "?\<rho>, node (At no_pos
               (ExprBinOp BOpAdd (At no_pos (ExprVar (var ''x''))) (At no_pos (ExprLiteral (LitInt 1)))))
      \<Rightarrow>\<^sub>e Val (VLit (LitInt 3))"
-    by simp
+    by (simp add: overload_simps)
   show ?thesis
     unfolding ex_lambda_def by (rule EvalCallLambda[OF _ args _ body]) (simp_all add: EvalLambda)
 qed

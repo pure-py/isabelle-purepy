@@ -1,6 +1,6 @@
 (* Values, results and evaluation judgements *)
 theory Semantics
-    imports Types "HOL-Library.Finite_Map"
+    imports Subtyping "HOL-Library.Finite_Map"
 begin
 
 (* Free o for outcomes *)
@@ -150,6 +150,29 @@ where
 "as_number (VLit (LitFloat x)) = float_value x" |
 "as_number _ = None"
 
+fun type_of :: "val \<Rightarrow> ty"
+where
+"type_of (VLit (LitFloat _)) = TyPrim float" |
+"type_of (VLit l) = TyLiteral l" |
+"type_of (VList _) = TyList (TyPrim object)" |
+"type_of (VTuple vs) = TyTuple (map (\<lambda>_. TyPrim object) vs)" |
+"type_of (VDict _) = TyDict (TyPrim object)" |
+"type_of _ = TyPrim object"
+
+(* Components of an operand within the bound of an overload *)
+fun the_int :: "val \<Rightarrow> int"
+where
+"the_int (VLit (LitInt n)) = n"
+
+fun the_str :: "val \<Rightarrow> str"
+where
+"the_str (VLit (LitString w)) = w"
+
+fun the_elems :: "val \<Rightarrow> val list"
+where
+"the_elems (VList vs) = vs" |
+"the_elems (VTuple vs) = vs"
+
 (* Equality of literals by value; undefined between a Boolean and a number, which Python compares numerically *)
 fun eq_lit :: "lit \<Rightarrow> lit \<Rightarrow> bool result"
 where
@@ -251,73 +274,80 @@ where
 "dict_entries (VLit (LitString w) # v # vs) = map_option (Cons (w, v)) (dict_entries vs)" |
 "dict_entries _ = None"
 
-(* Apply g to two numbers as floats; excluded for a Boolean operand *)
-fun number_op :: "(float \<Rightarrow> float \<Rightarrow> val result) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
-where
-"number_op g v v' =
-  (if is_bool v \<or> is_bool v' then Aborts Excluded
-   else case (as_float v, as_float v') of
-     (Some x, Some x') \<Rightarrow> g x x'
-   | _ \<Rightarrow> Aborts TypeError)"
+abbreviation bool_val :: "bool result \<Rightarrow> val result"
+where "bool_val r \<equiv> mlet r (\<lambda>b. Val (VLit (LitBool b)))"
 
-(* Apply f to two integers, g to two numbers otherwise *)
-fun arith :: "(int \<Rightarrow> int \<Rightarrow> int) \<Rightarrow> (float \<Rightarrow> float \<Rightarrow> float) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
+(* Numeric order by f; False if either operand is nan *)
+definition numeric_order :: "(ereal \<Rightarrow> ereal \<Rightarrow> bool) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
 where
-"arith f g (VLit (LitInt n)) (VLit (LitInt n')) = Val (VLit (LitInt (f n n')))" |
-"arith f g v v' = number_op (\<lambda>x x'. Val (VLit (LitFloat (g x x')))) v v'"
+"numeric_order f v v' =
+  Val (VLit (LitBool (case (as_number v, as_number v') of (Some y, Some y') \<Rightarrow> f y y' | _ \<Rightarrow> False)))"
 
-(* Compare strings lexicographically by code point and numbers by value; false if either number is nan *)
-fun compare :: "(ereal \<Rightarrow> ereal \<Rightarrow> bool) \<Rightarrow> (str \<Rightarrow> str \<Rightarrow> bool) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
+(* Lexicographic order on code points by f *)
+definition string_order :: "(str \<Rightarrow> str \<Rightarrow> bool) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
 where
-"compare f g (VLit (LitString w)) (VLit (LitString w')) = Val (VLit (LitBool (g w w')))" |
-"compare f g v v' =
-  number_op (\<lambda>_ _. Val (VLit (LitBool (case (as_number v, as_number v') of
-    (Some y, Some y') \<Rightarrow> f y y'
-  | _ \<Rightarrow> False)))) v v'"
+"string_order f v v' = Val (VLit (LitBool (f (the_str v) (the_str v'))))"
 
-fun binop_meaning :: "bop \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
+(* Integer arithmetic by f *)
+definition int_arith :: "(int \<Rightarrow> int \<Rightarrow> int) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
 where
-"binop_meaning BOpEq v v' =
-  (if is_nan_val v \<and> is_nan_val v' then Val (VLit (LitBool False))
-   else mlet (eq v v') (\<lambda>b. Val (VLit (LitBool b))))" |
-"binop_meaning BOpNeq v v' =
-  (if is_nan_val v \<and> is_nan_val v' then Val (VLit (LitBool True))
-   else mlet (eq v v') (\<lambda>b. Val (VLit (LitBool (\<not> b)))))" |
-"binop_meaning BOpIn v v' = mlet (in_op v v') (\<lambda>b. Val (VLit (LitBool b)))" |
-"binop_meaning BOpNotIn v v' = mlet (in_op v v') (\<lambda>b. Val (VLit (LitBool (\<not> b))))" |
-"binop_meaning BOpLt v v' = compare (<) (<) v v'" |
-"binop_meaning BOpLeq v v' = compare (\<le>) (\<le>) v v'" |
-"binop_meaning BOpGt v v' = compare (>) (>) v v'" |
-"binop_meaning BOpGeq v v' = compare (\<ge>) (\<ge>) v v'" |
-"binop_meaning BOpAdd v v' = arith (+) float_add v v'" |
-"binop_meaning BOpSub v v' = arith (-) float_sub v v'" |
-"binop_meaning BOpMul v v' = arith (*) float_mul v v'" |
-"binop_meaning BOpDiv v v' =
-  (if as_number v' = Some 0 then Aborts ZeroDivisionError
-   else number_op (\<lambda>x x'. Val (VLit (LitFloat (float_div x x')))) v v')" |
-"binop_meaning BOpFloorDiv v v' =
-  (if as_number v' = Some 0 then Aborts ZeroDivisionError else arith (div) float_floordiv v v')" |
-"binop_meaning BOpMod v v' =
-  (if as_number v' = Some 0 then Aborts ZeroDivisionError else arith (mod) float_mod v v')" |
-"binop_meaning BOpPow (VLit (LitInt n)) (VLit (LitInt n')) =
-  (if n' \<ge> 0 then Val (VLit (LitInt (n ^ nat n')))
-   else if n = 0 then Aborts ZeroDivisionError
-   else Val (VLit (LitFloat (float_pow (float_of_int n) (float_of_int n')))))" |
-"binop_meaning BOpPow v v' =
+"int_arith f v v' = Val (VLit (LitInt (f (the_int v) (the_int v'))))"
+
+(* Integer division by f; ZeroDivisionError for a zero divisor *)
+definition int_division :: "(int \<Rightarrow> int \<Rightarrow> int) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
+where
+"int_division f v v' = (if the_int v' = 0 then Aborts ZeroDivisionError else int_arith f v v')"
+
+(* Float arithmetic by g, with an integer operand converted *)
+definition float_arith :: "(float \<Rightarrow> float \<Rightarrow> float) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
+where
+"float_arith g v v' = Val (VLit (LitFloat (g (the (as_float v)) (the (as_float v')))))"
+
+(* Float division by g; ZeroDivisionError for a zero divisor *)
+definition float_division :: "(float \<Rightarrow> float \<Rightarrow> float) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
+where
+"float_division g v v' = (if as_number v' = Some 0 then Aborts ZeroDivisionError else float_arith g v v')"
+
+(* Integer power; a float for a negative exponent, after ZeroDivisionError for a zero base *)
+definition int_power :: "val \<Rightarrow> val \<Rightarrow> val result"
+where
+"int_power v v' =
+  (if the_int v' \<ge> 0 then int_arith (\<lambda>n n'. n ^ nat n') v v'
+   else if the_int v = 0 then Aborts ZeroDivisionError
+   else float_arith float_pow v v')"
+
+(* Float power; ZeroDivisionError for a zero base and a negative exponent *)
+definition float_power :: "val \<Rightarrow> val \<Rightarrow> val result"
+where
+"float_power v v' =
   (if as_number v = Some 0 \<and> (\<exists>y. as_number v' = Some y \<and> y < 0) then Aborts ZeroDivisionError
-   else number_op (\<lambda>x x'. Val (VLit (LitFloat (float_pow x x')))) v v')" |
-"binop_meaning _ _ _ = Aborts TypeError"
+   else float_arith float_pow v v')"
 
-fun unop_meaning :: "uop \<Rightarrow> val \<Rightarrow> val result"
+definition concat_str :: "val \<Rightarrow> val \<Rightarrow> val result"
 where
-"unop_meaning UOpNot (VLit (LitBool b)) = Val (VLit (LitBool (\<not> b)))" |
-"unop_meaning UOpPos (VLit (LitInt n)) = Val (VLit (LitInt n))" |
-"unop_meaning UOpPos (VLit (LitFloat x)) = Val (VLit (LitFloat x))" |
-"unop_meaning UOpNeg (VLit (LitInt n)) = Val (VLit (LitInt (- n)))" |
-"unop_meaning UOpNeg (VLit (LitFloat x)) = Val (VLit (LitFloat (float_neg x)))" |
-"unop_meaning UOpNot _ = Aborts Excluded" |
-"unop_meaning _ (VLit (LitBool _)) = Aborts Excluded" |
-"unop_meaning _ _ = Aborts TypeError"
+"concat_str v v' = Val (VLit (LitString (str_append (the_str v) (the_str v'))))"
+
+definition concat_list :: "val \<Rightarrow> val \<Rightarrow> val result"
+where
+"concat_list v v' = Val (VList (the_elems v @ the_elems v'))"
+
+definition concat_tuple :: "val \<Rightarrow> val \<Rightarrow> val result"
+where
+"concat_tuple v v' = Val (VTuple (the_elems v @ the_elems v'))"
+
+(* Repetition of v by the integer v', or none if v' is negative *)
+definition repeat_str :: "val \<Rightarrow> val \<Rightarrow> val result"
+where
+"repeat_str v v' = Val (VLit (LitString (str_concat (replicate (nat (the_int v')) (the_str v)))))"
+
+definition repeat_list :: "val \<Rightarrow> val \<Rightarrow> val result"
+where
+"repeat_list v v' = Val (VList (concat (replicate (nat (the_int v')) (the_elems v))))"
+
+fun negate :: "val \<Rightarrow> val"
+where
+"negate (VLit (LitInt n)) = VLit (LitInt (- n))" |
+"negate (VLit (LitFloat x)) = VLit (LitFloat (float_neg x))"
 
 (* Nearest integer, ties to even *)
 definition round_even :: "real \<Rightarrow> int"
@@ -384,6 +414,83 @@ attribute_setup ih_names = \<open>
 
 locale evaluation = fixes \<Sigma> :: class_table
 begin
+
+(* Whether an overload with operand bound \<tau> applies to v *)
+definition applies :: "ty \<Rightarrow> val \<Rightarrow> bool"
+where
+"applies \<tau> v = (\<Sigma> \<turnstile> type_of v <: \<tau>)"
+
+type_synonym overload = "(val \<Rightarrow> val \<Rightarrow> bool) \<times> (val \<Rightarrow> val \<Rightarrow> val result)"
+
+(* Overload with operand bounds \<tau> and \<tau>' and meaning f *)
+definition bounds :: "ty \<Rightarrow> ty \<Rightarrow> (val \<Rightarrow> val \<Rightarrow> val result) \<Rightarrow> overload"
+where
+"bounds \<tau> \<tau>' f = ((\<lambda>v v'. applies \<tau> v \<and> applies \<tau>' v'), f)"
+
+(* Overload with meaning f at the tuple types of the operands, one for each pair of lengths *)
+definition tuple_bounds :: "(val \<Rightarrow> val \<Rightarrow> val result) \<Rightarrow> overload"
+where
+"tuple_bounds f = ((\<lambda>v v'. case (v, v') of (VTuple _, VTuple _) \<Rightarrow> True | _ \<Rightarrow> False), f)"
+
+(* Run-time overloads of each binary operator, in order of specificity *)
+fun overloads :: "bop \<Rightarrow> overload list"
+where
+"overloads BOpEq =
+  [bounds (TyPrim object) (TyPrim object)
+    (\<lambda>v v'. if is_nan_val v \<and> is_nan_val v' then Val (VLit (LitBool False)) else bool_val (eq v v'))]" |
+"overloads BOpNeq =
+  [bounds (TyPrim object) (TyPrim object)
+    (\<lambda>v v'. if is_nan_val v \<and> is_nan_val v' then Val (VLit (LitBool True))
+             else bool_val (mlet (eq v v') (\<lambda>b. Val (\<not> b))))]" |
+"overloads BOpIn = [bounds (TyPrim object) (TyPrim object) (\<lambda>v v'. bool_val (in_op v v'))]" |
+"overloads BOpNotIn =
+  [bounds (TyPrim object) (TyPrim object) (\<lambda>v v'. bool_val (mlet (in_op v v') (\<lambda>b. Val (\<not> b))))]" |
+"overloads BOpLt =
+  [bounds (TyPrim float) (TyPrim float) (numeric_order (<)), bounds (TyPrim str) (TyPrim str) (string_order (<))]" |
+"overloads BOpLeq =
+  [bounds (TyPrim float) (TyPrim float) (numeric_order (\<le>)), bounds (TyPrim str) (TyPrim str) (string_order (\<le>))]" |
+"overloads BOpGt =
+  [bounds (TyPrim float) (TyPrim float) (numeric_order (>)), bounds (TyPrim str) (TyPrim str) (string_order (>))]" |
+"overloads BOpGeq =
+  [bounds (TyPrim float) (TyPrim float) (numeric_order (\<ge>)), bounds (TyPrim str) (TyPrim str) (string_order (\<ge>))]" |
+"overloads BOpAdd =
+  [bounds (TyPrim int) (TyPrim int) (int_arith (+)), bounds (TyPrim float) (TyPrim float) (float_arith float_add),
+   bounds (TyPrim str) (TyPrim str) concat_str, bounds (TyList (TyPrim object)) (TyList (TyPrim object)) concat_list,
+   tuple_bounds concat_tuple]" |
+"overloads BOpSub =
+  [bounds (TyPrim int) (TyPrim int) (int_arith (-)), bounds (TyPrim float) (TyPrim float) (float_arith float_sub)]" |
+"overloads BOpMul =
+  [bounds (TyPrim int) (TyPrim int) (int_arith (*)), bounds (TyPrim float) (TyPrim float) (float_arith float_mul),
+   bounds (TyPrim str) (TyPrim int) repeat_str, bounds (TyPrim int) (TyPrim str) (\<lambda>v v'. repeat_str v' v),
+   bounds (TyList (TyPrim object)) (TyPrim int) repeat_list,
+   bounds (TyPrim int) (TyList (TyPrim object)) (\<lambda>v v'. repeat_list v' v)]" |
+"overloads BOpDiv = [bounds (TyPrim float) (TyPrim float) (float_division float_div)]" |
+"overloads BOpFloorDiv =
+  [bounds (TyPrim int) (TyPrim int) (int_division (div)),
+   bounds (TyPrim float) (TyPrim float) (float_division float_floordiv)]" |
+"overloads BOpMod =
+  [bounds (TyPrim int) (TyPrim int) (int_division (mod)),
+   bounds (TyPrim float) (TyPrim float) (float_division float_mod)]" |
+"overloads BOpPow = [bounds (TyPrim int) (TyPrim int) int_power, bounds (TyPrim float) (TyPrim float) float_power]" |
+"overloads BOpBitOr = []"
+
+(* Result of the first overload which applies, the most specific; Excluded if none applies *)
+fun select :: "overload list \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
+where
+"select [] v v' = Aborts Excluded" |
+"select ((p, f) # fs) v v' = (if p v v' then f v v' else select fs v v')"
+
+definition binop_meaning :: "bop \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
+where
+"binop_meaning op v v' = select (overloads op) v v'"
+
+(* Run-time overload of each unary operator; Excluded if it doesn't apply *)
+fun unop_meaning :: "uop \<Rightarrow> val \<Rightarrow> val result"
+where
+"unop_meaning UOpNot v =
+  (if applies (TyPrim bool) v then Val (VLit (LitBool (v \<noteq> VLit (LitBool True)))) else Aborts Excluded)" |
+"unop_meaning UOpPos v = (if applies (TyPrim float) v then Val v else Aborts Excluded)" |
+"unop_meaning UOpNeg v = (if applies (TyPrim float) v then Val (negate v) else Aborts Excluded)"
 
 definition field_map :: "name \<Rightarrow> 'a list \<Rightarrow> (var \<times> 'a) list \<Rightarrow> (var \<times> 'a) list option"
 where
