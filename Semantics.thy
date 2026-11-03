@@ -401,15 +401,11 @@ attribute_setup ih_names = \<open>
 locale evaluation = fixes \<Sigma> :: class_table
 begin
 
-definition applies :: "ty \<Rightarrow> val \<Rightarrow> bool"
-where
-"applies \<tau> v = (\<Sigma> \<turnstile> type_of v <: \<tau>)"
-
 type_synonym overload = "(val \<Rightarrow> val \<Rightarrow> bool) \<times> (val \<Rightarrow> val \<Rightarrow> val result)"
 
 definition bounds :: "ty \<Rightarrow> ty \<Rightarrow> (val \<Rightarrow> val \<Rightarrow> val result) \<Rightarrow> overload"
 where
-"bounds \<tau> \<tau>' f = ((\<lambda>v v'. applies \<tau> v \<and> applies \<tau>' v'), f)"
+"bounds \<tau> \<tau>' f = ((\<lambda>v v'. \<Sigma> \<turnstile> type_of v <: \<tau> \<and> \<Sigma> \<turnstile> type_of v' <: \<tau>'), f)"
 
 (* Overload with meaning f at the tuple types of the operands, one for each pair of lengths *)
 definition tuple_bounds :: "(val \<Rightarrow> val \<Rightarrow> val result) \<Rightarrow> overload"
@@ -471,9 +467,9 @@ where
 fun unop_meaning :: "uop \<Rightarrow> val \<Rightarrow> val result"
 where
 "unop_meaning UOpNot v =
-  (if applies (TyPrim bool) v then Val (VLit (LitBool (v \<noteq> VLit (LitBool True)))) else Aborts Excluded)" |
-"unop_meaning UOpPos v = (if applies (TyPrim float) v then Val v else Aborts Excluded)" |
-"unop_meaning UOpNeg v = (if applies (TyPrim float) v then Val (negate v) else Aborts Excluded)"
+  (if \<Sigma> \<turnstile> type_of v <: TyPrim bool then Val (VLit (LitBool (v \<noteq> VLit (LitBool True)))) else Aborts Excluded)" |
+"unop_meaning UOpPos v = (if \<Sigma> \<turnstile> type_of v <: TyPrim float then Val v else Aborts Excluded)" |
+"unop_meaning UOpNeg v = (if \<Sigma> \<turnstile> type_of v <: TyPrim float then Val (negate v) else Aborts Excluded)"
 
 definition field_map :: "name \<Rightarrow> 'a list \<Rightarrow> (var \<times> 'a) list \<Rightarrow> (var \<times> 'a) list option"
 where
