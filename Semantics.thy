@@ -438,14 +438,19 @@ where
   [overload (TyPrim float) (TyPrim float) (compare_numbers (\<ge>)),
    overload (TyPrim str) (TyPrim str) (compare_strings (\<ge>))]" |
 "overloads BOpAdd =
-  [overload (TyPrim int) (TyPrim int) (int_arith (+)), overload (TyPrim float) (TyPrim float) (float_arith float_add),
-   overload (TyPrim str) (TyPrim str) concat_str, overload (TyList (TyPrim object)) (TyList (TyPrim object)) concat_list,
+  [overload (TyPrim int) (TyPrim int) (int_arith (+)),
+   overload (TyPrim float) (TyPrim float) (float_arith float_add),
+   overload (TyPrim str) (TyPrim str) concat_str,
+   overload (TyList (TyPrim object)) (TyList (TyPrim object)) concat_list,
    tuple_overload concat_tuple]" |
 "overloads BOpSub =
-  [overload (TyPrim int) (TyPrim int) (int_arith (-)), overload (TyPrim float) (TyPrim float) (float_arith float_sub)]" |
+  [overload (TyPrim int) (TyPrim int) (int_arith (-)),
+   overload (TyPrim float) (TyPrim float) (float_arith float_sub)]" |
 "overloads BOpMul =
-  [overload (TyPrim int) (TyPrim int) (int_arith (*)), overload (TyPrim float) (TyPrim float) (float_arith float_mul),
-   overload (TyPrim str) (TyPrim int) repeat_str, overload (TyPrim int) (TyPrim str) (\<lambda>v v'. repeat_str v' v),
+  [overload (TyPrim int) (TyPrim int) (int_arith (*)),
+   overload (TyPrim float) (TyPrim float) (float_arith float_mul),
+   overload (TyPrim str) (TyPrim int) repeat_str,
+   overload (TyPrim int) (TyPrim str) (\<lambda>v v'. repeat_str v' v),
    overload (TyList (TyPrim object)) (TyPrim int) repeat_list,
    overload (TyPrim int) (TyList (TyPrim object)) (\<lambda>v v'. repeat_list v' v)]" |
 "overloads BOpDiv = [overload (TyPrim float) (TyPrim float) (float_division float_div)]" |
@@ -455,7 +460,8 @@ where
 "overloads BOpMod =
   [overload (TyPrim int) (TyPrim int) (int_division (mod)),
    overload (TyPrim float) (TyPrim float) (float_division float_mod)]" |
-"overloads BOpPow = [overload (TyPrim int) (TyPrim int) int_power, overload (TyPrim float) (TyPrim float) float_power]" |
+"overloads BOpPow =
+  [overload (TyPrim int) (TyPrim int) int_power, overload (TyPrim float) (TyPrim float) float_power]" |
 "overloads BOpBitOr = []"
 
 fun select :: "overload list \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
