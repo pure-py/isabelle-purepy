@@ -159,7 +159,6 @@ where
 "type_of (VDict _) = TyDict (TyPrim object)" |
 "type_of _ = TyPrim object"
 
-(* Components of an operand within the bound of an overload *)
 fun the_int :: "val \<Rightarrow> int"
 where
 "the_int (VLit (LitInt n)) = n"
