@@ -400,13 +400,6 @@ where
    then Some (zip (take n xs) us @ map (\<lambda>y. (y, the (map_of kvs y))) (drop n xs))
    else None)"
 
-(* The head of a constructor pattern resolves as in Python: NameError if its first name is unbound,
-   AttributeError if a later name is not found, Excluded if it denotes a predefined class of builtins, which
-   Python matches by an instance test, and TypeError if it denotes any other value which is not a class.
-   Sub-patterns of a class C match the fields of an object whose class has C among its ancestors: positional
-   ones in field order, then keyword ones as written; TypeError for excess positional sub-patterns, a keyword
-   sub-pattern for a field already matched by position, or a positional sub-pattern of range, as in Python;
-   excluded if they otherwise do not cover the fields of C exactly *)
 fun match :: "env \<Rightarrow> pat \<Rightarrow> val \<Rightarrow> match_result"
   and match_all :: "env \<Rightarrow> pat located list \<Rightarrow> val list \<Rightarrow> match_result"
   and match_dict :: "env \<Rightarrow> (str \<times> pat located) list \<Rightarrow> (str \<times> val) list \<Rightarrow> match_result"
