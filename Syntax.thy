@@ -266,6 +266,10 @@ definition declares_top :: "top_stmt \<Rightarrow> var list"
 where
 "declares_top t = map node (declarations_top t)"
 
+fun declares_module :: "module_body \<Rightarrow> var list"
+where
+"declares_module (ModuleBody \<iota>s t) = declares_imports \<iota>s @ declares_top t"
+
 (* Position of the last statement *)
 fun last_pos :: "top_stmt \<Rightarrow> pos"
 where
@@ -492,7 +496,7 @@ consts
 
 adhoc_overloading binds \<rightleftharpoons> binds_pat binds_stmt binds_quals binds_top
 adhoc_overloading assigns \<rightleftharpoons> assigns_stmt assigns_top
-adhoc_overloading declares \<rightleftharpoons> declares_stmt declares_top declares_imports
+adhoc_overloading declares \<rightleftharpoons> declares_stmt declares_top declares_imports declares_module
 adhoc_overloading declarations \<rightleftharpoons> declarations_stmt declarations_top declarations_imports
 adhoc_overloading pat_bound \<rightleftharpoons> pat_bound_stmt pat_bound_top
 adhoc_overloading fv \<rightleftharpoons> fv_expr fv_quals fv_ty
