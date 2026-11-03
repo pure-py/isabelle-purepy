@@ -400,10 +400,12 @@ where
    then Some (zip (take n xs) us @ map (\<lambda>y. (y, the (map_of kvs y))) (drop n xs))
    else None)"
 
-fun match :: "env \<Rightarrow> pat \<Rightarrow> val \<Rightarrow> match_result"
+function (sequential) match :: "env \<Rightarrow> pat \<Rightarrow> val \<Rightarrow> match_result"
   and match_all :: "env \<Rightarrow> pat located list \<Rightarrow> val list \<Rightarrow> match_result"
   and match_dict :: "env \<Rightarrow> (str \<times> pat located) list \<Rightarrow> (str \<times> val) list \<Rightarrow> match_result"
   and match_kws :: "env \<Rightarrow> (var \<times> pat located) list \<Rightarrow> (var \<times> val) list \<Rightarrow> match_result"
+  and match_fields ::
+    "env \<Rightarrow> name \<Rightarrow> pat located list \<Rightarrow> (var \<times> pat located) list \<Rightarrow> (var \<times> val) list \<Rightarrow> match_result"
 where
 "match \<rho> (PatLiteral l) v =
   (if is_bool (VLit l) \<and> as_float v \<noteq> None then NoMatch
@@ -430,16 +432,7 @@ where
          None \<Rightarrow> MatchAborts TypeError
        | Some C \<Rightarrow>
            (case v of
-              VObject D zvs \<Rightarrow>
-                if C \<notin> set (ancestors \<Sigma> D) then NoMatch
-                else if C = range_class then MatchAborts (if ps = [] then Excluded else TypeError)
-                else
-                  let ys = field_names \<Sigma> C; n = length ps in
-                  if field_map C ps kps \<noteq> None \<and> set ys \<subseteq> set (map fst zvs)
-                  then match_all \<rho> ps (map (\<lambda>y. the (map_of zvs y)) (take n ys)) \<otimes>\<^sub>m match_kws \<rho> kps zvs
-                  else if length ys < n \<or> (\<exists>y \<in> set (map fst kps). y \<in> set (take n ys))
-                  then MatchAborts TypeError
-                  else MatchAborts Excluded
+              VObject D zvs \<Rightarrow> if C \<in> set (ancestors \<Sigma> D) then match_fields \<rho> C ps kps zvs else NoMatch
             | _ \<Rightarrow> NoMatch))" |
 "match \<rho> _ _ = NoMatch" |
 
@@ -450,7 +443,20 @@ where
 "match_dict \<rho> [] \<delta> = Match \<epsilon>" |
 
 "match_kws \<rho> ((y, p) # kps) zvs = match \<rho> (node p) (the (map_of zvs y)) \<otimes>\<^sub>m match_kws \<rho> kps zvs" |
-"match_kws \<rho> [] zvs = Match \<epsilon>"
+"match_kws \<rho> [] zvs = Match \<epsilon>" |
+
+"match_fields \<rho> C ps kps zvs =
+  (if C = range_class then MatchAborts (if ps = [] then Excluded else TypeError)
+   else
+     let ys = field_names \<Sigma> C; n = length ps in
+     if field_map C ps kps \<noteq> None \<and> set ys \<subseteq> set (map fst zvs)
+     then match_all \<rho> ps (map (\<lambda>y. the (map_of zvs y)) (take n ys)) \<otimes>\<^sub>m match_kws \<rho> kps zvs
+     else if length ys < n \<or> (\<exists>y \<in> set (map fst kps). y \<in> set (take n ys))
+     then MatchAborts TypeError
+     else MatchAborts Excluded)"
+by pat_completeness auto
+
+termination by size_change
 
 fun dispatch :: "env \<Rightarrow> val \<Rightarrow> (pat located \<times> stmt located) list \<Rightarrow> (env \<times> stmt located) result"
 where
