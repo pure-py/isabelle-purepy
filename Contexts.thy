@@ -25,6 +25,24 @@ datatype class_entry = ClassDef cxt name "type_def located list" nat
 
 type_synonym class_table = "(name, class_entry) fmap"
 
+fun fv_scheme :: "ty_scheme \<Rightarrow> var set"
+where
+"fv_scheme (TyScheme \<alpha>s \<tau>) = fv \<tau> - set \<alpha>s"
+
+fun fv_entry :: "cxt_entry \<Rightarrow> var set"
+where
+"fv_entry (Ty \<tau>) = fv \<tau>" |
+"fv_entry (DU \<tau>) = fv \<tau>" |
+"fv_entry (PU \<tau> _) = fv \<tau>" |
+"fv_entry (Scheme \<pi>) = fv_scheme \<pi>" |
+"fv_entry (PUScheme \<pi> _) = fv_scheme \<pi>" |
+"fv_entry _ = {}"
+
+definition tyvars :: "cxt \<Rightarrow> var set"
+where
+"tyvars \<Gamma> =
+  \<Union> (set (map (\<lambda>(x, \<theta>). (if \<theta> = TypeVar then {x} else {}) \<union> fv_entry \<theta>) (sorted_list_of_fmap \<Gamma>)))"
+
 fun lookup :: "cxt \<Rightarrow> name \<Rightarrow> cxt_entry option"
 where
 "lookup \<Gamma> (x, []) = fmlookup \<Gamma> x" |

@@ -409,6 +409,8 @@ def message(r: Reason) -> str:
             return f"bare return in function with result type {unparse_type(tau)}"
         case Reasons.MissingReturn(x, tau):
             return f"'{x}' declares result type {unparse_type(tau)} but does not always return"
+        case Reasons.ReturnOutsideFunction():
+            return "'return' outside function"
         case Reasons.MypyCompatibility(r_):
             return f"{message(r_)} (mypy compatibility)"
         case Reasons.Located(_, r_):
