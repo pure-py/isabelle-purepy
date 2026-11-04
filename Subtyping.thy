@@ -44,6 +44,12 @@ definition joins :: "class_table \<Rightarrow> ty list \<Rightarrow> ty"
 where
 "joins \<Sigma> \<tau>s = foldr (\<lambda>\<sigma> \<tau>. \<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>) \<tau>s (TyPrim Never)"
 
+lemma join_upper: "\<Sigma> \<turnstile> \<sigma> <: \<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>" "\<Sigma> \<turnstile> \<tau> <: \<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>"
+  by (auto simp: join_def intro: SubtyRefl SubtyUnionLeft SubtyUnionRight)
+
+lemma base_type_upper: "\<Sigma> \<turnstile> \<tau> <: base_type \<tau>"
+  by (cases \<tau>) (auto intro: SubtyRefl SubtyLiteral)
+
 function (sequential)
   meet :: "class_table \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> ty" and
   meet_incomparable :: "class_table \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> ty"

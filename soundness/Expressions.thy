@@ -116,14 +116,8 @@ lemma subty_trans: "\<lbrakk> \<Sigma> \<turnstile> \<sigma> <: \<tau> ; \<Sigma
 lemma subst_subty: "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> \<Sigma> \<turnstile> subst \<tau>s \<alpha>s \<sigma> <: subst \<tau>s \<alpha>s \<tau>"
   sorry
 
-lemma join_upper: "\<Sigma> \<turnstile> \<sigma> <: \<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>" "\<Sigma> \<turnstile> \<tau> <: \<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>"
-  by (auto simp: join_def intro: SubtyRefl SubtyUnionLeft SubtyUnionRight)
-
 lemma joins_upper: "\<tau> \<in> set \<tau>s \<Longrightarrow> \<Sigma> \<turnstile> \<tau> <: joins \<Sigma> \<tau>s"
   by (induction \<tau>s) (auto simp: joins_def intro: join_upper subty_trans)
-
-lemma base_type_upper: "\<Sigma> \<turnstile> \<tau> <: base_type \<tau>"
-  by (cases \<tau>) (auto intro: SubtyRefl SubtyLiteral)
 
 lemma result_typed_sub: "\<lbrakk> result_typed r (inst \<eta> \<sigma>) ; \<Sigma> \<turnstile> \<sigma> <: \<tau> \<rbrakk> \<Longrightarrow> result_typed r (inst \<eta> \<tau>)"
   by (cases r) (auto intro: ValSub subst_subty)
