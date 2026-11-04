@@ -137,7 +137,6 @@ definition scheme_of_name :: "cxt \<Rightarrow> expr \<Rightarrow> ty_scheme opt
 where
 "scheme_of_name \<Gamma> e = (case entry_of \<Gamma> e of Some (Scheme \<pi>) \<Rightarrow> Some \<pi> | _ \<Rightarrow> None)"
 
-
 (* Programs, and the stubs of the submodules of a module *)
 type_synonym program = "(name, module_body) fmap"
 

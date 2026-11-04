@@ -65,7 +65,6 @@ where
   (\<forall>\<eta> \<Gamma> \<tau>. (\<forall>\<rho> \<in> set \<rho>s. \<eta> \<turnstile> \<rho> : \<Gamma>) \<longrightarrow> check_expr_at \<Sigma> \<Gamma> e (TyPrim str) = Ok ()
      \<longrightarrow> has_type_at \<Sigma> \<eta> \<Gamma> e' \<tau> \<longrightarrow> wf_entries r (inst \<eta> \<tau>))"
 
-
 subsection \<open>Subtyping\<close>
 
 lemma subty_trans: "\<lbrakk> \<Sigma> \<turnstile> \<sigma> <: \<tau> ; \<Sigma> \<turnstile> \<tau> <: \<tau>' \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: \<tau>'"
@@ -89,7 +88,6 @@ lemma wf_result_sub: "\<lbrakk> wf_result r (inst \<eta> \<sigma>) ; \<Sigma> \<
 lemma wf_lit_bool: "\<turnstile> VLit (LitBool b) : Ty (TyPrim bool)"
   by (rule ValSub[OF ValLit], rule SubtyLiteral) (simp add: SubtyRefl)
 
-
 subsection \<open>Well-scoped types\<close>
 
 (* Types produced by the checker are over the type variables in scope *)
@@ -108,7 +106,6 @@ lemma type_args_fv:
 
 lemma type_args_of_length: "Subtyping.type_args_of \<gamma> \<alpha>s = Ok \<tau>s \<Longrightarrow> length \<tau>s = length \<alpha>s"
   by (auto simp: Subtyping.type_args_of_def dest!: those_sum_Ok list_all2_lengthD)
-
 
 subsection \<open>Checking\<close>
 
@@ -172,7 +169,6 @@ proof -
   then show ?thesis using wf_completion_bindings[OF R'[symmetric]] by (simp add: o)
 qed
 
-
 subsection \<open>Canonical forms\<close>
 
 lemma wf_bool: "\<lbrakk> \<turnstile> v : Ty \<tau> ; \<Sigma> \<turnstile> \<tau> <: TyPrim bool \<rbrakk> \<Longrightarrow> v = true \<or> v = false"
@@ -213,7 +209,6 @@ proof -
   have "wf_result (Aborts \<kappa>) (inst \<eta> (TyPrim str))" by (rule sound_expr_check_at[OF assms]) simp
   then show ?thesis by simp
 qed
-
 
 subsection \<open>Expressions\<close>
 
@@ -700,7 +695,6 @@ qed
 lemma exprs_fail_sound: "sound_expr \<rho> (node e) (Aborts \<kappa>) \<Longrightarrow> sound_exprs \<rho> (e # es) (Aborts \<kappa>)"
   unfolding sound_exprs_def by (auto simp: list_all2_Cons1 dest: sound_expr_has_type_at)
 
-
 subsection \<open>Statements\<close>
 
 lemma pass_sound: "sound_stmt \<rho> StmtPass (assigns\<^sub>o \<epsilon>)"
@@ -1107,7 +1101,6 @@ lemma elif_nonbool_sound:
   \<Longrightarrow> sound_elif \<rho> ((e, s) # elifs, else') (aborts\<^sub>o Excluded)"
   unfolding sound_elif_def by (auto simp: bind_sum_def dest!: bool_operand split: sum.splits)
 
-
 subsection \<open>Comprehensions\<close>
 
 lemma quals_nil_sound: "sound_quals \<rho> [] (Val [\<rho>])"
@@ -1224,7 +1217,6 @@ lemma entries_fail_value_sound:
   "\<lbrakk> sound_expr \<rho> (node e) (Val (VLit (LitString w))) ; sound_expr \<rho> (node e') (Aborts \<kappa>) \<rbrakk>
   \<Longrightarrow> sound_entries (\<rho> # \<rho>s) e e' (Aborts \<kappa>)"
   unfolding sound_entries_def by (auto dest: sound_expr_has_type_at)
-
 
 subsection \<open>Soundness of evaluation\<close>
 

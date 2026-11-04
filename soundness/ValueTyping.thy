@@ -17,7 +17,6 @@ where
 "prevented Excluded = True" |
 "prevented _ = False"
 
-
 subsection \<open>Instantiation of type variables\<close>
 
 lemma tyvars_entry: "fmlookup \<Gamma> x = Some \<theta> \<Longrightarrow> fv_entry \<theta> \<subseteq> tyvars \<Gamma>"
@@ -85,7 +84,6 @@ proof (induction \<sigma>)
           dest!: map_of_SomeD dest: set_zip_leftD)
   qed
 qed (simp_all cong: map_cong)
-
 
 subsection \<open>Typing of expressions and statements\<close>
 
