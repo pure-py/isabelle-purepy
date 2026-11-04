@@ -29,8 +29,7 @@ lemma tyvars_add: "tyvars (\<Gamma> \<otimes> \<Delta>) \<subseteq> tyvars \<Gam
 lemma tyvars_single: "\<theta> \<noteq> TypeVar \<Longrightarrow> tyvars (fmupd x \<theta> fmempty) = fv_entry \<theta>"
   by (auto simp: tyvars_def fmlookup_dom'_iff fmlookup_ran'_iff split: if_splits)
 
-(* Instantiation of the type variables in scope at the closed types bound to them by \<eta>, since values have
-   closed types *)
+(* Application of a closing type substitution, given as a list of pairs *)
 abbreviation inst :: "(var \<times> ty) list \<Rightarrow> ty \<Rightarrow> ty"
 where
 "inst \<eta> \<equiv> subst (map snd \<eta>) (map fst \<eta>)"
