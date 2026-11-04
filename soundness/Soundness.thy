@@ -57,46 +57,30 @@ lemma locate_Ok [simp]: "(locate p m = Ok x) = (m = Ok x)"
 
 subsection \<open>Type variables and their instantiation\<close>
 
-fun fv_scheme :: "ty_scheme \<Rightarrow> var set"
-where
-"fv_scheme (TyScheme \<alpha>s \<tau>) = fv \<tau> - set \<alpha>s"
+lemma set_sorted_list_of_fmap: "set (sorted_list_of_fmap \<Gamma>) = {(x, \<theta>). fmlookup \<Gamma> x = Some \<theta>}"
+  by (auto simp: sorted_list_of_fmap_def fmlookup_dom_iff)
 
-fun fv_entry :: "cxt_entry \<Rightarrow> var set"
-where
-"fv_entry (Ty \<tau>) = fv \<tau>" |
-"fv_entry (DU \<tau>) = fv \<tau>" |
-"fv_entry (PU \<tau> _) = fv \<tau>" |
-"fv_entry (Scheme \<pi>) = fv_scheme \<pi>" |
-"fv_entry (PUScheme \<pi> _) = fv_scheme \<pi>" |
-"fv_entry _ = {}"
-
-(* Type variables in scope in a context: those it binds and those free in its entries *)
-definition tyvars :: "cxt \<Rightarrow> var set"
-where
-"tyvars \<Gamma> = {\<alpha>. fmlookup \<Gamma> \<alpha> = Some TypeVar} \<union> \<Union> (fv_entry ` fmran' \<Gamma>)"
-
-lemma tyvars_entry: "fmlookup \<Gamma> x = Some \<theta> \<Longrightarrow> fv_entry \<theta> \<subseteq> tyvars \<Gamma>"
-  by (auto simp: tyvars_def intro: fmran'I)
-
-lemma tyvars_add: "tyvars (\<Gamma> \<otimes> \<Delta>) \<subseteq> tyvars \<Gamma> \<union> tyvars \<Delta>"
+lemma tyvars_iff:
+  "\<alpha> \<in> tyvars \<Gamma> \<longleftrightarrow> (\<exists>x \<theta>. fmlookup \<Gamma> x = Some \<theta> \<and> (\<theta> = TypeVar \<and> \<alpha> = x \<or> \<alpha> \<in> fv_entry \<theta>))"
 proof
-  fix \<alpha>
-  assume "\<alpha> \<in> tyvars (\<Gamma> \<otimes> \<Delta>)"
-  then consider "fmlookup (\<Gamma> \<otimes> \<Delta>) \<alpha> = Some TypeVar" | \<theta> where "\<theta> \<in> fmran' (\<Gamma> \<otimes> \<Delta>)" and "\<alpha> \<in> fv_entry \<theta>"
-    by (auto simp: tyvars_def)
-  then show "\<alpha> \<in> tyvars \<Gamma> \<union> tyvars \<Delta>"
-  proof cases
-    case 1
-    then show ?thesis by (auto simp: tyvars_def split: if_splits)
-  next
-    case 2
-    then obtain x where "fmlookup (\<Gamma> \<otimes> \<Delta>) x = Some \<theta>" by (auto simp: fmlookup_ran'_iff)
-    with 2(2) show ?thesis by (auto simp: tyvars_def dest!: fmran'I split: if_splits)
-  qed
+  assume "\<alpha> \<in> tyvars \<Gamma>"
+  then show "\<exists>x \<theta>. fmlookup \<Gamma> x = Some \<theta> \<and> (\<theta> = TypeVar \<and> \<alpha> = x \<or> \<alpha> \<in> fv_entry \<theta>)"
+    by (auto simp: tyvars_def set_sorted_list_of_fmap split: if_splits)
+next
+  assume "\<exists>x \<theta>. fmlookup \<Gamma> x = Some \<theta> \<and> (\<theta> = TypeVar \<and> \<alpha> = x \<or> \<alpha> \<in> fv_entry \<theta>)"
+  then obtain x \<theta> where "fmlookup \<Gamma> x = Some \<theta>" and "\<theta> = TypeVar \<and> \<alpha> = x \<or> \<alpha> \<in> fv_entry \<theta>" by blast
+  then show "\<alpha> \<in> tyvars \<Gamma>"
+    unfolding tyvars_def set_map set_sorted_list_of_fmap by (intro UN_I[of "(x, \<theta>)"]) auto
 qed
 
+lemma tyvars_entry: "fmlookup \<Gamma> x = Some \<theta> \<Longrightarrow> fv_entry \<theta> \<subseteq> tyvars \<Gamma>"
+  unfolding tyvars_iff subset_iff by blast
+
+lemma tyvars_add: "tyvars (\<Gamma> \<otimes> \<Delta>) \<subseteq> tyvars \<Gamma> \<union> tyvars \<Delta>"
+  unfolding tyvars_iff subset_iff Un_iff by (fastforce split: if_splits)
+
 lemma tyvars_single: "\<theta> \<noteq> TypeVar \<Longrightarrow> tyvars (fmupd x \<theta> fmempty) = fv_entry \<theta>"
-  by (auto simp: tyvars_def fmlookup_ran'_iff split: if_splits)
+  by (auto simp: tyvars_iff split: if_splits)
 
 (* Instantiation of the type variables in scope at the closed types bound to them by \<eta>, since values have
    closed types *)
@@ -205,99 +189,11 @@ lemma check_stmt_if:
    }"
   by simp
 
-(* Names declared in the branches of an elif block, and names bound by their patterns *)
-fun declarations_elif :: "elif_block \<Rightarrow> var located list"
+(* Return type over the type variables bound by \<eta> *)
+fun wf_return :: "(var \<times> ty) list \<Rightarrow> ty option \<Rightarrow> bool"
 where
-"declarations_elif (elifs, else') =
-  concat (map (\<lambda>(_, s'). declarations_stmt s') elifs)
-  @ (case else' of None \<Rightarrow> [] | Some s' \<Rightarrow> declarations_stmt s')"
-
-fun binds_elif :: "elif_block \<Rightarrow> var set"
-where
-"binds_elif (elifs, else') =
-  \<Union> (set (map (\<lambda>(_, s'). binds s') elifs)) \<union> (case else' of None \<Rightarrow> {} | Some s' \<Rightarrow> binds s')"
-
-(* Position of a statement does not affect its declared or pattern-bound names *)
-lemma declarations_stmt_pos:
-  "map node (declarations_stmt (At p s)) = map node (declarations_stmt (At p' s))"
-proof (cases s)
-  case (StmtAssign x \<psi> e)
-  then show ?thesis by (cases \<psi>) simp_all
-qed (simp_all add: map_concat)
-
-lemma pat_bound_stmt_pos: "map node (pat_bound_stmt (At p s)) = map node (pat_bound_stmt (At p' s))"
-  by (cases s) (simp_all add: map_concat o_def split_def)
-
-lemma binds_stmt_pos: "binds (At p s) = binds (At p' s)"
-  by (simp add: binds_stmt_def pat_bound_stmt_pos[of p s p'])
-
-lemma declarations_located_pos: "map node (declarations_stmt (At p (node s))) = map node (declarations_stmt s)"
-  by (cases s) (simp add: declarations_stmt_pos)
-
-lemma declares_stmt_located: "declares (node s) = map node (declarations_stmt s)"
-  by (simp add: declares_stmt_def declarations_located_pos)
-
-lemma binds_stmt_located: "binds (At no_pos (node s)) = binds s"
-  by (cases s) (simp add: binds_stmt_pos)
-
-(* Declared names xs, distinct, disjoint from the pattern-bound names Y and unbound in \<Gamma>, as the scope function
-   ensures for a function body or module *)
-definition scoped :: "cxt \<Rightarrow> var list \<Rightarrow> var set \<Rightarrow> bool"
-where
-"scoped \<Gamma> xs Y = (distinct xs \<and> set xs \<inter> Y = {} \<and> (\<forall>x \<in> set xs. fmlookup \<Gamma> x = Some Unbound))"
-
-lemma declares_seq: "declares (StmtSeq s s') = declares (node s) @ declares (node s')"
-  by (simp add: declares_stmt_def declarations_located_pos)
-
-lemma binds_seq: "binds (At p (StmtSeq s s')) = binds s \<union> binds s'"
-  by (simp add: binds_stmt_def)
-
-lemma declares_if:
-  "declares (StmtIf e s elifs else') = declares (node s) @ map node (declarations_elif (elifs, else'))"
-  by (simp add: declares_stmt_def declarations_located_pos)
-
-lemma binds_if: "binds (At p (StmtIf e s elifs else')) = binds s \<union> binds_elif (elifs, else')"
-  by (cases else') (auto simp: binds_stmt_def split_def)
-
-lemma declarations_elif_cons:
-  "map node (declarations_elif ((e, s) # elifs, else'))
-   = declares (node s) @ map node (declarations_elif (elifs, else'))"
-  by (simp add: declares_stmt_def declarations_located_pos)
-
-lemma binds_elif_cons: "binds_elif ((e, s) # elifs, else') = binds s \<union> binds_elif (elifs, else')"
-  by auto
-
-(* Statement with a return statement outside its nested definitions *)
-fun has_return :: "stmt \<Rightarrow> bool"
-where
-"has_return (StmtReturn _) = True" |
-"has_return (StmtSeq s s') = (has_return (node s) \<or> has_return (node s'))" |
-"has_return (StmtIf _ s elifs else') =
-  (has_return (node s) \<or> (\<exists>(_, s') \<in> set elifs. has_return (node s'))
-   \<or> (case else' of None \<Rightarrow> False | Some s' \<Rightarrow> has_return (node s')))" |
-"has_return (StmtMatch _ cases) = (\<exists>(_, s) \<in> set cases. has_return (node s))" |
-"has_return _ = False"
-
-fun has_return_elif :: "elif_block \<Rightarrow> bool"
-where
-"has_return_elif (elifs, else') =
-  ((\<exists>(_, s') \<in> set elifs. has_return (node s'))
-   \<or> (case else' of None \<Rightarrow> False | Some s' \<Rightarrow> has_return (node s')))"
-
-(* Return type over the type variables bound by \<eta>, or no return statement, flagged by r, where there is none *)
-fun scoped_return :: "(var \<times> ty) list \<Rightarrow> bool \<Rightarrow> ty option \<Rightarrow> bool"
-where
-"scoped_return \<eta> r (Some \<tau>) = (fv \<tau> \<subseteq> fst ` set \<eta>)" |
-"scoped_return \<eta> r None = (\<not> r)"
-
-lemma scoped_appendD1: "scoped \<Gamma> (xs @ ys) (Y \<union> Y') \<Longrightarrow> scoped \<Gamma> xs Y"
-  by (auto simp: scoped_def)
-
-lemma scoped_appendD2: "scoped \<Gamma> (xs @ ys) (Y \<union> Y') \<Longrightarrow> scoped \<Gamma> ys Y'"
-  by (auto simp: scoped_def)
-
-lemma scoped_return_mono: "\<lbrakk> scoped_return \<eta> r \<zeta> ; r' \<longrightarrow> r \<rbrakk> \<Longrightarrow> scoped_return \<eta> r' \<zeta>"
-  by (cases \<zeta>) auto
+"wf_return \<eta> (Some \<tau>) = (fv \<tau> \<subseteq> fst ` set \<eta>)" |
+"wf_return \<eta> None = True"
 
 fun bindings_of :: "static_outcome \<Rightarrow> cxt option"
 where
@@ -473,14 +369,13 @@ where
 definition sound_stmt :: "env \<Rightarrow> stmt \<Rightarrow> outcome \<Rightarrow> bool"
 where
 "sound_stmt \<rho> s o =
-  (\<forall>\<eta> \<Gamma> \<zeta> R. \<eta> \<turnstile> \<rho> : \<Gamma> \<longrightarrow> scoped \<Gamma> (declares s) (binds (At no_pos s)) \<longrightarrow> scoped_return \<eta> (has_return s) \<zeta>
-     \<longrightarrow> check_stmt \<Sigma> \<Gamma> \<zeta> s = Ok R \<longrightarrow> wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R)"
+  (\<forall>\<eta> \<Gamma> \<zeta> R. \<eta> \<turnstile> \<rho> : \<Gamma> \<longrightarrow> wf_return \<eta> \<zeta> \<longrightarrow> check_stmt \<Sigma> \<Gamma> \<zeta> s = Ok R
+     \<longrightarrow> wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R)"
 
 definition sound_elif :: "env \<Rightarrow> elif_block \<Rightarrow> outcome \<Rightarrow> bool"
 where
 "sound_elif \<rho> eb o =
-  (\<forall>\<eta> \<Gamma> \<zeta> Rs. \<eta> \<turnstile> \<rho> : \<Gamma> \<longrightarrow> scoped \<Gamma> (map node (declarations_elif eb)) (binds_elif eb)
-     \<longrightarrow> scoped_return \<eta> (has_return_elif eb) \<zeta> \<longrightarrow> those_sum (check_elif \<Sigma> \<Gamma> \<zeta> eb) = Ok Rs
+  (\<forall>\<eta> \<Gamma> \<zeta> Rs. \<eta> \<turnstile> \<rho> : \<Gamma> \<longrightarrow> wf_return \<eta> \<zeta> \<longrightarrow> those_sum (check_elif \<Sigma> \<Gamma> \<zeta> eb) = Ok Rs
      \<longrightarrow> (\<exists>R \<in> set Rs. wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R))"
 
 fun wf_envs :: "(var \<times> ty) list \<Rightarrow> env list result \<Rightarrow> cxt \<Rightarrow> bool"
@@ -615,16 +510,15 @@ lemma sound_exprs_abort:
   by (fastforce simp: sound_exprs_def)
 
 lemma sound_stmt_at:
-  assumes "sound_stmt \<rho> (node s) o" and "\<eta> \<turnstile> \<rho> : \<Gamma>" and "scoped \<Gamma> (declares (node s)) (binds s)"
-    and "scoped_return \<eta> (has_return (node s)) \<zeta>" and "check_stmt_at \<Sigma> \<Gamma> \<zeta> s = Ok R"
+  assumes "sound_stmt \<rho> (node s) o" and "\<eta> \<turnstile> \<rho> : \<Gamma>" and "wf_return \<eta> \<zeta>"
+    and "check_stmt_at \<Sigma> \<Gamma> \<zeta> s = Ok R"
   shows "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R"
 proof -
   obtain p s' where s: "s = At p s'" by (cases s)
   obtain vs \<omega> where o: "o = (vs, \<omega>)" by (cases o)
-  from assms(5) obtain R' where "check_stmt \<Sigma> \<Gamma> \<zeta> s' = Ok R'" and R': "bindings_of R' = bindings_of R"
+  from assms(4) obtain R' where "check_stmt \<Sigma> \<Gamma> \<zeta> s' = Ok R'" and R': "bindings_of R' = bindings_of R"
     unfolding s by (blast dest: check_stmt_at_Ok)
-  with assms(1-4) have "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R'"
-    unfolding sound_stmt_def s by (simp add: binds_stmt_pos[of p s' no_pos])
+  with assms(1-3) have "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R'" unfolding sound_stmt_def s by simp
   then show ?thesis using wf_completion_bindings[OF R'[symmetric]] by (simp add: o)
 qed
 
@@ -1166,11 +1060,10 @@ lemma declare_sound: "sound_stmt \<rho> (StmtDeclare x \<psi>) (assigns\<^sub>o 
   unfolding sound_stmt_def
 proof (intro allI impI)
   fix \<eta> \<Gamma> \<zeta> R
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and sc: "scoped \<Gamma> (declares (StmtDeclare x \<psi>)) (binds (At no_pos (StmtDeclare x \<psi>)))"
-    and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtDeclare x \<psi>) = Ok R"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtDeclare x \<psi>) = Ok R"
   from chk obtain \<tau> where \<tau>: "resolve_type \<Sigma> \<Gamma> \<psi> = Ok \<tau>" and R: "R = Assigns\<^sub>R (fmupd x (DU \<tau>) fmempty) None"
-    by (auto simp: bind_sum_def split: sum.splits)
-  from sc have "fmlookup \<Gamma> x = Some Unbound" by (simp add: scoped_def declares_stmt_def)
+    and "fmlookup \<Gamma> x = Some Unbound"
+    by (auto simp: bind_sum_def check_unbound_def ensure_def split: sum.splits if_splits)
   with env have "fmlookup \<rho> x = Some VUnbound" by (auto dest!: wf_env_lookup wf_unbound_entry)
   moreover have "fv \<tau> \<subseteq> fst ` set \<eta>" using resolve_type_tyvars[OF \<tau>] wf_env_tyvars[OF env] by blast
   ultimately have "\<eta> \<turnstile> \<rho> : fmupd x (DU \<tau>) \<Gamma>" using env by (intro wf_env_upd_cxt) (auto intro: ValUnbound)
@@ -1187,8 +1080,8 @@ proof (intro allI impI)
   from chk obtain \<tau> where chk_e: "check_expr_at \<Sigma> \<Gamma> e \<tau> = Ok ()"
     and R: "R = Assigns\<^sub>R (fmupd x (Ty \<tau>) fmempty) None" and "fv \<tau> \<subseteq> tyvars \<Gamma>"
     by (cases \<pi>)
-       (auto simp: bind_sum_def split: sum.splits option.splits cxt_entry.splits
-        dest: tyvars_entry resolve_type_tyvars)
+       (auto simp: bind_sum_def check_unbound_def ensure_def
+        split: sum.splits option.splits cxt_entry.splits if_splits dest: tyvars_entry resolve_type_tyvars)
   with wf_env_tyvars[OF env] have fv: "fv \<tau> \<subseteq> fst ` set \<eta>" by blast
   show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (mlet r (\<lambda>v. assigns\<^sub>o (fmupd x v \<epsilon>))) R"
   proof (cases r)
@@ -1251,10 +1144,10 @@ lemma return_sound:
   unfolding sound_stmt_def
 proof (intro allI impI)
   fix \<eta> \<Gamma> \<zeta> R
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "scoped_return \<eta> (has_return (StmtReturn (Some e))) \<zeta>"
-    and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtReturn (Some e)) = Ok R"
-  from ret obtain \<tau> where \<zeta>: "\<zeta> = Some \<tau>" and fv: "fv \<tau> \<subseteq> fst ` set \<eta>" by (cases \<zeta>) auto
-  with chk have "check_expr_at \<Sigma> \<Gamma> e \<tau> = Ok ()" by (auto simp: bind_sum_def split: sum.splits)
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtReturn (Some e)) = Ok R"
+  from chk obtain \<tau> where \<zeta>: "\<zeta> = Some \<tau>" by (cases \<zeta>) auto
+  with ret have fv: "fv \<tau> \<subseteq> fst ` set \<eta>" by simp
+  from chk \<zeta> have "check_expr_at \<Sigma> \<Gamma> e \<tau> = Ok ()" by (auto simp: bind_sum_def split: sum.splits)
   with assms env fv have "wf_result r (inst \<eta> \<tau>)" by (auto dest: sound_expr_check_at)
   then show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (mlet r returns\<^sub>o) R" by (cases r) (simp_all add: \<zeta>)
 qed
@@ -1263,9 +1156,8 @@ lemma return_none_sound: "sound_stmt \<rho> (StmtReturn None) (returns\<^sub>o (
   unfolding sound_stmt_def
 proof (intro allI impI)
   fix \<eta> \<Gamma> \<zeta> R
-  assume ret: "scoped_return \<eta> (has_return (StmtReturn None)) \<zeta>"
-    and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtReturn None) = Ok R"
-  from ret obtain \<tau> where \<zeta>: "\<zeta> = Some \<tau>" by (cases \<zeta>) auto
+  assume chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtReturn None) = Ok R"
+  from chk obtain \<tau> where \<zeta>: "\<zeta> = Some \<tau>" by (cases \<zeta>) auto
   with chk have "\<Sigma> \<turnstile> TyPrim NoneType <: \<tau>" by (auto split: if_splits)
   then have "\<turnstile> VLit LitNone : Ty (inst \<eta> \<tau>)"
     by (intro ValSub[OF ValLit] SubtyLiteral)
@@ -1391,13 +1283,18 @@ proof (intro allI impI)
   with assms env show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (aborts\<^sub>o Excluded) R" by (auto dest!: str_operand)
 qed
 
+(* A variable bound by the static outcome of a statement is unbound or declared unassigned before it *)
+lemma check_stmt_bound:
+  "\<lbrakk> check_stmt \<Sigma> \<Gamma> \<zeta> s = Ok (Assigns\<^sub>R \<Delta> r) ; fmlookup \<Delta> x = Some \<theta> \<rbrakk>
+  \<Longrightarrow> fmlookup \<Gamma> x = Some Unbound \<or> (\<exists>\<tau>. fmlookup \<Gamma> x = Some (DU \<tau>))"
+  sorry
+
 (* Soundness at one branch of an if statement carries to the merge of the branches *)
 lemma wf_outcome_merge_if:
   assumes "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R" and "R \<in> set Rs"
     and "those_sum (check_stmt_at \<Sigma> \<Gamma> \<zeta> s # check_elif \<Sigma> \<Gamma> \<zeta> (elifs, else')) = Ok Rs"
-    and "scoped \<Gamma> (declares (StmtIf e s elifs else')) (binds (At no_pos (StmtIf e s elifs else')))"
-    and "\<eta> \<turnstile> \<rho> : \<Gamma>"
-  shows "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o (foldr (merge_outcome \<Sigma> (set (declares (StmtIf e s elifs else')))) Rs Returns\<^sub>R)"
+    and "foldr (\<lambda>R m. do { R' \<leftarrow> m; merge_outcome \<Sigma> X R R' }) Rs (Ok Returns\<^sub>R) = Ok R'" and "\<eta> \<turnstile> \<rho> : \<Gamma>"
+  shows "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R'"
   sorry
 
 lemma if_true_sound:
@@ -1406,20 +1303,15 @@ lemma if_true_sound:
   unfolding sound_stmt_def
 proof (intro allI impI)
   fix \<eta> \<Gamma> \<zeta> R
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>"
-    and sc: "scoped \<Gamma> (declares (StmtIf e s elifs else')) (binds (At no_pos (StmtIf e s elifs else')))"
-    and ret: "scoped_return \<eta> (has_return (StmtIf e s elifs else')) \<zeta>"
-    and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtIf e s elifs else') = Ok R"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtIf e s elifs else') = Ok R"
   from chk obtain Rs where Rs: "those_sum (check_stmt_at \<Sigma> \<Gamma> \<zeta> s # check_elif \<Sigma> \<Gamma> \<zeta> (elifs, else')) = Ok Rs"
-    and R: "R = foldr (merge_outcome \<Sigma> (set (declares (StmtIf e s elifs else')))) Rs Returns\<^sub>R"
+    and R: "foldr (\<lambda>R m. do { R' \<leftarrow> m; merge_outcome \<Sigma> (set (declares (StmtIf e s elifs else'))) R R' }) Rs
+             (Ok Returns\<^sub>R) = Ok R"
     by (auto simp: check_stmt_if merges_def bind_sum_def split: sum.splits)
   from Rs obtain R0 where R0: "check_stmt_at \<Sigma> \<Gamma> \<zeta> s = Ok R0" and "R0 \<in> set Rs"
     by (auto simp: bind_sum_def split: sum.splits)
-  have "scoped \<Gamma> (declares (node s)) (binds s)"
-    using sc unfolding declares_if binds_if by (rule scoped_appendD1)
-  moreover have "scoped_return \<eta> (has_return (node s)) \<zeta>" using ret by (rule scoped_return_mono) simp
-  ultimately have "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R0" using assms(2) env R0 by (blast intro: sound_stmt_at)
-  then show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R" unfolding R using \<open>R0 \<in> set Rs\<close> Rs sc env by (rule wf_outcome_merge_if)
+  have "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R0" using assms(2) env ret R0 by (rule sound_stmt_at)
+  then show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R" using \<open>R0 \<in> set Rs\<close> Rs R env by (rule wf_outcome_merge_if)
 qed
 
 lemma if_false_sound:
@@ -1428,22 +1320,17 @@ lemma if_false_sound:
   unfolding sound_stmt_def
 proof (intro allI impI)
   fix \<eta> \<Gamma> \<zeta> R
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>"
-    and sc: "scoped \<Gamma> (declares (StmtIf e s elifs else')) (binds (At no_pos (StmtIf e s elifs else')))"
-    and ret: "scoped_return \<eta> (has_return (StmtIf e s elifs else')) \<zeta>"
-    and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtIf e s elifs else') = Ok R"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtIf e s elifs else') = Ok R"
   from chk obtain Rs where Rs: "those_sum (check_stmt_at \<Sigma> \<Gamma> \<zeta> s # check_elif \<Sigma> \<Gamma> \<zeta> (elifs, else')) = Ok Rs"
-    and R: "R = foldr (merge_outcome \<Sigma> (set (declares (StmtIf e s elifs else')))) Rs Returns\<^sub>R"
+    and R: "foldr (\<lambda>R m. do { R' \<leftarrow> m; merge_outcome \<Sigma> (set (declares (StmtIf e s elifs else'))) R R' }) Rs
+             (Ok Returns\<^sub>R) = Ok R"
     by (auto simp: check_stmt_if merges_def bind_sum_def split: sum.splits)
   from Rs obtain R0 Rs' where Rs': "those_sum (check_elif \<Sigma> \<Gamma> \<zeta> (elifs, else')) = Ok Rs'" and "Rs = R0 # Rs'"
     by (auto simp: bind_sum_def split: sum.splits)
-  have "scoped \<Gamma> (map node (declarations_elif (elifs, else'))) (binds_elif (elifs, else'))"
-    using sc unfolding declares_if binds_if by (rule scoped_appendD2)
-  moreover have "scoped_return \<eta> (has_return_elif (elifs, else')) \<zeta>" using ret by (rule scoped_return_mono) simp
-  ultimately obtain R' where "R' \<in> set Rs'" and "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R'"
-    using assms(2) env Rs' unfolding sound_elif_def by blast
+  with assms(2) env ret obtain R' where "R' \<in> set Rs'" and "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R'"
+    unfolding sound_elif_def by blast
   moreover from this(1) have "R' \<in> set Rs" by (simp add: \<open>Rs = R0 # Rs'\<close>)
-  ultimately show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R" unfolding R using Rs sc env by (blast intro: wf_outcome_merge_if)
+  ultimately show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R" using Rs R env by (blast intro: wf_outcome_merge_if)
 qed
 
 lemma if_fail_sound:
@@ -1468,46 +1355,20 @@ lemma match_abort_sound:
   \<Longrightarrow> sound_stmt \<rho> (StmtMatch e cases) (aborts\<^sub>o \<kappa>)"
   sorry
 
-(* A variable unbound in \<Gamma> and bound by the static outcome of s is declared or pattern-bound in s *)
-lemma check_stmt_binds_declared:
-  "\<lbrakk> check_stmt \<Sigma> \<Gamma> \<zeta> s = Ok (Assigns\<^sub>R \<Delta> r) ; fmlookup \<Gamma> x = Some Unbound ; fmlookup \<Delta> x = Some \<theta> \<rbrakk>
-  \<Longrightarrow> x \<in> set (declares s) \<union> binds (At no_pos s)"
-  sorry
-
 lemma seq_sound:
   assumes "sound_stmt \<rho> (node s) (us, Assigns \<rho>')" and "sound_stmt (\<rho> \<otimes> \<rho>') (node s') o"
   shows "sound_stmt \<rho> (StmtSeq s s') ((us, Assigns \<rho>') \<otimes>\<^sub>o o)"
   unfolding sound_stmt_def
 proof (intro allI impI)
   fix \<eta> \<Gamma> \<zeta> R
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and sc: "scoped \<Gamma> (declares (StmtSeq s s')) (binds (At no_pos (StmtSeq s s')))"
-    and ret: "scoped_return \<eta> (has_return (StmtSeq s s')) \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtSeq s s') = Ok R"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtSeq s s') = Ok R"
   from chk obtain \<Delta> r R' where chk1: "check_stmt_at \<Sigma> \<Gamma> \<zeta> s = Ok (Assigns\<^sub>R \<Delta> r)"
     and chk2: "check_stmt_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) \<zeta> s' = Ok R'" and R: "R = Assigns\<^sub>R \<Delta> r \<otimes>\<^sub>R R'"
     by (auto simp: bind_sum_def split: sum.splits static_outcome.splits)
-  from sc have sc1: "scoped \<Gamma> (declares (node s)) (binds s)" and sc2: "scoped \<Gamma> (declares (node s')) (binds s')"
-    and distinct: "set (declares (node s)) \<inter> set (declares (node s')) = {}"
-    and disjoint: "set (declares (node s')) \<inter> binds s = {}"
-    by (auto simp: declares_seq binds_seq scoped_def)
-  have ret1: "scoped_return \<eta> (has_return (node s)) \<zeta>" and ret2: "scoped_return \<eta> (has_return (node s')) \<zeta>"
-    using ret by (auto intro: scoped_return_mono)
   have o1: "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (us, Assigns \<rho>') (Assigns\<^sub>R \<Delta> r)"
-    using assms(1) env sc1 ret1 chk1 by (rule sound_stmt_at)
+    using assms(1) env ret chk1 by (rule sound_stmt_at)
   then have env': "\<eta> \<turnstile> \<rho> \<otimes> \<rho>' : \<Gamma> \<otimes> \<Delta>" and dom: "fmdom \<rho>' |\<subseteq>| fmdom \<Delta>" by simp_all
-  have "fmlookup \<Delta> x = None" if "x \<in> set (declares (node s'))" for x
-  proof (rule ccontr)
-    assume "fmlookup \<Delta> x \<noteq> None"
-    moreover from that sc2 have "fmlookup \<Gamma> x = Some Unbound" by (simp add: scoped_def)
-    moreover obtain p s0 where s: "s = At p s0" by (cases s)
-    with chk1 obtain r' where "check_stmt \<Sigma> \<Gamma> \<zeta> (node s) = Ok (Assigns\<^sub>R \<Delta> r')"
-      using check_stmt_at_Ok[of \<Sigma> \<Gamma> \<zeta> p s0] by (auto split: static_outcome.splits)
-    ultimately have "x \<in> set (declares (node s)) \<union> binds s"
-      by (auto dest!: check_stmt_binds_declared simp: binds_stmt_located)
-    with that distinct disjoint show False by blast
-  qed
-  with sc2 have sc2': "scoped (\<Gamma> \<otimes> \<Delta>) (declares (node s')) (binds s')"
-    by (auto simp: scoped_def fmlookup_dom_iff)
-  have o2: "wf_outcome \<eta> (\<rho> \<otimes> \<rho>') (\<Gamma> \<otimes> \<Delta>) \<zeta> o R'" using assms(2) env' sc2' ret2 chk2 by (rule sound_stmt_at)
+  have o2: "wf_outcome \<eta> (\<rho> \<otimes> \<rho>') (\<Gamma> \<otimes> \<Delta>) \<zeta> o R'" using assms(2) env' ret chk2 by (rule sound_stmt_at)
   obtain vs' \<omega>' where o: "o = (vs', \<omega>')" by (cases o)
   show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> ((us, Assigns \<rho>') \<otimes>\<^sub>o o) R"
   proof (cases \<omega>')
@@ -1525,14 +1386,10 @@ lemma seq_return_sound:
   unfolding sound_stmt_def
 proof (intro allI impI)
   fix \<eta> \<Gamma> \<zeta> R
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and sc: "scoped \<Gamma> (declares (StmtSeq s s')) (binds (At no_pos (StmtSeq s s')))"
-    and ret: "scoped_return \<eta> (has_return (StmtSeq s s')) \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtSeq s s') = Ok R"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtSeq s s') = Ok R"
   from chk obtain \<Delta> r where chk1: "check_stmt_at \<Sigma> \<Gamma> \<zeta> s = Ok (Assigns\<^sub>R \<Delta> r)"
     by (auto simp: bind_sum_def split: sum.splits static_outcome.splits)
-  have "scoped \<Gamma> (declares (node s)) (binds s)" using sc by (auto simp: declares_seq binds_seq scoped_def)
-  moreover have "scoped_return \<eta> (has_return (node s)) \<zeta>" using ret by (rule scoped_return_mono) simp
-  ultimately have "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (us, Returns v) (Assigns\<^sub>R \<Delta> r)"
-    using assms env chk1 by (blast intro: sound_stmt_at)
+  have "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (us, Returns v) (Assigns\<^sub>R \<Delta> r)" using assms env ret chk1 by (rule sound_stmt_at)
   then show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (us, Returns v) R" by simp
 qed
 
@@ -1542,14 +1399,10 @@ lemma seq_fail_sound:
   unfolding sound_stmt_def
 proof (intro allI impI)
   fix \<eta> \<Gamma> \<zeta> R
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and sc: "scoped \<Gamma> (declares (StmtSeq s s')) (binds (At no_pos (StmtSeq s s')))"
-    and ret: "scoped_return \<eta> (has_return (StmtSeq s s')) \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtSeq s s') = Ok R"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtSeq s s') = Ok R"
   from chk obtain \<Delta> r where chk1: "check_stmt_at \<Sigma> \<Gamma> \<zeta> s = Ok (Assigns\<^sub>R \<Delta> r)"
     by (auto simp: bind_sum_def split: sum.splits static_outcome.splits)
-  have "scoped \<Gamma> (declares (node s)) (binds s)" using sc by (auto simp: declares_seq binds_seq scoped_def)
-  moreover have "scoped_return \<eta> (has_return (node s)) \<zeta>" using ret by (rule scoped_return_mono) simp
-  ultimately have "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (us, Aborts\<^sub>\<omega> \<kappa>) (Assigns\<^sub>R \<Delta> r)"
-    using assms env chk1 by (blast intro: sound_stmt_at)
+  have "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (us, Aborts\<^sub>\<omega> \<kappa>) (Assigns\<^sub>R \<Delta> r)" using assms env ret chk1 by (rule sound_stmt_at)
   then show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (us, Aborts\<^sub>\<omega> \<kappa>) R" by simp
 qed
 
@@ -1562,14 +1415,10 @@ lemma else_sound:
   unfolding sound_elif_def
 proof (intro allI impI)
   fix \<eta> \<Gamma> \<zeta> Rs
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>"
-    and sc: "scoped \<Gamma> (map node (declarations_elif ([], Some s))) (binds_elif ([], Some s))"
-    and ret: "scoped_return \<eta> (has_return_elif ([], Some s)) \<zeta>"
-    and chk: "those_sum (check_elif \<Sigma> \<Gamma> \<zeta> ([], Some s)) = Ok Rs"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>" and chk: "those_sum (check_elif \<Sigma> \<Gamma> \<zeta> ([], Some s)) = Ok Rs"
   from chk obtain R where "check_stmt_at \<Sigma> \<Gamma> \<zeta> s = Ok R" and "Rs = [R]"
     by (auto simp: bind_sum_def split: sum.splits)
-  with assms env sc ret show "\<exists>R \<in> set Rs. wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R"
-    by (auto simp: declares_stmt_located intro: sound_stmt_at)
+  with assms env ret show "\<exists>R \<in> set Rs. wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R" by (auto intro: sound_stmt_at)
 qed
 
 lemma elif_true_sound:
@@ -1578,17 +1427,11 @@ lemma elif_true_sound:
   unfolding sound_elif_def
 proof (intro allI impI)
   fix \<eta> \<Gamma> \<zeta> Rs
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>"
-    and sc:
-      "scoped \<Gamma> (map node (declarations_elif ((e, s) # elifs, else'))) (binds_elif ((e, s) # elifs, else'))"
-    and ret: "scoped_return \<eta> (has_return_elif ((e, s) # elifs, else')) \<zeta>"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>"
     and chk: "those_sum (check_elif \<Sigma> \<Gamma> \<zeta> ((e, s) # elifs, else')) = Ok Rs"
   from chk obtain R Rs' where R: "check_stmt_at \<Sigma> \<Gamma> \<zeta> s = Ok R" and Rs: "Rs = R # Rs'"
     by (auto simp: bind_sum_def split: sum.splits)
-  have sc': "scoped \<Gamma> (declares (node s)) (binds s)"
-    using sc unfolding declarations_elif_cons binds_elif_cons by (rule scoped_appendD1)
-  have ret': "scoped_return \<eta> (has_return (node s)) \<zeta>" using ret by (rule scoped_return_mono) simp
-  have "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R" using assms(2) env sc' ret' R by (rule sound_stmt_at)
+  have "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R" using assms(2) env ret R by (rule sound_stmt_at)
   then show "\<exists>R \<in> set Rs. wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R" by (auto simp: Rs)
 qed
 
@@ -1598,17 +1441,11 @@ lemma elif_false_sound:
   unfolding sound_elif_def
 proof (intro allI impI)
   fix \<eta> \<Gamma> \<zeta> Rs
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>"
-    and sc:
-      "scoped \<Gamma> (map node (declarations_elif ((e, s) # elifs, else'))) (binds_elif ((e, s) # elifs, else'))"
-    and ret: "scoped_return \<eta> (has_return_elif ((e, s) # elifs, else')) \<zeta>"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>"
     and chk: "those_sum (check_elif \<Sigma> \<Gamma> \<zeta> ((e, s) # elifs, else')) = Ok Rs"
   from chk obtain R Rs' where "those_sum (check_elif \<Sigma> \<Gamma> \<zeta> (elifs, else')) = Ok Rs'" and "Rs = R # Rs'"
     by (auto simp: bind_sum_def split: sum.splits)
-  moreover have "scoped \<Gamma> (map node (declarations_elif (elifs, else'))) (binds_elif (elifs, else'))"
-    using sc unfolding declarations_elif_cons binds_elif_cons by (rule scoped_appendD2)
-  moreover have "scoped_return \<eta> (has_return_elif (elifs, else')) \<zeta>" using ret by (rule scoped_return_mono) auto
-  ultimately show "\<exists>R \<in> set Rs. wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R" using assms(2) env unfolding sound_elif_def by auto
+  then show "\<exists>R \<in> set Rs. wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R" using assms(2) env ret unfolding sound_elif_def by auto
 qed
 
 lemma elif_fail_sound:
