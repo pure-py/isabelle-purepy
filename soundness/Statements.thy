@@ -160,7 +160,7 @@ proof (intro allI impI)
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtExpr e) = Ok R"
   from check_expr_stmt[OF chk] obtain \<tau> where R: "R = Assigns\<^sub>R fmempty None" and "has_type_at \<Sigma> \<eta> \<Gamma> e \<tau>"
     by blast
-  with assms env have "wf_result r (inst \<eta> \<tau>)" by (auto dest: sound_expr_has_type_at)
+  with assms env have "result_typed r (inst \<eta> \<tau>)" by (auto dest: sound_expr_has_type_at)
   then show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (mlet r (\<lambda>v. assigns\<^sub>o \<epsilon>)) R" using env by (cases r) (simp_all add: R)
 qed
 
@@ -173,7 +173,7 @@ proof (intro allI impI)
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtPrint e) = Ok R"
   then obtain \<tau> where R: "R = Assigns\<^sub>R fmempty None" and "synth_expr_at \<Sigma> \<Gamma> e = Ok \<tau>"
     by (auto simp: bind_sum_def ensure_def split: sum.splits if_splits)
-  with assms env have "wf_result r (inst \<eta> \<tau>)" by (auto dest: sound_expr_synth_at)
+  with assms env have "result_typed r (inst \<eta> \<tau>)" by (auto dest: sound_expr_synth_at)
   then show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (mlet r (\<lambda>v. ([v], Assigns \<epsilon>))) R" using env by (cases r) (simp_all add: R)
 qed
 
@@ -187,7 +187,7 @@ proof (intro allI impI)
   from chk obtain \<tau> where \<zeta>: "\<zeta> = Some \<tau>" by (cases \<zeta>) auto
   with ret have fv: "fv \<tau> \<subseteq> fst ` set \<eta>" by simp
   from chk \<zeta> have "check_expr_at \<Sigma> \<Gamma> e \<tau> = Ok ()" by (auto simp: bind_sum_def split: sum.splits)
-  with assms env fv have "wf_result r (inst \<eta> \<tau>)" by (auto dest: sound_expr_check_at)
+  with assms env fv have "result_typed r (inst \<eta> \<tau>)" by (auto dest: sound_expr_check_at)
   then show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (mlet r returns\<^sub>o) R" by (cases r) (simp_all add: \<zeta>)
 qed
 
