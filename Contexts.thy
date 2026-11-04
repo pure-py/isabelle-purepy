@@ -38,7 +38,6 @@ where
 "fv_entry (PUScheme \<pi> _) = fv_scheme \<pi>" |
 "fv_entry _ = {}"
 
-(* Type variables in scope in a context: those it binds and those free in its entries *)
 definition tyvars :: "cxt \<Rightarrow> var set"
 where
 "tyvars \<Gamma> =
