@@ -18,7 +18,7 @@ where
 "prevented _ = False"
 
 
-subsection \<open>Type variables and their instantiation\<close>
+subsection \<open>Instantiation of type variables\<close>
 
 lemma tyvars_entry: "fmlookup \<Gamma> x = Some \<theta> \<Longrightarrow> fv_entry \<theta> \<subseteq> tyvars \<Gamma>"
   by (force simp: tyvars_def fmlookup_dom'_iff fmlookup_ran'_iff)
