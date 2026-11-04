@@ -18,6 +18,7 @@ datatype reason =
   | PossibleReassignment var
   | CapturedGeneratorVariable var
   | UnreachableStatement
+  | ReturnOutsideFunction
   | ConstructorArityMismatch var nat nat
   | UnknownConstructorKeyword var "var list"
   | PatternArityMismatch var nat nat
