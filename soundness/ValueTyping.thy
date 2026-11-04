@@ -128,6 +128,9 @@ lemma wf_env_closed: "\<eta> \<turnstile> \<rho> : \<Gamma> \<Longrightarrow> cl
 lemma wf_env_tyvars: "\<eta> \<turnstile> \<rho> : \<Gamma> \<Longrightarrow> tyvars \<Gamma> \<subseteq> fst ` set \<eta>"
   by (auto elim!: WfEnvE)
 
+lemma wf_env_fv: "\<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; fv (\<tau> :: ty) \<subseteq> tyvars \<Gamma> \<rbrakk> \<Longrightarrow> fv \<tau> \<subseteq> fst ` set \<eta>"
+  using wf_env_tyvars by blast
+
 lemma wf_env_lookup:
   "\<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; fmlookup \<Gamma> x = Some \<theta> ; \<theta> \<noteq> TypeVar \<rbrakk>
   \<Longrightarrow> \<exists>v. fmlookup \<rho> x = Some v \<and> \<turnstile> v : inst_entry \<eta> \<theta>"

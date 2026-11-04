@@ -223,19 +223,19 @@ next
   then show ?case by (blast intro: assert_nonbool_sound)
 next
   case EvalAssertMsg
-  then show ?case by (blast intro: assert_msg_sound)
+  then show ?case by (blast intro: assert_sound)
 next
   case EvalAssertMsgFalse
-  then show ?case by (blast intro: assert_msg_false_sound)
+  then show ?case by (blast intro: assert_false_sound)
 next
   case EvalAssertMsgFalseFail
   then show ?case by (blast intro: assert_msg_false_fail_sound)
 next
   case EvalAssertMsgFail
-  then show ?case by (blast intro: assert_msg_fail_sound)
+  then show ?case by (blast intro: assert_fail_sound)
 next
   case EvalAssertMsgNonBool
-  then show ?case by (blast intro: assert_msg_nonbool_sound)
+  then show ?case by (blast intro: assert_nonbool_sound)
 next
   case EvalAssertMsgNonStr
   then show ?case by (blast intro: assert_msg_nonstr_sound)
@@ -265,10 +265,10 @@ next
   then show ?case by (blast intro: seq_sound)
 next
   case EvalSeqReturn
-  then show ?case by (blast intro: seq_return_sound)
+  then show ?case by (auto intro: seq_exit_sound)
 next
   case EvalSeqFail
-  then show ?case by (blast intro: seq_fail_sound)
+  then show ?case by (auto intro: seq_exit_sound)
 next
   case EvalIfNone
   show ?case by (rule if_none_sound)
