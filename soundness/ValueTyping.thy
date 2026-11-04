@@ -20,18 +20,14 @@ where
 
 subsection \<open>Type variables and their instantiation\<close>
 
-lemma tyvars_iff:
-  "\<alpha> \<in> tyvars \<Gamma> \<longleftrightarrow> (\<exists>x \<theta>. fmlookup \<Gamma> x = Some \<theta> \<and> (\<theta> = TypeVar \<and> \<alpha> = x \<or> \<alpha> \<in> fv_entry \<theta>))"
+lemma tyvars_entry: "fmlookup \<Gamma> x = Some \<theta> \<Longrightarrow> fv_entry \<theta> \<subseteq> tyvars \<Gamma>"
   by (force simp: tyvars_def fmlookup_dom'_iff fmlookup_ran'_iff)
 
-lemma tyvars_entry: "fmlookup \<Gamma> x = Some \<theta> \<Longrightarrow> fv_entry \<theta> \<subseteq> tyvars \<Gamma>"
-  unfolding tyvars_iff subset_iff by blast
-
 lemma tyvars_add: "tyvars (\<Gamma> \<otimes> \<Delta>) \<subseteq> tyvars \<Gamma> \<union> tyvars \<Delta>"
-  unfolding tyvars_iff subset_iff Un_iff by (fastforce split: if_splits)
+  by (fastforce simp: tyvars_def fmlookup_dom'_iff fmlookup_ran'_iff split: if_splits)
 
 lemma tyvars_single: "\<theta> \<noteq> TypeVar \<Longrightarrow> tyvars (fmupd x \<theta> fmempty) = fv_entry \<theta>"
-  by (auto simp: tyvars_iff split: if_splits)
+  by (auto simp: tyvars_def fmlookup_dom'_iff fmlookup_ran'_iff split: if_splits)
 
 (* Instantiation of the type variables in scope at the closed types bound to them by \<eta>, since values have
    closed types *)
