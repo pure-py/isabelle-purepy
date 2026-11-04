@@ -162,8 +162,6 @@ proof (rule WfEnv)
   qed
 qed
 
-(* Binding of one variable, in the environment and its context, or in the context only when the variable
-   keeps its value *)
 lemma wf_env_upd:
   assumes "\<eta> \<turnstile> \<rho> : \<Gamma>" and "\<theta> \<noteq> TypeVar" and "fv_entry \<theta> \<subseteq> fst ` set \<eta>" and "\<turnstile> v : inst_entry \<eta> \<theta>"
   shows "\<eta> \<turnstile> fmupd x v \<rho> : fmupd x \<theta> \<Gamma>"
@@ -173,6 +171,7 @@ proof -
   then show ?thesis by simp
 qed
 
+(* Rebinding in the context alone *)
 lemma wf_env_upd_cxt:
   assumes "\<eta> \<turnstile> \<rho> : \<Gamma>" and "\<theta> \<noteq> TypeVar" and "fv_entry \<theta> \<subseteq> fst ` set \<eta>" and "fmlookup \<rho> x = Some v"
     and "\<turnstile> v : inst_entry \<eta> \<theta>"
