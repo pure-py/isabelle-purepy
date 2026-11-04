@@ -83,6 +83,16 @@ proof -
   ultimately show ?thesis by (metis card_Diff1_less finite_Diff finite_fmdom')
 qed
 
+lemma map_of_zip_map_snd:
+  "length xs = length ys \<Longrightarrow> map_of (zip xs (map f ys)) k = map_option f (map_of (zip xs ys) k)"
+  by (induction xs ys rule: list_induct2) auto
+
+lemma map_of_filter_key: "map_of (filter (\<lambda>(k, _). P k) xs) k = (if P k then map_of xs k else None)"
+  by (induction xs) auto
+
+lemma set_sorted_list_of_fmap: "set (sorted_list_of_fmap m) = {(k, v). fmlookup m k = Some v}"
+  by (auto simp: sorted_list_of_fmap_def fmlookup_dom_iff)
+
 (* Error monad: failure Fail e or result Ok x *)
 abbreviation Fail :: "'e \<Rightarrow> 'e + 'a" where "Fail \<equiv> Inl"
 abbreviation Ok :: "'a \<Rightarrow> 'e + 'a" where "Ok \<equiv> Inr"
@@ -121,5 +131,29 @@ fun those_sum :: "('e + 'a) list \<Rightarrow> 'e + 'a list"
 where
 "those_sum [] = Ok []" |
 "those_sum (m # ms) = do { x \<leftarrow> m; xs \<leftarrow> those_sum ms; Ok (x # xs) }"
+
+lemma those_sum_Ok: "those_sum ms = Ok xs \<Longrightarrow> list_all2 (\<lambda>m x. m = Ok x) ms xs"
+  by (induction ms arbitrary: xs) (auto simp: bind_sum_def split: sum.splits)
+
+lemma those_sum_map_Ok: "those_sum (map f xs) = Ok ys \<Longrightarrow> list_all2 (\<lambda>x y. f x = Ok y) xs ys"
+  by (auto dest: those_sum_Ok simp: list_all2_map1)
+
+lemma all_sum_Ok: "\<lbrakk> all_sum ms = Ok () ; m \<in> set ms \<rbrakk> \<Longrightarrow> m = Ok ()"
+  by (induction ms) (auto simp: bind_sum_def split: sum.splits)
+
+lemma all_sum_map_Ok: "\<lbrakk> all_sum (map f xs) = Ok () ; x \<in> set xs \<rbrakk> \<Longrightarrow> f x = Ok ()"
+  using all_sum_Ok[of "map f xs" "f x"] by simp
+
+lemma all_sum_map2_Ok:
+  assumes "all_sum (map2 f xs ys) = Ok ()" and "length xs = length ys"
+  shows "list_all2 (\<lambda>x y. f x y = Ok ()) xs ys"
+proof -
+  have "f (xs ! i) (ys ! i) = Ok ()" if "i < length xs" for i
+  proof -
+    have "map2 f xs ys ! i \<in> set (map2 f xs ys)" using that assms(2) by (intro nth_mem) simp
+    from all_sum_Ok[OF assms(1) this] that assms(2) show ?thesis by simp
+  qed
+  with assms(2) show ?thesis by (simp add: list_all2_conv_all_nth)
+qed
 
 end

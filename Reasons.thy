@@ -89,6 +89,9 @@ definition locate :: "pos \<Rightarrow> 'a may_fail \<Rightarrow> 'a may_fail"
 where
 "locate p = map_sum (locate_reason p) id"
 
+lemma locate_Ok [simp]: "(locate p m = Ok x) = (m = Ok x)"
+  by (cases m) (simp_all add: locate_def)
+
 definition not_type_name :: "cxt \<Rightarrow> name \<Rightarrow> reason"
 where
 "not_type_name \<Gamma> q = (case lookup \<Gamma> q of Some Unbound \<Rightarrow> UnboundName (fst q) | _ \<Rightarrow> NotClass q)"
