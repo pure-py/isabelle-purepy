@@ -271,7 +271,8 @@ lemma wf_unbound_ty: "\<turnstile> VUnbound : Ty \<tau> \<Longrightarrow> False"
 inductive_cases WfUnboundE: "\<turnstile> v : Unbound"
 inductive_cases WfDUE: "\<turnstile> v : DU \<tau>"
 
-lemma wf_unbound_entry: "\<turnstile> v : Unbound \<Longrightarrow> v = VUnbound" "\<turnstile> v : DU \<tau> \<Longrightarrow> v = VUnbound"
+lemma wf_val_unbound: "\<turnstile> v : Unbound \<Longrightarrow> v = VUnbound"
+  and wf_val_du: "\<turnstile> v : DU \<tau> \<Longrightarrow> v = VUnbound"
   by (auto elim!: WfUnboundE WfDUE simp: inst_entry_signature_entry split: if_splits)
 
 fun wf_result :: "val result \<Rightarrow> ty \<Rightarrow> bool"

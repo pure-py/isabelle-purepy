@@ -708,7 +708,7 @@ proof (intro allI impI)
   from chk obtain \<tau> where \<tau>: "resolve_type \<Sigma> \<Gamma> \<psi> = Ok \<tau>" and R: "R = Assigns\<^sub>R (fmupd x (DU \<tau>) fmempty) None"
     and "fmlookup \<Gamma> x = Some Unbound"
     by (auto simp: bind_sum_def check_unbound_def ensure_def split: sum.splits if_splits)
-  with env have "fmlookup \<rho> x = Some VUnbound" by (auto dest!: wf_env_lookup wf_unbound_entry)
+  with env have "fmlookup \<rho> x = Some VUnbound" by (auto dest!: wf_env_lookup wf_val_unbound wf_val_du)
   moreover have "fv \<tau> \<subseteq> fst ` set \<eta>" using resolve_type_tyvars[OF \<tau>] wf_env_tyvars[OF env] by blast
   ultimately have "\<eta> \<turnstile> \<rho> : fmupd x (DU \<tau>) \<Gamma>" using env by (intro wf_env_upd_cxt) (auto intro: ValUnbound)
   then show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (assigns\<^sub>o \<epsilon>) R" by (simp add: R)
