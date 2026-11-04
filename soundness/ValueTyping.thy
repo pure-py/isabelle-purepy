@@ -3,20 +3,6 @@ theory ValueTyping
   imports "isabelle-purepy.Programs" "isabelle-purepy.Determinism"
 begin
 
-(* Equations with a variable on the left in place of a constructor, which as default simp rules would unfold
-   every occurrence; applied explicitly instead *)
-declare check_expr.simps [simp del] callee.simps [simp del] elements_join.simps [simp del]
-  check_args.simps [simp del]
-
-(* Termination kinds ruled out by well-formedness *)
-fun prevented :: "termination_kind \<Rightarrow> bool"
-where
-"prevented TypeError = True" |
-"prevented AttributeError = True" |
-"prevented NameError = True" |
-"prevented Excluded = True" |
-"prevented _ = False"
-
 subsection \<open>Instantiation of type variables\<close>
 
 lemma tyvars_entry: "fmlookup \<Gamma> x = Some \<theta> \<Longrightarrow> fv_entry \<theta> \<subseteq> tyvars \<Gamma>"
@@ -84,69 +70,6 @@ proof (induction \<sigma>)
           dest!: map_of_SomeD dest: set_zip_leftD)
   qed
 qed (simp_all cong: map_cong)
-
-subsection \<open>Typing of expressions and statements\<close>
-
-(* Typing of a call statement, whose result may be None *)
-fun call_stmt :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> bool"
-where
-"call_stmt \<Sigma> \<Gamma> (ExprCall e (es, kws)) =
-  (lambda_of (node e) = None \<and> class_of_name \<Gamma> (node e) = None \<and>
-   (\<exists>\<sigma>. callee \<Sigma> \<Gamma> e es = Ok \<sigma> \<and> check_call_stmt \<Sigma> \<Gamma> e \<sigma> kws es = Ok ()))" |
-"call_stmt \<Sigma> \<Gamma> _ = False"
-
-(* e synthesises \<tau>, checks against \<tau>, whose type variables \<eta> binds, or is a call statement, at type object *)
-definition has_type :: "class_table \<Rightarrow> (var \<times> ty) list \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> bool"
-where
-"has_type \<Sigma> \<eta> \<Gamma> e \<tau> =
-  (synth_expr \<Sigma> \<Gamma> e = Ok \<tau> \<or> check_expr \<Sigma> \<Gamma> e \<tau> = Ok () \<and> fv \<tau> \<subseteq> fst ` set \<eta> \<or>
-   call_stmt \<Sigma> \<Gamma> e \<and> \<tau> = TyPrim object)"
-
-fun has_type_at :: "class_table \<Rightarrow> (var \<times> ty) list \<Rightarrow> cxt \<Rightarrow> expr located \<Rightarrow> ty \<Rightarrow> bool"
-where
-"has_type_at \<Sigma> \<eta> \<Gamma> (At p e) \<tau> = has_type \<Sigma> \<eta> \<Gamma> e \<tau>"
-
-lemma has_type_synth_at: "synth_expr_at \<Sigma> \<Gamma> e = Ok \<tau> \<Longrightarrow> has_type_at \<Sigma> \<eta> \<Gamma> e \<tau>"
-  by (cases e) (simp add: has_type_def)
-
-lemma has_type_check_at:
-  "\<lbrakk> check_expr_at \<Sigma> \<Gamma> e \<tau> = Ok () ; fv \<tau> \<subseteq> fst ` set \<eta> \<rbrakk> \<Longrightarrow> has_type_at \<Sigma> \<eta> \<Gamma> e \<tau>"
-  by (cases e) (simp add: has_type_def)
-
-lemma var_scheme_None: "dotted_name e = None \<Longrightarrow> var_scheme \<Sigma> \<Gamma> e \<tau> = None"
-  by (simp add: var_scheme_def scheme_of_name_def entry_of_def)
-
-type_synonym elif_block = "(expr located \<times> stmt located) list \<times> stmt located option"
-
-(* Static outcomes of the branches of an elif block, as listed by the if rule *)
-fun check_elif :: "class_table \<Rightarrow> cxt \<Rightarrow> ty option \<Rightarrow> elif_block \<Rightarrow> static_outcome may_fail list"
-where
-"check_elif \<Sigma> \<Gamma> \<zeta> (elifs, else') =
-  map (\<lambda>(e', s'). do { check_expr_at \<Sigma> \<Gamma> e' (TyPrim bool); check_stmt_at \<Sigma> \<Gamma> \<zeta> s' }) elifs
-  @ [case else' of Some s' \<Rightarrow> check_stmt_at \<Sigma> \<Gamma> \<zeta> s' | None \<Rightarrow> Ok (Assigns\<^sub>R fmempty None)]"
-
-lemma check_stmt_if:
-  "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtIf e s elifs else') = do {
-     check_expr_at \<Sigma> \<Gamma> e (TyPrim bool);
-     merges \<Sigma> (set (declares (StmtIf e s elifs else')))
-       (check_stmt_at \<Sigma> \<Gamma> \<zeta> s # check_elif \<Sigma> \<Gamma> \<zeta> (elifs, else'))
-   }"
-  by simp
-
-(* Return type over the type variables bound by \<eta> *)
-fun wf_return :: "(var \<times> ty) list \<Rightarrow> ty option \<Rightarrow> bool"
-where
-"wf_return \<eta> (Some \<tau>) = (fv \<tau> \<subseteq> fst ` set \<eta>)" |
-"wf_return \<eta> None = True"
-
-fun bindings_of :: "static_outcome \<Rightarrow> cxt option"
-where
-"bindings_of (Assigns\<^sub>R \<Delta> _) = Some \<Delta>" |
-"bindings_of Returns\<^sub>R = None"
-
-lemma check_stmt_at_Ok:
-  "check_stmt_at \<Sigma> \<Gamma> \<zeta> (At p s) = Ok R \<Longrightarrow> \<exists>R'. check_stmt \<Sigma> \<Gamma> \<zeta> s = Ok R' \<and> bindings_of R' = bindings_of R"
-  by (cases "check_stmt \<Sigma> \<Gamma> \<zeta> s") (auto split: static_outcome.splits)
 
 context evaluation
 begin
@@ -269,37 +192,12 @@ lemma wf_unbound_ty: "\<turnstile> VUnbound : Ty \<tau> \<Longrightarrow> False"
   by (auto dest!: wf_unbound(1))
 
 inductive_cases WfUnboundE: "\<turnstile> v : Unbound"
+
 inductive_cases WfDUE: "\<turnstile> v : DU \<tau>"
 
 lemma wf_val_unbound: "\<turnstile> v : Unbound \<Longrightarrow> v = VUnbound"
   and wf_val_du: "\<turnstile> v : DU \<tau> \<Longrightarrow> v = VUnbound"
   by (auto elim!: WfUnboundE WfDUE simp: inst_entry_signature_entry split: if_splits)
-
-fun wf_result :: "val result \<Rightarrow> ty \<Rightarrow> bool"
-where
-"wf_result (Val v) \<tau> = (\<turnstile> v : Ty \<tau>)" |
-"wf_result (Aborts \<kappa>) \<tau> = (\<not> prevented \<kappa>)"
-
-fun wf_results :: "val list result \<Rightarrow> ty list \<Rightarrow> bool"
-where
-"wf_results (Val vs) \<tau>s = list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) vs \<tau>s" |
-"wf_results (Aborts \<kappa>) \<tau>s = (\<not> prevented \<kappa>)"
-
-(* Completion of a statement checked at \<Gamma> and return type \<zeta> with static outcome R, run in \<rho> *)
-fun wf_completion :: "(var \<times> ty) list \<Rightarrow> env \<Rightarrow> cxt \<Rightarrow> ty option \<Rightarrow> completion \<Rightarrow> static_outcome \<Rightarrow> bool"
-where
-"wf_completion \<eta> \<rho> \<Gamma> \<zeta> (Assigns \<rho>') R =
-  (\<exists>\<Delta>. bindings_of R = Some \<Delta> \<and> fmdom \<rho>' |\<subseteq>| fmdom \<Delta> \<and> \<eta> \<turnstile> \<rho> \<otimes> \<rho>' : \<Gamma> \<otimes> \<Delta>)" |
-"wf_completion \<eta> \<rho> \<Gamma> \<zeta> (Returns v) R = (\<forall>\<tau>. \<zeta> = Some \<tau> \<longrightarrow> \<turnstile> v : Ty (inst \<eta> \<tau>))" |
-"wf_completion \<eta> \<rho> \<Gamma> \<zeta> (Aborts\<^sub>\<omega> \<kappa>) R = (\<not> prevented \<kappa>)"
-
-fun wf_outcome :: "(var \<times> ty) list \<Rightarrow> env \<Rightarrow> cxt \<Rightarrow> ty option \<Rightarrow> outcome \<Rightarrow> static_outcome \<Rightarrow> bool"
-where
-"wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (vs, \<omega>) R = wf_completion \<eta> \<rho> \<Gamma> \<zeta> \<omega> R"
-
-lemma wf_completion_bindings:
-  "bindings_of R = bindings_of R' \<Longrightarrow> wf_completion \<eta> \<rho> \<Gamma> \<zeta> \<omega> R = wf_completion \<eta> \<rho> \<Gamma> \<zeta> \<omega> R'"
-  by (cases \<omega>) simp_all
 
 end
 

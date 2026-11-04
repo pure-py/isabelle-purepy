@@ -94,5 +94,7 @@ Run the `Release` GitHub Action manually. The version number of a release is tha
 | `Examples.thy`              | Example evaluations                                                            |
 | `python/Codegen.thy`        | Operator resolution and subtyping in executable form; Python generation        |
 | `soundness/ValueTyping.thy` | Value and environment typing                                                   |
+| `soundness/Expressions.thy` | Soundness of expression evaluation                                             |
+| `soundness/Statements.thy`  | Soundness of statement evaluation                                              |
 | `soundness/Soundness.thy`   | Type soundness                                                                 |
 <!-- /theories -->
