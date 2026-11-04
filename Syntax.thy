@@ -1,6 +1,6 @@
 (* Abstract syntax and syntactic analyses *)
 theory Syntax
-  imports Complex_Main Util Floats Strings Positions
+  imports Floats Strings Positions
 begin
 
 type_synonym name = "var nonempty"

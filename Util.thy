@@ -1,9 +1,13 @@
 (* Shared utilities *)
 theory Util
-  imports "HOL-Library.Finite_Map" "HOL-Library.Monad_Syntax"
+  imports Complex_Main "HOL-Library.Finite_Map" "HOL-Library.Monad_Syntax" "HOL-Library.Extended_Real"
+    "HOL-Library.List_Lexorder" "HOL-Library.Char_ord"
 begin
 
 notation fmadd (infixl "\<otimes>" 100)
+
+(* Free o for outcomes; a later library import would restore the notation *)
+no_notation (ASCII) comp (infixl \<open>o\<close> 55)
 
 type_synonym 'a nonempty = "'a \<times> 'a list"
 

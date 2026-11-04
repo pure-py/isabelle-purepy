@@ -1,6 +1,6 @@
 (* Floats as an abstract type with uninterpreted arithmetic *)
 theory Floats
-  imports "HOL-Library.Extended_Real"
+  imports Util
 begin
 
 typedecl float

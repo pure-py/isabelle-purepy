@@ -1,10 +1,7 @@
 (* Values, results and functions on values *)
 theory Values
-    imports Subtyping "HOL-Library.Finite_Map"
+    imports Subtyping
 begin
-
-(* Free o for outcomes *)
-no_notation (ASCII) comp (infixl \<open>o\<close> 55)
 
 (* Predefined functions, each standing for its meaning *)
 datatype prim = PrimLen | PrimRound | PrimExit

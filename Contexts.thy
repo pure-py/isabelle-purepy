@@ -1,6 +1,6 @@
 (* Context entries, class tables, name resolution, predefined modules, programs *)
 theory Contexts
-  imports Syntax "HOL-Library.List_Lexorder" "HOL-Library.Char_ord"
+  imports Syntax
 begin
 
 (* Possibly unassigned entries carry a flag, set when the variable is declared in a branch, for the diagnostic

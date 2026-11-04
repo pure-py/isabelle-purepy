@@ -1,6 +1,6 @@
 (* Strings and identifiers as lists of Unicode code points *)
 theory Strings
-  imports "HOL-Library.List_Lexorder"
+  imports Util
 begin
 
 definition code_point_list :: "nat list set"
