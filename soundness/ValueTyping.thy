@@ -177,9 +177,8 @@ lemma wf_env_upd_cxt:
     and "\<turnstile> v : inst_entry \<eta> \<theta>"
   shows "\<eta> \<turnstile> \<rho> : fmupd x \<theta> \<Gamma>"
 proof -
-  have "\<eta> \<turnstile> \<rho> \<otimes> fmempty : \<Gamma> \<otimes> fmupd x \<theta> fmempty"
-    using assms by (intro wf_env_add) (auto simp: tyvars_single split: if_splits)
-  then show ?thesis by simp
+  have "fmupd x v \<rho> = \<rho>" using assms(4) by (intro fmap_ext) auto
+  with wf_env_upd[OF assms(1-3,5), of x] show ?thesis by simp
 qed
 
 lemma wf_unbound:
