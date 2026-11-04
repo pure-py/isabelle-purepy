@@ -22,16 +22,7 @@ subsection \<open>Type variables and their instantiation\<close>
 
 lemma tyvars_iff:
   "\<alpha> \<in> tyvars \<Gamma> \<longleftrightarrow> (\<exists>x \<theta>. fmlookup \<Gamma> x = Some \<theta> \<and> (\<theta> = TypeVar \<and> \<alpha> = x \<or> \<alpha> \<in> fv_entry \<theta>))"
-proof
-  assume "\<alpha> \<in> tyvars \<Gamma>"
-  then show "\<exists>x \<theta>. fmlookup \<Gamma> x = Some \<theta> \<and> (\<theta> = TypeVar \<and> \<alpha> = x \<or> \<alpha> \<in> fv_entry \<theta>)"
-    by (auto simp: tyvars_def set_sorted_list_of_fmap split: if_splits)
-next
-  assume "\<exists>x \<theta>. fmlookup \<Gamma> x = Some \<theta> \<and> (\<theta> = TypeVar \<and> \<alpha> = x \<or> \<alpha> \<in> fv_entry \<theta>)"
-  then obtain x \<theta> where "fmlookup \<Gamma> x = Some \<theta>" and "\<theta> = TypeVar \<and> \<alpha> = x \<or> \<alpha> \<in> fv_entry \<theta>" by blast
-  then show "\<alpha> \<in> tyvars \<Gamma>"
-    unfolding tyvars_def set_map set_sorted_list_of_fmap by (intro UN_I[of "(x, \<theta>)"]) auto
-qed
+  by (force simp: tyvars_def fmlookup_dom'_iff fmlookup_ran'_iff)
 
 lemma tyvars_entry: "fmlookup \<Gamma> x = Some \<theta> \<Longrightarrow> fv_entry \<theta> \<subseteq> tyvars \<Gamma>"
   unfolding tyvars_iff subset_iff by blast

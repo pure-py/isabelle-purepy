@@ -40,8 +40,7 @@ where
 
 definition tyvars :: "cxt \<Rightarrow> var set"
 where
-"tyvars \<Gamma> =
-  \<Union> (set (map (\<lambda>(x, \<theta>). (if \<theta> = TypeVar then {x} else {}) \<union> fv_entry \<theta>) (sorted_list_of_fmap \<Gamma>)))"
+"tyvars \<Gamma> = Set.filter (\<lambda>x. fmlookup \<Gamma> x = Some TypeVar) (fmdom' \<Gamma>) \<union> \<Union> (fv_entry ` fmran' \<Gamma>)"
 
 fun lookup :: "cxt \<Rightarrow> name \<Rightarrow> cxt_entry option"
 where
