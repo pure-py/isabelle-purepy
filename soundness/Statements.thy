@@ -245,7 +245,7 @@ proof (intro allI impI)
   fix \<eta> \<Gamma> \<zeta> R
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssert e e') = Ok R"
   from check_assert[OF chk assms(1)] have "check_expr_at \<Sigma> \<Gamma> e (TyPrim bool) = Ok ()" by simp
-  with assms(2) env show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (aborts\<^sub>o \<kappa>) R" by (auto dest: bool_operand_abort)
+  with assms(2) env show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (aborts\<^sub>o \<kappa>) R" by (auto dest: prim_operand)
 qed
 
 lemma assert_nonbool_sound:
@@ -267,7 +267,7 @@ proof (intro allI impI)
   fix \<eta> \<Gamma> \<zeta> R
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssert e (Some e')) = Ok R"
   from check_assert_msg[OF chk] assms env show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (aborts\<^sub>o \<kappa>) R"
-    by (auto dest: str_operand_abort)
+    by (auto dest: prim_operand)
 qed
 
 lemma assert_msg_nonstr_sound:
@@ -341,7 +341,7 @@ qed
 
 lemma if_fail_sound:
   "sound_expr \<rho> (node e) (Aborts \<kappa>) \<Longrightarrow> sound_stmt \<rho> (StmtIf e s elifs else') (aborts\<^sub>o \<kappa>)"
-  unfolding sound_stmt_def by (auto simp: check_stmt_if bind_sum_def dest: bool_operand_abort split: sum.splits)
+  unfolding sound_stmt_def by (auto simp: check_stmt_if bind_sum_def dest: prim_operand split: sum.splits)
 
 lemma if_nonbool_sound:
   "\<lbrakk> sound_expr \<rho> (node e) (Val v) ; v \<notin> {true, false} \<rbrakk>
@@ -442,7 +442,7 @@ qed
 
 lemma elif_fail_sound:
   "sound_expr \<rho> (node e) (Aborts \<kappa>) \<Longrightarrow> sound_elif \<rho> ((e, s) # elifs, else') (aborts\<^sub>o \<kappa>)"
-  unfolding sound_elif_def by (auto simp: bind_sum_def dest: bool_operand_abort split: sum.splits)
+  unfolding sound_elif_def by (auto simp: bind_sum_def dest: prim_operand split: sum.splits)
 
 lemma elif_nonbool_sound:
   "\<lbrakk> sound_expr \<rho> (node e) (Val v) ; v \<notin> {true, false} \<rbrakk>
