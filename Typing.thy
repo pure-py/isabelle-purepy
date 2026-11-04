@@ -42,14 +42,14 @@ where
 "merge_cxt_entry \<Sigma> b None (Some \<theta>) = possibly_unassigned b \<theta>" |
 "merge_cxt_entry \<Sigma> b None None = None"
 
-(* Merge of the contexts of two branches of a statement declaring the variables D; failure at the first
-   variable with incompatible entries *)
+(* Merge of the contexts of two branches of a statement, where X holds the variables declared in any of the
+   branches; failure at the first variable for which the merge of entries is undefined *)
 definition merge :: "class_table \<Rightarrow> var set \<Rightarrow> cxt \<Rightarrow> cxt \<Rightarrow> cxt may_fail"
 where
-"merge \<Sigma> D \<Gamma> \<Gamma>' =
-  (let entry = \<lambda>x. merge_cxt_entry \<Sigma> (x \<in> D) (fmlookup \<Gamma> x) (fmlookup \<Gamma>' x);
-       X = ffilter (\<lambda>x. entry x = None) (fmdom (\<Gamma> \<otimes> \<Gamma>')) in
-   if X = {||} then Ok (fmmap_keys (\<lambda>x _. the (entry x)) (\<Gamma> \<otimes> \<Gamma>')) else Fail (Redeclaration (Min (fset X))))"
+"merge \<Sigma> X \<Gamma> \<Gamma>' =
+  (let entry = \<lambda>x. merge_cxt_entry \<Sigma> (x \<in> X) (fmlookup \<Gamma> x) (fmlookup \<Gamma>' x);
+       Y = ffilter (\<lambda>x. entry x = None) (fmdom (\<Gamma> \<otimes> \<Gamma>')) in
+   if Y = {||} then Ok (fmmap_keys (\<lambda>x _. the (entry x)) (\<Gamma> \<otimes> \<Gamma>')) else Fail (Redeclaration (Min (fset Y))))"
 
 (* Assigns\<^sub>R \<Delta> r: the statement can complete normally, adding bindings \<Delta>. If present, r is the error reported
    when a function body ends with a statement which PurePy determines to return or raise but which mypy treats
@@ -59,15 +59,15 @@ datatype static_outcome = Assigns\<^sub>R cxt "reason option" | Returns\<^sub>R
 fun merge_outcome ::
   "class_table \<Rightarrow> var set \<Rightarrow> static_outcome \<Rightarrow> static_outcome \<Rightarrow> static_outcome may_fail"
 where
-"merge_outcome \<Sigma> D (Assigns\<^sub>R \<Delta> r) (Assigns\<^sub>R \<Delta>' r') =
-  do { \<Delta>'' \<leftarrow> merge \<Sigma> D \<Delta> \<Delta>'; Ok (Assigns\<^sub>R \<Delta>'' (if r' = None then None else r)) }" |
-"merge_outcome \<Sigma> D R Returns\<^sub>R = Ok R" |
-"merge_outcome \<Sigma> D Returns\<^sub>R R = Ok R"
+"merge_outcome \<Sigma> X (Assigns\<^sub>R \<Delta> r) (Assigns\<^sub>R \<Delta>' r') =
+  do { \<Delta>'' \<leftarrow> merge \<Sigma> X \<Delta> \<Delta>'; Ok (Assigns\<^sub>R \<Delta>'' (if r' = None then None else r)) }" |
+"merge_outcome \<Sigma> X R Returns\<^sub>R = Ok R" |
+"merge_outcome \<Sigma> X Returns\<^sub>R R = Ok R"
 
 definition merges :: "class_table \<Rightarrow> var set \<Rightarrow> static_outcome may_fail list \<Rightarrow> static_outcome may_fail"
 where
-"merges \<Sigma> D ms =
-  do { Rs \<leftarrow> those_sum ms; foldr (\<lambda>R m. do { R' \<leftarrow> m; merge_outcome \<Sigma> D R R' }) Rs (Ok Returns\<^sub>R) }"
+"merges \<Sigma> X ms =
+  do { Rs \<leftarrow> those_sum ms; foldr (\<lambda>R m. do { R' \<leftarrow> m; merge_outcome \<Sigma> X R R' }) Rs (Ok Returns\<^sub>R) }"
 
 fun override_outcome :: "static_outcome \<Rightarrow> static_outcome \<Rightarrow> static_outcome" (infixl "\<otimes>\<^sub>R" 100)
 where
