@@ -58,11 +58,11 @@ where
 "match \<rho> (PatTuple ps) (VList vs) = MatchAborts Excluded" |
 "match \<rho> (PatDict kps) (VDict \<delta>) =
   (if set (map fst kps) \<subseteq> set (map fst \<delta>) then match_dict \<rho> kps \<delta> else NoMatch)" |
-"match \<rho> (PatConstr (x, xs) (ps, kps)) v =
+"match \<rho> (PatConstr q (ps, kps)) v =
   (case do {
-      u \<leftarrow> or_else NameError (fmlookup \<rho> x);
+      u \<leftarrow> or_else NameError (fmlookup \<rho> (root q));
       ensure (u \<noteq> VUnbound) NameError;
-      u' \<leftarrow> or_else AttributeError (resolve \<rho> (x, xs));
+      u' \<leftarrow> or_else AttributeError (resolve \<rho> q);
       ensure (\<not> is_opaque_builtin u') Excluded;
       or_else TypeError (class_of u') }
    of Fail \<kappa> \<Rightarrow> MatchAborts \<kappa>
@@ -336,7 +336,7 @@ lemmas eval_rules = eval_expr_eval_exprs_eval_stmt_eval_elif_eval_quals_eval_gen
 definition type_value :: "name \<Rightarrow> type_def located list \<Rightarrow> nat \<Rightarrow> val"
 where
 "type_value q \<chi>s i =
-  (case node (\<chi>s ! i) of Dataclass c _ _ _ \<Rightarrow> VClass (snoc q c) | TypeStmt _ _ _ \<Rightarrow> VTypeAlias q \<chi>s i)"
+  (case node (\<chi>s ! i) of Dataclass c _ _ _ \<Rightarrow> VClass (Qualified q c) | TypeStmt _ _ _ \<Rightarrow> VTypeAlias q \<chi>s i)"
 
 inductive eval_top :: "name \<Rightarrow> env \<Rightarrow> top_stmt \<Rightarrow> outcome \<Rightarrow> bool"  ("_, _, _ \<Rightarrow>\<^sub>t _" [60,60,0,60] 60)
 where
@@ -358,16 +358,17 @@ where
     [(builtins, fmap_of_list
        ([name ''builtins'', (var ''len'', VPrim PrimLen), (var ''range'', VClass range_class),
          (var ''round'', VPrim PrimRound)]
-        @ map (\<lambda>y. (y, VPredef (snoc builtins y)))
+        @ map (\<lambda>y. (y, VPredef (Qualified builtins y)))
             (map prim_name [NoneType, object, bool, int, float, str]
              @ map var [''list'', ''dict'', ''tuple'']))),
-     ((var ''sys'', []), fmap_of_list
+     (Simple (var ''sys''), fmap_of_list
        [name ''sys'', (var ''argv'', VList (map (VLit \<circ> LitString) \<A>)), (var ''exit'', VPrim PrimExit)]),
-     ((var ''typing'', []), fmap_of_list
-       (name ''typing'' # map (\<lambda>y. (y, VPredef (var ''typing'', [y])))
+     (Simple (var ''typing''), fmap_of_list
+       (name ''typing'' # map (\<lambda>y. (y, VPredef (Qualified (Simple (var ''typing'')) y)))
           [var ''Callable'', var ''Literal'', prim_name Never, prim_name Sized])),
-     ((var ''dataclasses'', []), fmap_of_list
-       [name ''dataclasses'', (var ''dataclass'', VPredef (var ''dataclasses'', [var ''dataclass'']))])])"
+     (Simple (var ''dataclasses''), fmap_of_list
+       [name ''dataclasses'',
+        (var ''dataclass'', VPredef (Qualified (Simple (var ''dataclasses'')) (var ''dataclass'')))])])"
 
 function (sequential) extend_val :: "val \<Rightarrow> val \<Rightarrow> val"
 and extend_env :: "env \<Rightarrow> env \<Rightarrow> env" (infixl "\<uplus>\<^sub>v" 65)
@@ -396,11 +397,12 @@ fun submod_env :: "(name, env) fmap \<Rightarrow> name \<Rightarrow> var list \<
 where
 "submod_env \<L> q [] = the (fmlookup \<L> q)" |
 "submod_env \<L> q (x # xs) =
-   the (fmlookup \<L> q) \<uplus>\<^sub>v fmupd x (VModLoaded (snoc q x) (submod_env \<L> (snoc q x) xs)) \<epsilon>"
+   the (fmlookup \<L> q) \<uplus>\<^sub>v fmupd x (VModLoaded (Qualified q x) (submod_env \<L> (Qualified q x) xs)) \<epsilon>"
 
 fun import_env :: "(name, env) fmap \<Rightarrow> import \<Rightarrow> env"
 where
-"import_env \<L> (Import (x, xs)) = fmupd x (VModLoaded (x, []) (submod_env \<L> (x, []) xs)) \<epsilon>" |
+"import_env \<L> (Import q) =
+   fmupd (root q) (VModLoaded (Simple (root q)) (submod_env \<L> (Simple (root q)) (tl (components q)))) \<epsilon>" |
 "import_env \<L> (FromImport q xs) = fmap_of_list (map (\<lambda>x. (x, member \<L> (the (fmlookup \<L> q)) x)) xs)"
 
 fun imports_env :: "(name, env) fmap \<Rightarrow> import located list \<Rightarrow> env"
@@ -425,8 +427,8 @@ where
 
 "submod_loads qs q [] = qs" |
 "submod_loads qs q (x # xs) =
-   (if snoc q x |\<in>| fmdom \<M> \<and> x \<notin> set (declares (the (fmlookup \<M> q)))
-    then submod_loads (loads qs [snoc q x]) q xs
+   (if Qualified q x |\<in>| fmdom \<M> \<and> x \<notin> set (declares (the (fmlookup \<M> q)))
+    then submod_loads (loads qs [Qualified q x]) q xs
     else submod_loads qs q xs)" |
 
 "imports_loads qs q [] = qs" |

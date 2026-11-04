@@ -120,7 +120,7 @@ where
 (* Opaque value of a predefined class of builtins, such as int, which Python matches by an instance test *)
 fun is_opaque_builtin :: "val \<Rightarrow> bool"
 where
-"is_opaque_builtin (VPredef (x, [y])) = ((x, []) = builtins)" |
+"is_opaque_builtin (VPredef (Qualified q _)) = (q = builtins)" |
 "is_opaque_builtin _ = False"
 
 fun is_bool :: "val \<Rightarrow> bool"
@@ -360,15 +360,10 @@ where
 "prim_meaning PrimExit [v] = Aborts Excluded" |
 "prim_meaning _ _ = Aborts TypeError"
 
-fun resolve_path :: "val option \<Rightarrow> var list \<Rightarrow> val option"
+fun resolve :: "env \<Rightarrow> name \<Rightarrow> val option"
 where
-"resolve_path v [] = v" |
-"resolve_path (Some (VModLoaded _ \<rho>')) (y # ys) = resolve_path (fmlookup \<rho>' y) ys" |
-"resolve_path _ _ = None"
-
-definition resolve :: "env \<Rightarrow> name \<Rightarrow> val option"
-where
-"resolve \<rho> q = resolve_path (fmlookup \<rho> (fst q)) (snd q)"
+"resolve \<rho> (Simple x) = fmlookup \<rho> x" |
+"resolve \<rho> (Qualified q y) = (case resolve \<rho> q of Some (VModLoaded _ \<rho>') \<Rightarrow> fmlookup \<rho>' y | _ \<Rightarrow> None)"
 
 locale evaluation = fixes \<Sigma> :: class_table
 begin

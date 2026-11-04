@@ -95,7 +95,7 @@ where
 "module_attribute \<Gamma> e x = do {
    q \<leftarrow> dotted_name e;
    case lookup \<Gamma> q of
-     Some (ModChecked q' \<Gamma>') \<Rightarrow> Some (attr_module q' \<Gamma>' x (snoc q x))
+     Some (ModChecked q' \<Gamma>') \<Rightarrow> Some (attr_module q' \<Gamma>' x (Qualified q x))
    | Some (ModStub q') \<Rightarrow> Some (Fail (SubmoduleNotImported q'))
    | _ \<Rightarrow> None
  }"

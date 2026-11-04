@@ -44,8 +44,8 @@ where
 
 fun lookup :: "cxt \<Rightarrow> name \<Rightarrow> cxt_entry option"
 where
-"lookup \<Gamma> (x, []) = fmlookup \<Gamma> x" |
-"lookup \<Gamma> (x, y # ys) = (case fmlookup \<Gamma> x of Some (ModChecked _ \<Gamma>') \<Rightarrow> lookup \<Gamma>' (y, ys) | _ \<Rightarrow> None)"
+"lookup \<Gamma> (Simple x) = fmlookup \<Gamma> x" |
+"lookup \<Gamma> (Qualified q x) = (case lookup \<Gamma> q of Some (ModChecked _ \<Gamma>') \<Rightarrow> fmlookup \<Gamma>' x | _ \<Rightarrow> None)"
 
 definition resolve_name :: "cxt \<Rightarrow> name \<Rightarrow> cxt_entry option"
 where
@@ -59,7 +59,7 @@ where
    | Some PredefName \<Rightarrow> Some PredefName
    | _ \<Rightarrow> None)"
 
-definition range_class :: name where "range_class = snoc builtins (var ''range'')"
+definition range_class :: name where "range_class = Qualified builtins (var ''range'')"
 
 abbreviation name_binding :: "var \<times> cxt_entry"
 where "name_binding \<equiv> (var ''__name__'', Ty (TyPrim str))"
@@ -74,13 +74,13 @@ where
        (var ''round'', Ty (TyCallable [TyPrim float] (TyPrim int)))]
       @ map (\<lambda>\<nu>. (prim_name \<nu>, PredefName)) [NoneType, object, bool, int, float, str]
       @ map (\<lambda>x. (var x, PredefName)) [''list'', ''dict'', ''tuple''])),
-   ((var ''sys'', []), fmap_of_list
+   (Simple (var ''sys''), fmap_of_list
      [name_binding, (var ''argv'', Ty (TyList (TyPrim str))),
       (var ''exit'', Ty (TyCallable [TyPrim int] (TyPrim Never)))]),
-   ((var ''typing'', []), fmap_of_list
+   (Simple (var ''typing''), fmap_of_list
      [name_binding, (var ''Callable'', PredefName), (var ''Literal'', PredefName),
       (prim_name Never, PredefName), (prim_name Sized, PredefName)]),
-   ((var ''dataclasses'', []),
+   (Simple (var ''dataclasses''),
     fmap_of_list [name_binding, (var ''dataclass'', PredefName)])]"
 
 (* Boxed plus of the specification isn't in Isabelle's symbol table *)
@@ -143,28 +143,27 @@ type_synonym program = "(name, module_body) fmap"
 context includes fmap.lifting
 begin
 lift_definition submods :: "program \<Rightarrow> name \<Rightarrow> cxt"
-  is "\<lambda>\<M> q x. if snoc q x \<in> dom \<M> then Some (ModStub (snoc q x)) else None"
+  is "\<lambda>\<M> q x. if Qualified q x \<in> dom \<M> then Some (ModStub (Qualified q x)) else None"
 proof -
   fix \<M> :: "name \<Rightarrow> module_body option" and q
-  let ?S = "\<lambda>x. if snoc q x \<in> dom \<M> then Some (ModStub (snoc q x)) else None"
+  let ?S = "\<lambda>x. if Qualified q x \<in> dom \<M> then Some (ModStub (Qualified q x)) else None"
   assume "finite (dom \<M>)"
-  have "dom ?S \<subseteq> (\<lambda>q'. snd (the (unsnoc q'))) ` dom \<M>"
-    by (auto simp: dom_def image_iff intro: rev_image_eqI)
-  then show "finite (dom ?S)"
-    using \<open>finite (dom \<M>)\<close> by (blast intro: finite_subset finite_imageI)
+  have "dom ?S \<subseteq> Qualified q -` dom \<M>" by (auto simp: dom_def)
+  moreover have "inj (Qualified q)" by (simp add: inj_def)
+  ultimately show "finite (dom ?S)" using \<open>finite (dom \<M>)\<close> by (blast intro: finite_subset finite_vimageI)
 qed
 end
 
 lemma submods_of_list [code]:
   "submods (fmap_of_list m) q
-   = fmap_of_list (map (\<lambda>(q', _). (snd (the (unsnoc q')), ModStub q'))
-                       (filter (\<lambda>(q', _). case unsnoc q' of Some (q'', _) \<Rightarrow> q'' = q | None \<Rightarrow> False) m))"
+   = fmap_of_list (map (\<lambda>(q', _). (short_name q', ModStub q'))
+                       (filter (\<lambda>(q', _). case q' of Qualified q'' _ \<Rightarrow> q'' = q | Simple _ \<Rightarrow> False) m))"
 proof (rule fmap_ext)
   fix x
-  let ?l = "map (\<lambda>(q', _). (snd (the (unsnoc q')), ModStub q'))
-              (filter (\<lambda>(q', _). case unsnoc q' of Some (q'', _) \<Rightarrow> q'' = q | None \<Rightarrow> False) m)"
-  have "map_of ?l x = (if snoc q x \<in> dom (map_of m) then Some (ModStub (snoc q x)) else None)"
-    by (induction m) (auto simp: dom_def snoc_eq_iff simp del: snoc.simps unsnoc.simps split: option.splits)
+  let ?l = "map (\<lambda>(q', _). (short_name q', ModStub q'))
+              (filter (\<lambda>(q', _). case q' of Qualified q'' _ \<Rightarrow> q'' = q | Simple _ \<Rightarrow> False) m)"
+  have "map_of ?l x = (if Qualified q x \<in> dom (map_of m) then Some (ModStub (Qualified q x)) else None)"
+    by (induction m) (auto simp: dom_def split: name.splits)
   then show "fmlookup (submods (fmap_of_list m) q) x = fmlookup (fmap_of_list ?l) x"
     by (simp add: submods.rep_eq fmlookup_of_list)
 qed

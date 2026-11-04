@@ -18,11 +18,12 @@ from .syntax import (
     Expr,
     Lit,
     Pat,
-    QualifiedName,
     Qualifier,
     Reason,
     Ty,
     node,
+    root,
+    unparse_name,
 )
 
 BY_DESIGN = Classification.BY_DESIGN
@@ -59,11 +60,6 @@ EXCLUDED_BY_DESIGN = {
     "dict.clear",
     "dict.setdefault",
 }
-
-
-def unparse_name(q: QualifiedName) -> str:
-    x, xs = q
-    return ".".join([x, *xs])
 
 
 def lit_value(ell: Lit) -> bool | int | float | str | None:
@@ -248,7 +244,7 @@ def excluded_feature(r: Reason) -> tuple[str, Classification] | None:
             return ("print inside function", FOR_NOW)
         case Reasons.UndefinedVariable(x) if x in BUILTINS:
             return excluded_name(x)
-        case Reasons.UnknownModule((x, _) as q) if x in sys.stdlib_module_names:
+        case Reasons.UnknownModule(q) if root(q) in sys.stdlib_module_names:
             return (f"module '{unparse_name(q)}'", FOR_NOW)
         case Reasons.UnknownMember(x, q) if (
             m := unparse_name(q)

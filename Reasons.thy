@@ -94,18 +94,18 @@ lemma locate_Ok [simp]: "(locate p m = Ok x) = (m = Ok x)"
 
 definition not_type_name :: "cxt \<Rightarrow> name \<Rightarrow> reason"
 where
-"not_type_name \<Gamma> q = (case lookup \<Gamma> q of Some Unbound \<Rightarrow> UnboundName (fst q) | _ \<Rightarrow> NotClass q)"
+"not_type_name \<Gamma> q = (case lookup \<Gamma> q of Some Unbound \<Rightarrow> UnboundName (root q) | _ \<Rightarrow> NotClass q)"
 
 (* Failure for variable x, which isn't bound at a type, by context entry *)
 fun var_reason :: "var \<Rightarrow> cxt_entry option \<Rightarrow> reason"
 where
-"var_reason x (Some (ModStub _)) = ModuleAsValue (x, [])" |
-"var_reason x (Some (ModChecked _ _)) = ModuleAsValue (x, [])" |
-"var_reason x (Some (Type _)) = ClassAsValue (x, [])" |
-"var_reason x (Some (TypeAlias _ _ _ _)) = TypeAliasAsValue (x, [])" |
-"var_reason x (Some PredefName) = PredefinedNameAsValue (x, [])" |
+"var_reason x (Some (ModStub _)) = ModuleAsValue (Simple x)" |
+"var_reason x (Some (ModChecked _ _)) = ModuleAsValue (Simple x)" |
+"var_reason x (Some (Type _)) = ClassAsValue (Simple x)" |
+"var_reason x (Some (TypeAlias _ _ _ _)) = TypeAliasAsValue (Simple x)" |
+"var_reason x (Some PredefName) = PredefinedNameAsValue (Simple x)" |
 "var_reason x (Some TypeVar) = TypeParameterAsValue x" |
-"var_reason x (Some (Scheme _)) = TypeSchemeAsValue (x, [])" |
+"var_reason x (Some (Scheme _)) = TypeSchemeAsValue (Simple x)" |
 "var_reason x (Some Unbound) = UnboundName x" |
 "var_reason x (Some (DU _)) = UnassignedVariable x" |
 "var_reason x (Some (PU _ b)) = PossiblyUnassigned x b" |

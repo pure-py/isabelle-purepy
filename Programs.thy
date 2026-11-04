@@ -57,12 +57,13 @@ where
        })" |
 
 "check_imports \<M> V \<Sigma> q [] = Ok (fmempty, \<Sigma>)" |
-"check_imports \<M> V \<Sigma> q (At p (Import (x, xs)) # \<iota>s) = locate_in q p (do {
-   ensure (\<not> q \<prec> (x, xs)) (q, ImportOfContainedModule (x, xs) q);
-   (\<Delta>, \<Sigma>\<^sub>1) \<leftarrow> check_module \<M> V \<Sigma> q (x, []);
-   (\<Delta>', \<Sigma>\<^sub>2) \<leftarrow> submodules \<M> V \<Sigma>\<^sub>1 q (x, []) \<Delta> xs;
+"check_imports \<M> V \<Sigma> q (At p (Import q') # \<iota>s) = locate_in q p (do {
+   ensure (\<not> q \<prec> q') (q, ImportOfContainedModule q' q);
+   let x = root q';
+   (\<Delta>, \<Sigma>\<^sub>1) \<leftarrow> check_module \<M> V \<Sigma> q (Simple x);
+   (\<Delta>', \<Sigma>\<^sub>2) \<leftarrow> submodules \<M> V \<Sigma>\<^sub>1 q (Simple x) \<Delta> (tl (components q'));
    (\<Gamma>, \<Sigma>') \<leftarrow> check_imports \<M> V \<Sigma>\<^sub>2 q \<iota>s;
-   Ok (fmupd x (ModChecked (x, []) \<Delta>') fmempty \<uplus> \<Gamma>, \<Sigma>')
+   Ok (fmupd x (ModChecked (Simple x) \<Delta>') fmempty \<uplus> \<Gamma>, \<Sigma>')
  })" |
 "check_imports \<M> V \<Sigma> q (At p (FromImport q' xs) # \<iota>s) = locate_in q p (do {
    (\<Delta>, \<Sigma>\<^sub>1) \<leftarrow> check_module \<M> V \<Sigma> q q';
@@ -75,16 +76,16 @@ where
 
 "submodules \<M> V \<Sigma> q q' \<Gamma> [] = Ok (\<Gamma>, \<Sigma>)" |
 "submodules \<M> V \<Sigma> q q' \<Gamma> (x # xs) = do {
-   (\<Delta>, \<Sigma>\<^sub>1) \<leftarrow> check_module \<M> V \<Sigma> q (snoc q' x);
-   (\<Delta>', \<Sigma>') \<leftarrow> submodules \<M> V \<Sigma>\<^sub>1 q (snoc q' x) \<Delta> xs;
-   Ok (\<Gamma> \<uplus> fmupd x (ModChecked (snoc q' x) \<Delta>') fmempty, \<Sigma>')
+   (\<Delta>, \<Sigma>\<^sub>1) \<leftarrow> check_module \<M> V \<Sigma> q (Qualified q' x);
+   (\<Delta>', \<Sigma>') \<leftarrow> submodules \<M> V \<Sigma>\<^sub>1 q (Qualified q' x) \<Delta> xs;
+   Ok (\<Gamma> \<uplus> fmupd x (ModChecked (Qualified q' x) \<Delta>') fmempty, \<Sigma>')
  }" |
 
 "imports_entry \<M> V \<Sigma> q q' \<Gamma> x =
   (case fmlookup \<Gamma> x of
      Some (ModStub q'') \<Rightarrow> do { (\<Gamma>', \<Sigma>') \<leftarrow> check_module \<M> V \<Sigma> q q''; Ok (ModChecked q'' \<Gamma>', \<Sigma>') }
    | \<theta> \<Rightarrow>
-       (case resolve_name \<Gamma> (x, []) of
+       (case resolve_name \<Gamma> (Simple x) of
           Some \<theta>' \<Rightarrow> Ok (\<theta>', \<Sigma>)
         | None \<Rightarrow> Fail (q, case \<theta> of None \<Rightarrow> UnknownMember x q' | Some _ \<Rightarrow> UnassignedMember x q')))" |
 
@@ -125,9 +126,13 @@ by (relation "measures [
      | Inr (Inr (Inr (_, _, _, _, qs))) \<Rightarrow> length qs]")
    (auto simp: card_fmdom_insert)
 
-definition check_program :: "program \<Rightarrow> (name \<times> reason) option"
+(* Module at fault and reason of an ill-formed program *)
+datatype ill_formed = IllFormed name reason
+
+definition check_program :: "program \<Rightarrow> ill_formed option"
 where
 "check_program \<M> =
-  (case check_module \<M> [] predefined_classes main main of Fail f \<Rightarrow> Some f | Ok _ \<Rightarrow> None)"
+  (case check_module \<M> [] predefined_classes main main of
+     Fail (q, r) \<Rightarrow> Some (IllFormed q r) | Ok _ \<Rightarrow> None)"
 
 end

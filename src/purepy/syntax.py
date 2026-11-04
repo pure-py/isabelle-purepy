@@ -16,7 +16,7 @@ FOR_NOW = Classification.FOR_NOW
 type Var = str
 type Pos = tuple[int, int]
 type Located = Any
-type QualifiedName = Any
+type Name = Any
 type Lit = Any
 type Pat = Any
 type Expr = Any
@@ -31,13 +31,30 @@ type TopStmt = Any
 type ModuleBody = Any
 type Program = Any
 type Reason = Any
-# Name as a tuple of variables, because a generated name contains a list and so is not hashable; delete once
-# names are a datatype (#24)
-type Name = tuple[Var, ...]
 
 
 def parse_name(name: str) -> Name:
-    return tuple(name.split("."))
+    x, *xs = name.split(".")
+    return reduce(Syntax.Qualified, xs, Syntax.Simple(x))
+
+
+def components(q: Name) -> list[Var]:
+    """Variables of q, root first"""
+    match q:
+        case Syntax.Simple(x):
+            return [x]
+        case Syntax.Qualified(q_, x):
+            return [*components(q_), x]
+        case _:
+            raise AssertionError(f"unexpected name: {q}")
+
+
+def root(q: Name) -> Var:
+    return components(q)[0]
+
+
+def unparse_name(q: Name) -> str:
+    return ".".join(components(q))
 
 
 def is_import(s: ast.stmt) -> bool:
@@ -211,16 +228,12 @@ def lit(v: object) -> Lit:
 def name(e: ast.expr) -> Name | None:
     match e:
         case ast.Name(id=x):
-            return (x,)
+            return Syntax.Simple(x)
         case ast.Attribute(value=e_, attr=x):
             q = name(e_)
-            return None if q is None else (*q, x)
+            return None if q is None else Syntax.Qualified(q, x)
         case _:
             return None
-
-
-def qualified_name(q: Name) -> QualifiedName:
-    return (q[0], list(q[1:]))
 
 
 PRIM_TY = {
@@ -244,7 +257,7 @@ def ty_expr(e: ast.expr) -> TyExpr | None:
             return Syntax.TyExprPrim(PRIM_TY[x]())
         case ast.Name() | ast.Attribute():
             q = name(e)
-            return None if q is None else Syntax.TyExprName(qualified_name(q), [])
+            return None if q is None else Syntax.TyExprName(q, [])
         case ast.BinOp(left=e1, op=ast.BitOr(), right=e2):
             psi, psi_ = ty_expr(e1), ty_expr(e2)
             return None if psi is None or psi_ is None else Syntax.TyExprUnion(psi, psi_)
@@ -282,7 +295,7 @@ def ty_expr(e: ast.expr) -> TyExpr | None:
                     return None
                 case _:
                     q = name(head)
-                    return None if q is None else Syntax.TyExprName(qualified_name(q), psis)
+                    return None if q is None else Syntax.TyExprName(q, psis)
         case _:
             return None
 
@@ -541,7 +554,7 @@ def pat_node(p: ast.pattern) -> Pat:
                 raise PythonRejects(
                     f"duplicate keyword {dup} in constructor pattern", *node_position(p)
                 )
-            return Syntax.PatConstr(qualified_name(q), (ps_, list(zip(xs, qs_))))
+            return Syntax.PatConstr(q, (ps_, list(zip(xs, qs_))))
         case ast.MatchMapping(rest=str()):
             raise SyntacticallyExcluded(p, "rest capture in dictionary patterns")
         case ast.MatchMapping(keys=ks, patterns=ps):
@@ -839,7 +852,7 @@ def import_(iota: ast.stmt) -> Import:
 def import_node(iota: ast.stmt) -> Import:
     match iota:
         case ast.Import(names=[ast.alias(name=q, asname=None)]):
-            return Syntax.Import(qualified_name(parse_name(q)))
+            return Syntax.Import(parse_name(q))
         case ast.Import(names=[_]):
             raise SyntacticallyExcluded(iota, "import-as")
         case ast.Import():
@@ -854,13 +867,13 @@ def import_node(iota: ast.stmt) -> Import:
                     raise SyntacticallyExcluded(iota, "from M import *", BY_DESIGN)
                 if alias.asname is not None:
                     raise SyntacticallyExcluded(iota, "from-import-as")
-            return Syntax.FromImport(qualified_name(parse_name(q)), [a.name for a in aliases])
+            return Syntax.FromImport(parse_name(q), [a.name for a in aliases])
         case _:
             raise AssertionError(f"unexpected import: {type(iota).__name__}")
 
 
 def name_declaration(q: Name) -> ast.stmt:
-    return ast.parse(f"__name__: str = {'.'.join(q)!r}").body[0]
+    return ast.parse(f"__name__: str = {unparse_name(q)!r}").body[0]
 
 
 def module_body(q: Name, m: ast.Module) -> ModuleBody:
