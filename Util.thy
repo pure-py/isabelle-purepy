@@ -46,9 +46,6 @@ lemma map_of_zip_map_snd:
 lemma map_of_filter_key: "map_of (filter (\<lambda>(k, _). P k) xs) k = (if P k then map_of xs k else None)"
   by (induction xs) auto
 
-lemma set_sorted_list_of_fmap: "set (sorted_list_of_fmap m) = {(k, v). fmlookup m k = Some v}"
-  by (auto simp: sorted_list_of_fmap_def fmlookup_dom_iff)
-
 (* Termination through lists of pairs and finite maps *)
 lemma size_prod_pair [simp]: "size_prod f g p = f (fst p) + g (snd p) + Suc 0"
   by (cases p) simp
@@ -120,11 +117,25 @@ definition ensure :: "bool \<Rightarrow> 'e \<Rightarrow> 'e + unit"
 where
 "ensure b e = (if b then Ok () else Fail e)"
 
-(* First failure in the list, otherwise success *)
-fun all_sum :: "('e + unit) list \<Rightarrow> 'e + unit"
+(* First failure in the list, otherwise the list of results *)
+fun those_sum :: "('e + 'a) list \<Rightarrow> 'e + 'a list"
 where
-"all_sum [] = Ok ()" |
-"all_sum (m # ms) = do { m; all_sum ms }"
+"those_sum [] = Ok []" |
+"those_sum (m # ms) = do { x \<leftarrow> m; xs \<leftarrow> those_sum ms; Ok (x # xs) }"
+
+lemma those_sum_Ok: "those_sum ms = Ok xs \<Longrightarrow> list_all2 (\<lambda>m x. m = Ok x) ms xs"
+  by (induction ms arbitrary: xs) (auto simp: bind_sum_def split: sum.splits)
+
+lemma those_sum_map_Ok: "those_sum (map f xs) = Ok ys \<Longrightarrow> list_all2 (\<lambda>x y. f x = Ok y) xs ys"
+  by (auto dest: those_sum_Ok simp: list_all2_map1)
+
+(* First failure in the list, otherwise success *)
+definition all_sum :: "('e + unit) list \<Rightarrow> 'e + unit"
+where
+"all_sum ms = do { those_sum ms; Ok () }"
+
+lemma all_sum_simps [simp]: "all_sum [] = Ok ()" "all_sum (m # ms) = do { m; all_sum ms }"
+  by (simp_all add: all_sum_def bind_sum_def split: sum.splits)
 
 lemma all_sum_Ok: "\<lbrakk> all_sum ms = Ok () ; m \<in> set ms \<rbrakk> \<Longrightarrow> m = Ok ()"
   by (induction ms) (auto simp: bind_sum_def split: sum.splits)
@@ -143,17 +154,5 @@ proof -
   qed
   with assms(2) show ?thesis by (simp add: list_all2_conv_all_nth)
 qed
-
-(* First failure in the list, otherwise the list of results *)
-fun those_sum :: "('e + 'a) list \<Rightarrow> 'e + 'a list"
-where
-"those_sum [] = Ok []" |
-"those_sum (m # ms) = do { x \<leftarrow> m; xs \<leftarrow> those_sum ms; Ok (x # xs) }"
-
-lemma those_sum_Ok: "those_sum ms = Ok xs \<Longrightarrow> list_all2 (\<lambda>m x. m = Ok x) ms xs"
-  by (induction ms arbitrary: xs) (auto simp: bind_sum_def split: sum.splits)
-
-lemma those_sum_map_Ok: "those_sum (map f xs) = Ok ys \<Longrightarrow> list_all2 (\<lambda>x y. f x = Ok y) xs ys"
-  by (auto dest: those_sum_Ok simp: list_all2_map1)
 
 end
