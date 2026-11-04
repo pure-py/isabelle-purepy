@@ -3,10 +3,8 @@ theory Soundness
   imports "isabelle-purepy.Programs" "isabelle-purepy.Determinism"
 begin
 
-(* Free o for outcomes, as in the values theory, since the typing theories keep the composition notation *)
-no_notation (ASCII) comp (infixl \<open>o\<close> 55)
-
-(* Equations which rewrite unconditionally, to be used by name *)
+(* Equations with a variable on the left in place of a constructor, which as default simp rules would unfold
+   every occurrence; applied explicitly instead *)
 declare check_expr.simps [simp del] callee.simps [simp del] elements_join.simps [simp del]
   check_args.simps [simp del]
 
