@@ -1,6 +1,6 @@
 (* Syntax nodes with their positions in the source *)
 theory Positions
-  imports Main
+  imports Util
 begin
 
 type_synonym pos = "nat \<times> nat"

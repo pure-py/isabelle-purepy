@@ -1,6 +1,6 @@
 (* Context entries, class tables, name resolution, predefined modules, programs *)
 theory Contexts
-  imports Syntax "HOL-Library.List_Lexorder" "HOL-Library.Char_ord"
+  imports Syntax
 begin
 
 (* Possibly unassigned entries carry a flag, set when the variable is declared in a branch, for the diagnostic
@@ -40,8 +40,7 @@ where
 
 definition tyvars :: "cxt \<Rightarrow> var set"
 where
-"tyvars \<Gamma> =
-  \<Union> (set (map (\<lambda>(x, \<theta>). (if \<theta> = TypeVar then {x} else {}) \<union> fv_entry \<theta>) (sorted_list_of_fmap \<Gamma>)))"
+"tyvars \<Gamma> = Set.filter (\<lambda>x. fmlookup \<Gamma> x = Some TypeVar) (fmdom' \<Gamma>) \<union> \<Union> (fv_entry ` fmran' \<Gamma>)"
 
 fun lookup :: "cxt \<Rightarrow> name \<Rightarrow> cxt_entry option"
 where
@@ -137,7 +136,6 @@ where
 definition scheme_of_name :: "cxt \<Rightarrow> expr \<Rightarrow> ty_scheme option"
 where
 "scheme_of_name \<Gamma> e = (case entry_of \<Gamma> e of Some (Scheme \<pi>) \<Rightarrow> Some \<pi> | _ \<Rightarrow> None)"
-
 
 (* Programs, and the stubs of the submodules of a module *)
 type_synonym program = "(name, module_body) fmap"

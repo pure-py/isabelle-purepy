@@ -1,9 +1,13 @@
 (* Shared utilities *)
 theory Util
-  imports "HOL-Library.Finite_Map" "HOL-Library.Monad_Syntax"
+  imports Complex_Main "HOL-Library.Finite_Map" "HOL-Library.Monad_Syntax" "HOL-Library.Extended_Real"
+    "HOL-Library.List_Lexorder" "HOL-Library.Char_ord"
 begin
 
 notation fmadd (infixl "\<otimes>" 100)
+
+(* Free o for outcomes; a later library import would restore the notation *)
+no_notation (ASCII) comp (infixl \<open>o\<close> 55)
 
 type_synonym 'a nonempty = "'a \<times> 'a list"
 
@@ -34,6 +38,13 @@ lemma comp_fun_idem_fmupd: "comp_fun_idem_on UNIV (\<lambda>x. fmupd x u)"
 
 lemma fmconst_code [code]: "fmconst (set xs) u = fold (\<lambda>x. fmupd x u) xs fmempty"
   unfolding fmconst_def by (rule comp_fun_idem_on.fold_set_fold[OF comp_fun_idem_fmupd subset_UNIV])
+
+lemma map_of_zip_map_snd:
+  "length xs = length ys \<Longrightarrow> map_of (zip xs (map f ys)) k = map_option f (map_of (zip xs ys) k)"
+  by (induction xs ys rule: list_induct2) auto
+
+lemma map_of_filter_key: "map_of (filter (\<lambda>(k, _). P k) xs) k = (if P k then map_of xs k else None)"
+  by (induction xs) auto
 
 (* Termination through lists of pairs and finite maps *)
 lemma size_prod_pair [simp]: "size_prod f g p = f (fst p) + g (snd p) + Suc 0"
@@ -89,23 +100,17 @@ where
 
 adhoc_overloading Monad_Syntax.bind \<rightleftharpoons> bind_sum
 
-(* Failure e for None, otherwise the value; e is computed eagerly by generated code *)
-definition or_else :: "'e \<Rightarrow> 'a option \<Rightarrow> 'e + 'a"
-where
-"or_else e m = (case m of Some x \<Rightarrow> Ok x | None \<Rightarrow> Fail e)"
-
-(* First failure in the list, otherwise success *)
-fun all_sum :: "('e + unit) list \<Rightarrow> 'e + unit"
-where
-"all_sum [] = Ok ()" |
-"all_sum (m # ms) = do { m; all_sum ms }"
-
 lemma bind_sum_simps [simp]: "bind_sum (Fail e) f = Fail e" "bind_sum (Ok x) f = f x"
   by (simp_all add: bind_sum_def)
 
 lemma bind_sum_cong [fundef_cong]:
   "\<lbrakk> m = m' ; \<And>x. m' = Ok x \<Longrightarrow> f x = f' x \<rbrakk> \<Longrightarrow> bind_sum m f = bind_sum m' f'"
   by (cases m') simp_all
+
+(* Failure e for None, otherwise the value; e is computed eagerly by generated code *)
+definition or_else :: "'e \<Rightarrow> 'a option \<Rightarrow> 'e + 'a"
+where
+"or_else e m = (case m of Some x \<Rightarrow> Ok x | None \<Rightarrow> Fail e)"
 
 (* Failure e unless b; e is computed eagerly by generated code *)
 definition ensure :: "bool \<Rightarrow> 'e \<Rightarrow> 'e + unit"
@@ -117,5 +122,37 @@ fun those_sum :: "('e + 'a) list \<Rightarrow> 'e + 'a list"
 where
 "those_sum [] = Ok []" |
 "those_sum (m # ms) = do { x \<leftarrow> m; xs \<leftarrow> those_sum ms; Ok (x # xs) }"
+
+lemma those_sum_Ok: "those_sum ms = Ok xs \<Longrightarrow> list_all2 (\<lambda>m x. m = Ok x) ms xs"
+  by (induction ms arbitrary: xs) (auto simp: bind_sum_def split: sum.splits)
+
+lemma those_sum_map_Ok: "those_sum (map f xs) = Ok ys \<Longrightarrow> list_all2 (\<lambda>x y. f x = Ok y) xs ys"
+  by (auto dest: those_sum_Ok simp: list_all2_map1)
+
+(* First failure in the list, otherwise success *)
+definition all_sum :: "('e + unit) list \<Rightarrow> 'e + unit"
+where
+"all_sum ms = do { those_sum ms; Ok () }"
+
+lemma all_sum_simps [simp]: "all_sum [] = Ok ()" "all_sum (m # ms) = do { m; all_sum ms }"
+  by (simp_all add: all_sum_def bind_sum_def split: sum.splits)
+
+lemma all_sum_Ok: "\<lbrakk> all_sum ms = Ok () ; m \<in> set ms \<rbrakk> \<Longrightarrow> m = Ok ()"
+  by (induction ms) (auto simp: bind_sum_def split: sum.splits)
+
+lemma all_sum_map_Ok: "\<lbrakk> all_sum (map f xs) = Ok () ; x \<in> set xs \<rbrakk> \<Longrightarrow> f x = Ok ()"
+  using all_sum_Ok[of "map f xs" "f x"] by simp
+
+lemma all_sum_map2_Ok:
+  assumes "all_sum (map2 f xs ys) = Ok ()" and "length xs = length ys"
+  shows "list_all2 (\<lambda>x y. f x y = Ok ()) xs ys"
+proof -
+  have "f (xs ! i) (ys ! i) = Ok ()" if "i < length xs" for i
+  proof -
+    have "map2 f xs ys ! i \<in> set (map2 f xs ys)" using that assms(2) by (intro nth_mem) simp
+    from all_sum_Ok[OF assms(1) this] that assms(2) show ?thesis by simp
+  qed
+  with assms(2) show ?thesis by (simp add: list_all2_conv_all_nth)
+qed
 
 end
