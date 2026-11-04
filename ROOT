@@ -36,4 +36,5 @@ session "isabelle-purepy-soundness" in "soundness" = "isabelle-purepy" +
   description "type soundness"
   options [timeout = 1200, quick_and_dirty]
   theories
+    ValueTyping
     Soundness
