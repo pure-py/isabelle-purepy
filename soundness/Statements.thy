@@ -311,7 +311,6 @@ proof (intro allI impI)
   with assms env show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (aborts\<^sub>o Excluded) R" by (auto dest!: str_operand)
 qed
 
-(* A variable bound by the static outcome of a statement is unbound or declared unassigned before it *)
 lemma check_stmt_bound:
   "\<lbrakk> check_stmt \<Sigma> \<Gamma> \<zeta> s = Ok (Assigns\<^sub>R \<Delta> r) ; fmlookup \<Delta> x = Some \<theta> \<rbrakk>
   \<Longrightarrow> fmlookup \<Gamma> x = Some Unbound \<or> (\<exists>\<tau>. fmlookup \<Gamma> x = Some (DU \<tau>))"

@@ -25,7 +25,8 @@ where
    (\<exists>\<sigma>. callee \<Sigma> \<Gamma> e es = Ok \<sigma> \<and> check_call_stmt \<Sigma> \<Gamma> e \<sigma> kws es = Ok ()))" |
 "call_stmt \<Sigma> \<Gamma> _ = False"
 
-(* e synthesises \<tau>, checks against \<tau>, whose type variables \<eta> binds, or is a call statement, at type object *)
+(* Typing of e at \<tau>: by synthesis, by checking when \<eta> binds the type variables of \<tau>, or at type object
+   for a call statement, which synthesises no type *)
 definition has_type :: "class_table \<Rightarrow> (var \<times> ty) list \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> bool"
 where
 "has_type \<Sigma> \<eta> \<Gamma> e \<tau> =
