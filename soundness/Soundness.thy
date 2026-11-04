@@ -44,6 +44,13 @@ proof -
   with assms(2) show ?thesis by (simp add: list_all2_conv_all_nth)
 qed
 
+lemma map_of_zip_map_snd:
+  "length xs = length ys \<Longrightarrow> map_of (zip xs (map f ys)) k = map_option f (map_of (zip xs ys) k)"
+  by (induction xs ys rule: list_induct2) auto
+
+lemma map_of_filter_key: "map_of (filter (\<lambda>(k, _). P k) xs) k = (if P k then map_of xs k else None)"
+  by (induction xs) auto
+
 lemma locate_Ok [simp]: "(locate p m = Ok x) = (m = Ok x)"
   by (cases m) (simp_all add: locate_def)
 
@@ -123,15 +130,12 @@ proof (induction \<sigma>)
     case True
     then obtain \<tau> where "map_of (zip \<alpha>s \<tau>s) \<beta> = Some \<tau>"
       using map_of_zip_is_Some[OF assms(2)[symmetric]] by blast
-    with True assms(2) show ?thesis
-      by (simp add: zip_map2[of \<alpha>s] map_of_map[unfolded split_def] zip_map_fst_snd
-          map_of_filter[of "\<lambda>\<alpha>. \<alpha> \<notin> set \<alpha>s"] restrict_map_def split_def)
+    with True assms(2) show ?thesis by (simp add: map_of_zip_map_snd zip_map_fst_snd map_of_filter_key)
   next
     case False
     then have "map_of (zip \<alpha>s \<tau>s) \<beta> = None" by (simp add: assms(2))
     with False assms show ?thesis
-      by (auto simp: zip_map_fst_snd map_of_filter[of "\<lambda>\<alpha>. \<alpha> \<notin> set \<alpha>s"] restrict_map_def split_def
-          subst_closed closed_inst_def split: option.splits
+      by (auto simp: zip_map_fst_snd map_of_filter_key subst_closed closed_inst_def split: option.splits
           dest!: map_of_SomeD dest: set_zip_leftD)
   qed
 qed (simp_all cong: map_cong)
