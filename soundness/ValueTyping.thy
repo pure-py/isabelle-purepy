@@ -102,9 +102,10 @@ ValObj:
   "\<lbrakk> map fst xvs = field_names \<Sigma> C ; list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) (map snd xvs) (field_types \<Sigma> C \<tau>s) \<rbrakk>
   \<Longrightarrow> \<turnstile> VObject C xvs : Ty (TyClass C \<tau>s)" |
 ValSub: "\<lbrakk> \<turnstile> v : Ty \<sigma> ; \<Sigma> \<turnstile> \<sigma> <: \<tau> \<rbrakk> \<Longrightarrow> \<turnstile> v : Ty \<tau>" |
-ValPrimLen: "\<turnstile> VPrim PrimLen : Ty (TyCallable [TyPrim Sized] (TyPrim int))" |
-ValPrimRound: "\<turnstile> VPrim PrimRound : Ty (TyCallable [TyPrim float] (TyPrim int))" |
-ValPrimExit: "\<turnstile> VPrim PrimExit : Ty (TyCallable [TyPrim int] (TyPrim Never))" |
+ValPrim:
+  "\<lbrakk> fmlookup (\<E> \<A>) q = Some \<rho> ; fmlookup \<rho> x = Some (VPrim f) ; fmlookup \<P> q = Some \<Gamma>
+   ; fmlookup \<Gamma> x = Some \<theta> \<rbrakk>
+  \<Longrightarrow> \<turnstile> VPrim f : \<theta>" |
 ValPredef: "\<turnstile> VPredef q : PredefName" |
 ValMod: "\<turnstile> VModStub q : ModStub q" |
 ValModLoaded: "[] \<turnstile> \<rho> : \<Gamma> \<Longrightarrow> \<turnstile> VModLoaded q \<rho> : ModChecked q \<Gamma>" |
@@ -196,7 +197,7 @@ inductive_cases WfDUE: "\<turnstile> v : DU \<tau>"
 
 lemma wf_val_unbound: "\<turnstile> v : Unbound \<Longrightarrow> v = VUnbound"
   and wf_val_du: "\<turnstile> v : DU \<tau> \<Longrightarrow> v = VUnbound"
-  by (auto elim!: WfUnboundE WfDUE simp: inst_entry_signature_entry split: if_splits)
+  by (auto elim!: WfUnboundE WfDUE simp: inst_entry_signature_entry \<E>_def \<P>_def split: if_splits)
 
 end
 
