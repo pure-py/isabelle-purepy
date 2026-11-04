@@ -18,8 +18,8 @@ where
 "scheme_of (PUScheme \<pi> _) = Some \<pi>" |
 "scheme_of _ = None"
 
-(* Merge of a context entry with undefined, flagged if the variable is declared in a branch; None for an entry
-   other than a variable's *)
+(* Merge of a context entry with undefined, flagged if the variable is declared in a branch; no merge for an entry
+   without a type *)
 fun possibly_unassigned :: "bool \<Rightarrow> cxt_entry \<Rightarrow> cxt_entry option"
 where
 "possibly_unassigned b (Ty \<tau>) = Some (PU \<tau> b)" |
@@ -29,7 +29,7 @@ where
 "possibly_unassigned b (PUScheme \<pi> _) = Some (PUScheme \<pi> b)" |
 "possibly_unassigned _ _ = None"
 
-(* Merge of the entries of a variable in two branches; None if they are incompatible *)
+(* Merge of the entries of a variable in two branches; no merge for incompatible entries *)
 fun merge_cxt_entry :: "class_table \<Rightarrow> bool \<Rightarrow> cxt_entry option \<Rightarrow> cxt_entry option \<Rightarrow> cxt_entry option"
 where
 "merge_cxt_entry \<Sigma> b (Some (Ty \<sigma>)) (Some (Ty \<tau>)) = Some (Ty (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>))" |
@@ -43,8 +43,8 @@ where
 "merge_cxt_entry \<Sigma> b None (Some \<theta>) = possibly_unassigned b \<theta>" |
 "merge_cxt_entry \<Sigma> b None None = None"
 
-(* Merge of the contexts of two branches of a statement declaring the variables D; failure for the first
-   variable whose entries are incompatible *)
+(* Merge of the contexts of two branches of a statement declaring the variables D; failure at the first
+   variable with incompatible entries *)
 definition merge :: "class_table \<Rightarrow> var set \<Rightarrow> cxt \<Rightarrow> cxt \<Rightarrow> cxt may_fail"
 where
 "merge \<Sigma> D \<Gamma> \<Gamma>' =
