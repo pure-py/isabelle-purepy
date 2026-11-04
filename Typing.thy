@@ -18,50 +18,57 @@ where
 "scheme_of (PUScheme \<pi> _) = Some \<pi>" |
 "scheme_of _ = None"
 
-(* Merge of a context entry with undefined, flagged if the variable is declared in a branch *)
-fun possibly_unassigned :: "bool \<Rightarrow> cxt_entry \<Rightarrow> cxt_entry"
+(* Merge of a context entry with undefined, flagged if the variable is declared in a branch; None for an entry
+   other than a variable's *)
+fun possibly_unassigned :: "bool \<Rightarrow> cxt_entry \<Rightarrow> cxt_entry option"
 where
-"possibly_unassigned b (Ty \<tau>) = PU \<tau> b" |
-"possibly_unassigned b (DU \<tau>) = PU \<tau> b" |
-"possibly_unassigned b (PU \<tau> _) = PU \<tau> b" |
-"possibly_unassigned b (Scheme \<pi>) = PUScheme \<pi> b" |
-"possibly_unassigned b (PUScheme \<pi> _) = PUScheme \<pi> b" |
-"possibly_unassigned _ _ = undefined"
+"possibly_unassigned b (Ty \<tau>) = Some (PU \<tau> b)" |
+"possibly_unassigned b (DU \<tau>) = Some (PU \<tau> b)" |
+"possibly_unassigned b (PU \<tau> _) = Some (PU \<tau> b)" |
+"possibly_unassigned b (Scheme \<pi>) = Some (PUScheme \<pi> b)" |
+"possibly_unassigned b (PUScheme \<pi> _) = Some (PUScheme \<pi> b)" |
+"possibly_unassigned _ _ = None"
 
-fun merge_cxt_entry :: "class_table \<Rightarrow> bool \<Rightarrow> cxt_entry option \<Rightarrow> cxt_entry option \<Rightarrow> cxt_entry"
+(* Merge of the entries of a variable in two branches; None if they are incompatible *)
+fun merge_cxt_entry :: "class_table \<Rightarrow> bool \<Rightarrow> cxt_entry option \<Rightarrow> cxt_entry option \<Rightarrow> cxt_entry option"
 where
-"merge_cxt_entry \<Sigma> b (Some (Ty \<sigma>)) (Some (Ty \<tau>)) = Ty (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>)" |
+"merge_cxt_entry \<Sigma> b (Some (Ty \<sigma>)) (Some (Ty \<tau>)) = Some (Ty (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>))" |
 "merge_cxt_entry \<Sigma> b (Some \<theta>) (Some \<theta>') =
-  (if \<theta> = \<theta>' then \<theta>
+  (if \<theta> = \<theta>' then Some \<theta>
    else case (scheme_of \<theta>, scheme_of \<theta>', var_ty \<theta>, var_ty \<theta>') of
-     (Some \<pi>, Some \<pi>', _, _) \<Rightarrow> if \<pi> = \<pi>' then PUScheme \<pi> b else undefined
-   | (None, None, Some \<sigma>, Some \<tau>) \<Rightarrow> PU (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>) b
-   | _ \<Rightarrow> undefined)" |
+     (Some \<pi>, Some \<pi>', _, _) \<Rightarrow> if \<pi> = \<pi>' then Some (PUScheme \<pi> b) else None
+   | (None, None, Some \<sigma>, Some \<tau>) \<Rightarrow> Some (PU (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>) b)
+   | _ \<Rightarrow> None)" |
 "merge_cxt_entry \<Sigma> b (Some \<theta>) None = possibly_unassigned b \<theta>" |
 "merge_cxt_entry \<Sigma> b None (Some \<theta>) = possibly_unassigned b \<theta>" |
-"merge_cxt_entry \<Sigma> b None None = undefined"
+"merge_cxt_entry \<Sigma> b None None = None"
 
-(* Merge of the contexts of two branches of a statement declaring the variables D *)
-definition merge :: "class_table \<Rightarrow> var set \<Rightarrow> cxt \<Rightarrow> cxt \<Rightarrow> cxt"
+(* Merge of the contexts of two branches of a statement declaring the variables D; failure for the first
+   variable whose entries are incompatible *)
+definition merge :: "class_table \<Rightarrow> var set \<Rightarrow> cxt \<Rightarrow> cxt \<Rightarrow> cxt may_fail"
 where
 "merge \<Sigma> D \<Gamma> \<Gamma>' =
-  fmmap_keys (\<lambda>x _. merge_cxt_entry \<Sigma> (x \<in> D) (fmlookup \<Gamma> x) (fmlookup \<Gamma>' x)) (\<Gamma> \<otimes> \<Gamma>')"
+  (let entry = \<lambda>x. merge_cxt_entry \<Sigma> (x \<in> D) (fmlookup \<Gamma> x) (fmlookup \<Gamma>' x);
+       X = ffilter (\<lambda>x. entry x = None) (fmdom (\<Gamma> \<otimes> \<Gamma>')) in
+   if X = {||} then Ok (fmmap_keys (\<lambda>x _. the (entry x)) (\<Gamma> \<otimes> \<Gamma>')) else Fail (Redeclaration (Min (fset X))))"
 
 (* Assigns\<^sub>R \<Delta> r: the statement can complete normally, adding bindings \<Delta>. If present, r is the error reported
    when a function body ends with a statement which PurePy determines to return or raise but which mypy treats
    as completing normally. *)
 datatype static_outcome = Assigns\<^sub>R cxt "reason option" | Returns\<^sub>R
 
-fun merge_outcome :: "class_table \<Rightarrow> var set \<Rightarrow> static_outcome \<Rightarrow> static_outcome \<Rightarrow> static_outcome"
+fun merge_outcome ::
+  "class_table \<Rightarrow> var set \<Rightarrow> static_outcome \<Rightarrow> static_outcome \<Rightarrow> static_outcome may_fail"
 where
 "merge_outcome \<Sigma> D (Assigns\<^sub>R \<Delta> r) (Assigns\<^sub>R \<Delta>' r') =
-  Assigns\<^sub>R (merge \<Sigma> D \<Delta> \<Delta>') (if r' = None then None else r)" |
-"merge_outcome \<Sigma> D R Returns\<^sub>R = R" |
-"merge_outcome \<Sigma> D Returns\<^sub>R R = R"
+  do { \<Delta>'' \<leftarrow> merge \<Sigma> D \<Delta> \<Delta>'; Ok (Assigns\<^sub>R \<Delta>'' (if r' = None then None else r)) }" |
+"merge_outcome \<Sigma> D R Returns\<^sub>R = Ok R" |
+"merge_outcome \<Sigma> D Returns\<^sub>R R = Ok R"
 
 definition merges :: "class_table \<Rightarrow> var set \<Rightarrow> static_outcome may_fail list \<Rightarrow> static_outcome may_fail"
 where
-"merges \<Sigma> D ms = do { Rs \<leftarrow> those_sum ms; Ok (foldr (merge_outcome \<Sigma> D) Rs Returns\<^sub>R) }"
+"merges \<Sigma> D ms =
+  do { Rs \<leftarrow> those_sum ms; foldr (\<lambda>R m. do { R' \<leftarrow> m; merge_outcome \<Sigma> D R R' }) Rs (Ok Returns\<^sub>R) }"
 
 fun override_outcome :: "static_outcome \<Rightarrow> static_outcome \<Rightarrow> static_outcome" (infixl "\<otimes>\<^sub>R" 100)
 where
@@ -392,6 +399,7 @@ fun def_signature :: "class_table \<Rightarrow> cxt \<Rightarrow> func \<Rightar
 where
 "def_signature \<Sigma> \<Gamma> (Def f \<alpha>s xps \<psi> s) =
    (let \<Gamma>' = \<Gamma> \<otimes> fmconst (set \<alpha>s) TypeVar in do {
+      (case find (\<lambda>\<alpha>. \<alpha> \<in> tyvars \<Gamma>) \<alpha>s of Some \<alpha> \<Rightarrow> Fail (Redeclaration \<alpha>) | None \<Rightarrow> Ok ());
       \<sigma>s \<leftarrow> those_sum (map (resolve_type \<Sigma> \<Gamma>' \<circ> snd) xps);
       \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma>' \<psi>;
       Ok (TyScheme \<alpha>s (TyCallable \<sigma>s \<tau>))
@@ -436,14 +444,16 @@ and check_def :: "class_table \<Rightarrow> cxt \<Rightarrow> func \<Rightarrow>
 and check_def_at :: "class_table \<Rightarrow> cxt \<Rightarrow> func located \<Rightarrow> ty_scheme \<Rightarrow> unit may_fail"
 where
 "check_stmt \<Sigma> \<Gamma> \<zeta> StmtPass = Ok (Assigns\<^sub>R fmempty None)" |
-"check_stmt \<Sigma> \<Gamma> \<zeta> (StmtDeclare x \<psi>) =
-  do { \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; Ok (Assigns\<^sub>R (fmupd x (DU \<tau>) fmempty) None) }" |
+"check_stmt \<Sigma> \<Gamma> \<zeta> (StmtDeclare x \<psi>) = do {
+   check_unbound \<Gamma> x; \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; Ok (Assigns\<^sub>R (fmupd x (DU \<tau>) fmempty) None)
+ }" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssign x None e) =
   (case fmlookup \<Gamma> x of
      Some (DU \<tau>) \<Rightarrow> do { check_expr_at \<Sigma> \<Gamma> e \<tau>; Ok (Assigns\<^sub>R (fmupd x (Ty \<tau>) fmempty) None) }
    | \<theta> \<Rightarrow> Fail (assign_reason x \<theta>))" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssign x (Some \<psi>) e) = do {
-   \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; check_expr_at \<Sigma> \<Gamma> e \<tau>; Ok (Assigns\<^sub>R (fmupd x (Ty \<tau>) fmempty) None)
+   check_unbound \<Gamma> x; \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; check_expr_at \<Sigma> \<Gamma> e \<tau>;
+   Ok (Assigns\<^sub>R (fmupd x (Ty \<tau>) fmempty) None)
  }" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtExpr e) = do {
    (case node e of
@@ -470,9 +480,11 @@ where
      Some \<tau> \<Rightarrow>
        if \<Sigma> \<turnstile> \<tau> \<approx> TyPrim NoneType then Ok Returns\<^sub>R
        else Fail (mypy_only_if (\<Sigma> \<turnstile> TyPrim NoneType <: \<tau>) (BareReturn \<tau>))
-   | None \<Rightarrow> undefined)" |
+   | None \<Rightarrow> Fail ReturnOutsideFunction)" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtReturn (Some e)) =
-  (case \<zeta> of Some \<tau> \<Rightarrow> do { check_expr_at \<Sigma> \<Gamma> e \<tau>; Ok Returns\<^sub>R } | None \<Rightarrow> undefined)" |
+  (case \<zeta> of
+     Some \<tau> \<Rightarrow> do { check_expr_at \<Sigma> \<Gamma> e \<tau>; Ok Returns\<^sub>R }
+   | None \<Rightarrow> Fail ReturnOutsideFunction)" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtIf e s elifs else') = do {
    check_expr_at \<Sigma> \<Gamma> e (TyPrim bool);
    merges \<Sigma> (set (declares (StmtIf e s elifs else'))) (check_stmt_at \<Sigma> \<Gamma> \<zeta> s
@@ -486,6 +498,10 @@ where
    | Returns\<^sub>R \<Rightarrow> Fail (Located (pos_of s') UnreachableStatement)
  }" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtMutualRegion ds) = do {
+   (case redeclared node {} (map (\<lambda>d. At (pos_of d) (def_name (node d))) ds) of
+      Some f \<Rightarrow> Fail (Located (pos_of f) (Redeclaration (node f)))
+    | None \<Rightarrow> Ok ());
+   all_sum (map (\<lambda>d. locate (pos_of d) (check_unbound \<Gamma> (def_name (node d)))) ds);
    \<pi>s \<leftarrow> those_sum (map (\<lambda>d. locate (pos_of d) (def_signature \<Sigma> \<Gamma> (node d))) ds);
    let \<Delta> = fmap_of_list (zip (map (def_name \<circ> node) ds) (map signature_entry \<pi>s));
    all_sum (map2 (check_def_at \<Sigma> (\<Gamma> \<otimes> \<Delta>)) ds \<pi>s);
