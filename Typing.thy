@@ -43,7 +43,7 @@ where
 "merge_cxt_entry \<Sigma> b None None = None"
 
 (* Merge of the contexts of two branches of a statement, where X holds the variables declared in any of the
-   branches; failure at the first variable for which the merge of entries is undefined *)
+   branches; failure at the first variable with incompatible entries *)
 definition merge :: "class_table \<Rightarrow> var set \<Rightarrow> cxt \<Rightarrow> cxt \<Rightarrow> cxt may_fail"
 where
 "merge \<Sigma> X \<Gamma> \<Gamma>' =
