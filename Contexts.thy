@@ -3,8 +3,8 @@ theory Contexts
   imports Syntax
 begin
 
-(* Possibly unassigned entries carry a flag, set when the variable is declared in a branch, for the diagnostic
-   only *)
+(* A possibly unassigned entry records whether its variable is declared in a branch, so that the reason for
+   rejecting a use of the variable can say so; typing ignores the flag *)
 datatype cxt_entry =
     Ty ty
   | DU ty
@@ -137,7 +137,6 @@ definition scheme_of_name :: "cxt \<Rightarrow> expr \<Rightarrow> ty_scheme opt
 where
 "scheme_of_name \<Gamma> e = (case entry_of \<Gamma> e of Some (Scheme \<pi>) \<Rightarrow> Some \<pi> | _ \<Rightarrow> None)"
 
-(* Programs, and the stubs of the submodules of a module *)
 type_synonym program = "(name, module_body) fmap"
 
 context includes fmap.lifting
