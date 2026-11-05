@@ -38,23 +38,8 @@ def parse_name(name: str) -> Name:
     return reduce(Syntax.Qualified, xs, Syntax.Simple(x))
 
 
-def components(q: Name) -> list[Var]:
-    """Variables of q, root first"""
-    match q:
-        case Syntax.Simple(x):
-            return [x]
-        case Syntax.Qualified(q_, x):
-            return [*components(q_), x]
-        case _:
-            raise AssertionError(f"unexpected name: {q}")
-
-
-def root(q: Name) -> Var:
-    return components(q)[0]
-
-
 def unparse_name(q: Name) -> str:
-    return ".".join(components(q))
+    return ".".join(Syntax.components(q))
 
 
 def is_import(s: ast.stmt) -> bool:

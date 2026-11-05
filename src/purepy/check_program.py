@@ -7,13 +7,13 @@ from purepy_conformance import Classification, Exit
 from . import syntax
 from .generated import Finite_Map, Option, Programs, Reasons, Syntax
 from .messages import classification, message
-from .syntax import ModuleBody, Name, Program, components, parse_name
+from .syntax import ModuleBody, Name, Program, parse_name
 
 MAIN = parse_name("__main__")
 
 
 def module_path(q: Name, base_dir: pathlib.Path) -> pathlib.Path:
-    stem = pathlib.Path(*components(q))
+    stem = pathlib.Path(*Syntax.components(q))
     for candidate in (base_dir / f"{stem}.py", base_dir / stem / "__init__.py"):
         if candidate.exists():
             return candidate
@@ -27,19 +27,11 @@ def module_name(base_dir: pathlib.Path, path: pathlib.Path) -> Name | None:
     return parse_name(".".join(parts)) if len(parts) > 0 else None
 
 
-def proper_prefixes(q: Name) -> list[Name]:
-    match q:
-        case Syntax.Qualified(q_, _):
-            return [*proper_prefixes(q_), q_]
-        case _:
-            return []
-
-
 def module_names(base_dir: pathlib.Path) -> set[Name]:
     names = {
         module_name(base_dir, p) for p in base_dir.rglob("*.py") if "__pycache__" not in p.parts
     }
-    return {p for q in names if q is not None for p in [q, *proper_prefixes(q)]}
+    return {p for q in names if q is not None for p in [q, *Syntax.proper_prefixes(q)]}
 
 
 type PurePyRejects = Programs.IllFormed | syntax.ParserRejects
@@ -48,7 +40,7 @@ type PurePyRejects = Programs.IllFormed | syntax.ParserRejects
 def parse_program(entry_path: pathlib.Path) -> Program:
     """Entry module parsed first, so its errors take precedence"""
     base_dir = entry_path.parent
-    names = sorted(module_names(base_dir), key=components)
+    names = sorted(module_names(base_dir), key=Syntax.components)
     return program(
         {
             MAIN: parse_module(MAIN, entry_path),

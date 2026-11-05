@@ -22,7 +22,6 @@ from .syntax import (
     Reason,
     Ty,
     node,
-    root,
     unparse_name,
 )
 
@@ -244,7 +243,7 @@ def excluded_feature(r: Reason) -> tuple[str, Classification] | None:
             return ("print inside function", FOR_NOW)
         case Reasons.UndefinedVariable(x) if x in BUILTINS:
             return excluded_name(x)
-        case Reasons.UnknownModule(q) if root(q) in sys.stdlib_module_names:
+        case Reasons.UnknownModule(q) if Syntax.root(q) in sys.stdlib_module_names:
             return (f"module '{unparse_name(q)}'", FOR_NOW)
         case Reasons.UnknownMember(x, q) if (
             m := unparse_name(q)
