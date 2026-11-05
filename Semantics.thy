@@ -402,7 +402,7 @@ where
 fun import_env :: "(name, env) fmap \<Rightarrow> import \<Rightarrow> env"
 where
 "import_env \<L> (Import q) =
-   (case components q of x # xs \<Rightarrow> fmupd x (VModLoaded (Simple x) (submod_env \<L> (Simple x) xs)) \<epsilon>)" |
+   (case variables q of x # xs \<Rightarrow> fmupd x (VModLoaded (Simple x) (submod_env \<L> (Simple x) xs)) \<epsilon>)" |
 "import_env \<L> (FromImport q xs) = fmap_of_list (map (\<lambda>x. (x, member \<L> (the (fmlookup \<L> q)) x)) xs)"
 
 fun imports_env :: "(name, env) fmap \<Rightarrow> import located list \<Rightarrow> env"

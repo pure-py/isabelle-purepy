@@ -13,7 +13,7 @@ MAIN = parse_name("__main__")
 
 
 def module_path(q: Name, base_dir: pathlib.Path) -> pathlib.Path:
-    stem = pathlib.Path(*Syntax.components(q))
+    stem = pathlib.Path(*Syntax.variables(q))
     for candidate in (base_dir / f"{stem}.py", base_dir / stem / "__init__.py"):
         if candidate.exists():
             return candidate
@@ -40,7 +40,7 @@ type PurePyRejects = Programs.IllFormed | syntax.ParserRejects
 def parse_program(entry_path: pathlib.Path) -> Program:
     """Entry module parsed first, so its errors take precedence"""
     base_dir = entry_path.parent
-    names = sorted(module_names(base_dir), key=Syntax.components)
+    names = sorted(module_names(base_dir), key=Syntax.variables)
     return program(
         {
             MAIN: parse_module(MAIN, entry_path),

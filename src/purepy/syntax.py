@@ -39,7 +39,7 @@ def parse_name(name: str) -> Name:
 
 
 def unparse_name(q: Name) -> str:
-    return ".".join(Syntax.components(q))
+    return ".".join(Syntax.variables(q))
 
 
 def is_import(s: ast.stmt) -> bool:

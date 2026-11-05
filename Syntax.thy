@@ -140,11 +140,10 @@ where
 "root (Simple x) = x" |
 "root (Qualified q _) = root q"
 
-(* Variables of a name, root first *)
-fun components :: "name \<Rightarrow> var list"
+fun variables :: "name \<Rightarrow> var list"
 where
-"components (Simple x) = [x]" |
-"components (Qualified q x) = components q @ [x]"
+"variables (Simple x) = [x]" |
+"variables (Qualified q x) = variables q @ [x]"
 
 fun prefix_of :: "name \<Rightarrow> name \<Rightarrow> bool" (infix "\<preceq>" 50)
 where

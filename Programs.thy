@@ -57,7 +57,7 @@ where
        })" |
 
 "check_imports \<M> V \<Sigma> q [] = Ok (fmempty, \<Sigma>)" |
-"check_imports \<M> V \<Sigma> q (At p (Import q') # \<iota>s) = locate_in q p (case components q' of x # xs \<Rightarrow> do {
+"check_imports \<M> V \<Sigma> q (At p (Import q') # \<iota>s) = locate_in q p (case variables q' of x # xs \<Rightarrow> do {
    ensure (\<not> q \<prec> q') (q, ImportOfContainedModule q' q);
    (\<Delta>, \<Sigma>\<^sub>1) \<leftarrow> check_module \<M> V \<Sigma> q (Simple x);
    (\<Delta>', \<Sigma>\<^sub>2) \<leftarrow> submodules \<M> V \<Sigma>\<^sub>1 q (Simple x) \<Delta> xs;
