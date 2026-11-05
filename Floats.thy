@@ -1,11 +1,10 @@
-(* Floats as an abstract type, with rounding and IEEE 754 arithmetic uninterpreted *)
+(* Floats as an abstract type, with its IEEE 754 interface uninterpreted *)
 theory Floats
   imports Util
 begin
 
 typedecl float
 
-(* Observers and rounding, left uninterpreted since type soundness doesn't depend on the values *)
 consts
   (* Extended real denoted by a float; None for nan *)
   real_of_float :: "float \<Rightarrow> ereal option"
@@ -14,9 +13,6 @@ consts
   nan :: float
   (* Rounding by roundTiesToEven of IEEE 754, on extended reals since the value of a float may be infinite *)
   fl :: "ereal \<Rightarrow> float"
-
-(* IEEE 754 arithmetic *)
-consts
   float_neg :: "float \<Rightarrow> float"
   float_add :: "float \<Rightarrow> float \<Rightarrow> float"
   float_sub :: "float \<Rightarrow> float \<Rightarrow> float"
