@@ -79,7 +79,7 @@ where
 "unlocated (Located _ r) = r" |
 "unlocated r = r"
 
-(* Reason at p, unless already located *)
+(* Give r position p, unless r already has a position *)
 fun locate_reason :: "pos \<Rightarrow> reason \<Rightarrow> reason"
 where
 "locate_reason p (Located p' r) = Located p' r" |

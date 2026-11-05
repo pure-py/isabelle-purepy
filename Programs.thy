@@ -3,7 +3,7 @@ theory Programs
   imports Typing
 begin
 
-(* Failure in module q located at p, unless already located *)
+(* Give a failure in module q position p, unless its reason already has a position *)
 definition locate_in :: "name \<Rightarrow> pos \<Rightarrow> (name \<times> reason) + 'a \<Rightarrow> (name \<times> reason) + 'a"
 where
 "locate_in q p = map_sum (\<lambda>(q', r). (q', if q' = q then locate_reason p r else r)) id"
