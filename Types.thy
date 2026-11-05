@@ -55,7 +55,7 @@ where
 definition type_entry :: "cxt \<Rightarrow> name \<Rightarrow> type_def located list \<Rightarrow> nat \<Rightarrow> cxt_entry"
 where
 "type_entry \<Gamma> q \<chi>s i =
-  (case node (\<chi>s ! i) of Dataclass c _ _ _ \<Rightarrow> Type (snoc q c) | TypeStmt _ _ _ \<Rightarrow> TypeAlias \<Gamma> q \<chi>s i)"
+  (case node (\<chi>s ! i) of Dataclass c _ _ _ \<Rightarrow> Type (Qualified q c) | TypeStmt _ _ _ \<Rightarrow> TypeAlias \<Gamma> q \<chi>s i)"
 
 definition type_context :: "cxt \<Rightarrow> name \<Rightarrow> type_def located list \<Rightarrow> nat \<Rightarrow> cxt"
 where
@@ -72,7 +72,8 @@ fun resolve_type' :: "class_table \<Rightarrow> cxt \<Rightarrow> (name \<times>
 where
 "resolve_type' \<Sigma> \<Gamma> A n (TyExprPrim \<nu>) = do { check_predefined \<Gamma> (prim_name \<nu>); Ok (TyPrim \<nu>) }" |
 "resolve_type' \<Sigma> \<Gamma> A n (TyExprName q \<psi>s) =
-  (if snd q = [] \<and> \<psi>s = [] \<and> fmlookup \<Gamma> (fst q) = Some TypeVar then Ok (TyVar (fst q))
+  (if \<psi>s = [] \<and> (case q of Simple x \<Rightarrow> fmlookup \<Gamma> x = Some TypeVar | Qualified _ _ \<Rightarrow> False)
+   then Ok (TyVar (root q))
    else case resolve_name \<Gamma> q of
      Some (Type C) \<Rightarrow> do {
        \<tau>s \<leftarrow> those_sum (map (resolve_type' \<Sigma> \<Gamma> A n) \<psi>s);
@@ -189,7 +190,7 @@ definition class_table :: "cxt \<Rightarrow> name \<Rightarrow> type_def located
 where
 "class_table \<Gamma> q \<chi>s i =
   (case node (\<chi>s ! i) of
-     Dataclass c _ _ _ \<Rightarrow> fmupd (snoc q c) (ClassDef \<Gamma> q \<chi>s i) fmempty
+     Dataclass c _ _ _ \<Rightarrow> fmupd (Qualified q c) (ClassDef \<Gamma> q \<chi>s i) fmempty
    | TypeStmt _ _ _ \<Rightarrow> fmempty)"
 
 (* Failure unless n positional arguments and keywords ys supply exactly the fields xs, with arity and unknown as

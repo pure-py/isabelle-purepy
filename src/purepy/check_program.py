@@ -5,23 +5,15 @@ import pathlib
 from purepy_conformance import Classification, Exit
 
 from . import syntax
-from .generated import Finite_Map, Option, Programs, Reasons
+from .generated import Finite_Map, Option, Programs, Reasons, Syntax
 from .messages import classification, message
-from .syntax import (
-    ModuleBody,
-    Name,
-    Program,
-    QualifiedName,
-    Reason,
-    parse_name,
-    qualified_name,
-)
+from .syntax import ModuleBody, Name, Program, parse_name
 
 MAIN = parse_name("__main__")
 
 
 def module_path(q: Name, base_dir: pathlib.Path) -> pathlib.Path:
-    stem = pathlib.Path(*q)
+    stem = pathlib.Path(*Syntax.variables(q))
     for candidate in (base_dir / f"{stem}.py", base_dir / stem / "__init__.py"):
         if candidate.exists():
             return candidate
@@ -32,29 +24,23 @@ def module_path(q: Name, base_dir: pathlib.Path) -> pathlib.Path:
 def module_name(base_dir: pathlib.Path, path: pathlib.Path) -> Name | None:
     rel = path.relative_to(base_dir)
     parts = rel.parent.parts if rel.name == "__init__.py" else rel.with_suffix("").parts
-    return parts if len(parts) > 0 else None
-
-
-def proper_prefixes(q: Name) -> list[Name]:
-    return [q[:i] for i in range(1, len(q))]
+    return parse_name(".".join(parts)) if len(parts) > 0 else None
 
 
 def module_names(base_dir: pathlib.Path) -> set[Name]:
     names = {
         module_name(base_dir, p) for p in base_dir.rglob("*.py") if "__pycache__" not in p.parts
     }
-    return {p for q in names if q is not None for p in [q, *proper_prefixes(q)]}
+    return {p for q in names if q is not None for p in [q, *Syntax.proper_prefixes(q)]}
 
 
-# Module and reason of an ill-formed program
-type IllFormed = tuple[QualifiedName, Reason]
-type PurePyRejects = IllFormed | syntax.ParserRejects
+type PurePyRejects = Programs.IllFormed | syntax.ParserRejects
 
 
 def parse_program(entry_path: pathlib.Path) -> Program:
     """Entry module parsed first, so its errors take precedence"""
     base_dir = entry_path.parent
-    names = sorted(module_names(base_dir), key=str)
+    names = sorted(module_names(base_dir), key=Syntax.variables)
     return program(
         {
             MAIN: parse_module(MAIN, entry_path),
@@ -73,15 +59,15 @@ def parse_module(q: Name, path: pathlib.Path) -> ModuleBody:
 
 
 def program(bodies: dict[Name, ModuleBody]) -> Program:
-    return Finite_Map.fmap_of_list([(qualified_name(q), body) for q, body in bodies.items()])
+    return Finite_Map.fmap_of_list(list(bodies.items()))
 
 
-def check(M: Program) -> IllFormed | None:
+def check(M: Program) -> Programs.IllFormed | None:
     match Programs.check_program(M):
         case Option.None_():
             return None
-        case Option.Some((q, r)):
-            return (q, r)
+        case Option.Some(Programs.IllFormed() as f):
+            return f
         case result:
             raise AssertionError(f"unexpected result: {result}")
 
@@ -109,7 +95,7 @@ def exit_code(rejection: PurePyRejects | None) -> Exit:
             return Exit.EXCLUDED_FOR_NOW
         case syntax.ParserRejects():
             return Exit.NOT_ALLOWED
-        case (_, r) if classification(r) == Classification.FOR_NOW:
+        case Programs.IllFormed(_, r) if classification(r) == Classification.FOR_NOW:
             return Exit.EXCLUDED_FOR_NOW
         case _:
             return Exit.ILL_FORMED
@@ -120,8 +106,10 @@ def error_path(rejection: PurePyRejects, entry_path: pathlib.Path) -> pathlib.Pa
     match rejection:
         case syntax.ParserRejects():
             q = rejection.module
-        case ((x, xs), _):
-            q = (x, *xs)
+        case Programs.IllFormed(q, _):
+            pass
+        case _:
+            raise AssertionError(f"unexpected rejection: {rejection}")
     return entry_path if q is None or q == MAIN else module_path(q, entry_path.parent)
 
 
@@ -133,10 +121,12 @@ def format_rejection(rejection: PurePyRejects | None, filename: str) -> str:
             return f"{filename}:{rejection.line}:{rejection.col}: {rejection.msg}"
         case syntax.ParserRejects():
             return f"{filename}: {rejection.msg}"
-        case (_, Reasons.Located((line, col), r)):
+        case Programs.IllFormed(_, Reasons.Located((line, col), r)):
             return f"{filename}:{line}:{col}: {message(r)}"
-        case (_, r):
+        case Programs.IllFormed(_, r):
             return f"{filename}: {message(r)}"
+        case _:
+            raise AssertionError(f"unexpected rejection: {rejection}")
 
 
 def format_program_rejection(rejection: PurePyRejects | None, entry_path: pathlib.Path) -> str:

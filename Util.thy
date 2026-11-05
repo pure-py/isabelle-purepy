@@ -4,30 +4,15 @@ theory Util
     "HOL-Library.List_Lexorder" "HOL-Library.Char_ord"
 begin
 
-notation fmadd (infixl "\<otimes>" 100)
+consts override :: "'a \<Rightarrow> 'a \<Rightarrow> 'a" (infixl "\<otimes>" 100)
+
+(* Boxed plus of the specification isn't in Isabelle's symbol table *)
+consts extend :: "'a \<Rightarrow> 'a \<Rightarrow> 'a" (infixl "\<uplus>" 65)
+
+adhoc_overloading override \<rightleftharpoons> fmadd
 
 (* Free o for outcomes; a later library import would restore the notation *)
 no_notation (ASCII) comp (infixl \<open>o\<close> 55)
-
-type_synonym 'a nonempty = "'a \<times> 'a list"
-
-fun snoc :: "'a nonempty \<Rightarrow> 'a \<Rightarrow> 'a nonempty"
-where
-"snoc (y, ys) x = (y, ys @ [x])"
-
-fun unsnoc :: "'a nonempty \<Rightarrow> ('a nonempty \<times> 'a) option"
-where
-"unsnoc (y, ys) = (if ys = [] then None else Some ((y, butlast ys), last ys))"
-
-lemma unsnoc_snoc [simp]: "unsnoc (snoc q x) = Some (q, x)"
-  by (cases q) simp
-
-lemma snoc_unsnoc: "unsnoc q' = Some (q, x) \<Longrightarrow> q' = snoc q x"
-  by (cases q') (auto split: if_splits simp: append_butlast_last_id)
-
-lemma snoc_eq_iff:
-  "snoc q x = q' \<longleftrightarrow> unsnoc q' = Some (q, x)" "q' = snoc q x \<longleftrightarrow> unsnoc q' = Some (q, x)"
-  by (auto dest: snoc_unsnoc)
 
 definition fmconst :: "'a set \<Rightarrow> 'b \<Rightarrow> ('a, 'b) fmap"
 where

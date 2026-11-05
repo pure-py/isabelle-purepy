@@ -5,12 +5,14 @@ begin
 
 datatype match_result = Match env | NoMatch | MatchAborts termination_kind
 
-fun seq_compose_match :: "match_result \<Rightarrow> match_result \<Rightarrow> match_result" (infixl "\<otimes>\<^sub>m" 100)
+fun seq_compose_match :: "match_result \<Rightarrow> match_result \<Rightarrow> match_result"
 where
-"Match \<rho> \<otimes>\<^sub>m Match \<rho>' = Match (\<rho> \<otimes> \<rho>')" |
-"Match \<rho> \<otimes>\<^sub>m m = m" |
-"NoMatch \<otimes>\<^sub>m m = NoMatch" |
-"MatchAborts \<kappa> \<otimes>\<^sub>m m = MatchAborts \<kappa>"
+"seq_compose_match (Match \<rho>) (Match \<rho>') = Match (\<rho> \<otimes> \<rho>')" |
+"seq_compose_match (Match \<rho>) m = m" |
+"seq_compose_match NoMatch m = NoMatch" |
+"seq_compose_match (MatchAborts \<kappa>) m = MatchAborts \<kappa>"
+
+adhoc_overloading override \<rightleftharpoons> seq_compose_match
 
 (* Name a case hypothesis IH when it contains an induction predicate, and hyps otherwise, following a rule
    without parameters. The induction method also takes the free variables among the conclusion's arguments for
@@ -51,18 +53,18 @@ where
    else case eq (VLit l) v of Val True \<Rightarrow> Match \<epsilon> | Val False \<Rightarrow> NoMatch | Aborts \<kappa> \<Rightarrow> MatchAborts \<kappa>)" |
 "match \<rho> (PatVar x) v = Match (fmupd x v \<epsilon>)" |
 "match \<rho> PatWildcard v = Match \<epsilon>" |
-"match \<rho> (PatAs p x) v = match \<rho> (node p) v \<otimes>\<^sub>m Match (fmupd x v \<epsilon>)" |
+"match \<rho> (PatAs p x) v = match \<rho> (node p) v \<otimes> Match (fmupd x v \<epsilon>)" |
 "match \<rho> (PatList ps) (VList vs) = (if length ps = length vs then match_all \<rho> ps vs else NoMatch)" |
 "match \<rho> (PatList ps) (VTuple vs) = MatchAborts Excluded" |
 "match \<rho> (PatTuple ps) (VTuple vs) = (if length ps = length vs then match_all \<rho> ps vs else NoMatch)" |
 "match \<rho> (PatTuple ps) (VList vs) = MatchAborts Excluded" |
 "match \<rho> (PatDict kps) (VDict \<delta>) =
   (if set (map fst kps) \<subseteq> set (map fst \<delta>) then match_dict \<rho> kps \<delta> else NoMatch)" |
-"match \<rho> (PatConstr (x, xs) (ps, kps)) v =
+"match \<rho> (PatConstr q (ps, kps)) v =
   (case do {
-      u \<leftarrow> or_else NameError (fmlookup \<rho> x);
+      u \<leftarrow> or_else NameError (fmlookup \<rho> (root q));
       ensure (u \<noteq> VUnbound) NameError;
-      u' \<leftarrow> or_else AttributeError (resolve \<rho> (x, xs));
+      u' \<leftarrow> or_else AttributeError (resolve \<rho> q);
       ensure (\<not> is_opaque_builtin u') Excluded;
       or_else TypeError (class_of u') }
    of Fail \<kappa> \<Rightarrow> MatchAborts \<kappa>
@@ -72,13 +74,13 @@ where
          | _ \<Rightarrow> NoMatch))" |
 "match \<rho> _ _ = NoMatch" |
 
-"match_all \<rho> (p # ps) (v # vs) = match \<rho> (node p) v \<otimes>\<^sub>m match_all \<rho> ps vs" |
+"match_all \<rho> (p # ps) (v # vs) = match \<rho> (node p) v \<otimes> match_all \<rho> ps vs" |
 "match_all \<rho> _ _ = Match \<epsilon>" |
 
-"match_dict \<rho> ((w, p) # kps) \<delta> = match \<rho> (node p) (the (map_of \<delta> w)) \<otimes>\<^sub>m match_dict \<rho> kps \<delta>" |
+"match_dict \<rho> ((w, p) # kps) \<delta> = match \<rho> (node p) (the (map_of \<delta> w)) \<otimes> match_dict \<rho> kps \<delta>" |
 "match_dict \<rho> [] \<delta> = Match \<epsilon>" |
 
-"match_kws \<rho> ((y, p) # kps) zvs = match \<rho> (node p) (the (map_of zvs y)) \<otimes>\<^sub>m match_kws \<rho> kps zvs" |
+"match_kws \<rho> ((y, p) # kps) zvs = match \<rho> (node p) (the (map_of zvs y)) \<otimes> match_kws \<rho> kps zvs" |
 "match_kws \<rho> [] zvs = Match \<epsilon>" |
 
 "match_fields \<rho> C ps kps zvs =
@@ -86,7 +88,7 @@ where
    else
      let ys = field_names \<Sigma> C; n = length ps in
      if field_map C ps kps \<noteq> None \<and> set ys \<subseteq> set (map fst zvs)
-     then match_all \<rho> ps (map (\<lambda>y. the (map_of zvs y)) (take n ys)) \<otimes>\<^sub>m match_kws \<rho> kps zvs
+     then match_all \<rho> ps (map (\<lambda>y. the (map_of zvs y)) (take n ys)) \<otimes> match_kws \<rho> kps zvs
      else if length ys < n \<or> (\<exists>y \<in> set (map fst kps). y \<in> set (take n ys))
      then MatchAborts TypeError
      else MatchAborts Excluded)"
@@ -275,12 +277,12 @@ EvalIfNonBool:
   "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; v \<notin> {true, false} \<rbrakk> \<Longrightarrow> \<rho>, StmtIf e s elifs else' \<Rightarrow>\<^sub>s aborts\<^sub>o Excluded" |
 EvalMatch:
   "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; dispatch \<rho> v cases = Val (\<rho>', s') ; \<rho> \<otimes> \<rho>', node s' \<Rightarrow>\<^sub>s o \<rbrakk>
-  \<Longrightarrow> \<rho>, StmtMatch e cases \<Rightarrow>\<^sub>s assigns\<^sub>o \<rho>' \<otimes>\<^sub>o o" |
+  \<Longrightarrow> \<rho>, StmtMatch e cases \<Rightarrow>\<^sub>s assigns\<^sub>o \<rho>' \<otimes> o" |
 EvalMatchFail: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtMatch e cases \<Rightarrow>\<^sub>s aborts\<^sub>o \<kappa>" |
 EvalMatchAbort:
   "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; dispatch \<rho> v cases = Aborts \<kappa> \<rbrakk> \<Longrightarrow> \<rho>, StmtMatch e cases \<Rightarrow>\<^sub>s aborts\<^sub>o \<kappa>" |
 EvalSeq: "\<lbrakk> \<rho>, node s \<Rightarrow>\<^sub>s (us, Assigns \<rho>') ; \<rho> \<otimes> \<rho>', node s' \<Rightarrow>\<^sub>s o \<rbrakk>
-  \<Longrightarrow> \<rho>, StmtSeq s s' \<Rightarrow>\<^sub>s (us, Assigns \<rho>') \<otimes>\<^sub>o o" |
+  \<Longrightarrow> \<rho>, StmtSeq s s' \<Rightarrow>\<^sub>s (us, Assigns \<rho>') \<otimes> o" |
 EvalSeqReturn: "\<rho>, node s \<Rightarrow>\<^sub>s (us, Returns v) \<Longrightarrow> \<rho>, StmtSeq s s' \<Rightarrow>\<^sub>s (us, Returns v)" |
 EvalSeqFail: "\<rho>, node s \<Rightarrow>\<^sub>s (us, Aborts\<^sub>\<omega> \<kappa>) \<Longrightarrow> \<rho>, StmtSeq s s' \<Rightarrow>\<^sub>s (us, Aborts\<^sub>\<omega> \<kappa>)" |
 
@@ -336,13 +338,13 @@ lemmas eval_rules = eval_expr_eval_exprs_eval_stmt_eval_elif_eval_quals_eval_gen
 definition type_value :: "name \<Rightarrow> type_def located list \<Rightarrow> nat \<Rightarrow> val"
 where
 "type_value q \<chi>s i =
-  (case node (\<chi>s ! i) of Dataclass c _ _ _ \<Rightarrow> VClass (snoc q c) | TypeStmt _ _ _ \<Rightarrow> VTypeAlias q \<chi>s i)"
+  (case node (\<chi>s ! i) of Dataclass c _ _ _ \<Rightarrow> VClass (Qualified q c) | TypeStmt _ _ _ \<Rightarrow> VTypeAlias q \<chi>s i)"
 
 inductive eval_top :: "name \<Rightarrow> env \<Rightarrow> top_stmt \<Rightarrow> outcome \<Rightarrow> bool"  ("_, _, _ \<Rightarrow>\<^sub>t _" [60,60,0,60] 60)
 where
 EvalTopStmt: "\<rho>, node s \<Rightarrow>\<^sub>s o \<Longrightarrow> q, \<rho>, Stmt s \<Rightarrow>\<^sub>t o" |
 EvalTopSeq:
-  "\<lbrakk> q, \<rho>, t \<Rightarrow>\<^sub>t (us, Assigns \<rho>') ; q, \<rho> \<otimes> \<rho>', t' \<Rightarrow>\<^sub>t o \<rbrakk> \<Longrightarrow> q, \<rho>, TopSeq t t' \<Rightarrow>\<^sub>t (us, Assigns \<rho>') \<otimes>\<^sub>o o" |
+  "\<lbrakk> q, \<rho>, t \<Rightarrow>\<^sub>t (us, Assigns \<rho>') ; q, \<rho> \<otimes> \<rho>', t' \<Rightarrow>\<^sub>t o \<rbrakk> \<Longrightarrow> q, \<rho>, TopSeq t t' \<Rightarrow>\<^sub>t (us, Assigns \<rho>') \<otimes> o" |
 EvalTopSeqFail: "q, \<rho>, t \<Rightarrow>\<^sub>t (us, Aborts\<^sub>\<omega> \<kappa>) \<Longrightarrow> q, \<rho>, TopSeq t t' \<Rightarrow>\<^sub>t (us, Aborts\<^sub>\<omega> \<kappa>)" |
 EvalTypes:
   "q, \<rho>, TypeDefs \<chi>s \<Rightarrow>\<^sub>t
@@ -358,33 +360,35 @@ where
     [(builtins, fmap_of_list
        ([name ''builtins'', (var ''len'', VPrim PrimLen), (var ''range'', VClass range_class),
          (var ''round'', VPrim PrimRound)]
-        @ map (\<lambda>y. (y, VPredef (snoc builtins y)))
+        @ map (\<lambda>y. (y, VPredef (Qualified builtins y)))
             (map prim_name [NoneType, object, bool, int, float, str]
              @ map var [''list'', ''dict'', ''tuple'']))),
-     ((var ''sys'', []), fmap_of_list
+     (name_of [''sys''], fmap_of_list
        [name ''sys'', (var ''argv'', VList (map (VLit \<circ> LitString) \<A>)), (var ''exit'', VPrim PrimExit)]),
-     ((var ''typing'', []), fmap_of_list
-       (name ''typing'' # map (\<lambda>y. (y, VPredef (var ''typing'', [y])))
+     (name_of [''typing''], fmap_of_list
+       (name ''typing'' # map (\<lambda>y. (y, VPredef (Qualified (name_of [''typing'']) y)))
           [var ''Callable'', var ''Literal'', prim_name Never, prim_name Sized])),
-     ((var ''dataclasses'', []), fmap_of_list
-       [name ''dataclasses'', (var ''dataclass'', VPredef (var ''dataclasses'', [var ''dataclass'']))])])"
+     (name_of [''dataclasses''], fmap_of_list
+       [name ''dataclasses'', (var ''dataclass'', VPredef (name_of [''dataclasses'', ''dataclass'']))])])"
 
 function (sequential) extend_val :: "val \<Rightarrow> val \<Rightarrow> val"
-and extend_env :: "env \<Rightarrow> env \<Rightarrow> env" (infixl "\<uplus>\<^sub>v" 65)
+and extend_env :: "env \<Rightarrow> env \<Rightarrow> env"
 where
 "extend_val (VModLoaded q \<rho>) v' =
    (case v' of
       VModStub q' \<Rightarrow> if q = q' then VModLoaded q \<rho> else v'
-    | VModLoaded q' \<rho>' \<Rightarrow> if q = q' then VModLoaded q (\<rho> \<uplus>\<^sub>v \<rho>') else v'
+    | VModLoaded q' \<rho>' \<Rightarrow> if q = q' then VModLoaded q (extend_env \<rho> \<rho>') else v'
     | _ \<Rightarrow> v')" |
 "extend_val _ v' = v'" |
-"\<rho> \<uplus>\<^sub>v \<rho>' =
+"extend_env \<rho> \<rho>' =
    \<rho> ++\<^sub>f fmmap_keys (\<lambda>x v'. case fmlookup \<rho> x of None \<Rightarrow> v' | Some v \<Rightarrow> extend_val v v') \<rho>'"
 by pat_completeness auto
 
 termination
 by (relation "measure (\<lambda>p. case p of Inl (v, _) \<Rightarrow> size v | Inr (\<rho>, _) \<Rightarrow> size_fmap (\<lambda>_. 0) size \<rho>)")
    (simp_all add: size_fmap_lookup del: size_fmap_def)
+
+adhoc_overloading extend \<rightleftharpoons> extend_env
 
 declare extend_env.simps [simp del]
 
@@ -396,17 +400,18 @@ fun submod_env :: "(name, env) fmap \<Rightarrow> name \<Rightarrow> var list \<
 where
 "submod_env \<L> q [] = the (fmlookup \<L> q)" |
 "submod_env \<L> q (x # xs) =
-   the (fmlookup \<L> q) \<uplus>\<^sub>v fmupd x (VModLoaded (snoc q x) (submod_env \<L> (snoc q x) xs)) \<epsilon>"
+   the (fmlookup \<L> q) \<uplus> fmupd x (VModLoaded (Qualified q x) (submod_env \<L> (Qualified q x) xs)) \<epsilon>"
 
 fun import_env :: "(name, env) fmap \<Rightarrow> import \<Rightarrow> env"
 where
-"import_env \<L> (Import (x, xs)) = fmupd x (VModLoaded (x, []) (submod_env \<L> (x, []) xs)) \<epsilon>" |
+"import_env \<L> (Import q) =
+   (case variables q of x # xs \<Rightarrow> fmupd x (VModLoaded (Simple x) (submod_env \<L> (Simple x) xs)) \<epsilon>)" |
 "import_env \<L> (FromImport q xs) = fmap_of_list (map (\<lambda>x. (x, member \<L> (the (fmlookup \<L> q)) x)) xs)"
 
 fun imports_env :: "(name, env) fmap \<Rightarrow> import located list \<Rightarrow> env"
 where
 "imports_env \<L> [] = \<epsilon>" |
-"imports_env \<L> (\<iota> # \<iota>s) = import_env \<L> (node \<iota>) \<uplus>\<^sub>v imports_env \<L> \<iota>s"
+"imports_env \<L> (\<iota> # \<iota>s) = import_env \<L> (node \<iota>) \<uplus> imports_env \<L> \<iota>s"
 
 locale loading = evaluation +
   fixes \<M> :: program
@@ -425,8 +430,8 @@ where
 
 "submod_loads qs q [] = qs" |
 "submod_loads qs q (x # xs) =
-   (if snoc q x |\<in>| fmdom \<M> \<and> x \<notin> set (declares (the (fmlookup \<M> q)))
-    then submod_loads (loads qs [snoc q x]) q xs
+   (if Qualified q x |\<in>| fmdom \<M> \<and> x \<notin> set (declares (the (fmlookup \<M> q)))
+    then submod_loads (loads qs [Qualified q x]) q xs
     else submod_loads qs q xs)" |
 
 "imports_loads qs q [] = qs" |
@@ -453,7 +458,7 @@ where
 EvalModsNil: "[], \<L> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s assigns\<^sub>o \<epsilon>" |
 EvalModsCons:
   "\<lbrakk> q, \<L> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d (vs, Assigns \<rho>) ; qs, fmupd q (submods_env q \<otimes> \<rho>) \<L> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s o \<rbrakk>
-  \<Longrightarrow> q # qs, \<L> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s (vs, Assigns \<epsilon>) \<otimes>\<^sub>o o" |
+  \<Longrightarrow> q # qs, \<L> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s (vs, Assigns \<epsilon>) \<otimes> o" |
 EvalModsFail: "q, \<L> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d (vs, Aborts\<^sub>\<omega> \<kappa>) \<Longrightarrow> q # qs, \<L> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s (vs, Aborts\<^sub>\<omega> \<kappa>)"
 
 inductive eval_program :: "str list \<Rightarrow> val list \<Rightarrow> termination_kind \<Rightarrow> bool"

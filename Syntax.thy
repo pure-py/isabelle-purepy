@@ -3,7 +3,7 @@ theory Syntax
   imports Floats Strings Positions
 begin
 
-type_synonym name = "var nonempty"
+datatype name = Simple var | Qualified name var
 
 datatype lit =
     LitInt int
@@ -135,9 +135,25 @@ datatype top_stmt =
 
 datatype module_body = ModuleBody "import located list" top_stmt
 
+fun root :: "name \<Rightarrow> var"
+where
+"root (Simple x) = x" |
+"root (Qualified q _) = root q"
+
+fun variables :: "name \<Rightarrow> var list"
+where
+"variables (Simple x) = [x]" |
+"variables (Qualified q x) = variables q @ [x]"
+
+(* Name written in a theory *)
+definition name_of :: "string list \<Rightarrow> name"
+where
+"name_of xs = foldl (\<lambda>q x. Qualified q (var x)) (Simple (var (hd xs))) (tl xs)"
+
 fun prefix_of :: "name \<Rightarrow> name \<Rightarrow> bool" (infix "\<preceq>" 50)
 where
-"(y, ys) \<preceq> (y', ys') = (y = y' \<and> take (length ys) ys' = ys)"
+"q \<preceq> Simple x = (q = Simple x)" |
+"q \<preceq> Qualified q' x = (q = Qualified q' x \<or> q \<preceq> q')"
 
 definition proper_prefix_of :: "name \<Rightarrow> name \<Rightarrow> bool" (infix "\<prec>" 50)
 where
@@ -146,14 +162,15 @@ where
 (* Shortest first *)
 fun proper_prefixes :: "name \<Rightarrow> name list"
 where
-"proper_prefixes (y, ys) = map (\<lambda>i. (y, take i ys)) [0..<length ys]"
+"proper_prefixes (Simple _) = []" |
+"proper_prefixes (Qualified q _) = proper_prefixes q @ [q]"
 
 definition unique_to :: "name \<Rightarrow> name \<Rightarrow> name list"
 where
 "unique_to q' q = filter (\<lambda>p. \<not> p \<preceq> q) (proper_prefixes q')"
 
-definition builtins :: name where "builtins = (var ''builtins'', [])"
-definition main :: name where "main = (var ''__main__'', [])"
+definition builtins :: name where "builtins = name_of [''builtins'']"
+definition main :: name where "main = name_of [''__main__'']"
 
 fun def_name :: "func \<Rightarrow> var"
 where
@@ -243,9 +260,10 @@ where
 fun declarations_imports :: "import located list \<Rightarrow> var located list"
 where
 "declarations_imports [] = []" |
-"declarations_imports (At p (Import (x, xs)) # \<iota>s) =
-  (if list_ex (\<lambda>\<iota>. case node \<iota> of Import (x', _) \<Rightarrow> x' = x | _ \<Rightarrow> False) \<iota>s then declarations_imports \<iota>s
-   else At p x # declarations_imports \<iota>s)" |
+"declarations_imports (At p (Import q) # \<iota>s) =
+  (if list_ex (\<lambda>\<iota>. case node \<iota> of Import q' \<Rightarrow> root q' = root q | _ \<Rightarrow> False) \<iota>s
+   then declarations_imports \<iota>s
+   else At p (root q) # declarations_imports \<iota>s)" |
 "declarations_imports (At p (FromImport q xs) # \<iota>s) = map (At p) xs @ declarations_imports \<iota>s"
 
 fun declarations_top :: "top_stmt \<Rightarrow> var located list"
@@ -387,7 +405,8 @@ where
 
 fun short_name :: "name \<Rightarrow> var"
 where
-"short_name (x, xs) = (if xs = [] then x else last xs)"
+"short_name (Simple x) = x" |
+"short_name (Qualified _ x) = x"
 
 fun lambda_of :: "expr \<Rightarrow> (var list \<times> expr located) option"
 where
@@ -399,8 +418,8 @@ lemma lambda_of_size: "lambda_of e = Some (xs, e') \<Longrightarrow> size (node 
 
 fun dotted_name :: "expr \<Rightarrow> name option"
 where
-"dotted_name (ExprVar x) = Some (x, [])" |
-"dotted_name (ExprAttribute e x) = map_option (\<lambda>q. snoc q x) (dotted_name (node e))" |
+"dotted_name (ExprVar x) = Some (Simple x)" |
+"dotted_name (ExprAttribute e x) = map_option (\<lambda>q. Qualified q x) (dotted_name (node e))" |
 "dotted_name _ = None"
 
 (* Targets of the plain assignments in s, each at the position of its assignment, in order *)
@@ -424,7 +443,7 @@ where
 fun binders_imports :: "import located list \<Rightarrow> var located list"
 where
 "binders_imports [] = []" |
-"binders_imports (At p (Import (x, _)) # \<iota>s) = At p x # binders_imports \<iota>s" |
+"binders_imports (At p (Import q) # \<iota>s) = At p (root q) # binders_imports \<iota>s" |
 "binders_imports (At p (FromImport _ xs) # \<iota>s) = map (At p) xs @ binders_imports \<iota>s"
 
 (* Names assigned by the top-level statements of t, each at the position of its statement, in order and with
@@ -455,7 +474,7 @@ fun type_expr_of :: "expr located \<Rightarrow> ty_expr option"
 where
 "type_expr_of (At _ (ExprLiteral LitNone)) = Some (TyExprPrim NoneType)" |
 "type_expr_of (At _ (ExprVar x)) =
-  Some (case prim_of_name x of Some \<nu> \<Rightarrow> TyExprPrim \<nu> | None \<Rightarrow> TyExprName (x, []) [])" |
+  Some (case prim_of_name x of Some \<nu> \<Rightarrow> TyExprPrim \<nu> | None \<Rightarrow> TyExprName (Simple x) [])" |
 "type_expr_of (At _ (ExprAttribute e x)) = map_option (\<lambda>q. TyExprName q []) (dotted_name (ExprAttribute e x))" |
 "type_expr_of (At _ (ExprBinOp BOpBitOr e e')) = do {
    \<psi> \<leftarrow> type_expr_of e; \<psi>' \<leftarrow> type_expr_of e'; Some (TyExprUnion \<psi> \<psi>')

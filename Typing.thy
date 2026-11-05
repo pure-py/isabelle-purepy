@@ -69,10 +69,12 @@ where
 "merges \<Sigma> X ms =
   do { Rs \<leftarrow> those_sum ms; foldr (\<lambda>R m. do { R' \<leftarrow> m; merge_outcome \<Sigma> X R R' }) Rs (Ok Returns\<^sub>R) }"
 
-fun override_outcome :: "static_outcome \<Rightarrow> static_outcome \<Rightarrow> static_outcome" (infixl "\<otimes>\<^sub>R" 100)
+fun override_outcome :: "static_outcome \<Rightarrow> static_outcome \<Rightarrow> static_outcome"
 where
-"Assigns\<^sub>R \<Delta> r \<otimes>\<^sub>R Assigns\<^sub>R \<Delta>' r' = Assigns\<^sub>R (\<Delta> \<otimes> \<Delta>') (if r = None then r' else None)" |
-"_ \<otimes>\<^sub>R _ = Returns\<^sub>R"
+"override_outcome (Assigns\<^sub>R \<Delta> r) (Assigns\<^sub>R \<Delta>' r') = Assigns\<^sub>R (\<Delta> \<otimes> \<Delta>') (if r = None then r' else None)" |
+"override_outcome _ _ = Returns\<^sub>R"
+
+adhoc_overloading override \<rightleftharpoons> override_outcome
 
 definition attr_module :: "name \<Rightarrow> cxt \<Rightarrow> var \<Rightarrow> name \<Rightarrow> ty may_fail"
 where
@@ -95,7 +97,7 @@ where
 "module_attribute \<Gamma> e x = do {
    q \<leftarrow> dotted_name e;
    case lookup \<Gamma> q of
-     Some (ModChecked q' \<Gamma>') \<Rightarrow> Some (attr_module q' \<Gamma>' x (snoc q x))
+     Some (ModChecked q' \<Gamma>') \<Rightarrow> Some (attr_module q' \<Gamma>' x (Qualified q x))
    | Some (ModStub q') \<Rightarrow> Some (Fail (SubmoduleNotImported q'))
    | _ \<Rightarrow> None
  }"
@@ -493,7 +495,7 @@ where
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtSeq s s') = do {
    R \<leftarrow> check_stmt_at \<Sigma> \<Gamma> \<zeta> s;
    case R of
-     Assigns\<^sub>R \<Delta> r \<Rightarrow> do { R' \<leftarrow> check_stmt_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) \<zeta> s'; Ok (Assigns\<^sub>R \<Delta> r \<otimes>\<^sub>R R') }
+     Assigns\<^sub>R \<Delta> r \<Rightarrow> do { R' \<leftarrow> check_stmt_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) \<zeta> s'; Ok (Assigns\<^sub>R \<Delta> r \<otimes> R') }
    | Returns\<^sub>R \<Rightarrow> Fail (Located (pos_of s') UnreachableStatement)
  }" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtMutualRegion ds) = do {
@@ -510,7 +512,7 @@ where
    \<sigma> \<leftarrow> synth_expr_at \<Sigma> \<Gamma> e;
    (\<Delta>s, \<tau>, L) \<leftarrow> match_cases \<Sigma> \<Gamma> \<sigma> (shapes \<Sigma> \<sigma> {}) (map fst bs);
    merges \<Sigma> (set (declares (StmtMatch e bs)))
-     (map2 (\<lambda>\<Delta> (_, s). do { R \<leftarrow> check_stmt_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) \<zeta> s; Ok (Assigns\<^sub>R \<Delta> None \<otimes>\<^sub>R R) }) \<Delta>s bs
+     (map2 (\<lambda>\<Delta> (_, s). do { R \<leftarrow> check_stmt_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) \<zeta> s; Ok (Assigns\<^sub>R \<Delta> None \<otimes> R) }) \<Delta>s bs
       @ (if \<tau> = TyPrim Never then []
          else [Ok (Assigns\<^sub>R fmempty
                  (if L = [] then Some (MypyCompatibility (MissingReturnMatchPartial \<tau>)) else None))]))
@@ -583,7 +585,7 @@ where
    case R of
      Assigns\<^sub>R \<Delta> r \<Rightarrow> do {
        (R', \<Sigma>'') \<leftarrow> check_top_stmt \<Sigma>' q (\<Gamma> \<otimes> \<Delta>) t';
-       Ok (Assigns\<^sub>R \<Delta> r \<otimes>\<^sub>R R', \<Sigma>'')
+       Ok (Assigns\<^sub>R \<Delta> r \<otimes> R', \<Sigma>'')
      }
    | Returns\<^sub>R \<Rightarrow> Fail (Located (last_pos t) TopLevelAssertFalse)
  }" |
