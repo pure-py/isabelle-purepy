@@ -102,7 +102,7 @@ where
        in if 0 \<le> i \<and> i < of_nat (length \<tau>s) then Ok (\<tau>s ! nat i)
           else Fail (Located p (TupleIndexOutOfRange n (length \<tau>s)))
    | TyPrim int \<Rightarrow> Ok (joins \<Sigma> \<tau>s)
-   | _ \<Rightarrow> Fail (Located p (TypeMismatch (TyPrim int) \<iota>))
+   | _ \<Rightarrow> Fail (Located p (InSubscript (TypeMismatch (TyPrim int) \<iota>)))
  }" |
 "subscript_type \<Sigma> \<sigma> int_ok _ _ _ =
   (if base_type \<sigma> = TyPrim str then do { int_ok; Ok (TyPrim str) } else Fail (NotSubscriptable \<sigma>))"

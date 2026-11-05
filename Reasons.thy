@@ -70,6 +70,25 @@ datatype reason =
   | ImportCycle "name list"
   | MypyCompatibility reason
   | Located pos reason
+  (* Reason under the judgement or statement named, for a reason which several can raise *)
+  | InModuleAttribute reason
+  | InImportedName reason
+  | InImport reason
+  | InTypeExpression reason
+  | InPattern reason
+  | InIf reason
+  | InMatch reason
+  | InSignature reason
+  | InDeclaration reason
+  | InDefs reason
+  | InBody reason
+  | InModule reason
+  | InAssignment reason
+  | InScheme reason
+  | InSubscript reason
+  | InLambdaCall reason
+  | InGenerator reason
+  | InCallee reason
 
 type_synonym 'a may_fail = "reason + 'a"
 
@@ -83,6 +102,24 @@ where
 fun locate_reason :: "pos \<Rightarrow> reason \<Rightarrow> reason"
 where
 "locate_reason p (Located p' r) = Located p' r" |
+"locate_reason p (InModuleAttribute r) = InModuleAttribute (locate_reason p r)" |
+"locate_reason p (InImportedName r) = InImportedName (locate_reason p r)" |
+"locate_reason p (InImport r) = InImport (locate_reason p r)" |
+"locate_reason p (InTypeExpression r) = InTypeExpression (locate_reason p r)" |
+"locate_reason p (InPattern r) = InPattern (locate_reason p r)" |
+"locate_reason p (InIf r) = InIf (locate_reason p r)" |
+"locate_reason p (InMatch r) = InMatch (locate_reason p r)" |
+"locate_reason p (InSignature r) = InSignature (locate_reason p r)" |
+"locate_reason p (InDeclaration r) = InDeclaration (locate_reason p r)" |
+"locate_reason p (InDefs r) = InDefs (locate_reason p r)" |
+"locate_reason p (InBody r) = InBody (locate_reason p r)" |
+"locate_reason p (InModule r) = InModule (locate_reason p r)" |
+"locate_reason p (InAssignment r) = InAssignment (locate_reason p r)" |
+"locate_reason p (InScheme r) = InScheme (locate_reason p r)" |
+"locate_reason p (InSubscript r) = InSubscript (locate_reason p r)" |
+"locate_reason p (InLambdaCall r) = InLambdaCall (locate_reason p r)" |
+"locate_reason p (InGenerator r) = InGenerator (locate_reason p r)" |
+"locate_reason p (InCallee r) = InCallee (locate_reason p r)" |
 "locate_reason p r = Located p r"
 
 definition locate :: "pos \<Rightarrow> 'a may_fail \<Rightarrow> 'a may_fail"
@@ -91,6 +128,9 @@ where
 
 lemma locate_Ok [simp]: "(locate p m = Ok x) = (m = Ok x)"
   by (cases m) (simp_all add: locate_def)
+
+lemma map_sum_id_Ok [simp]: "(map_sum f id m = Ok x) = (m = Ok x)"
+  by (cases m) simp_all
 
 definition not_type_name :: "cxt \<Rightarrow> name \<Rightarrow> reason"
 where

@@ -18,8 +18,8 @@ lemma merges_Ok: "merges \<Sigma> X ms = Ok R \<Longrightarrow> \<exists>Rs. tho
 lemma check_stmt_if:
   "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtIf e s elifs else') = do {
      check_expr_at \<Sigma> \<Gamma> e (TyPrim bool);
-     merges \<Sigma> (set (declares (StmtIf e s elifs else')))
-       (check_stmt_at \<Sigma> \<Gamma> \<zeta> s # check_elif \<Sigma> \<Gamma> \<zeta> (elifs, else'))
+     map_sum InIf id (merges \<Sigma> (set (declares (StmtIf e s elifs else')))
+       (check_stmt_at \<Sigma> \<Gamma> \<zeta> s # check_elif \<Sigma> \<Gamma> \<zeta> (elifs, else')))
    }"
   by simp
 

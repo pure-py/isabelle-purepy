@@ -116,7 +116,7 @@ where
 
 definition resolve_type :: "class_table \<Rightarrow> cxt \<Rightarrow> ty_expr \<Rightarrow> ty may_fail"
 where
-"resolve_type \<Sigma> \<Gamma> \<psi> = resolve_type' \<Sigma> \<Gamma> [] (aliases \<Gamma>) \<psi>"
+"resolve_type \<Sigma> \<Gamma> \<psi> = map_sum InTypeExpression id (resolve_type' \<Sigma> \<Gamma> [] (aliases \<Gamma>) \<psi>)"
 
 definition base :: "class_table \<Rightarrow> name \<Rightarrow> (name \<times> ty list) option"
 where

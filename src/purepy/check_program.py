@@ -6,8 +6,9 @@ from dataclasses import dataclass
 from purepy_conformance import TYPE_CHECKER_VERDICT, Classification, Exit, PurePyOutcome
 
 from . import syntax
-from .generated import Finite_Map, Option, Programs, Reasons, Syntax
-from .messages import classification, message
+from .generated import Finite_Map, Option, Programs, Syntax
+from .messages import classification, message, position
+from .rules import rule
 from .syntax import ModuleBody, Name, Program, Reason, parse_name
 
 MAIN = parse_name("__main__")
@@ -81,6 +82,7 @@ class Diagnostic:
     module: Name | None  # None for the entry module
     position: tuple[int, int | None] | None
     message: str
+    rule: str | None  # rule of the specification violated, as the conformance suite cites it
 
 
 def reason_outcome(r: Reason) -> PurePyOutcome:
@@ -89,15 +91,16 @@ def reason_outcome(r: Reason) -> PurePyOutcome:
 
 
 def diagnostic(rejection: PurePyRejects) -> Diagnostic:
+    """Rule cited only for a typing rejection, as in the conformance suite"""
     match rejection:
         case syntax.ParserRejects(module=q, line=line, col=col, msg=msg, classification=k):
             excluded = k == Classification.FOR_NOW
             outcome = PurePyOutcome.EXCLUDED_FOR_NOW if excluded else PurePyOutcome.PARSER_REJECTS
-            return Diagnostic(outcome, q, None if line is None else (line, col), msg)
-        case Programs.IllFormed(q, Reasons.Located((line, col), r)):
-            return Diagnostic(reason_outcome(r), q, (line, col), message(r))
+            return Diagnostic(outcome, q, None if line is None else (line, col), msg, None)
         case Programs.IllFormed(q, r):
-            return Diagnostic(reason_outcome(r), q, None, message(r))
+            outcome = reason_outcome(r)
+            cited = rule(r) if outcome == PurePyOutcome.TYPING_REJECTS else None
+            return Diagnostic(outcome, q, position(r), message(r), cited)
         case _:
             raise AssertionError(f"unexpected rejection: {rejection}")
 
@@ -134,4 +137,5 @@ def format_diagnostic(d: Diagnostic | None, entry_path: pathlib.Path) -> str:
         return f"{entry_path}: ok"
     path = error_path(d, entry_path)
     where = str(path) if d.position is None else f"{path}:{d.position[0]}:{d.position[1]}"
-    return f"{where}: {d.message}"
+    cited = "" if d.rule is None else f", rule {d.rule}"
+    return f"{where}: {d.message} [{d.outcome}{cited}]"

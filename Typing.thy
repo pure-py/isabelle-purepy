@@ -79,7 +79,7 @@ adhoc_overloading override \<rightleftharpoons> override_outcome
 definition attr_module :: "name \<Rightarrow> cxt \<Rightarrow> var \<Rightarrow> name \<Rightarrow> ty may_fail"
 where
 "attr_module q \<Gamma> x q' =
-  (case fmlookup \<Gamma> x of
+  map_sum InModuleAttribute id (case fmlookup \<Gamma> x of
      None \<Rightarrow> Fail (UnknownMember x q)
    | Some (Ty \<tau>) \<Rightarrow> Ok \<tau>
    | Some (ModStub q'') \<Rightarrow> Fail (SubmoduleNotImported q'')
@@ -98,7 +98,7 @@ where
    q \<leftarrow> dotted_name e;
    case lookup \<Gamma> q of
      Some (ModChecked q' \<Gamma>') \<Rightarrow> Some (attr_module q' \<Gamma>' x (Qualified q x))
-   | Some (ModStub q') \<Rightarrow> Some (Fail (SubmoduleNotImported q'))
+   | Some (ModStub q') \<Rightarrow> Some (Fail (InModuleAttribute (SubmoduleNotImported q')))
    | _ \<Rightarrow> None
  }"
 
@@ -119,23 +119,23 @@ definition lambda_args ::
   "expr located \<Rightarrow> var list \<Rightarrow> (var \<times> expr located) list \<Rightarrow> expr located list \<Rightarrow> ty may_fail list
    \<Rightarrow> cxt may_fail"
 where
-"lambda_args e xs kws es \<sigma>s = do {
+"lambda_args e xs kws es \<sigma>s = map_sum InLambdaCall id (do {
    ensure (kws = []) KeywordArgumentsNotConstructor;
    ensure (length xs = length es) (CallArityMismatch e (length xs) (length es));
    \<tau>s \<leftarrow> those_sum \<sigma>s;
    params_cxt xs \<tau>s
- }"
+ })"
 
 (* Check of a name bound at a type scheme against \<tau>; None for other expressions *)
 definition var_scheme :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> unit may_fail option"
 where
 "var_scheme \<Sigma> \<Gamma> e \<tau> =
   (case scheme_of_name \<Gamma> e of
-     Some (TyScheme \<alpha>s \<sigma>) \<Rightarrow> Some (do {
+     Some (TyScheme \<alpha>s \<sigma>) \<Rightarrow> Some (map_sum InScheme id (do {
        \<tau>s \<leftarrow> type_args_of (type_args \<Sigma> \<alpha>s \<sigma> \<tau>) \<alpha>s;
        let \<sigma>' = subst \<tau>s \<alpha>s \<sigma>;
        ensure (\<Sigma> \<turnstile> \<sigma>' <: \<tau>) (TypeMismatch \<tau> \<sigma>')
-     })
+     }))
    | None \<Rightarrow> None)"
 
 (* Type arguments for \<alpha>s inferred from the arguments that synthesise; failing that, the first failure
@@ -265,7 +265,7 @@ where
 "callee \<Sigma> \<Gamma> e es =
   (case scheme_of_name \<Gamma> (node e) of
      Some (TyScheme \<alpha>s (TyCallable \<sigma>s \<sigma>)) \<Rightarrow> do {
-       \<tau>s \<leftarrow> inferred_type_args \<Sigma> \<alpha>s \<sigma>s (map (synth_expr_at \<Sigma> \<Gamma>) es);
+       \<tau>s \<leftarrow> map_sum InCallee id (inferred_type_args \<Sigma> \<alpha>s \<sigma>s (map (synth_expr_at \<Sigma> \<Gamma>) es));
        Ok (TyCallable (map (subst \<tau>s \<alpha>s) \<sigma>s) (subst \<tau>s \<alpha>s \<sigma>))
      }
    | Some _ \<Rightarrow> undefined
@@ -355,7 +355,7 @@ where
 "quals \<Sigma> \<Gamma> (At p (Generator x e) # gs) = do {
    \<sigma> \<leftarrow> synth_expr_at \<Sigma> \<Gamma> e;
    \<tau> \<leftarrow> or_else (Located (pos_of e) (NotIterable \<sigma>)) (elem_type \<Sigma> \<sigma>);
-   ensure (x \<notin> captures gs) (Located p (CapturedGeneratorVariable x));
+   ensure (x \<notin> captures gs) (Located p (InGenerator (CapturedGeneratorVariable x)));
    \<Delta> \<leftarrow> quals \<Sigma> (\<Gamma> \<otimes> fmupd x (Ty \<tau>) fmempty) gs;
    Ok (fmupd x (Ty \<tau>) fmempty \<otimes> \<Delta>)
  }"
@@ -400,7 +400,7 @@ fun def_signature :: "class_table \<Rightarrow> cxt \<Rightarrow> func \<Rightar
 where
 "def_signature \<Sigma> \<Gamma> (Def f \<alpha>s xps \<psi> s) =
    (let \<Gamma>' = \<Gamma> \<otimes> fmconst (set \<alpha>s) TypeVar in do {
-      (case find (\<lambda>\<alpha>. \<alpha> \<in> tyvars \<Gamma>) \<alpha>s of Some \<alpha> \<Rightarrow> Fail (Redeclaration \<alpha>) | None \<Rightarrow> Ok ());
+      (case find (\<lambda>\<alpha>. \<alpha> \<in> tyvars \<Gamma>) \<alpha>s of Some \<alpha> \<Rightarrow> Fail (InSignature (Redeclaration \<alpha>)) | None \<Rightarrow> Ok ());
       \<sigma>s \<leftarrow> those_sum (map (resolve_type \<Sigma> \<Gamma>' \<circ> snd) xps);
       \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma>' \<psi>;
       Ok (TyScheme \<alpha>s (TyCallable \<sigma>s \<tau>))
@@ -446,14 +446,15 @@ and check_def_at :: "class_table \<Rightarrow> cxt \<Rightarrow> func located \<
 where
 "check_stmt \<Sigma> \<Gamma> \<zeta> StmtPass = Ok (Assigns\<^sub>R fmempty None)" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtDeclare x \<psi>) = do {
-   check_unbound \<Gamma> x; \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; Ok (Assigns\<^sub>R (fmupd x (DU \<tau>) fmempty) None)
+   map_sum InDeclaration id (check_unbound \<Gamma> x); \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>;
+   Ok (Assigns\<^sub>R (fmupd x (DU \<tau>) fmempty) None)
  }" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssign x None e) =
   (case fmlookup \<Gamma> x of
      Some (DU \<tau>) \<Rightarrow> do { check_expr_at \<Sigma> \<Gamma> e \<tau>; Ok (Assigns\<^sub>R (fmupd x (Ty \<tau>) fmempty) None) }
-   | \<theta> \<Rightarrow> Fail (assign_reason x \<theta>))" |
+   | \<theta> \<Rightarrow> Fail (InAssignment (assign_reason x \<theta>)))" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssign x (Some \<psi>) e) = do {
-   check_unbound \<Gamma> x; \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; check_expr_at \<Sigma> \<Gamma> e \<tau>;
+   map_sum InDeclaration id (check_unbound \<Gamma> x); \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; check_expr_at \<Sigma> \<Gamma> e \<tau>;
    Ok (Assigns\<^sub>R (fmupd x (Ty \<tau>) fmempty) None)
  }" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtExpr e) = do {
@@ -488,9 +489,9 @@ where
    | None \<Rightarrow> Fail ReturnOutsideFunction)" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtIf e s elifs else') = do {
    check_expr_at \<Sigma> \<Gamma> e (TyPrim bool);
-   merges \<Sigma> (set (declares (StmtIf e s elifs else'))) (check_stmt_at \<Sigma> \<Gamma> \<zeta> s
+   map_sum InIf id (merges \<Sigma> (set (declares (StmtIf e s elifs else'))) (check_stmt_at \<Sigma> \<Gamma> \<zeta> s
            # map (\<lambda>(e', s'). do { check_expr_at \<Sigma> \<Gamma> e' (TyPrim bool); check_stmt_at \<Sigma> \<Gamma> \<zeta> s' }) elifs
-           @ [case else' of Some s' \<Rightarrow> check_stmt_at \<Sigma> \<Gamma> \<zeta> s' | None \<Rightarrow> Ok (Assigns\<^sub>R fmempty None)])
+           @ [case else' of Some s' \<Rightarrow> check_stmt_at \<Sigma> \<Gamma> \<zeta> s' | None \<Rightarrow> Ok (Assigns\<^sub>R fmempty None)]))
  }" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtSeq s s') = do {
    R \<leftarrow> check_stmt_at \<Sigma> \<Gamma> \<zeta> s;
@@ -500,9 +501,9 @@ where
  }" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtMutualRegion ds) = do {
    (case redeclared node {} (map (\<lambda>d. At (pos_of d) (def_name (node d))) ds) of
-      Some f \<Rightarrow> Fail (Located (pos_of f) (Redeclaration (node f)))
+      Some f \<Rightarrow> Fail (InDefs (Located (pos_of f) (Redeclaration (node f))))
     | None \<Rightarrow> Ok ());
-   all_sum (map (\<lambda>d. locate (pos_of d) (check_unbound \<Gamma> (def_name (node d)))) ds);
+   all_sum (map (\<lambda>d. map_sum InDefs id (locate (pos_of d) (check_unbound \<Gamma> (def_name (node d))))) ds);
    \<pi>s \<leftarrow> those_sum (map (\<lambda>d. locate (pos_of d) (def_signature \<Sigma> \<Gamma> (node d))) ds);
    let \<Delta> = fmap_of_list (zip (map (def_name \<circ> node) ds) (map signature_entry \<pi>s));
    all_sum (map2 (check_def_at \<Sigma> (\<Gamma> \<otimes> \<Delta>)) ds \<pi>s);
@@ -511,11 +512,11 @@ where
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtMatch e bs) = do {
    \<sigma> \<leftarrow> synth_expr_at \<Sigma> \<Gamma> e;
    (\<Delta>s, \<tau>, L) \<leftarrow> match_cases \<Sigma> \<Gamma> \<sigma> (shapes \<Sigma> \<sigma> {}) (map fst bs);
-   merges \<Sigma> (set (declares (StmtMatch e bs)))
+   map_sum InMatch id (merges \<Sigma> (set (declares (StmtMatch e bs)))
      (map2 (\<lambda>\<Delta> (_, s). do { R \<leftarrow> check_stmt_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) \<zeta> s; Ok (Assigns\<^sub>R \<Delta> None \<otimes> R) }) \<Delta>s bs
       @ (if \<tau> = TyPrim Never then []
          else [Ok (Assigns\<^sub>R fmempty
-                 (if L = [] then Some (MypyCompatibility (MissingReturnMatchPartial \<tau>)) else None))]))
+                 (if L = [] then Some (MypyCompatibility (MissingReturnMatchPartial \<tau>)) else None))])))
  }" |
 
 "check_stmt_at \<Sigma> \<Gamma> \<zeta> (At p s) =
@@ -525,10 +526,10 @@ where
 
 "check_def \<Sigma> \<Gamma> (Def f \<alpha>s xps \<psi> s) (TyScheme \<alpha>s' (TyCallable \<sigma>s \<tau>)) =
   (let xs = map fst xps in do {
-     check_assignments_declared (set xs) (assign_targets s) (declares (node s)) (binds s);
+     map_sum InBody id (check_assignments_declared (set xs) (assign_targets s) (declares (node s)) (binds s));
      \<Delta> \<leftarrow> (case scope Unbound xs s of
              Some \<Delta> \<Rightarrow> Ok \<Delta>
-           | None \<Rightarrow> Fail (redeclaration xs (declarations s) (pat_bound s)));
+           | None \<Rightarrow> Fail (InBody (redeclaration xs (declarations s) (pat_bound s))));
      if length xs = length \<sigma>s then do {
        \<Delta>' \<leftarrow> params_cxt xs \<sigma>s;
        R \<leftarrow> check_stmt_at \<Sigma> (\<Gamma> \<otimes> fmconst (set \<alpha>s) TypeVar \<otimes> \<Delta>' \<otimes> \<Delta>) (Some \<tau>) s;
@@ -566,7 +567,7 @@ where
       | Some (q', \<psi>s) \<Rightarrow>
           (case resolve_name \<Gamma> q' of
              Some (Type D) \<Rightarrow> do { resolve_type \<Sigma> \<Gamma> (TyExprName q' \<psi>s); Ok (Some D) }
-           | _ \<Rightarrow> Fail (not_type_name \<Gamma> q')));
+           | _ \<Rightarrow> Fail (InTypeExpression (not_type_name \<Gamma> q'))));
    (case redeclared id {} (map fst \<phi>) of Some x \<Rightarrow> Fail (DuplicateField x c) | None \<Rightarrow> Ok ());
    (case base_class of
       Some D \<Rightarrow>
