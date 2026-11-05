@@ -114,6 +114,22 @@ class SyntacticallyExcluded(ParserRejects):
         self.classification = classification
 
 
+SOFT_KEYWORDS = {"match", "case", "type", "_"}
+
+
+def ident(x: str, node: ast.AST) -> str:
+    """x as an identifier of node, unless a soft keyword, which Python's syntax tree holds as an identifier
+    only where Python treats it as one"""
+    if x in SOFT_KEYWORDS:
+        raise SyntacticallyExcluded(node, f"soft keyword '{x}' as identifier", BY_DESIGN)
+    return x
+
+
+def idents(q: str, node: ast.AST) -> str:
+    """Dotted name q of node, each component an identifier"""
+    return ".".join(ident(x, node) for x in q.split("."))
+
+
 def parse(source: str, filename: str) -> ast.Module:
     """Parse, marking sequence patterns in square brackets as list patterns, since Python's syntax tree
     doesn't record the brackets"""
@@ -213,10 +229,10 @@ def lit(v: object) -> Lit:
 def name(e: ast.expr) -> Name | None:
     match e:
         case ast.Name(id=x):
-            return Syntax.Simple(x)
+            return Syntax.Simple(ident(x, e))
         case ast.Attribute(value=e_, attr=x):
             q = name(e_)
-            return None if q is None else Syntax.Qualified(q, x)
+            return None if q is None else Syntax.Qualified(q, ident(x, e))
         case _:
             return None
 
@@ -353,7 +369,7 @@ def expr_node(e: ast.expr) -> Expr:
         case ast.Name(id="print"):
             raise SyntacticallyExcluded(e, "print within expression")
         case ast.Name(id=x):
-            return Syntax.ExprVar(x)
+            return Syntax.ExprVar(ident(x, e))
         case ast.Constant(value=v):
             if not isinstance(v, (int, float, str, bool, type(None))):
                 raise SyntacticallyExcluded(e, f"{type(v).__name__} literal")
@@ -372,7 +388,7 @@ def expr_node(e: ast.expr) -> Expr:
             ks_ = [expr(k) for k in ks if k is not None]
             return Syntax.ExprDict(list(zip(ks_, [expr(v) for v in vs])))
         case ast.Attribute(value=e_, attr=x):
-            return Syntax.ExprAttribute(expr(e_), x)
+            return Syntax.ExprAttribute(expr(e_), ident(x, e))
         case ast.Subscript(value=e_, slice=e__):
             return Syntax.ExprSubscript(expr(e_), expr(e__))
         case ast.BinOp(op=op) if type(op) not in BOP:
@@ -421,7 +437,7 @@ def expr_node(e: ast.expr) -> Expr:
             k = expr(e_)
             return Syntax.ExprDictComp(k, expr(e__), qualifiers(gs))
         case ast.Lambda(args=args, body=e_):
-            xs = [a.arg for a in params(args)]
+            xs = [ident(a.arg, a) for a in params(args)]
             return Syntax.ExprLambda(xs, expr(e_))
         case ast.Set():
             raise SyntacticallyExcluded(e, "set literals")
@@ -448,7 +464,7 @@ def expr_node(e: ast.expr) -> Expr:
 def keyword(k: ast.keyword) -> tuple[str, Expr]:
     if k.arg is None:
         raise SyntacticallyExcluded(k, "dictionary unpacking in argument list")
-    return (k.arg, expr(k.value))
+    return (ident(k.arg, k), expr(k.value))
 
 
 def params(args: ast.arguments) -> list[ast.arg]:
@@ -479,7 +495,7 @@ def qualifier(g: ast.comprehension) -> list[Qualifier]:
             raise SyntacticallyExcluded(g, "async comprehensions")
         case ast.comprehension(target=ast.Name(id=x), iter=e, ifs=cs):
             return [
-                at(g.target, Syntax.Generator(x, expr(e))),
+                at(g.target, Syntax.Generator(ident(x, g.target), expr(e))),
                 *(at(c, Syntax.Guard(expr(c))) for c in cs),
             ]
         case _:
@@ -522,9 +538,9 @@ def pat_node(p: ast.pattern) -> Pat:
         case ast.MatchAs(pattern=None, name=None):
             return Syntax.PatWildcard()
         case ast.MatchAs(pattern=None, name=str(x)):
-            return Syntax.PatVar(x)
+            return Syntax.PatVar(ident(x, p))
         case ast.MatchAs(pattern=ast.pattern() as p_, name=str(x)):
-            return Syntax.PatAs(pat(p_), x)
+            return Syntax.PatAs(pat(p_), ident(x, p))
         case ast.MatchSequence(patterns=ps) if getattr(p, "list", False):
             return Syntax.PatList([pat(p_) for p_ in ps])
         case ast.MatchSequence(patterns=ps):
@@ -539,7 +555,7 @@ def pat_node(p: ast.pattern) -> Pat:
                 raise PythonRejects(
                     f"duplicate keyword {dup} in constructor pattern", *node_position(p)
                 )
-            return Syntax.PatConstr(q, (ps_, list(zip(xs, qs_))))
+            return Syntax.PatConstr(q, (ps_, list(zip([ident(x, p) for x in xs], qs_))))
         case ast.MatchMapping(rest=str()):
             raise SyntacticallyExcluded(p, "rest capture in dictionary patterns")
         case ast.MatchMapping(keys=ks, patterns=ps):
@@ -583,14 +599,14 @@ def stmt_node(s: ast.stmt) -> Stmt:
         case ast.Assign(targets=[ast.Attribute()]):
             raise SyntacticallyExcluded(s, "attribute assignment", BY_DESIGN)
         case ast.Assign(targets=[ast.Name(id=x)], value=e):
-            return Syntax.StmtAssign(x, Option.None_(), expr(e))
+            return Syntax.StmtAssign(ident(x, s), Option.None_(), expr(e))
         case ast.Assign():
             raise SyntacticallyExcluded(s, "unpacking assignment")
         case ast.AnnAssign(target=ast.Name(id=x), annotation=a, value=None):
-            return Syntax.StmtDeclare(x, annotation(a))
+            return Syntax.StmtDeclare(ident(x, s), annotation(a))
         case ast.AnnAssign(target=ast.Name(id=x), annotation=a, value=ast.expr() as e):
             psi = annotation(a)
-            return Syntax.StmtAssign(x, Option.Some(psi), expr(e))
+            return Syntax.StmtAssign(ident(x, s), Option.Some(psi), expr(e))
         case ast.AnnAssign():
             raise SyntacticallyExcluded(s, "assignment target other than a simple name", BY_DESIGN)
         case ast.Expr(value=ast.Call(func=ast.Name(id="print"), args=es, keywords=ks)):
@@ -705,8 +721,8 @@ def func(d: ast.stmt) -> Func:
     if d.returns is None:
         raise SyntacticallyExcluded(d, "unannotated return type", BY_DESIGN)
     tau = annotation(d.returns)
-    xs = [(a.arg, annotation(a.annotation)) for a in args]
-    return at(d, Syntax.Def(d.name, alphas, xs, tau, seq(d.body)))
+    xs = [(ident(a.arg, a), annotation(a.annotation)) for a in args]
+    return at(d, Syntax.Def(ident(d.name, d), alphas, xs, tau, seq(d.body)))
 
 
 def type_params(node: ast.FunctionDef | ast.ClassDef | ast.TypeAlias) -> list[str]:
@@ -722,7 +738,7 @@ def type_param(param: ast.type_param) -> str:
         case ast.TypeVar(name=alpha, bound=ast.Tuple()):
             raise SyntacticallyExcluded(param, f"constraints on type parameter {alpha}")
         case ast.TypeVar(name=alpha, bound=None):
-            return alpha
+            return ident(alpha, param)
         case ast.TypeVar(name=alpha):
             raise SyntacticallyExcluded(param, f"bound on type parameter {alpha}")
         case ast.ParamSpec(name=alpha):
@@ -762,10 +778,10 @@ def type_def_node(chi: ast.stmt) -> TypeDef:
                     fields = []
                 case _:
                     fields = [field(t) for t in body]
-            return Syntax.Dataclass(c, alphas, base, fields)
+            return Syntax.Dataclass(ident(c, chi), alphas, base, fields)
         case ast.TypeAlias(name=ast.Name(id=x), value=psi):
             alphas = type_params(chi)
-            return Syntax.TypeStmt(x, alphas, annotation(psi))
+            return Syntax.TypeStmt(ident(x, chi), alphas, annotation(psi))
         case _:
             raise AssertionError(f"unexpected type definition: {type(chi).__name__}")
 
@@ -773,7 +789,7 @@ def type_def_node(chi: ast.stmt) -> TypeDef:
 def field(t: ast.stmt) -> tuple[str, TyExpr]:
     match t:
         case ast.AnnAssign(target=ast.Name(id=x), annotation=a, value=None):
-            return (x, annotation(a))
+            return (ident(x, t), annotation(a))
         case ast.AnnAssign(target=ast.Name(), value=ast.expr()):
             raise SyntacticallyExcluded(t, "field default values")
         case ast.AnnAssign():
@@ -837,7 +853,7 @@ def import_(iota: ast.stmt) -> Import:
 def import_node(iota: ast.stmt) -> Import:
     match iota:
         case ast.Import(names=[ast.alias(name=q, asname=None)]):
-            return Syntax.Import(parse_name(q))
+            return Syntax.Import(parse_name(idents(q, iota)))
         case ast.Import(names=[_]):
             raise SyntacticallyExcluded(iota, "import-as")
         case ast.Import():
@@ -852,7 +868,9 @@ def import_node(iota: ast.stmt) -> Import:
                     raise SyntacticallyExcluded(iota, "from M import *", BY_DESIGN)
                 if alias.asname is not None:
                     raise SyntacticallyExcluded(iota, "from-import-as")
-            return Syntax.FromImport(parse_name(q), [a.name for a in aliases])
+            return Syntax.FromImport(
+                parse_name(idents(q, iota)), [ident(a.name, a) for a in aliases]
+            )
         case _:
             raise AssertionError(f"unexpected import: {type(iota).__name__}")
 
