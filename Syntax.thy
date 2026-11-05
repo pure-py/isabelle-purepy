@@ -145,6 +145,11 @@ where
 "variables (Simple x) = [x]" |
 "variables (Qualified q x) = variables q @ [x]"
 
+(* Name written in a theory *)
+definition name_of :: "string list \<Rightarrow> name"
+where
+"name_of xs = foldl (\<lambda>q x. Qualified q (var x)) (Simple (var (hd xs))) (tl xs)"
+
 fun prefix_of :: "name \<Rightarrow> name \<Rightarrow> bool" (infix "\<preceq>" 50)
 where
 "q \<preceq> Simple x = (q = Simple x)" |
@@ -164,8 +169,8 @@ definition unique_to :: "name \<Rightarrow> name \<Rightarrow> name list"
 where
 "unique_to q' q = filter (\<lambda>p. \<not> p \<preceq> q) (proper_prefixes q')"
 
-definition builtins :: name where "builtins = Simple (var ''builtins'')"
-definition main :: name where "main = Simple (var ''__main__'')"
+definition builtins :: name where "builtins = name_of [''builtins'']"
+definition main :: name where "main = name_of [''__main__'']"
 
 fun def_name :: "func \<Rightarrow> var"
 where

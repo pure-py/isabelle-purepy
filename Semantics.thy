@@ -363,14 +363,13 @@ where
         @ map (\<lambda>y. (y, VPredef (Qualified builtins y)))
             (map prim_name [NoneType, object, bool, int, float, str]
              @ map var [''list'', ''dict'', ''tuple'']))),
-     (Simple (var ''sys''), fmap_of_list
+     (name_of [''sys''], fmap_of_list
        [name ''sys'', (var ''argv'', VList (map (VLit \<circ> LitString) \<A>)), (var ''exit'', VPrim PrimExit)]),
-     (Simple (var ''typing''), fmap_of_list
-       (name ''typing'' # map (\<lambda>y. (y, VPredef (Qualified (Simple (var ''typing'')) y)))
+     (name_of [''typing''], fmap_of_list
+       (name ''typing'' # map (\<lambda>y. (y, VPredef (Qualified (name_of [''typing'']) y)))
           [var ''Callable'', var ''Literal'', prim_name Never, prim_name Sized])),
-     (Simple (var ''dataclasses''), fmap_of_list
-       [name ''dataclasses'',
-        (var ''dataclass'', VPredef (Qualified (Simple (var ''dataclasses'')) (var ''dataclass'')))])])"
+     (name_of [''dataclasses''], fmap_of_list
+       [name ''dataclasses'', (var ''dataclass'', VPredef (name_of [''dataclasses'', ''dataclass'']))])])"
 
 function (sequential) extend_val :: "val \<Rightarrow> val \<Rightarrow> val"
 and extend_env :: "env \<Rightarrow> env \<Rightarrow> env"

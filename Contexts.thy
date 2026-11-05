@@ -73,13 +73,13 @@ where
        (var ''round'', Ty (TyCallable [TyPrim float] (TyPrim int)))]
       @ map (\<lambda>\<nu>. (prim_name \<nu>, PredefName)) [NoneType, object, bool, int, float, str]
       @ map (\<lambda>x. (var x, PredefName)) [''list'', ''dict'', ''tuple''])),
-   (Simple (var ''sys''), fmap_of_list
+   (name_of [''sys''], fmap_of_list
      [name_binding, (var ''argv'', Ty (TyList (TyPrim str))),
       (var ''exit'', Ty (TyCallable [TyPrim int] (TyPrim Never)))]),
-   (Simple (var ''typing''), fmap_of_list
+   (name_of [''typing''], fmap_of_list
      [name_binding, (var ''Callable'', PredefName), (var ''Literal'', PredefName),
       (prim_name Never, PredefName), (prim_name Sized, PredefName)]),
-   (Simple (var ''dataclasses''),
+   (name_of [''dataclasses''],
     fmap_of_list [name_binding, (var ''dataclass'', PredefName)])]"
 
 function (sequential) extend_entry :: "cxt_entry \<Rightarrow> cxt_entry \<Rightarrow> cxt_entry"
