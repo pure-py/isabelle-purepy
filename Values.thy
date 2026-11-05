@@ -135,18 +135,17 @@ where
 "is_nan_val (VLit (LitFloat x)) = is_nan x" |
 "is_nan_val _ = False"
 
-(* Float of an int or float value; None otherwise *)
-fun as_float :: "val \<Rightarrow> float option"
+fun is_number :: "val \<Rightarrow> bool"
 where
-"as_float (VLit (LitInt n)) = Some (float_of_int n)" |
-"as_float (VLit (LitFloat x)) = Some x" |
-"as_float _ = None"
+"is_number (VLit (LitInt _)) = True" |
+"is_number (VLit (LitFloat _)) = True" |
+"is_number _ = False"
 
 (* Value of a number as an extended real; None for nan or a non-number *)
 fun as_number :: "val \<Rightarrow> ereal option"
 where
 "as_number (VLit (LitInt n)) = Some (ereal (real_of_int n))" |
-"as_number (VLit (LitFloat x)) = float_value x" |
+"as_number (VLit (LitFloat x)) = real_of_float x" |
 "as_number _ = None"
 
 fun type_of :: "val \<Rightarrow> ty"
@@ -174,10 +173,10 @@ where
 fun eq_lit :: "lit \<Rightarrow> lit \<Rightarrow> bool result"
 where
 "eq_lit (LitInt n) (LitInt n') = Val (n = n')" |
-"eq_lit (LitInt n) (LitFloat x') = Val (float_value x' = Some (ereal (real_of_int n)))" |
-"eq_lit (LitFloat x) (LitInt n') = Val (float_value x = Some (ereal (real_of_int n')))" |
+"eq_lit (LitInt n) (LitFloat x') = Val (real_of_float x' = Some (ereal (real_of_int n)))" |
+"eq_lit (LitFloat x) (LitInt n') = Val (real_of_float x = Some (ereal (real_of_int n')))" |
 "eq_lit (LitFloat x) (LitFloat x') =
-  (if is_nan x \<and> is_nan x' then Aborts Undef else Val (float_value x = float_value x'))" |
+  (if is_nan x \<and> is_nan x' then Aborts Undef else Val (real_of_float x = real_of_float x'))" |
 "eq_lit (LitString w) (LitString w') = Val (w = w')" |
 "eq_lit (LitBool b) (LitBool b') = Val (b = b')" |
 "eq_lit LitNone LitNone = Val True" |
@@ -289,26 +288,56 @@ definition int_division :: "(int \<Rightarrow> int \<Rightarrow> int) \<Rightarr
 where
 "int_division f v v' = (if the_int v' = 0 then Aborts ZeroDivisionError else int_arith f v v')"
 
+definition float_of :: "ereal \<Rightarrow> float result"
+where
+"float_of x = (if is_infinite (fl x) then Aborts OverflowError else Val (fl x))"
+
+abbreviation float_val :: "float result \<Rightarrow> val result"
+where "float_val r \<equiv> mlet r (\<lambda>x. Val (VLit (LitFloat x)))"
+
+(* Operand of an operator expecting a float, with an integer converted *)
+fun to_float :: "val \<Rightarrow> float result"
+where
+"to_float (VLit (LitInt n)) = float_of (ereal (real_of_int n))" |
+"to_float (VLit (LitFloat x)) = Val x"
+
+definition float_operands :: "val \<Rightarrow> val \<Rightarrow> (float \<times> float) result"
+where
+"float_operands v v' = mlet (to_float v) (\<lambda>x. mlet (to_float v') (\<lambda>x'. Val (x, x')))"
+
 definition float_arith :: "(float \<Rightarrow> float \<Rightarrow> float) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
 where
-"float_arith g v v' = Val (VLit (LitFloat (g (the (as_float v)) (the (as_float v')))))"
+"float_arith g v v' = mlet (float_operands v v') (\<lambda>(x, x'). Val (VLit (LitFloat (g x x'))))"
 
 definition float_division :: "(float \<Rightarrow> float \<Rightarrow> float) \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
 where
-"float_division g v v' = (if as_number v' = Some 0 then Aborts ZeroDivisionError else float_arith g v v')"
+"float_division g v v' =
+  mlet (float_operands v v')
+    (\<lambda>(x, x'). if real_of_float x' = Some 0 then Aborts ZeroDivisionError else Val (VLit (LitFloat (g x x'))))"
+
+(* Exact quotient of integers, rounded *)
+definition int_quotient :: "val \<Rightarrow> val \<Rightarrow> val result"
+where
+"int_quotient v v' =
+  (if the_int v' = 0 then Aborts ZeroDivisionError
+   else float_val (float_of (ereal (real_of_int (the_int v) / real_of_int (the_int v')))))"
+
+(* Exact power of a number by an integer exponent, rounded *)
+definition float_power :: "val \<Rightarrow> val \<Rightarrow> val result"
+where
+"float_power v v' =
+  mlet (to_float v)
+    (\<lambda>x. let n = the_int v'; y = fl (the (real_of_float x) powi n) in
+         if real_of_float x = Some 0 \<and> n < 0 then Aborts ZeroDivisionError
+         else if \<not> is_infinite x \<and> is_infinite y then Aborts Undef
+         else Val (VLit (LitFloat y)))"
 
 definition int_power :: "val \<Rightarrow> val \<Rightarrow> val result"
 where
 "int_power v v' =
   (if the_int v' \<ge> 0 then int_arith (\<lambda>n n'. n ^ nat n') v v'
    else if the_int v = 0 then Aborts ZeroDivisionError
-   else float_arith float_pow v v')"
-
-definition float_power :: "val \<Rightarrow> val \<Rightarrow> val result"
-where
-"float_power v v' =
-  (if as_number v = Some 0 \<and> (\<exists>y. as_number v' = Some y \<and> y < 0) then Aborts ZeroDivisionError
-   else float_arith float_pow v v')"
+   else float_power v v')"
 
 definition concat_str :: "val \<Rightarrow> val \<Rightarrow> val result"
 where
@@ -349,12 +378,12 @@ where
 "prim_meaning PrimRound [VLit (LitBool _)] = Aborts Excluded" |
 "prim_meaning PrimRound [VLit (LitInt n)] = Val (VLit (LitInt n))" |
 "prim_meaning PrimRound [VLit (LitFloat x)] =
-  (case float_value x of
+  (case real_of_float x of
      None \<Rightarrow> Aborts ValueError
    | Some (ereal r) \<Rightarrow> Val (VLit (LitInt (round_even r)))
    | Some _ \<Rightarrow> Aborts OverflowError)" |
 "prim_meaning PrimRound [v, v'] =
-  (if (as_float v \<noteq> None \<or> is_bool v) \<and>
+  (if (is_number v \<or> is_bool v) \<and>
       (case v' of VLit (LitInt _) \<Rightarrow> True | VLit (LitBool _) \<Rightarrow> True | VLit LitNone \<Rightarrow> True | _ \<Rightarrow> False)
    then Aborts Excluded else Aborts TypeError)" |
 "prim_meaning PrimExit [VLit (LitInt n)] = Aborts (SystemExit n)" |
@@ -422,7 +451,9 @@ where
    overload (TyPrim int) (TyPrim str) (\<lambda>v v'. repeat_str v' v),
    overload (TyList (TyPrim object)) (TyPrim int) repeat_list,
    overload (TyPrim int) (TyList (TyPrim object)) (\<lambda>v v'. repeat_list v' v)]" |
-"overloads BOpDiv = [overload (TyPrim float) (TyPrim float) (float_division float_div)]" |
+"overloads BOpDiv =
+  [overload (TyPrim int) (TyPrim int) int_quotient,
+   overload (TyPrim float) (TyPrim float) (float_division float_div)]" |
 "overloads BOpFloorDiv =
   [overload (TyPrim int) (TyPrim int) (int_division (div)),
    overload (TyPrim float) (TyPrim float) (float_division float_floordiv)]" |
@@ -430,7 +461,7 @@ where
   [overload (TyPrim int) (TyPrim int) (int_division (mod)),
    overload (TyPrim float) (TyPrim float) (float_division float_mod)]" |
 "overloads BOpPow =
-  [overload (TyPrim int) (TyPrim int) int_power, overload (TyPrim float) (TyPrim float) float_power]" |
+  [overload (TyPrim int) (TyPrim int) int_power, overload (TyPrim float) (TyPrim int) float_power]" |
 "overloads BOpBitOr = []"
 
 fun select :: "overload list \<Rightarrow> val \<Rightarrow> val \<Rightarrow> val result"
