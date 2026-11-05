@@ -348,4 +348,14 @@ qed
 
 end
 
+context loading
+begin
+
+theorem type_soundness:
+  assumes "check_module \<M> [] predefined_classes main main = Ok (\<Gamma>, \<Sigma>)" and "eval_program \<A> vs \<kappa>"
+  shows "\<kappa> \<notin> {TypeError, AttributeError, NameError, Excluded}"
+  sorry
+
+end
+
 end
