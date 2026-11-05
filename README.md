@@ -71,30 +71,30 @@ Run the `Release` GitHub Action manually. The version number of a release is tha
 ## Theories
 
 <!-- theories -->
-| File                        | Content                                                                        |
-|-----------------------------|--------------------------------------------------------------------------------|
-| `Util.thy`                  | Shared utilities                                                               |
-| `Floats.thy`                | Floats as an abstract type with uninterpreted arithmetic                       |
-| `Strings.thy`               | Strings and identifiers as lists of Unicode code points                        |
-| `Positions.thy`             | Syntax nodes with their positions in the source                                |
-| `Syntax.thy`                | Abstract syntax and syntactic analyses                                         |
-| `Contexts.thy`              | Context entries, class tables, name resolution, predefined modules, programs   |
-| `Reasons.thy`               | Reasons for ill-formedness                                                     |
-| `Types.thy`                 | Type resolution, substitution and class definitions                            |
-| `Values.thy`                | Values, results and functions on values                                        |
-| `Semantics.thy`             | Evaluation judgements                                                          |
-| `Determinism.thy`           | Inversion lemmas and determinism of evaluation                                 |
-| `Subtyping.thy`             | Subtyping, join and meet; element, subscript and attribute types               |
-| `Shapes.thy`                | Heads and shapes for pattern matching; head and shape typing; shapes of a type |
-| `Patterns.thy`              | Pattern checking; matched and remaining types of patterns                      |
-| `Matching.thy`              | Splitting of shapes; matching of patterns against shapes                       |
-| `Operators.thy`             | Equality types and operator overloads                                          |
-| `Typing.thy`                | Static outcomes; typing of expressions, statements and type definitions        |
-| `Programs.thy`              | Typing of imports, modules and programs                                        |
-| `Examples.thy`              | Example evaluations                                                            |
-| `python/Codegen.thy`        | Operator resolution and subtyping in executable form; Python generation        |
-| `soundness/ValueTyping.thy` | Value and environment typing                                                   |
-| `soundness/Expressions.thy` | Soundness of expression evaluation                                             |
-| `soundness/Statements.thy`  | Soundness of statement evaluation                                              |
-| `soundness/Soundness.thy`   | Type soundness                                                                 |
+| File                        | Content                                                                         |
+|-----------------------------|---------------------------------------------------------------------------------|
+| `Util.thy`                  | Shared utilities                                                                |
+| `Floats.thy`                | Floats as an abstract type, with rounding and IEEE 754 arithmetic uninterpreted |
+| `Strings.thy`               | Strings and identifiers as lists of Unicode code points                         |
+| `Positions.thy`             | Syntax nodes with their positions in the source                                 |
+| `Syntax.thy`                | Abstract syntax and syntactic analyses                                          |
+| `Contexts.thy`              | Context entries, class tables, name resolution, predefined modules, programs    |
+| `Reasons.thy`               | Reasons for ill-formedness                                                      |
+| `Types.thy`                 | Type resolution, substitution and class definitions                             |
+| `Values.thy`                | Values, results and functions on values                                         |
+| `Semantics.thy`             | Evaluation judgements                                                           |
+| `Determinism.thy`           | Inversion lemmas and determinism of evaluation                                  |
+| `Subtyping.thy`             | Subtyping, join and meet; element, subscript and attribute types                |
+| `Shapes.thy`                | Heads and shapes for pattern matching; head and shape typing; shapes of a type  |
+| `Patterns.thy`              | Pattern checking; matched and remaining types of patterns                       |
+| `Matching.thy`              | Splitting of shapes; matching of patterns against shapes                        |
+| `Operators.thy`             | Equality types and operator overloads                                           |
+| `Typing.thy`                | Static outcomes; typing of expressions, statements and type definitions         |
+| `Programs.thy`              | Typing of imports, modules and programs                                         |
+| `Examples.thy`              | Example evaluations                                                             |
+| `python/Codegen.thy`        | Operator resolution and subtyping in executable form; Python generation         |
+| `soundness/ValueTyping.thy` | Value and environment typing                                                    |
+| `soundness/Expressions.thy` | Soundness of expression evaluation                                              |
+| `soundness/Statements.thy`  | Soundness of statement evaluation                                               |
+| `soundness/Soundness.thy`   | Type soundness                                                                  |
 <!-- /theories -->
