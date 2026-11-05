@@ -8,8 +8,8 @@ definition locate_in :: "name \<Rightarrow> pos \<Rightarrow> (name \<times> rea
 where
 "locate_in q p = map_sum (\<lambda>(q', r). (q', if q' = q then locate_reason p r else r)) id"
 
-(* V holds the modules being checked, in order, so that an import cycle is rejected; failure paired
-   with the module in which it occurs *)
+(* V holds the modules being checked, in order, so that import cycles are rejected; failures paired
+   with the modules in which they occur *)
 function (sequential)
   check_module ::
     "program \<Rightarrow> name list \<Rightarrow> class_table \<Rightarrow> name \<Rightarrow> name \<Rightarrow> (name \<times> reason) + cxt \<times> class_table" and

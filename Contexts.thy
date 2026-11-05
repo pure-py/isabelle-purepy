@@ -3,7 +3,7 @@ theory Contexts
   imports Syntax
 begin
 
-(* A possibly unassigned entry records whether its variable is declared in a branch, for error messages only *)
+(* Possibly unassigned entries record whether the variable is declared in a branch, for error messages only *)
 datatype cxt_entry =
     Ty ty
   | DU ty
