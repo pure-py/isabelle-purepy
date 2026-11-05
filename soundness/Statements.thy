@@ -45,7 +45,7 @@ qed
 lemma check_seq:
   "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtSeq s s') = Ok R
   \<Longrightarrow> \<exists>\<Delta> r R'. check_stmt_at \<Sigma> \<Gamma> \<zeta> s = Ok (Assigns\<^sub>R \<Delta> r) \<and> check_stmt_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) \<zeta> s' = Ok R'
-     \<and> R = Assigns\<^sub>R \<Delta> r \<otimes>\<^sub>R R'"
+     \<and> R = Assigns\<^sub>R \<Delta> r \<otimes> R'"
   by (auto simp: bind_sum_def split: sum.splits static_outcome.splits)
 
 context evaluation
@@ -350,7 +350,7 @@ lemma if_nonbool_sound:
 
 lemma match_sound:
   "\<lbrakk> sound_expr \<rho> (node e) (Val v) ; dispatch \<rho> v cases = Val (\<rho>', s') ; sound_stmt (\<rho> \<otimes> \<rho>') (node s') o \<rbrakk>
-  \<Longrightarrow> sound_stmt \<rho> (StmtMatch e cases) (assigns\<^sub>o \<rho>' \<otimes>\<^sub>o o)"
+  \<Longrightarrow> sound_stmt \<rho> (StmtMatch e cases) (assigns\<^sub>o \<rho>' \<otimes> o)"
   sorry
 
 lemma match_fail_sound: "sound_expr \<rho> (node e) (Aborts \<kappa>) \<Longrightarrow> sound_stmt \<rho> (StmtMatch e cases) (aborts\<^sub>o \<kappa>)"
@@ -363,19 +363,19 @@ lemma match_abort_sound:
 
 lemma seq_sound:
   assumes "sound_stmt \<rho> (node s) (us, Assigns \<rho>')" and "sound_stmt (\<rho> \<otimes> \<rho>') (node s') o"
-  shows "sound_stmt \<rho> (StmtSeq s s') ((us, Assigns \<rho>') \<otimes>\<^sub>o o)"
+  shows "sound_stmt \<rho> (StmtSeq s s') ((us, Assigns \<rho>') \<otimes> o)"
   unfolding sound_stmt_def
 proof (intro allI impI)
   fix \<eta> \<Gamma> \<zeta> R
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtSeq s s') = Ok R"
   from check_seq[OF chk] obtain \<Delta> r R' where chk1: "check_stmt_at \<Sigma> \<Gamma> \<zeta> s = Ok (Assigns\<^sub>R \<Delta> r)"
-    and chk2: "check_stmt_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) \<zeta> s' = Ok R'" and R: "R = Assigns\<^sub>R \<Delta> r \<otimes>\<^sub>R R'" by blast
+    and chk2: "check_stmt_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) \<zeta> s' = Ok R'" and R: "R = Assigns\<^sub>R \<Delta> r \<otimes> R'" by blast
   have o1: "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (us, Assigns \<rho>') (Assigns\<^sub>R \<Delta> r)"
     using assms(1) env ret chk1 by (rule sound_stmt_at)
   then have env': "\<eta> \<turnstile> \<rho> \<otimes> \<rho>' : \<Gamma> \<otimes> \<Delta>" and dom: "fmdom \<rho>' |\<subseteq>| fmdom \<Delta>" by simp_all
   have o2: "wf_outcome \<eta> (\<rho> \<otimes> \<rho>') (\<Gamma> \<otimes> \<Delta>) \<zeta> o R'" using assms(2) env' ret chk2 by (rule sound_stmt_at)
   obtain vs' \<omega>' where o: "o = (vs', \<omega>')" by (cases o)
-  show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> ((us, Assigns \<rho>') \<otimes>\<^sub>o o) R"
+  show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> ((us, Assigns \<rho>') \<otimes> o) R"
   proof (cases \<omega>')
     case (Assigns \<rho>'')
     with o2 o obtain \<Delta>' where "bindings_of R' = Some \<Delta>'" and "fmdom \<rho>'' |\<subseteq>| fmdom \<Delta>'"

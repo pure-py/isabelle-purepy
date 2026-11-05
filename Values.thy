@@ -63,12 +63,14 @@ where
 
 adhoc_overloading mlet \<rightleftharpoons> mlet_result mlet_outcome
 
-fun seq_compose :: "outcome \<Rightarrow> outcome \<Rightarrow> outcome" (infixl "\<otimes>\<^sub>o" 100)
+fun seq_compose :: "outcome \<Rightarrow> outcome \<Rightarrow> outcome"
 where
-"(vs, Returns v) \<otimes>\<^sub>o o = (vs, Returns v)" |
-"(vs, Aborts\<^sub>\<omega> \<kappa>) \<otimes>\<^sub>o o = (vs, Aborts\<^sub>\<omega> \<kappa>)" |
-"(vs, Assigns \<rho>) \<otimes>\<^sub>o (vs', Assigns \<rho>') = (vs @ vs', Assigns (\<rho> \<otimes> \<rho>'))" |
-"(vs, Assigns \<rho>) \<otimes>\<^sub>o (vs', \<omega>) = (vs @ vs', \<omega>)"
+"seq_compose (vs, Returns v) o = (vs, Returns v)" |
+"seq_compose (vs, Aborts\<^sub>\<omega> \<kappa>) o = (vs, Aborts\<^sub>\<omega> \<kappa>)" |
+"seq_compose (vs, Assigns \<rho>) (vs', Assigns \<rho>') = (vs @ vs', Assigns (\<rho> \<otimes> \<rho>'))" |
+"seq_compose (vs, Assigns \<rho>) (vs', \<omega>) = (vs @ vs', \<omega>)"
+
+adhoc_overloading override \<rightleftharpoons> seq_compose
 
 fun result_of :: "completion \<Rightarrow> val result"
 where

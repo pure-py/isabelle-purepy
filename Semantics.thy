@@ -5,12 +5,14 @@ begin
 
 datatype match_result = Match env | NoMatch | MatchAborts termination_kind
 
-fun seq_compose_match :: "match_result \<Rightarrow> match_result \<Rightarrow> match_result" (infixl "\<otimes>\<^sub>m" 100)
+fun seq_compose_match :: "match_result \<Rightarrow> match_result \<Rightarrow> match_result"
 where
-"Match \<rho> \<otimes>\<^sub>m Match \<rho>' = Match (\<rho> \<otimes> \<rho>')" |
-"Match \<rho> \<otimes>\<^sub>m m = m" |
-"NoMatch \<otimes>\<^sub>m m = NoMatch" |
-"MatchAborts \<kappa> \<otimes>\<^sub>m m = MatchAborts \<kappa>"
+"seq_compose_match (Match \<rho>) (Match \<rho>') = Match (\<rho> \<otimes> \<rho>')" |
+"seq_compose_match (Match \<rho>) m = m" |
+"seq_compose_match NoMatch m = NoMatch" |
+"seq_compose_match (MatchAborts \<kappa>) m = MatchAborts \<kappa>"
+
+adhoc_overloading override \<rightleftharpoons> seq_compose_match
 
 (* Name a case hypothesis IH when it contains an induction predicate, and hyps otherwise, following a rule
    without parameters. The induction method also takes the free variables among the conclusion's arguments for
@@ -51,7 +53,7 @@ where
    else case eq (VLit l) v of Val True \<Rightarrow> Match \<epsilon> | Val False \<Rightarrow> NoMatch | Aborts \<kappa> \<Rightarrow> MatchAborts \<kappa>)" |
 "match \<rho> (PatVar x) v = Match (fmupd x v \<epsilon>)" |
 "match \<rho> PatWildcard v = Match \<epsilon>" |
-"match \<rho> (PatAs p x) v = match \<rho> (node p) v \<otimes>\<^sub>m Match (fmupd x v \<epsilon>)" |
+"match \<rho> (PatAs p x) v = match \<rho> (node p) v \<otimes> Match (fmupd x v \<epsilon>)" |
 "match \<rho> (PatList ps) (VList vs) = (if length ps = length vs then match_all \<rho> ps vs else NoMatch)" |
 "match \<rho> (PatList ps) (VTuple vs) = MatchAborts Excluded" |
 "match \<rho> (PatTuple ps) (VTuple vs) = (if length ps = length vs then match_all \<rho> ps vs else NoMatch)" |
@@ -72,13 +74,13 @@ where
          | _ \<Rightarrow> NoMatch))" |
 "match \<rho> _ _ = NoMatch" |
 
-"match_all \<rho> (p # ps) (v # vs) = match \<rho> (node p) v \<otimes>\<^sub>m match_all \<rho> ps vs" |
+"match_all \<rho> (p # ps) (v # vs) = match \<rho> (node p) v \<otimes> match_all \<rho> ps vs" |
 "match_all \<rho> _ _ = Match \<epsilon>" |
 
-"match_dict \<rho> ((w, p) # kps) \<delta> = match \<rho> (node p) (the (map_of \<delta> w)) \<otimes>\<^sub>m match_dict \<rho> kps \<delta>" |
+"match_dict \<rho> ((w, p) # kps) \<delta> = match \<rho> (node p) (the (map_of \<delta> w)) \<otimes> match_dict \<rho> kps \<delta>" |
 "match_dict \<rho> [] \<delta> = Match \<epsilon>" |
 
-"match_kws \<rho> ((y, p) # kps) zvs = match \<rho> (node p) (the (map_of zvs y)) \<otimes>\<^sub>m match_kws \<rho> kps zvs" |
+"match_kws \<rho> ((y, p) # kps) zvs = match \<rho> (node p) (the (map_of zvs y)) \<otimes> match_kws \<rho> kps zvs" |
 "match_kws \<rho> [] zvs = Match \<epsilon>" |
 
 "match_fields \<rho> C ps kps zvs =
@@ -86,7 +88,7 @@ where
    else
      let ys = field_names \<Sigma> C; n = length ps in
      if field_map C ps kps \<noteq> None \<and> set ys \<subseteq> set (map fst zvs)
-     then match_all \<rho> ps (map (\<lambda>y. the (map_of zvs y)) (take n ys)) \<otimes>\<^sub>m match_kws \<rho> kps zvs
+     then match_all \<rho> ps (map (\<lambda>y. the (map_of zvs y)) (take n ys)) \<otimes> match_kws \<rho> kps zvs
      else if length ys < n \<or> (\<exists>y \<in> set (map fst kps). y \<in> set (take n ys))
      then MatchAborts TypeError
      else MatchAborts Excluded)"
@@ -275,12 +277,12 @@ EvalIfNonBool:
   "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; v \<notin> {true, false} \<rbrakk> \<Longrightarrow> \<rho>, StmtIf e s elifs else' \<Rightarrow>\<^sub>s aborts\<^sub>o Excluded" |
 EvalMatch:
   "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; dispatch \<rho> v cases = Val (\<rho>', s') ; \<rho> \<otimes> \<rho>', node s' \<Rightarrow>\<^sub>s o \<rbrakk>
-  \<Longrightarrow> \<rho>, StmtMatch e cases \<Rightarrow>\<^sub>s assigns\<^sub>o \<rho>' \<otimes>\<^sub>o o" |
+  \<Longrightarrow> \<rho>, StmtMatch e cases \<Rightarrow>\<^sub>s assigns\<^sub>o \<rho>' \<otimes> o" |
 EvalMatchFail: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtMatch e cases \<Rightarrow>\<^sub>s aborts\<^sub>o \<kappa>" |
 EvalMatchAbort:
   "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; dispatch \<rho> v cases = Aborts \<kappa> \<rbrakk> \<Longrightarrow> \<rho>, StmtMatch e cases \<Rightarrow>\<^sub>s aborts\<^sub>o \<kappa>" |
 EvalSeq: "\<lbrakk> \<rho>, node s \<Rightarrow>\<^sub>s (us, Assigns \<rho>') ; \<rho> \<otimes> \<rho>', node s' \<Rightarrow>\<^sub>s o \<rbrakk>
-  \<Longrightarrow> \<rho>, StmtSeq s s' \<Rightarrow>\<^sub>s (us, Assigns \<rho>') \<otimes>\<^sub>o o" |
+  \<Longrightarrow> \<rho>, StmtSeq s s' \<Rightarrow>\<^sub>s (us, Assigns \<rho>') \<otimes> o" |
 EvalSeqReturn: "\<rho>, node s \<Rightarrow>\<^sub>s (us, Returns v) \<Longrightarrow> \<rho>, StmtSeq s s' \<Rightarrow>\<^sub>s (us, Returns v)" |
 EvalSeqFail: "\<rho>, node s \<Rightarrow>\<^sub>s (us, Aborts\<^sub>\<omega> \<kappa>) \<Longrightarrow> \<rho>, StmtSeq s s' \<Rightarrow>\<^sub>s (us, Aborts\<^sub>\<omega> \<kappa>)" |
 
@@ -342,7 +344,7 @@ inductive eval_top :: "name \<Rightarrow> env \<Rightarrow> top_stmt \<Rightarro
 where
 EvalTopStmt: "\<rho>, node s \<Rightarrow>\<^sub>s o \<Longrightarrow> q, \<rho>, Stmt s \<Rightarrow>\<^sub>t o" |
 EvalTopSeq:
-  "\<lbrakk> q, \<rho>, t \<Rightarrow>\<^sub>t (us, Assigns \<rho>') ; q, \<rho> \<otimes> \<rho>', t' \<Rightarrow>\<^sub>t o \<rbrakk> \<Longrightarrow> q, \<rho>, TopSeq t t' \<Rightarrow>\<^sub>t (us, Assigns \<rho>') \<otimes>\<^sub>o o" |
+  "\<lbrakk> q, \<rho>, t \<Rightarrow>\<^sub>t (us, Assigns \<rho>') ; q, \<rho> \<otimes> \<rho>', t' \<Rightarrow>\<^sub>t o \<rbrakk> \<Longrightarrow> q, \<rho>, TopSeq t t' \<Rightarrow>\<^sub>t (us, Assigns \<rho>') \<otimes> o" |
 EvalTopSeqFail: "q, \<rho>, t \<Rightarrow>\<^sub>t (us, Aborts\<^sub>\<omega> \<kappa>) \<Longrightarrow> q, \<rho>, TopSeq t t' \<Rightarrow>\<^sub>t (us, Aborts\<^sub>\<omega> \<kappa>)" |
 EvalTypes:
   "q, \<rho>, TypeDefs \<chi>s \<Rightarrow>\<^sub>t
@@ -371,21 +373,23 @@ where
         (var ''dataclass'', VPredef (Qualified (Simple (var ''dataclasses'')) (var ''dataclass'')))])])"
 
 function (sequential) extend_val :: "val \<Rightarrow> val \<Rightarrow> val"
-and extend_env :: "env \<Rightarrow> env \<Rightarrow> env" (infixl "\<uplus>\<^sub>v" 65)
+and extend_env :: "env \<Rightarrow> env \<Rightarrow> env"
 where
 "extend_val (VModLoaded q \<rho>) v' =
    (case v' of
       VModStub q' \<Rightarrow> if q = q' then VModLoaded q \<rho> else v'
-    | VModLoaded q' \<rho>' \<Rightarrow> if q = q' then VModLoaded q (\<rho> \<uplus>\<^sub>v \<rho>') else v'
+    | VModLoaded q' \<rho>' \<Rightarrow> if q = q' then VModLoaded q (extend_env \<rho> \<rho>') else v'
     | _ \<Rightarrow> v')" |
 "extend_val _ v' = v'" |
-"\<rho> \<uplus>\<^sub>v \<rho>' =
+"extend_env \<rho> \<rho>' =
    \<rho> ++\<^sub>f fmmap_keys (\<lambda>x v'. case fmlookup \<rho> x of None \<Rightarrow> v' | Some v \<Rightarrow> extend_val v v') \<rho>'"
 by pat_completeness auto
 
 termination
 by (relation "measure (\<lambda>p. case p of Inl (v, _) \<Rightarrow> size v | Inr (\<rho>, _) \<Rightarrow> size_fmap (\<lambda>_. 0) size \<rho>)")
    (simp_all add: size_fmap_lookup del: size_fmap_def)
+
+adhoc_overloading extend \<rightleftharpoons> extend_env
 
 declare extend_env.simps [simp del]
 
@@ -397,7 +401,7 @@ fun submod_env :: "(name, env) fmap \<Rightarrow> name \<Rightarrow> var list \<
 where
 "submod_env \<L> q [] = the (fmlookup \<L> q)" |
 "submod_env \<L> q (x # xs) =
-   the (fmlookup \<L> q) \<uplus>\<^sub>v fmupd x (VModLoaded (Qualified q x) (submod_env \<L> (Qualified q x) xs)) \<epsilon>"
+   the (fmlookup \<L> q) \<uplus> fmupd x (VModLoaded (Qualified q x) (submod_env \<L> (Qualified q x) xs)) \<epsilon>"
 
 fun import_env :: "(name, env) fmap \<Rightarrow> import \<Rightarrow> env"
 where
@@ -408,7 +412,7 @@ where
 fun imports_env :: "(name, env) fmap \<Rightarrow> import located list \<Rightarrow> env"
 where
 "imports_env \<L> [] = \<epsilon>" |
-"imports_env \<L> (\<iota> # \<iota>s) = import_env \<L> (node \<iota>) \<uplus>\<^sub>v imports_env \<L> \<iota>s"
+"imports_env \<L> (\<iota> # \<iota>s) = import_env \<L> (node \<iota>) \<uplus> imports_env \<L> \<iota>s"
 
 locale loading = evaluation +
   fixes \<M> :: program
@@ -455,7 +459,7 @@ where
 EvalModsNil: "[], \<L> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s assigns\<^sub>o \<epsilon>" |
 EvalModsCons:
   "\<lbrakk> q, \<L> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d (vs, Assigns \<rho>) ; qs, fmupd q (submods_env q \<otimes> \<rho>) \<L> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s o \<rbrakk>
-  \<Longrightarrow> q # qs, \<L> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s (vs, Assigns \<epsilon>) \<otimes>\<^sub>o o" |
+  \<Longrightarrow> q # qs, \<L> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s (vs, Assigns \<epsilon>) \<otimes> o" |
 EvalModsFail: "q, \<L> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d (vs, Aborts\<^sub>\<omega> \<kappa>) \<Longrightarrow> q # qs, \<L> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s (vs, Aborts\<^sub>\<omega> \<kappa>)"
 
 inductive eval_program :: "str list \<Rightarrow> val list \<Rightarrow> termination_kind \<Rightarrow> bool"

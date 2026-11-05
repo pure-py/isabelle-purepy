@@ -4,7 +4,12 @@ theory Util
     "HOL-Library.List_Lexorder" "HOL-Library.Char_ord"
 begin
 
-notation fmadd (infixl "\<otimes>" 100)
+consts override :: "'a \<Rightarrow> 'a \<Rightarrow> 'a" (infixl "\<otimes>" 100)
+
+(* Boxed plus of the specification isn't in Isabelle's symbol table *)
+consts extend :: "'a \<Rightarrow> 'a \<Rightarrow> 'a" (infixl "\<uplus>" 65)
+
+adhoc_overloading override \<rightleftharpoons> fmadd
 
 (* Free o for outcomes; a later library import would restore the notation *)
 no_notation (ASCII) comp (infixl \<open>o\<close> 55)

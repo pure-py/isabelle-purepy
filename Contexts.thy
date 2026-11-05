@@ -82,21 +82,22 @@ where
    (Simple (var ''dataclasses''),
     fmap_of_list [name_binding, (var ''dataclass'', PredefName)])]"
 
-(* Boxed plus of the specification isn't in Isabelle's symbol table *)
 function (sequential) extend_entry :: "cxt_entry \<Rightarrow> cxt_entry \<Rightarrow> cxt_entry"
-and extend :: "cxt \<Rightarrow> cxt \<Rightarrow> cxt" (infixl "\<uplus>" 65)
+and extend_cxt :: "cxt \<Rightarrow> cxt \<Rightarrow> cxt"
 where
 "extend_entry (ModChecked q \<Gamma>) (ModStub q') = (if q = q' then ModChecked q \<Gamma> else ModStub q')" |
 "extend_entry (ModChecked q \<Gamma>) (ModChecked q' \<Gamma>') =
-   (if q = q' then ModChecked q (\<Gamma> \<uplus> \<Gamma>') else ModChecked q' \<Gamma>')" |
+   (if q = q' then ModChecked q (extend_cxt \<Gamma> \<Gamma>') else ModChecked q' \<Gamma>')" |
 "extend_entry _ \<theta>' = \<theta>'" |
-"\<Gamma> \<uplus> \<Gamma>' =
+"extend_cxt \<Gamma> \<Gamma>' =
    \<Gamma> ++\<^sub>f fmmap_keys (\<lambda>x \<theta>'. case fmlookup \<Gamma> x of None \<Rightarrow> \<theta>' | Some \<theta> \<Rightarrow> extend_entry \<theta> \<theta>') \<Gamma>'"
 by pat_completeness auto
 
 termination
 by (relation "measure (\<lambda>p. case p of Inl (\<theta>, _) \<Rightarrow> size \<theta> | Inr (\<Gamma>, _) \<Rightarrow> size_fmap (\<lambda>_. 0) size \<Gamma>)")
    (simp_all add: size_fmap_lookup del: size_fmap_def)
+
+adhoc_overloading extend \<rightleftharpoons> extend_cxt
 
 definition predefined_classes :: class_table
 where
