@@ -289,9 +289,9 @@ where
 "int_division f v v' = (if the_int v' = 0 then Aborts ZeroDivisionError else int_arith f v v')"
 
 (* Extended real rounded to a float, aborting if it rounds to an infinity *)
-definition float_of_real :: "ereal \<Rightarrow> float result"
+definition float_of :: "ereal \<Rightarrow> float result"
 where
-"float_of_real x = (if is_infinite (fl x) then Aborts OverflowError else Val (fl x))"
+"float_of x = (if is_infinite (fl x) then Aborts OverflowError else Val (fl x))"
 
 abbreviation float_val :: "float result \<Rightarrow> val result"
 where "float_val r \<equiv> mlet r (\<lambda>x. Val (VLit (LitFloat x)))"
@@ -299,7 +299,7 @@ where "float_val r \<equiv> mlet r (\<lambda>x. Val (VLit (LitFloat x)))"
 (* Operand of an operator expecting a float, with an integer converted *)
 fun to_float :: "val \<Rightarrow> float result"
 where
-"to_float (VLit (LitInt n)) = float_of_real (ereal (real_of_int n))" |
+"to_float (VLit (LitInt n)) = float_of (ereal (real_of_int n))" |
 "to_float (VLit (LitFloat x)) = Val x"
 
 definition float_operands :: "val \<Rightarrow> val \<Rightarrow> (float \<times> float) result"
@@ -317,11 +317,11 @@ where
     (\<lambda>(x, x'). if real_of_float x' = Some 0 then Aborts ZeroDivisionError else Val (VLit (LitFloat (g x x'))))"
 
 (* Exact quotient of integers, rounded *)
-definition int_true_div :: "val \<Rightarrow> val \<Rightarrow> val result"
+definition int_quotient :: "val \<Rightarrow> val \<Rightarrow> val result"
 where
-"int_true_div v v' =
+"int_quotient v v' =
   (if the_int v' = 0 then Aborts ZeroDivisionError
-   else float_val (float_of_real (ereal (real_of_int (the_int v) / real_of_int (the_int v')))))"
+   else float_val (float_of (ereal (real_of_int (the_int v) / real_of_int (the_int v')))))"
 
 (* Exact power of a number by an integer exponent, rounded *)
 definition float_power :: "val \<Rightarrow> val \<Rightarrow> val result"
@@ -453,7 +453,7 @@ where
    overload (TyList (TyPrim object)) (TyPrim int) repeat_list,
    overload (TyPrim int) (TyList (TyPrim object)) (\<lambda>v v'. repeat_list v' v)]" |
 "overloads BOpDiv =
-  [overload (TyPrim int) (TyPrim int) int_true_div,
+  [overload (TyPrim int) (TyPrim int) int_quotient,
    overload (TyPrim float) (TyPrim float) (float_division float_div)]" |
 "overloads BOpFloorDiv =
   [overload (TyPrim int) (TyPrim int) (int_division (div)),
