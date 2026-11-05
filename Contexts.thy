@@ -58,7 +58,7 @@ where
    | Some PredefName \<Rightarrow> Some PredefName
    | _ \<Rightarrow> None)"
 
-definition range_class :: name where "range_class = Qualified builtins (var ''range'')"
+definition range_class :: name where "range_class = name_of [''builtins'', ''range'']"
 
 abbreviation name_binding :: "var \<times> cxt_entry"
 where "name_binding \<equiv> (var ''__name__'', Ty (TyPrim str))"
