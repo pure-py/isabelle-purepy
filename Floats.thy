@@ -12,7 +12,7 @@ consts
   (* Sign bit, which distinguishes the two zeros *)
   negative :: "float \<Rightarrow> bool"
   nan :: float
-  (* Extended real rounded by roundTiesToEven; extended since a power is taken on the value of a float *)
+  (* Rounding by roundTiesToEven of IEEE 754, on extended reals since the value of a float may be infinite *)
   fl :: "ereal \<Rightarrow> float"
 
 (* IEEE 754 arithmetic *)
@@ -37,7 +37,6 @@ definition trunc :: "real \<Rightarrow> int"
 where
 "trunc x = (if x \<ge> 0 then \<lfloor>x\<rfloor> else \<lceil>x\<rceil>)"
 
-(* Floor division of n by a nonzero n', by the algorithm of the Python Language Reference *)
 definition float_floordiv :: "float \<Rightarrow> float \<Rightarrow> float"
 where
 "float_floordiv n n' =
@@ -55,7 +54,6 @@ where
    | (Some (ereal x), Some MInfty) \<Rightarrow> if x > 0 then fl (-1) else if x < 0 \<or> negative n then fl 0 else neg_zero
    | _ \<Rightarrow> nan)"
 
-(* Remainder of division of n by a nonzero n', with the sign of n' *)
 definition float_mod :: "float \<Rightarrow> float \<Rightarrow> float"
 where
 "float_mod n n' =

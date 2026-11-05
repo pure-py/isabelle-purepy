@@ -288,7 +288,6 @@ definition int_division :: "(int \<Rightarrow> int \<Rightarrow> int) \<Rightarr
 where
 "int_division f v v' = (if the_int v' = 0 then Aborts ZeroDivisionError else int_arith f v v')"
 
-(* Extended real rounded to a float, aborting if it rounds to an infinity *)
 definition float_of :: "ereal \<Rightarrow> float result"
 where
 "float_of x = (if is_infinite (fl x) then Aborts OverflowError else Val (fl x))"

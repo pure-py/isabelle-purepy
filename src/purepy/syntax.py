@@ -118,8 +118,6 @@ SOFT_KEYWORDS = {"match", "case", "type", "_"}
 
 
 def ident(x: str, node: ast.AST) -> str:
-    """x as an identifier of node, unless a soft keyword, which Python's syntax tree holds as an identifier
-    only where Python treats it as one"""
     if x in SOFT_KEYWORDS:
         raise SyntacticallyExcluded(node, f"soft keyword '{x}' as identifier", BY_DESIGN)
     return x
