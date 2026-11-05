@@ -125,7 +125,6 @@ by (relation "measures [
      | Inr (Inr (Inr (_, _, _, _, qs))) \<Rightarrow> length qs]")
    (auto simp: card_fmdom_insert)
 
-(* Module at fault and reason of an ill-formed program *)
 datatype ill_formed = IllFormed name reason
 
 definition check_program :: "program \<Rightarrow> ill_formed option"
