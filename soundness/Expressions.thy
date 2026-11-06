@@ -701,31 +701,119 @@ lemma subscript_fail_sound:
   by (rule sound_expr_synthI)
      (auto simp: bind_sum_def var_scheme_None dest: sound_expr_synth_at split: sum.splits)
 
+(* Element of a list comprehension typed under its qualifiers at a subtype of the element type *)
+lemma list_comp_typed:
+  assumes "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprListComp e gs) \<tau>"
+  shows "\<exists>\<Delta> \<tau>' \<sigma>. \<tau> = TyList \<tau>' \<and> quals \<Sigma> \<Gamma> gs = Ok \<Delta> \<and> has_type_at \<Sigma> \<eta> (\<Gamma> \<otimes> \<Delta>) e \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>'"
+  using assms unfolding typed_by_rule_def
+proof
+  assume "synth_expr \<Sigma> \<Gamma> (ExprListComp e gs) = Ok \<tau>"
+  then show ?thesis by (auto simp: bind_sum_def intro: has_type_synth_at base_type_upper split: sum.splits)
+next
+  assume "check_expr' \<Sigma> \<Gamma> (ExprListComp e gs) \<tau> = Some (Ok ()) \<and> fv \<tau> \<subseteq> fst ` set \<eta>"
+  then show ?thesis
+    by (auto simp: bind_sum_def intro: has_type_check_at SubtyRefl split: ty.splits sum.splits)
+qed
+
 lemma list_comp_sound:
-  "\<lbrakk> sound_quals \<rho> gs (Val \<rho>s) ; sound_comp \<rho>s e (Val vs) \<rbrakk> \<Longrightarrow> sound_expr \<rho> (ExprListComp e gs) (Val (VList vs))"
-  sorry
+  assumes "sound_quals \<rho> gs (Val \<rho>s)" and "sound_comp \<rho>s e (Val vs)"
+  shows "sound_expr \<rho> (ExprListComp e gs) (Val (VList vs))"
+proof (rule sound_expr_typedI)
+  fix \<eta> \<Gamma> \<tau>
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprListComp e gs) \<tau>"
+  from list_comp_typed[OF this(2)] obtain \<Delta> \<tau>' \<sigma> where \<tau>: "\<tau> = TyList \<tau>'" and "quals \<Sigma> \<Gamma> gs = Ok \<Delta>"
+    and e: "has_type_at \<Sigma> \<eta> (\<Gamma> \<otimes> \<Delta>) e \<sigma>" and sub: "\<Sigma> \<turnstile> \<sigma> <: \<tau>'"
+    by blast
+  with assms(1) env have envs: "\<forall>\<rho>' \<in> set \<rho>s. \<eta> \<turnstile> \<rho>' : \<Gamma> \<otimes> \<Delta>" by (simp add: sound_quals_def)
+  from assms(2)[unfolded sound_comp_def, rule_format, OF envs[rule_format] e]
+  have "\<forall>v \<in> set vs. \<turnstile> v : Ty (inst \<eta> \<sigma>)" by simp
+  then have "\<forall>v \<in> set vs. \<turnstile> v : Ty (inst \<eta> \<tau>')" by (blast intro: ValSub[OF _ subst_subty'[OF sub]])
+  then show "result_typed (Val (VList vs)) (inst \<eta> \<tau>)" by (auto simp: \<tau> intro: ValList)
+qed simp
 
 lemma list_comp_fail_quals_sound:
-  "sound_quals \<rho> gs (Aborts \<kappa>) \<Longrightarrow> sound_expr \<rho> (ExprListComp e gs) (Aborts \<kappa>)"
-  sorry
+  assumes "sound_quals \<rho> gs (Aborts \<kappa>)"
+  shows "sound_expr \<rho> (ExprListComp e gs) (Aborts \<kappa>)"
+proof (rule sound_expr_typedI)
+  fix \<eta> \<Gamma> \<tau>
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprListComp e gs) \<tau>"
+  from list_comp_typed[OF this(2)] assms env show "result_typed (Aborts \<kappa>) (inst \<eta> \<tau>)"
+    by (auto simp: sound_quals_def)
+qed simp
 
 lemma list_comp_fail_sound:
-  "\<lbrakk> sound_quals \<rho> gs (Val \<rho>s) ; sound_comp \<rho>s e (Aborts \<kappa>) \<rbrakk> \<Longrightarrow> sound_expr \<rho> (ExprListComp e gs) (Aborts \<kappa>)"
-  sorry
+  assumes "sound_quals \<rho> gs (Val \<rho>s)" and "sound_comp \<rho>s e (Aborts \<kappa>)"
+  shows "sound_expr \<rho> (ExprListComp e gs) (Aborts \<kappa>)"
+proof (rule sound_expr_typedI)
+  fix \<eta> \<Gamma> \<tau>
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprListComp e gs) \<tau>"
+  from list_comp_typed[OF this(2)] obtain \<Delta> \<sigma> where "quals \<Sigma> \<Gamma> gs = Ok \<Delta>"
+    and e: "has_type_at \<Sigma> \<eta> (\<Gamma> \<otimes> \<Delta>) e \<sigma>"
+    by blast
+  with assms(1) env have envs: "\<forall>\<rho>' \<in> set \<rho>s. \<eta> \<turnstile> \<rho>' : \<Gamma> \<otimes> \<Delta>" by (simp add: sound_quals_def)
+  from assms(2)[unfolded sound_comp_def, rule_format, OF envs[rule_format] e]
+  show "result_typed (Aborts \<kappa>) (inst \<eta> \<tau>)" by simp
+qed simp
+
+(* Key of a dictionary comprehension checked against str, and its value typed at a subtype of the value type,
+   under its qualifiers *)
+lemma dict_comp_typed:
+  assumes "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprDictComp e e' gs) \<tau>"
+  shows "\<exists>\<Delta> \<tau>' \<sigma>. \<tau> = TyDict \<tau>' \<and> quals \<Sigma> \<Gamma> gs = Ok \<Delta> \<and> check_expr_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e (TyPrim str) = Ok ()
+           \<and> has_type_at \<Sigma> \<eta> (\<Gamma> \<otimes> \<Delta>) e' \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>'"
+  using assms unfolding typed_by_rule_def
+proof
+  assume "synth_expr \<Sigma> \<Gamma> (ExprDictComp e e' gs) = Ok \<tau>"
+  then show ?thesis by (auto simp: bind_sum_def intro: has_type_synth_at base_type_upper split: sum.splits)
+next
+  assume "check_expr' \<Sigma> \<Gamma> (ExprDictComp e e' gs) \<tau> = Some (Ok ()) \<and> fv \<tau> \<subseteq> fst ` set \<eta>"
+  then show ?thesis
+    by (auto simp: bind_sum_def intro: has_type_check_at SubtyRefl split: ty.splits sum.splits)
+qed
 
 lemma dict_comp_sound:
-  "\<lbrakk> sound_quals \<rho> gs (Val \<rho>s) ; sound_entries \<rho>s e e' (Val \<delta>) \<rbrakk>
-  \<Longrightarrow> sound_expr \<rho> (ExprDictComp e e' gs) (Val (VDict (update [] \<delta>)))"
-  sorry
+  assumes "sound_quals \<rho> gs (Val \<rho>s)" and "sound_entries \<rho>s e e' (Val \<delta>)"
+  shows "sound_expr \<rho> (ExprDictComp e e' gs) (Val (VDict (update [] \<delta>)))"
+proof (rule sound_expr_typedI)
+  fix \<eta> \<Gamma> \<tau>
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprDictComp e e' gs) \<tau>"
+  from dict_comp_typed[OF this(2)] obtain \<Delta> \<tau>' \<sigma> where \<tau>: "\<tau> = TyDict \<tau>'" and "quals \<Sigma> \<Gamma> gs = Ok \<Delta>"
+    and key: "check_expr_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e (TyPrim str) = Ok ()" and e': "has_type_at \<Sigma> \<eta> (\<Gamma> \<otimes> \<Delta>) e' \<sigma>"
+    and sub: "\<Sigma> \<turnstile> \<sigma> <: \<tau>'"
+    by blast
+  with assms(1) env have envs: "\<forall>\<rho>' \<in> set \<rho>s. \<eta> \<turnstile> \<rho>' : \<Gamma> \<otimes> \<Delta>" by (simp add: sound_quals_def)
+  from assms(2)[unfolded sound_entries_def, rule_format, OF envs[rule_format] key e']
+  have "\<forall>w v. (w, v) \<in> set \<delta> \<longrightarrow> \<turnstile> v : Ty (inst \<eta> \<sigma>)" by simp
+  then have "\<forall>w v. (w, v) \<in> set \<delta> \<longrightarrow> \<turnstile> v : Ty (inst \<eta> \<tau>')" by (blast intro: ValSub[OF _ subst_subty'[OF sub]])
+  then have "\<forall>w v. (w, v) \<in> set (update [] \<delta>) \<longrightarrow> \<turnstile> v : Ty (inst \<eta> \<tau>')"
+    using set_update[of "[]" \<delta>] by auto
+  then show "result_typed (Val (VDict (update [] \<delta>))) (inst \<eta> \<tau>)"
+    by (auto simp: \<tau> intro!: ValDict distinct_update)
+qed simp
 
 lemma dict_comp_fail_quals_sound:
-  "sound_quals \<rho> gs (Aborts \<kappa>) \<Longrightarrow> sound_expr \<rho> (ExprDictComp e e' gs) (Aborts \<kappa>)"
-  sorry
+  assumes "sound_quals \<rho> gs (Aborts \<kappa>)"
+  shows "sound_expr \<rho> (ExprDictComp e e' gs) (Aborts \<kappa>)"
+proof (rule sound_expr_typedI)
+  fix \<eta> \<Gamma> \<tau>
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprDictComp e e' gs) \<tau>"
+  from dict_comp_typed[OF this(2)] assms env show "result_typed (Aborts \<kappa>) (inst \<eta> \<tau>)"
+    by (auto simp: sound_quals_def)
+qed simp
 
 lemma dict_comp_fail_sound:
-  "\<lbrakk> sound_quals \<rho> gs (Val \<rho>s) ; sound_entries \<rho>s e e' (Aborts \<kappa>) \<rbrakk>
-  \<Longrightarrow> sound_expr \<rho> (ExprDictComp e e' gs) (Aborts \<kappa>)"
-  sorry
+  assumes "sound_quals \<rho> gs (Val \<rho>s)" and "sound_entries \<rho>s e e' (Aborts \<kappa>)"
+  shows "sound_expr \<rho> (ExprDictComp e e' gs) (Aborts \<kappa>)"
+proof (rule sound_expr_typedI)
+  fix \<eta> \<Gamma> \<tau>
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprDictComp e e' gs) \<tau>"
+  from dict_comp_typed[OF this(2)] obtain \<Delta> \<sigma> where "quals \<Sigma> \<Gamma> gs = Ok \<Delta>"
+    and key: "check_expr_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e (TyPrim str) = Ok ()" and e': "has_type_at \<Sigma> \<eta> (\<Gamma> \<otimes> \<Delta>) e' \<sigma>"
+    by blast
+  with assms(1) env have envs: "\<forall>\<rho>' \<in> set \<rho>s. \<eta> \<turnstile> \<rho>' : \<Gamma> \<otimes> \<Delta>" by (simp add: sound_quals_def)
+  from assms(2)[unfolded sound_entries_def, rule_format, OF envs[rule_format] key e']
+  show "result_typed (Aborts \<kappa>) (inst \<eta> \<tau>)" by simp
+qed simp
 
 lemma attr_object_sound:
   "\<lbrakk> sound_expr \<rho> (node e) (Val (VObject C xvs)) ; map_of xvs x = Some v \<rbrakk>
