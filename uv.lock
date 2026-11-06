@@ -258,7 +258,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "purepy-conformance", url = "https://github.com/pure-py/pure-py-spec/releases/download/v0.27.2/purepy_conformance-0.27.2-py3-none-any.whl" }]
+requires-dist = [{ name = "purepy-conformance", url = "https://github.com/pure-py/pure-py-spec/releases/download/v0.27.3/purepy_conformance-0.27.3-py3-none-any.whl" }]
 
 [package.metadata.requires-dev]
 dev = [
@@ -268,10 +268,10 @@ dev = [
 
 [[package]]
 name = "purepy-conformance"
-version = "0.27.2"
-source = { url = "https://github.com/pure-py/pure-py-spec/releases/download/v0.27.2/purepy_conformance-0.27.2-py3-none-any.whl" }
+version = "0.27.3"
+source = { url = "https://github.com/pure-py/pure-py-spec/releases/download/v0.27.3/purepy_conformance-0.27.3-py3-none-any.whl" }
 wheels = [
-    { url = "https://github.com/pure-py/pure-py-spec/releases/download/v0.27.2/purepy_conformance-0.27.2-py3-none-any.whl", hash = "sha256:5572a4bce46bdee6349b802886d2aec5209057d813fc535ee5e8312f2787be69" },
+    { url = "https://github.com/pure-py/pure-py-spec/releases/download/v0.27.3/purepy_conformance-0.27.3-py3-none-any.whl", hash = "sha256:aee051bfc4d3a58e8f2b512f82624b2a0abdbd02d5a6c21eaa7e5dfd25dc72d6" },
 ]
 
 [[package]]

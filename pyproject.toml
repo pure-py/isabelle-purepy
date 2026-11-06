@@ -8,7 +8,7 @@ description = "reference implementation"
 version = "0.26.0"
 requires-python = ">=3.12"
 dependencies = [
-    "purepy-conformance @ https://github.com/pure-py/pure-py-spec/releases/download/v0.27.2/purepy_conformance-0.27.2-py3-none-any.whl",
+    "purepy-conformance @ https://github.com/pure-py/pure-py-spec/releases/download/v0.27.3/purepy_conformance-0.27.3-py3-none-any.whl",
 ]
 
 [project.scripts]
