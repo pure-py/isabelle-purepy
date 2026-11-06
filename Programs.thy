@@ -34,7 +34,7 @@ where
    | None \<Rightarrow>
      if q \<in> set V then Fail (q, Violates RuleModule (ImportCycle (dropWhile (\<lambda>q''. q'' \<noteq> q) V @ [q])))
      else case fmlookup \<M> q of
-       None \<Rightarrow> Fail (q', UnknownModule q)
+       None \<Rightarrow> Fail (q', SelectsNoRule JudgementModule (UnknownModule q))
      | Some (ModuleBody \<iota>s t) \<Rightarrow> do {
          (\<Gamma>', \<Sigma>') \<leftarrow> check_imports \<M> (V @ [q]) \<Sigma> q \<iota>s;
          map_sum (Pair q \<circ> violates RuleModule) id (do {
@@ -77,7 +77,7 @@ where
 
 "submodules \<M> V \<Sigma> q q' \<Gamma> [] = Ok (\<Gamma>, \<Sigma>)" |
 "submodules \<M> V \<Sigma> q q' \<Gamma> (x # xs) = do {
-   (\<Delta>, \<Sigma>\<^sub>1) \<leftarrow> map_sum (apsnd (violates RuleSubmodulesCons)) id (check_module \<M> V \<Sigma> q (Qualified q' x));
+   (\<Delta>, \<Sigma>\<^sub>1) \<leftarrow> check_module \<M> V \<Sigma> q (Qualified q' x);
    (\<Delta>', \<Sigma>') \<leftarrow> submodules \<M> V \<Sigma>\<^sub>1 q (Qualified q' x) \<Delta> xs;
    Ok (\<Gamma> \<uplus> fmupd x (ModChecked (Qualified q' x) \<Delta>') fmempty, \<Sigma>')
  }" |
@@ -89,8 +89,9 @@ where
        (case resolve_name \<Gamma> (Simple x) of
           Some \<theta>' \<Rightarrow> Ok (\<theta>', \<Sigma>)
         | None \<Rightarrow>
-            Fail (q, Violates RuleImpMember
-                       (case \<theta> of None \<Rightarrow> UnknownMember x q' | Some _ \<Rightarrow> UnassignedMember x q'))))" |
+            Fail (q, case \<theta> of
+                       None \<Rightarrow> SelectsNoRule JudgementResolveName (UnknownMember x q')
+                     | Some _ \<Rightarrow> Violates RuleImpMember (UnassignedMember x q'))))" |
 
 "imports_entries \<M> V \<Sigma> q q' \<Gamma> [] = Ok ([], \<Sigma>)" |
 "imports_entries \<M> V \<Sigma> q q' \<Gamma> (x # xs) = do {

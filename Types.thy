@@ -45,6 +45,11 @@ definition check_predefined :: "cxt \<Rightarrow> var \<Rightarrow> unit may_fai
 where
 "check_predefined \<Gamma> x = ensure (fmlookup \<Gamma> x = Some PredefName) (NotPredefinedName x)"
 
+(* Check of predefined name x heading a type expression, which selects the rule for the type expression *)
+definition check_type_head :: "cxt \<Rightarrow> var \<Rightarrow> unit may_fail"
+where
+"check_type_head \<Gamma> x = map_sum (SelectsNoRule JudgementResolveType) id (check_predefined \<Gamma> x)"
+
 definition type_params :: "class_table \<Rightarrow> name \<Rightarrow> var list"
 where
 "type_params \<Sigma> C =
@@ -70,8 +75,7 @@ where
    are distinct *)
 fun resolve_type' :: "class_table \<Rightarrow> cxt \<Rightarrow> (name \<times> var) list \<Rightarrow> nat \<Rightarrow> ty_expr \<Rightarrow> ty may_fail"
 where
-"resolve_type' \<Sigma> \<Gamma> A n (TyExprPrim \<nu>) =
-  by_rule RuleTyName (do { check_predefined \<Gamma> (prim_name \<nu>); Ok (TyPrim \<nu>) })" |
+"resolve_type' \<Sigma> \<Gamma> A n (TyExprPrim \<nu>) = do { check_type_head \<Gamma> (prim_name \<nu>); Ok (TyPrim \<nu>) }" |
 "resolve_type' \<Sigma> \<Gamma> A n (TyExprName q \<psi>s) =
   (if \<psi>s = [] \<and> (case q of Simple x \<Rightarrow> fmlookup \<Gamma> x = Some TypeVar | Qualified _ _ \<Rightarrow> False)
    then Ok (TyVar (root q))
@@ -93,28 +97,27 @@ where
             Ok (subst \<sigma>s \<alpha>s \<tau>)
           })
         | _ \<Rightarrow> undefined)
-   | _ \<Rightarrow> Fail (not_type_name \<Gamma> q))" |
-"resolve_type' \<Sigma> \<Gamma> A n (TyExprLiteral l) =
-  by_rule RuleTyLiteral (do { check_predefined \<Gamma> (var ''Literal''); Ok (TyLiteral l) })" |
+   | _ \<Rightarrow> Fail (SelectsNoRule JudgementResolveType (not_type_name \<Gamma> q)))" |
+"resolve_type' \<Sigma> \<Gamma> A n (TyExprLiteral l) = do { check_type_head \<Gamma> (var ''Literal''); Ok (TyLiteral l) }" |
 "resolve_type' \<Sigma> \<Gamma> A n (TyExprList \<psi>) =
-  by_rule RuleTyList (do { check_predefined \<Gamma> (var ''list''); \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>; Ok (TyList \<tau>) })" |
-"resolve_type' \<Sigma> \<Gamma> A n (TyExprDict \<psi>) = by_rule RuleTyDict (do {
-   check_predefined \<Gamma> (var ''dict''); check_predefined \<Gamma> (var ''str'');
+  do { check_type_head \<Gamma> (var ''list''); \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>; Ok (TyList \<tau>) }" |
+"resolve_type' \<Sigma> \<Gamma> A n (TyExprDict \<psi>) = do {
+   check_type_head \<Gamma> (var ''dict''); by_rule RuleTyDict (check_predefined \<Gamma> (var ''str''));
    \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>; Ok (TyDict \<tau>)
- })" |
-"resolve_type' \<Sigma> \<Gamma> A n (TyExprTuple \<psi>s) = by_rule RuleTyTuple (do {
-   check_predefined \<Gamma> (var ''tuple'');
+ }" |
+"resolve_type' \<Sigma> \<Gamma> A n (TyExprTuple \<psi>s) = do {
+   check_type_head \<Gamma> (var ''tuple'');
    \<tau>s \<leftarrow> those_sum (map (resolve_type' \<Sigma> \<Gamma> A n) \<psi>s); Ok (TyTuple \<tau>s)
- })" |
-"resolve_type' \<Sigma> \<Gamma> A n (TyExprCallable \<psi>s \<psi>) = by_rule RuleTyCallable (do {
-   check_predefined \<Gamma> (var ''Callable'');
+ }" |
+"resolve_type' \<Sigma> \<Gamma> A n (TyExprCallable \<psi>s \<psi>) = do {
+   check_type_head \<Gamma> (var ''Callable'');
    \<sigma>s \<leftarrow> those_sum (map (resolve_type' \<Sigma> \<Gamma> A n) \<psi>s);
    \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>;
    Ok (TyCallable \<sigma>s \<tau>)
- })" |
-"resolve_type' \<Sigma> \<Gamma> A n (TyExprUnion \<psi> \<psi>') = by_rule RuleTyUnion (do {
+ }" |
+"resolve_type' \<Sigma> \<Gamma> A n (TyExprUnion \<psi> \<psi>') = do {
    \<sigma> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>; \<tau> \<leftarrow> resolve_type' \<Sigma> \<Gamma> A n \<psi>'; Ok (TyUnion \<sigma> \<tau>)
- })"
+ }"
 
 definition resolve_type :: "class_table \<Rightarrow> cxt \<Rightarrow> ty_expr \<Rightarrow> ty may_fail"
 where
@@ -234,7 +237,8 @@ where
               }))
           | None \<Rightarrow>
               (let e''' = the (find (\<lambda>e'''. type_expr_of e''' = None) (subscript_args e'')) in
-               Some (Fail (Located (pos_of e''') (Violates RuleConstrExplicit (NotTypeExpression e'''))))))
+               Some (Fail (Located (pos_of e''')
+                 (SelectsNoRule JudgementResolveType (NotTypeExpression e'''))))))
    | _ \<Rightarrow> None)"
 
 lemma constructor_args_elem:

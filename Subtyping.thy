@@ -88,10 +88,10 @@ where
 fun subscript_type ::
   "class_table \<Rightarrow> ty \<Rightarrow> unit may_fail \<Rightarrow> unit may_fail \<Rightarrow> pos \<Rightarrow> ty may_fail \<Rightarrow> ty may_fail"
 where
-"subscript_type \<Sigma> (TyUnion \<sigma> \<sigma>') int_ok str_ok p idx = by_rule RuleSubscriptUnion (do {
+"subscript_type \<Sigma> (TyUnion \<sigma> \<sigma>') int_ok str_ok p idx = do {
    \<tau> \<leftarrow> subscript_type \<Sigma> \<sigma> int_ok str_ok p idx; \<tau>' \<leftarrow> subscript_type \<Sigma> \<sigma>' int_ok str_ok p idx;
    Ok (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>')
- })" |
+ }" |
 "subscript_type \<Sigma> (TyList \<tau>) int_ok _ _ _ = by_rule RuleSubscriptList (do { int_ok; Ok \<tau> })" |
 "subscript_type \<Sigma> (TyDict \<tau>) _ str_ok _ _ = by_rule RuleSubscriptDict (do { str_ok; Ok \<tau> })" |
 "subscript_type \<Sigma> (TyTuple \<tau>s) _ _ p idx = do {
@@ -107,7 +107,7 @@ where
  }" |
 "subscript_type \<Sigma> \<sigma> int_ok _ _ _ =
   (if base_type \<sigma> = TyPrim str then by_rule RuleSubscriptStr (do { int_ok; Ok (TyPrim str) })
-   else Fail (NotSubscriptable \<sigma>))"
+   else Fail (SelectsNoRule JudgementSynth (NotSubscriptable \<sigma>)))"
 
 datatype instances = Instance "ty list" | Undetermined | NoInstance
 
@@ -187,27 +187,28 @@ where
 fun attribute_type :: "class_table \<Rightarrow> ty \<Rightarrow> var \<Rightarrow> ty may_fail"
 where
 "attribute_type \<Sigma> (TyUnion \<sigma> \<sigma>') x =
-  by_rule RuleAttrUnion (do { \<tau> \<leftarrow> attribute_type \<Sigma> \<sigma> x; \<tau>' \<leftarrow> attribute_type \<Sigma> \<sigma>' x; Ok (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>') })" |
+  do { \<tau> \<leftarrow> attribute_type \<Sigma> \<sigma> x; \<tau>' \<leftarrow> attribute_type \<Sigma> \<sigma>' x; Ok (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>') }" |
 "attribute_type \<Sigma> (TyClass C \<sigma>s) x =
   or_else (Violates RuleAttrObject (UnknownField (short_name C) x)) (map_of (instantiate (fields \<Sigma> C) \<sigma>s) x)" |
-"attribute_type \<Sigma> \<sigma> x = Fail (Violates RuleAttrObject (NoAttributes \<sigma> x))"
+"attribute_type \<Sigma> \<sigma> x = Fail (SelectsNoRule JudgementSynth (NoAttributes \<sigma> x))"
 
-(* Rule of subtyping, if any, with a conclusion of the form of \<sigma> a subtype of \<tau>, taking the arities of callable
-   and tuple types as side conditions, and a literal type as its base type unless \<tau> is a literal type *)
+(* Rule of subtyping, if any, selected by \<sigma> a subtype of \<tau>, taking a literal type as its base type unless \<tau> is
+   a literal type *)
 fun subtyping_rule :: "class_table \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> rule option"
 where
 "subtyping_rule \<Sigma> (TyUnion _ _) _ = Some RuleSubtyUnion" |
 "subtyping_rule \<Sigma> _ (TyUnion _ _) = None" |
 "subtyping_rule \<Sigma> (TyClass C _) (TyClass D _) =
-  (if C = D \<or> D \<in> set (ancestors \<Sigma> C) then Some RuleSubtyClass
-   else if base \<Sigma> C = None then None
+  (if base \<Sigma> C = None then if C = D then Some RuleSubtyClass else None
+   else if C = D then None
    else Some RuleSubtyClassExtend)" |
 "subtyping_rule \<Sigma> (TyClass C _) _ = (if base \<Sigma> C = None then None else Some RuleSubtyClassExtend)" |
 "subtyping_rule \<Sigma> _ (TyPrim Sized) = Some RuleSubtySized" |
 "subtyping_rule \<Sigma> (TyList _) (TyList _) = Some RuleSubtyList" |
 "subtyping_rule \<Sigma> (TyDict _) (TyDict _) = Some RuleSubtyDict" |
-"subtyping_rule \<Sigma> (TyCallable _ _) (TyCallable _ _) = Some RuleSubtyCallable" |
-"subtyping_rule \<Sigma> (TyTuple _) (TyTuple _) = Some RuleSubtyTuple" |
+"subtyping_rule \<Sigma> (TyCallable \<sigma>s _) (TyCallable \<tau>s _) =
+  (if length \<sigma>s = length \<tau>s then Some RuleSubtyCallable else None)" |
+"subtyping_rule \<Sigma> (TyTuple \<sigma>s) (TyTuple \<tau>s) = (if length \<sigma>s = length \<tau>s then Some RuleSubtyTuple else None)" |
 "subtyping_rule \<Sigma> (TyLiteral _) (TyLiteral _) = Some RuleSubtyLiteral" |
 "subtyping_rule \<Sigma> _ _ = None"
 

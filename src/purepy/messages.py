@@ -238,9 +238,9 @@ def excluded_name(name: str) -> tuple[str, Classification]:
 
 
 def unwrapped(r: Reason) -> Reason:
-    """r without the rule it violates"""
+    """r without the rule it violates or the judgement which selects no rule"""
     match r:
-        case Reasons.Violates(_, r_):
+        case Reasons.Violates(_, r_) | Reasons.SelectsNoRule(_, r_):
             return unwrapped(r_)
         case Reasons.Located(p, r_):
             return Reasons.Located(p, unwrapped(r_))

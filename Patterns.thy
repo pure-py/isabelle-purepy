@@ -8,8 +8,8 @@ where
 "check_pattern_class \<Gamma> q =
   (case resolve_name \<Gamma> q of
      Some (Type C) \<Rightarrow> if C = range_class then Fail (Violates RulePatConstr RangePattern) else Ok C
-   | Some PredefName \<Rightarrow> Fail (PredefinedNameAsPattern q)
-   | _ \<Rightarrow> Fail (NotClass q))"
+   | Some PredefName \<Rightarrow> Fail (SelectsNoRule JudgementCheckPattern (PredefinedNameAsPattern q))
+   | _ \<Rightarrow> Fail (SelectsNoRule JudgementCheckPattern (NotClass q)))"
 
 definition pattern_class :: "cxt \<Rightarrow> name \<Rightarrow> name"
 where
@@ -168,7 +168,10 @@ where
                    Some (pattern_bindings
                      (map2 (check_pat_at \<Sigma> \<Gamma>) (field_patterns \<Sigma> C (ps, kps)) (field_types \<Sigma> C \<sigma>s)))
                | NoInstance \<Rightarrow> None
-               | Undetermined \<Rightarrow> Some (Fail (PatternClassUndetermined (short_name C) \<sigma>)))
+               | Undetermined \<Rightarrow>
+                   Some (Fail (Violates
+                     (if instance_above \<Sigma> C \<sigma> = Undetermined then RuleInstanceAbove else RuleInstanceBelow)
+                     (PatternClassUndetermined (short_name C) \<sigma>))))
        (disjuncts \<tau>))
  })" |
 

@@ -1,32 +1,36 @@
-"""Rules of the specification violated by the reasons of the generated type checker, named as the conformance
-suite cites them"""
+"""Rules and judgements of the specification under which the generated type checker rejects programs, named as
+the conformance suite cites them"""
 
 import re
 
 from .generated import Reasons
 from .syntax import Reason
 
-PREFIX = "Rule"
+RULE = "Rule"
+JUDGEMENT = "Judgement"
 
 
-def rule_name(n: object) -> str:
-    """Name of rule n in the specification, its constructor's name without the prefix and in kebab case"""
-    return re.sub(r"(?<!^)(?=[A-Z])", "-", type(n).__name__.removeprefix(PREFIX)).lower()
+def spec_name(c: object, prefix: str) -> str:
+    """Name in the specification of constructor c, its name without the prefix and in kebab case"""
+    return re.sub(r"(?<!^)(?=[A-Z])", "-", type(c).__name__.removeprefix(prefix)).lower()
 
 
-def rule_names() -> set[str]:
+def spec_names(prefix: str) -> set[str]:
     return {
-        rule_name(c())
+        spec_name(c(), prefix)
         for x, c in vars(Reasons).items()
-        if x.startswith(PREFIX) and isinstance(c, type)
+        if x.startswith(prefix) and isinstance(c, type)
     }
 
 
-def rule(r: Reason) -> str:
+def citation(r: Reason) -> tuple[str | None, str | None]:
+    """Judgement which selects no rule, or rule violated, by r"""
     match r:
         case Reasons.Located(_, r_) | Reasons.MypyCompatibility(r_):
-            return rule(r_)
+            return citation(r_)
         case Reasons.Violates(n, _):
-            return rule_name(n)
+            return (None, spec_name(n, RULE))
+        case Reasons.SelectsNoRule(j, _):
+            return (spec_name(j, JUDGEMENT), None)
         case _:
-            raise AssertionError(f"reason violates no rule: {r}")
+            raise AssertionError(f"reason under no rule or judgement: {r}")

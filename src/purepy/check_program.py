@@ -3,12 +3,18 @@
 import pathlib
 from dataclasses import dataclass
 
-from purepy_conformance import TYPE_CHECKER_VERDICT, Classification, Exit, PurePyOutcome
+from purepy_conformance import (
+    TYPE_CHECKER_VERDICT,
+    Classification,
+    Exit,
+    PurePyOutcome,
+    figure_numbers,
+)
 
 from . import syntax
 from .generated import Finite_Map, Option, Programs, Syntax
 from .messages import classification, message, position
-from .rules import rule
+from .rules import citation
 from .syntax import ModuleBody, Name, Program, Reason, parse_name
 
 MAIN = parse_name("__main__")
@@ -82,7 +88,9 @@ class Diagnostic:
     module: Name | None  # None for the entry module
     position: tuple[int, int | None] | None
     message: str
-    rule: str | None  # rule of the specification violated, as the conformance suite cites it
+    # Judgement which selects no rule, or rule violated, as the conformance suite cites them
+    judgement: str | None
+    rule: str | None
 
 
 def reason_outcome(r: Reason) -> PurePyOutcome:
@@ -91,16 +99,18 @@ def reason_outcome(r: Reason) -> PurePyOutcome:
 
 
 def diagnostic(rejection: PurePyRejects) -> Diagnostic:
-    """Rule cited only for a typing rejection, as in the conformance suite"""
+    """Judgement or rule cited only for a typing rejection, as in the conformance suite"""
     match rejection:
         case syntax.ParserRejects(module=q, line=line, col=col, msg=msg, classification=k):
             excluded = k == Classification.FOR_NOW
             outcome = PurePyOutcome.EXCLUDED_FOR_NOW if excluded else PurePyOutcome.PARSER_REJECTS
-            return Diagnostic(outcome, q, None if line is None else (line, col), msg, None)
+            return Diagnostic(outcome, q, None if line is None else (line, col), msg, None, None)
         case Programs.IllFormed(q, r):
             outcome = reason_outcome(r)
-            cited = rule(r) if outcome == PurePyOutcome.TYPING_REJECTS else None
-            return Diagnostic(outcome, q, position(r), message(r), cited)
+            judgement, rule = (
+                citation(r) if outcome == PurePyOutcome.TYPING_REJECTS else (None, None)
+            )
+            return Diagnostic(outcome, q, position(r), message(r), judgement, rule)
         case _:
             raise AssertionError(f"unexpected rejection: {rejection}")
 
@@ -137,5 +147,13 @@ def format_diagnostic(d: Diagnostic | None, entry_path: pathlib.Path) -> str:
         return f"{entry_path}: ok"
     path = error_path(d, entry_path)
     where = str(path) if d.position is None else f"{path}:{d.position[0]}:{d.position[1]}"
-    cited = "" if d.rule is None else f", rule {d.rule}"
-    return f"{where}: {d.message} [{d.outcome}{cited}]"
+    return f"{where}: {d.message} [{d.outcome}{cited(d)}]"
+
+
+def cited(d: Diagnostic) -> str:
+    """Rule violated with its figure, or the figure alone of a judgement which selects no rule, since the
+    specification shows no names of judgements"""
+    figures = figure_numbers()
+    if d.rule is not None:
+        return f", rule {d.rule}, Figure {figures.rules[d.rule]}"
+    return "" if d.judgement is None else f", Figure {figures.judgements[d.judgement]}"

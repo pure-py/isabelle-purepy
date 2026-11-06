@@ -5,16 +5,24 @@ import re
 import sys
 
 import purepy_conformance
-from purepy_conformance import PurePyOutcome, Results, main_module, run, suite, tests
+from purepy_conformance import (
+    PurePyOutcome,
+    Results,
+    figure_numbers,
+    main_module,
+    run,
+    suite,
+    tests,
+)
 
 from purepy.check_program import check_module, check_program
-from purepy.rules import rule_names
+from purepy.rules import JUDGEMENT, RULE, spec_names
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 TEST = ROOT / "test"
 SRC = ROOT / "src" / "purepy"
 PYTHON_VERSION = (ROOT / ".python-version").read_text().strip()
-CITATION = re.compile(r"# rule: ([a-z0-9-]+)")
+CITATION = re.compile(r"# judgement: ([a-z0-9-]+)(?:, rule: ([a-z0-9-]+))?$")
 
 
 def check_lint(r: Results) -> None:
@@ -33,27 +41,49 @@ def check_lint(r: Results) -> None:
                 break
 
 
-def rule_violated(test: pathlib.Path) -> str | None:
+type Citation = tuple[str | None, str | None]
+
+
+def citation_of(test: pathlib.Path) -> Citation:
+    """Judgement which selects no rule, or rule violated, by the rejection of test"""
     d = check_program(main_module(test)) if test.is_dir() else check_module(test)
-    return None if d is None else d.rule
+    return (None, None) if d is None else (d.judgement, d.rule)
 
 
-def check_rules(r: Results) -> None:
-    """Each test of an ill-formed program rejected under the rule it cites, and each rule reached by such a test"""
-    with r.test("rules violated"):
+def cited(judgement: str, rule: str | None) -> Citation:
+    """Citation of a judgement, with its rule if any; the rule alone determines the judgement"""
+    return (judgement, None) if rule is None else (None, rule)
+
+
+def show(c: Citation) -> str:
+    judgement, rule = c
+    return f"rule {rule}" if judgement is None else f"judgement {judgement}"
+
+
+def check_citations(r: Results) -> None:
+    """Each test of an ill-formed program rejected under the judgement or rule it cites; each judgement and rule
+    of the mechanisation reached by such a test, and named in the specification"""
+    with r.test("judgements and rules cited"):
         with suite() as path:
-            cited = {
-                test.relative_to(path): (m.group(1), rule_violated(test))
+            citations = {
+                test.relative_to(path): (cited(m.group(1), m.group(2)), citation_of(test))
                 for test in tests(path)
                 if test.relative_to(path).parts[1] == PurePyOutcome.TYPING_REJECTS
                 and (m := CITATION.match(main_module(test).read_text().split("\n", 1)[0]))
             }
-        for test, (name, violated) in sorted(cited.items()):
-            if violated != name:
-                r.fail(f"{test} cites {name}, rejected under {violated}")
-        reached = {name for name, violated in cited.values() if violated == name}
-        for name in sorted(rule_names() - reached):
-            r.fail(f"{name} reached by no test citing it")
+        for test, (expected, actual) in sorted(citations.items()):
+            if actual != expected:
+                r.fail(f"{test} cites {show(expected)}, rejected under {show(actual)}")
+        reached = {expected for expected, actual in citations.values() if actual == expected}
+        figures = figure_numbers()
+        tags = [((j, None), j in figures.judgements) for j in sorted(spec_names(JUDGEMENT))] + [
+            ((None, n), n in figures.rules) for n in sorted(spec_names(RULE))
+        ]
+        for c, specified in tags:
+            if not specified:
+                r.fail(f"{show(c)} not in the specification")
+            elif c not in reached:
+                r.fail(f"{show(c)} reached by no test citing it")
 
 
 def main() -> None:
@@ -63,7 +93,7 @@ def main() -> None:
     if not args.no_lint:
         lint = Results()
         check_lint(lint)
-        check_rules(lint)
+        check_citations(lint)
         lint.summary()
         if lint.failed:
             sys.exit(1)

@@ -80,7 +80,7 @@ definition attr_module :: "name \<Rightarrow> cxt \<Rightarrow> var \<Rightarrow
 where
 "attr_module q \<Gamma> x q' =
   by_rule RuleAttrModule (case fmlookup \<Gamma> x of
-     None \<Rightarrow> Fail (Violates RuleQualified (UnknownMember x q))
+     None \<Rightarrow> Fail (SelectsNoRule JudgementResolveName (UnknownMember x q))
    | Some (Ty \<tau>) \<Rightarrow> Ok \<tau>
    | Some (ModStub q'') \<Rightarrow> Fail (Violates RuleQualified (SubmoduleNotImported q''))
    | Some (ModChecked _ _) \<Rightarrow> Fail (ModuleAsValue q')
@@ -144,7 +144,7 @@ definition inferred_type_args :: "class_table \<Rightarrow> var list \<Rightarro
 where
 "inferred_type_args \<Sigma> \<alpha>s \<sigma>s ms =
   (let \<sigma>\<tau>s = filter (Not \<circ> isl \<circ> snd) (zip \<sigma>s ms) in
-   map_sum (\<lambda>r. let r' = synth_failure ms in if unlocated r' = NotSynthesised then r else without_rule r') id
+   map_sum (\<lambda>r. let r' = synth_failure ms in if unlocated (without_rule r') = NotSynthesised then r else r') id
      (type_args_of (type_args_seq \<Sigma> \<alpha>s (map fst \<sigma>\<tau>s) (map (projr \<circ> snd) \<sigma>\<tau>s)) \<alpha>s))"
 
 (* Operator resolution extended by elimination of a union among the operand types, left first *)
@@ -234,10 +234,9 @@ where
    | (r\<^sub>1, r\<^sub>2) \<Rightarrow> Fail (synth_failure [r\<^sub>1, r\<^sub>2])
  })" |
 "synth_expr \<Sigma> \<Gamma> (ExprList es) =
-  (if es = [] then Fail NotSynthesised
+  (if es = [] then Fail (SelectsNoRule JudgementSynth NotSynthesised)
    else by_rule RuleSynList (do { \<tau> \<leftarrow> elements_join \<Sigma> \<Gamma> es; Ok (TyList \<tau>) }))" |
-"synth_expr \<Sigma> \<Gamma> (ExprTuple es) =
-  by_rule RuleSynTuple (do { \<tau>s \<leftarrow> those_sum (map (synth_expr_at \<Sigma> \<Gamma>) es); Ok (TyTuple \<tau>s) })" |
+"synth_expr \<Sigma> \<Gamma> (ExprTuple es) = do { \<tau>s \<leftarrow> those_sum (map (synth_expr_at \<Sigma> \<Gamma>) es); Ok (TyTuple \<tau>s) }" |
 "synth_expr \<Sigma> \<Gamma> (ExprAttribute e x) =
   (case module_attribute \<Gamma> (node e) x of
      Some m \<Rightarrow> m
@@ -248,7 +247,7 @@ where
      (pos_of e') (synth_expr_at \<Sigma> \<Gamma> e')
  }" |
 "synth_expr \<Sigma> \<Gamma> (ExprDict kvs) =
-  (if kvs = [] then Fail NotSynthesised
+  (if kvs = [] then Fail (SelectsNoRule JudgementSynth NotSynthesised)
    else by_rule RuleSynDict (do {
      all_sum (map (\<lambda>e. check_expr_at \<Sigma> \<Gamma> e (TyPrim str)) (map fst kvs));
      \<tau> \<leftarrow> elements_join \<Sigma> \<Gamma> (map snd kvs);
@@ -267,7 +266,7 @@ where
    \<tau> \<leftarrow> synth_expr_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e';
    Ok (TyDict (base_type \<tau>))
  })" |
-"synth_expr \<Sigma> \<Gamma> _ = Fail NotSynthesised" |
+"synth_expr \<Sigma> \<Gamma> _ = Fail (SelectsNoRule JudgementSynth NotSynthesised)" |
 
 "synth_expr_at \<Sigma> \<Gamma> (At p e) = locate p (synth_expr \<Sigma> \<Gamma> e)" |
 
@@ -280,15 +279,16 @@ where
    | Some _ \<Rightarrow> undefined
    | None \<Rightarrow> by_rule RuleCallee (synth_expr_at \<Sigma> \<Gamma> e))" |
 
-"synth_call \<Sigma> \<Gamma> e (TyUnion \<sigma> \<sigma>') kws es = by_rule RuleCallUnion (do {
-   \<tau> \<leftarrow> synth_call \<Sigma> \<Gamma> e \<sigma> kws es; \<tau>' \<leftarrow> synth_call \<Sigma> \<Gamma> e \<sigma>' kws es; Ok (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>')
- })" |
+"synth_call \<Sigma> \<Gamma> e (TyUnion \<sigma> \<sigma>') kws es =
+  do { \<tau> \<leftarrow> synth_call \<Sigma> \<Gamma> e \<sigma> kws es; \<tau>' \<leftarrow> synth_call \<Sigma> \<Gamma> e \<sigma>' kws es; Ok (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>') }" |
 "synth_call \<Sigma> \<Gamma> e (TyCallable \<sigma>s \<tau>) kws es = by_rule RuleCall (do {
    check_args \<Sigma> \<Gamma> e kws es \<sigma>s;
    ensure (\<tau> \<noteq> TyPrim NoneType) (MypyCompatibility NoneResult);
    Ok \<tau>
  })" |
-"synth_call \<Sigma> \<Gamma> _ \<sigma> _ _ = Fail (Violates RuleCallee (NotCallable \<sigma>))" |
+"synth_call \<Sigma> \<Gamma> e \<sigma> _ _ =
+  Fail (if dotted_name (node e) = None then Violates RuleCallee (NotCallable \<sigma>)
+        else SelectsNoRule JudgementCallee (NotCallable \<sigma>))" |
 
 "elements_join \<Sigma> \<Gamma> es =
   (let \<sigma>s = map (synth_expr_at \<Sigma> \<Gamma>) es; \<tau> = joins \<Sigma> (map (base_type \<circ> projr) (filter (Not \<circ> isl) \<sigma>s)) in
@@ -312,9 +312,10 @@ where
 "check_expr' \<Sigma> \<Gamma> (ExprLambda xs e) \<tau> =
   Some (by_rule RuleLambda (case \<tau> of
      TyCallable \<tau>s \<tau>' \<Rightarrow>
-       if length xs \<noteq> length \<tau>s then Fail (LambdaTypeMismatch \<tau> (Some (length xs)))
+       if length xs \<noteq> length \<tau>s
+       then Fail (SelectsNoRule JudgementSynth (LambdaTypeMismatch \<tau> (Some (length xs))))
        else do { \<Delta> \<leftarrow> params_cxt xs \<tau>s; check_expr_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e \<tau>' }
-   | _ \<Rightarrow> Fail (LambdaTypeMismatch \<tau> None)))" |
+   | _ \<Rightarrow> Fail (SelectsNoRule JudgementSynth (LambdaTypeMismatch \<tau> None))))" |
 "check_expr' \<Sigma> \<Gamma> (ExprCall e (es, kws)) \<tau> =
   (case lambda_of (node e) of
      Some (xs, e') \<Rightarrow> Some (by_rule RuleCallLambda (do {
@@ -432,10 +433,10 @@ fun check_call_stmt ::
    \<Rightarrow> unit may_fail"
 where
 "check_call_stmt \<Sigma> \<Gamma> e (TyUnion \<sigma> \<sigma>') kws es =
-  by_rule RuleCallStmtUnion (do { check_call_stmt \<Sigma> \<Gamma> e \<sigma> kws es; check_call_stmt \<Sigma> \<Gamma> e \<sigma>' kws es })" |
+  do { check_call_stmt \<Sigma> \<Gamma> e \<sigma> kws es; check_call_stmt \<Sigma> \<Gamma> e \<sigma>' kws es }" |
 "check_call_stmt \<Sigma> \<Gamma> e (TyCallable \<sigma>s (TyPrim NoneType)) kws es =
   by_rule RuleCallStmt (check_args \<Sigma> \<Gamma> e kws es \<sigma>s)" |
-"check_call_stmt \<Sigma> \<Gamma> e \<sigma> kws es = by_rule RuleExprStmt (do { synth_call \<Sigma> \<Gamma> e \<sigma> kws es; Ok () })"
+"check_call_stmt \<Sigma> \<Gamma> e \<sigma> kws es = do { synth_call \<Sigma> \<Gamma> e \<sigma> kws es; Ok () }"
 
 (* Failure for the first assignment target of xs which isn't in X, declared or a pattern variable of Y, located
    at its assignment *)
@@ -444,7 +445,7 @@ definition check_assignments_declared ::
 where
 "check_assignments_declared X xs ys Y =
   (case find (\<lambda>x. node x \<notin> X \<and> node x \<notin> set ys \<and> node x \<notin> Y) xs of
-     Some x \<Rightarrow> Fail (Located (pos_of x) (UndeclaredAssignment (node x)))
+     Some x \<Rightarrow> Fail (Located (pos_of x) (Violates RuleAssign (UndeclaredAssignment (node x))))
    | None \<Rightarrow> Ok ())"
 
 (* Bindings of the patterns ps of the cases of a match at remaining type \<tau> and residual L, with the final
@@ -478,7 +479,7 @@ where
    check_unbound \<Gamma> x; \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; check_expr_at \<Sigma> \<Gamma> e \<tau>;
    Ok (Assigns\<^sub>R (fmupd x (Ty \<tau>) fmempty) None)
  })" |
-"check_stmt \<Sigma> \<Gamma> \<zeta> (StmtExpr e) = by_rule RuleExprStmt (do {
+"check_stmt \<Sigma> \<Gamma> \<zeta> (StmtExpr e) = do {
    (case node e of
       ExprCall e' (es, kws) \<Rightarrow>
         if lambda_of (node e') = None \<and> class_of_name \<Gamma> (node e') = None
@@ -486,10 +487,9 @@ where
         else do { synth_expr_at \<Sigma> \<Gamma> e; Ok () }
     | _ \<Rightarrow> do { synth_expr_at \<Sigma> \<Gamma> e; Ok () });
    Ok (Assigns\<^sub>R fmempty None)
- })" |
+ }" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtPrint e) =
-  by_rule RulePrint
-    (do { ensure (\<zeta> = None) PrintInFunction; synth_expr_at \<Sigma> \<Gamma> e; Ok (Assigns\<^sub>R fmempty None) })" |
+  do { ensure (\<zeta> = None) PrintInFunction; synth_expr_at \<Sigma> \<Gamma> e; Ok (Assigns\<^sub>R fmempty None) }" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssert e e') =
   (let false_literal = (node e = ExprLiteral (LitBool False)) in
    by_rule
@@ -534,18 +534,17 @@ where
    all_sum (map2 (check_def_at \<Sigma> (\<Gamma> \<otimes> \<Delta>)) ds \<pi>s);
    Ok (Assigns\<^sub>R \<Delta> None)
  })" |
-"check_stmt \<Sigma> \<Gamma> \<zeta> (StmtMatch e bs) = by_rule RuleMatch (do {
+"check_stmt \<Sigma> \<Gamma> \<zeta> (StmtMatch e bs) = do {
    \<sigma> \<leftarrow> synth_expr_at \<Sigma> \<Gamma> e;
    (\<Delta>s, \<tau>, L) \<leftarrow> match_cases \<Sigma> \<Gamma> \<sigma> (shapes \<Sigma> \<sigma> {}) (map fst bs);
-   by_rule (if \<tau> = TyPrim Never then RuleMatch else RuleMatchPartial)
-     (merges \<Sigma> (set (declares (StmtMatch e bs)))
+   merges \<Sigma> (set (declares (StmtMatch e bs)))
      (map2 (\<lambda>\<Delta> (_, s). do { R \<leftarrow> check_stmt_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) \<zeta> s; Ok (Assigns\<^sub>R \<Delta> None \<otimes> R) }) \<Delta>s bs
       @ (if \<tau> = TyPrim Never then []
          else [Ok (Assigns\<^sub>R fmempty
                  (if L = [] then
                     Some (MypyCompatibility (Violates RuleMatchPartial (MissingReturnMatchPartial \<tau>)))
-                  else None))])))
- })" |
+                  else None))]))
+ }" |
 
 "check_stmt_at \<Sigma> \<Gamma> \<zeta> (At p s) =
   map_sum (locate_reason p)
@@ -596,7 +595,8 @@ where
       | Some (q', \<psi>s) \<Rightarrow>
           (case resolve_name \<Gamma> q' of
              Some (Type D) \<Rightarrow> do { resolve_type \<Sigma> \<Gamma> (TyExprName q' \<psi>s); Ok (Some D) }
-           | _ \<Rightarrow> Fail (not_type_name \<Gamma> q')));
+           | None \<Rightarrow> Fail (SelectsNoRule JudgementResolveName (not_type_name \<Gamma> q'))
+           | Some _ \<Rightarrow> Fail (Violates RuleClassExtend (not_type_name \<Gamma> q'))));
    (case redeclared id {} (map fst \<phi>) of Some x \<Rightarrow> Fail (DuplicateField x c) | None \<Rightarrow> Ok ());
    (case base_class of
       Some D \<Rightarrow>
