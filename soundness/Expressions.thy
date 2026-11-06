@@ -59,6 +59,14 @@ where
 lemma var_scheme_None: "dotted_name e = None \<Longrightarrow> var_scheme \<Sigma> \<Gamma> e \<tau> = None"
   by (simp add: var_scheme_def scheme_of_name_def entry_of_def)
 
+lemma def_signature_callable: "def_signature \<Sigma> \<Gamma> d = Ok (TyScheme \<alpha>s \<tau>) \<Longrightarrow> \<exists>\<sigma>s \<tau>'. \<tau> = TyCallable \<sigma>s \<tau>'"
+  by (cases d) (auto simp: bind_sum_def Let_def split: sum.splits option.splits)
+
+lemma prim_entry_callable:
+  "\<lbrakk> fmlookup (\<E> \<A>) q = Some \<rho> ; fmlookup \<rho> x = Some (VPrim f) ; fmlookup \<P> q = Some \<Gamma> ; fmlookup \<Gamma> x = Some \<theta> \<rbrakk>
+  \<Longrightarrow> \<exists>\<sigma>s \<tau>. \<theta> = Ty (TyCallable \<sigma>s \<tau>)"
+  by (auto simp: \<E>_def \<P>_def builtins_def name_of_def fmlookup_of_list split: if_splits)
+
 context evaluation
 begin
 
@@ -202,11 +210,53 @@ lemma sound_exprs_abort:
 
 subsection \<open>Canonical forms\<close>
 
+lemma wf_scheme_callable:
+  "\<turnstile> v : \<theta> \<Longrightarrow> \<theta> = Scheme \<pi> \<longrightarrow> (\<exists>\<alpha>s \<sigma>s \<tau>. \<pi> = TyScheme \<alpha>s (TyCallable \<sigma>s \<tau>))"
+  "\<eta> \<turnstile> \<rho> : \<Gamma> \<Longrightarrow> True"
+proof (induction rule: wf_val_wf_env.inducts)
+  case (ValDef \<eta> \<rho> \<Gamma> ds \<pi>s \<Delta> i \<alpha>s \<tau>)
+  then have "def_signature \<Sigma> \<Gamma> (node (ds ! i)) = Ok (TyScheme \<alpha>s \<tau>)"
+    by (auto dest!: those_sum_map_Ok simp: list_all2_conv_all_nth)
+  then show ?case by (auto dest!: def_signature_callable simp: inst_entry_signature_entry)
+next
+  case ValPrim
+  then show ?case by (auto dest!: prim_entry_callable)
+qed auto
+
+(* Literal at a subtype of a primitive type p other than object and Sized *)
+lemma wf_prim_subtype:
+  assumes "p \<notin> {object, Sized}"
+  shows "\<turnstile> v : \<theta> \<Longrightarrow> \<theta> = Ty \<tau> \<longrightarrow> prim_subtype p \<tau> \<longrightarrow> (\<exists>l. v = VLit l \<and> prim_subtype p (TyLiteral l))"
+    and "\<eta> \<turnstile> \<rho> : \<Gamma> \<Longrightarrow> True"
+proof (induction arbitrary: \<tau> rule: wf_val_wf_env.inducts)
+  case (ValDef \<eta> \<rho> \<Gamma> ds \<pi>s \<Delta> i \<alpha>s \<sigma>)
+  then have "def_signature \<Sigma> \<Gamma> (node (ds ! i)) = Ok (TyScheme \<alpha>s \<sigma>)"
+    by (auto dest!: those_sum_map_Ok simp: list_all2_conv_all_nth)
+  then show ?case by (auto dest!: def_signature_callable simp: inst_entry_signature_entry)
+next
+  case (ValInst v \<alpha>s \<sigma> \<tau>s)
+  then show ?case by (auto dest!: wf_scheme_callable(1))
+next
+  case (ValSub v \<sigma> \<tau>)
+  then show ?case using prim_subtype_subty(1)[OF assms] by blast
+next
+  case ValPrim
+  then show ?case by (auto dest!: prim_entry_callable)
+qed (use assms in \<open>auto split: lit.splits\<close>)
+
+lemma wf_prim_lit:
+  assumes "\<turnstile> v : Ty \<tau>" and "\<Sigma> \<turnstile> \<tau> <: TyPrim p" and "p \<notin> {object, Sized}"
+  obtains l where "v = VLit l" and "prim_subtype p (TyLiteral l)"
+proof -
+  have "prim_subtype p \<tau>" using prim_subtype_subty(1)[OF assms(3, 2)] by simp
+  with wf_prim_subtype(1)[OF assms(3, 1)] that show ?thesis by blast
+qed
+
 lemma wf_bool: "\<lbrakk> \<turnstile> v : Ty \<tau> ; \<Sigma> \<turnstile> \<tau> <: TyPrim bool \<rbrakk> \<Longrightarrow> v = true \<or> v = false"
-  sorry
+  by (erule wf_prim_lit) (auto elim: base_type_lit.elims)
 
 lemma wf_str: "\<lbrakk> \<turnstile> v : Ty \<tau> ; \<Sigma> \<turnstile> \<tau> <: TyPrim str \<rbrakk> \<Longrightarrow> \<exists>w. v = VLit (LitString w)"
-  sorry
+  by (erule wf_prim_lit) (auto elim: base_type_lit.elims)
 
 (* Operand checked at a primitive type *)
 lemma prim_operand:

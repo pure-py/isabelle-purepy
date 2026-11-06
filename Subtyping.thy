@@ -1043,4 +1043,23 @@ next
   then show ?case by (cases l) (auto intro: Subtyping.SubtyLiteral)
 qed (auto intro: subty_subtys.intros)
 
+
+(* Types built by union from the primitive type p and the primitive and literal types below it; for p neither
+   object nor Sized, the subtypes of p *)
+fun prim_subtype :: "prim_ty \<Rightarrow> ty \<Rightarrow> bool"
+where
+"prim_subtype p (TyPrim q) = (q = p \<or> q = Never \<or> q = int \<and> p = float)" |
+"prim_subtype p (TyLiteral l) = (base_type_lit l = TyPrim p \<or> base_type_lit l = TyPrim int \<and> p = float)" |
+"prim_subtype p (TyUnion \<sigma> \<tau>) = (prim_subtype p \<sigma> \<and> prim_subtype p \<tau>)" |
+"prim_subtype p _ = False"
+
+lemma prim_subtype_subty:
+  assumes "p \<notin> {object, Sized}"
+  shows "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> prim_subtype p \<tau> \<Longrightarrow> prim_subtype p \<sigma>"
+    and "\<Sigma> \<turnstile> \<sigma>s [<:] \<tau>s \<Longrightarrow> True"
+proof (induction rule: subty_subtys.inducts)
+  case (SubtyLiteral l \<tau>)
+  then show ?case by (cases l) auto
+qed (use assms in \<open>auto elim: sized.elims\<close>)
+
 end
