@@ -57,9 +57,9 @@ jobs:
           name: site
           path: site
 
-  # Suite and type checker under other Python runtimes
+  # Run the programs of the suite under other Python runtimes, with harness and type checker under CPython
   runtimes:
-    name: type checker conformance under ${{ matrix.runtime }}
+    name: conformance suite under ${{ matrix.runtime }}
     needs: build
     runs-on: ubuntu-latest
     strategy:
@@ -79,9 +79,11 @@ jobs:
 
       - name: Set up GraalPy
         if: matrix.runtime == 'GraalPy'
+        id: graalpy
         uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.version }}
+          update-environment: false
 
       - name: Set up uv for Pyodide
         if: matrix.runtime == 'Pyodide'
@@ -98,7 +100,7 @@ jobs:
         if: matrix.runtime == 'GraalPy'
         env:
           PYTHONPATH: ${{ github.workspace }}/site
-        run: test/check-conformance.sh python --no-lint
+        run: test/check-conformance.sh "${{ steps.graalpy.outputs.python-path }}" --no-lint
 
       - name: Run tests with Pyodide
         if: matrix.runtime == 'Pyodide'
