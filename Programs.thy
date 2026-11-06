@@ -32,12 +32,12 @@ where
   (case fmlookup \<P> q of
      Some \<Gamma> \<Rightarrow> Ok (\<Gamma>, \<Sigma>)
    | None \<Rightarrow>
-     if q \<in> set V then Fail (q, ImportCycle (dropWhile (\<lambda>q''. q'' \<noteq> q) V @ [q]))
+     if q \<in> set V then Fail (q, Violates RuleModule (ImportCycle (dropWhile (\<lambda>q''. q'' \<noteq> q) V @ [q])))
      else case fmlookup \<M> q of
-       None \<Rightarrow> Fail (q', UnknownModule q)
+       None \<Rightarrow> Fail (q', SelectsNoRule JudgementModule (UnknownModule q))
      | Some (ModuleBody \<iota>s t) \<Rightarrow> do {
          (\<Gamma>', \<Sigma>') \<leftarrow> check_imports \<M> (V @ [q]) \<Sigma> q \<iota>s;
-         map_sum (Pair q) id (do {
+         map_sum (Pair q \<circ> violates RuleModule) id (do {
            (case redeclared node {} (declarations \<iota>s) of
               Some y \<Rightarrow> Fail (Located (pos_of y) (DuplicateImportedName (node y)))
             | None \<Rightarrow> Ok ());
@@ -57,21 +57,23 @@ where
        })" |
 
 "check_imports \<M> V \<Sigma> q [] = Ok (fmempty, \<Sigma>)" |
-"check_imports \<M> V \<Sigma> q (At p (Import q') # \<iota>s) = locate_in q p (case variables q' of x # xs \<Rightarrow> do {
+"check_imports \<M> V \<Sigma> q (At p (Import q') # \<iota>s) =
+  locate_in q p (map_sum (apsnd (violates RuleImport)) id (case variables q' of x # xs \<Rightarrow> do {
    ensure (\<not> q \<prec> q') (q, ImportOfContainedModule q' q);
    (\<Delta>, \<Sigma>\<^sub>1) \<leftarrow> check_module \<M> V \<Sigma> q (Simple x);
    (\<Delta>', \<Sigma>\<^sub>2) \<leftarrow> submodules \<M> V \<Sigma>\<^sub>1 q (Simple x) \<Delta> xs;
    (\<Gamma>, \<Sigma>') \<leftarrow> check_imports \<M> V \<Sigma>\<^sub>2 q \<iota>s;
    Ok (fmupd x (ModChecked (Simple x) \<Delta>') fmempty \<uplus> \<Gamma>, \<Sigma>')
- })" |
-"check_imports \<M> V \<Sigma> q (At p (FromImport q' xs) # \<iota>s) = locate_in q p (do {
+ }))" |
+"check_imports \<M> V \<Sigma> q (At p (FromImport q' xs) # \<iota>s) =
+  locate_in q p (map_sum (apsnd (violates RuleFromImport)) id (do {
    (\<Delta>, \<Sigma>\<^sub>1) \<leftarrow> check_module \<M> V \<Sigma> q q';
    \<Sigma>\<^sub>2 \<leftarrow> check_modules \<M> V \<Sigma>\<^sub>1 q (unique_to q' q);
    (case redeclared id {} xs of Some x \<Rightarrow> Fail (q, DuplicateImportedName x) | None \<Rightarrow> Ok ());
    (\<theta>s, \<Sigma>\<^sub>3) \<leftarrow> imports_entries \<M> V \<Sigma>\<^sub>2 q q' \<Delta> xs;
    (\<Gamma>, \<Sigma>') \<leftarrow> check_imports \<M> V \<Sigma>\<^sub>3 q \<iota>s;
    Ok (fmap_of_list (zip xs \<theta>s) \<uplus> \<Gamma>, \<Sigma>')
- })" |
+ }))" |
 
 "submodules \<M> V \<Sigma> q q' \<Gamma> [] = Ok (\<Gamma>, \<Sigma>)" |
 "submodules \<M> V \<Sigma> q q' \<Gamma> (x # xs) = do {
@@ -86,7 +88,10 @@ where
    | \<theta> \<Rightarrow>
        (case resolve_name \<Gamma> (Simple x) of
           Some \<theta>' \<Rightarrow> Ok (\<theta>', \<Sigma>)
-        | None \<Rightarrow> Fail (q, case \<theta> of None \<Rightarrow> UnknownMember x q' | Some _ \<Rightarrow> UnassignedMember x q')))" |
+        | None \<Rightarrow>
+            Fail (q, case \<theta> of
+                       None \<Rightarrow> SelectsNoRule JudgementResolveName (UnknownMember x q')
+                     | Some _ \<Rightarrow> Violates RuleImpMember (UnassignedMember x q'))))" |
 
 "imports_entries \<M> V \<Sigma> q q' \<Gamma> [] = Ok ([], \<Sigma>)" |
 "imports_entries \<M> V \<Sigma> q q' \<Gamma> (x # xs) = do {

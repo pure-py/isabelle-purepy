@@ -92,20 +92,22 @@ where
    \<tau> \<leftarrow> subscript_type \<Sigma> \<sigma> int_ok str_ok p idx; \<tau>' \<leftarrow> subscript_type \<Sigma> \<sigma>' int_ok str_ok p idx;
    Ok (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>')
  }" |
-"subscript_type \<Sigma> (TyList \<tau>) int_ok _ _ _ = do { int_ok; Ok \<tau> }" |
-"subscript_type \<Sigma> (TyDict \<tau>) _ str_ok _ _ = do { str_ok; Ok \<tau> }" |
+"subscript_type \<Sigma> (TyList \<tau>) int_ok _ _ _ = by_rule RuleSubscriptList (do { int_ok; Ok \<tau> })" |
+"subscript_type \<Sigma> (TyDict \<tau>) _ str_ok _ _ = by_rule RuleSubscriptDict (do { str_ok; Ok \<tau> })" |
 "subscript_type \<Sigma> (TyTuple \<tau>s) _ _ p idx = do {
    \<iota> \<leftarrow> idx;
    case \<iota> of
      TyLiteral (LitInt n) \<Rightarrow>
        let i = (if n < 0 then of_nat (length \<tau>s) + n else n)
        in if 0 \<le> i \<and> i < of_nat (length \<tau>s) then Ok (\<tau>s ! nat i)
-          else Fail (Located p (TupleIndexOutOfRange n (length \<tau>s)))
+          else Fail (Located p (Violates (if n < 0 then RuleSubscriptTupleNeg else RuleSubscriptTuple)
+                                   (TupleIndexOutOfRange n (length \<tau>s))))
    | TyPrim int \<Rightarrow> Ok (joins \<Sigma> \<tau>s)
-   | _ \<Rightarrow> Fail (Located p (TypeMismatch (TyPrim int) \<iota>))
+   | _ \<Rightarrow> Fail (Located p (Violates RuleSubscriptTupleInt (TypeMismatch (TyPrim int) \<iota>)))
  }" |
 "subscript_type \<Sigma> \<sigma> int_ok _ _ _ =
-  (if base_type \<sigma> = TyPrim str then do { int_ok; Ok (TyPrim str) } else Fail (NotSubscriptable \<sigma>))"
+  (if base_type \<sigma> = TyPrim str then by_rule RuleSubscriptStr (do { int_ok; Ok (TyPrim str) })
+   else Fail (SelectsNoRule JudgementSynth (NotSubscriptable \<sigma>)))"
 
 datatype instances = Instance "ty list" | Undetermined | NoInstance
 
@@ -187,7 +189,33 @@ where
 "attribute_type \<Sigma> (TyUnion \<sigma> \<sigma>') x =
   do { \<tau> \<leftarrow> attribute_type \<Sigma> \<sigma> x; \<tau>' \<leftarrow> attribute_type \<Sigma> \<sigma>' x; Ok (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>') }" |
 "attribute_type \<Sigma> (TyClass C \<sigma>s) x =
-  or_else (UnknownField (short_name C) x) (map_of (instantiate (fields \<Sigma> C) \<sigma>s) x)" |
-"attribute_type \<Sigma> \<sigma> x = Fail (NoAttributes \<sigma> x)"
+  or_else (Violates RuleAttrObject (UnknownField (short_name C) x)) (map_of (instantiate (fields \<Sigma> C) \<sigma>s) x)" |
+"attribute_type \<Sigma> \<sigma> x = Fail (SelectsNoRule JudgementSynth (NoAttributes \<sigma> x))"
+
+(* Rule of subtyping, if any, selected by the judgement that \<sigma> is a subtype of \<tau>, taking a literal type as its
+   base type unless \<tau> is a literal type *)
+fun subtyping_rule :: "class_table \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> rule option"
+where
+"subtyping_rule \<Sigma> (TyUnion _ _) _ = Some RuleSubtyUnion" |
+"subtyping_rule \<Sigma> _ (TyUnion _ _) = None" |
+"subtyping_rule \<Sigma> (TyClass C _) (TyClass D _) =
+  (if base \<Sigma> C = None then if C = D then Some RuleSubtyClass else None
+   else if C = D then None
+   else Some RuleSubtyClassExtend)" |
+"subtyping_rule \<Sigma> (TyClass C _) _ = (if base \<Sigma> C = None then None else Some RuleSubtyClassExtend)" |
+"subtyping_rule \<Sigma> _ (TyPrim Sized) = Some RuleSubtySized" |
+"subtyping_rule \<Sigma> (TyList _) (TyList _) = Some RuleSubtyList" |
+"subtyping_rule \<Sigma> (TyDict _) (TyDict _) = Some RuleSubtyDict" |
+"subtyping_rule \<Sigma> (TyCallable \<sigma>s _) (TyCallable \<tau>s _) =
+  (if length \<sigma>s = length \<tau>s then Some RuleSubtyCallable else None)" |
+"subtyping_rule \<Sigma> (TyTuple \<sigma>s) (TyTuple \<tau>s) = (if length \<sigma>s = length \<tau>s then Some RuleSubtyTuple else None)" |
+"subtyping_rule \<Sigma> (TyLiteral _) (TyLiteral _) = Some RuleSubtyLiteral" |
+"subtyping_rule \<Sigma> _ _ = None"
+
+(* Mismatch of type \<sigma> against expected type \<tau>, under the rule of subtyping selected by them, if any *)
+definition mismatch :: "class_table \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> reason"
+where
+"mismatch \<Sigma> \<tau> \<sigma> =
+  (case subtyping_rule \<Sigma> \<sigma> \<tau> of Some n \<Rightarrow> Violates n (TypeMismatch \<tau> \<sigma>) | None \<Rightarrow> TypeMismatch \<tau> \<sigma>)"
 
 end
