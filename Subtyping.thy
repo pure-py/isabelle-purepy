@@ -192,8 +192,8 @@ where
   or_else (Violates RuleAttrObject (UnknownField (short_name C) x)) (map_of (instantiate (fields \<Sigma> C) \<sigma>s) x)" |
 "attribute_type \<Sigma> \<sigma> x = Fail (SelectsNoRule JudgementSynth (NoAttributes \<sigma> x))"
 
-(* Rule of subtyping, if any, selected by \<sigma> a subtype of \<tau>, taking a literal type as its base type unless \<tau> is
-   a literal type *)
+(* Rule of subtyping, if any, selected by the judgement that \<sigma> is a subtype of \<tau>, taking a literal type as its
+   base type unless \<tau> is a literal type *)
 fun subtyping_rule :: "class_table \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> rule option"
 where
 "subtyping_rule \<Sigma> (TyUnion _ _) _ = Some RuleSubtyUnion" |
@@ -212,7 +212,7 @@ where
 "subtyping_rule \<Sigma> (TyLiteral _) (TyLiteral _) = Some RuleSubtyLiteral" |
 "subtyping_rule \<Sigma> _ _ = None"
 
-(* Mismatch of type \<sigma> against expected type \<tau>, under the rule of subtyping for their form, if any *)
+(* Mismatch of type \<sigma> against expected type \<tau>, under the rule of subtyping selected by them, if any *)
 definition mismatch :: "class_table \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> reason"
 where
 "mismatch \<Sigma> \<tau> \<sigma> =
