@@ -226,412 +226,370 @@ proof
     by (induction rule: list_all2_induct) (auto intro: subty_subtys.intros)
 qed
 
-(* Substitution of equivalent types for the same variables *)
-lemma subst_equiv:
-  "list_all2 (\<lambda>\<sigma> \<tau>. \<Sigma> \<turnstile> \<sigma> \<approx> \<tau>) \<sigma>s \<tau>s \<Longrightarrow> \<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<upsilon> \<approx> subst \<tau>s \<alpha>s \<upsilon>"
-proof (induction \<upsilon>)
-  case (TyVar \<alpha>)
-  show ?case
-  proof (cases "map_of (zip \<alpha>s \<sigma>s) \<alpha>")
-    case None
-    with TyVar show ?thesis by (simp add: SubtyRefl map_of_zip_list_all2_None)
-  next
-    case (Some \<sigma>)
-    with TyVar show ?thesis by (auto dest!: map_of_zip_list_all2)
-  qed
-next
-  case (TyTuple \<upsilon>s)
-  then show ?case
-    by (auto intro!: SubtyTuple list.rel_refl_strong simp: subtys_list_all2 list_all2_map1 list_all2_map2)
-next
-  case (TyCallable \<upsilon>s \<upsilon>)
-  then show ?case
-    by (auto intro!: SubtyCallable list.rel_refl_strong simp: subtys_list_all2 list_all2_map1 list_all2_map2)
-next
-  case (TyClass C \<upsilon>s)
-  then show ?case
-    by (auto intro!: SubtyClass list.rel_refl_strong simp: subtys_list_all2 list_all2_map1 list_all2_map2)
-qed (auto intro: subty_subtys.intros)
+lemma subtys_Nil: "\<Sigma> \<turnstile> \<sigma>s [<:] [] \<Longrightarrow> \<sigma>s = []"
+  by (simp add: subtys_list_all2)
 
-(* Subtyping of \<sigma> by \<tau> which composes with subtyping on either side *)
+(* Substitution of equivalent types for the same type variables *)
+lemma subst_equiv:
+  "list_all2 (\<lambda>\<sigma> \<tau>. \<Sigma> \<turnstile> \<sigma> \<approx> \<tau>) \<sigma>s \<tau>s \<Longrightarrow> \<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<sigma> \<approx> subst \<tau>s \<alpha>s \<sigma>"
+proof (induction \<sigma>)
+  case (TyVar \<alpha>)
+  then show ?case
+    using rel_option_map_of_zip[OF TyVar, of \<alpha>s \<alpha>]
+    by (auto simp: rel_option_iff SubtyRefl split: option.splits)
+qed (auto intro!: SubtyTuple SubtyCallable SubtyClass list.rel_refl_strong intro: subty_subtys.intros
+      simp: subtys_list_all2 list_all2_map1 list_all2_map2)
+
+(* Pair of types \<sigma> and \<tau> with each upper bound of \<tau> an upper bound of \<sigma>, and each lower bound of \<sigma> a lower
+   bound of \<tau> *)
 definition composable :: "class_table \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> bool"
 where
 "composable \<Sigma> \<sigma> \<tau> = ((\<forall>\<tau>'. \<Sigma> \<turnstile> \<tau> <: \<tau>' \<longrightarrow> \<Sigma> \<turnstile> \<sigma> <: \<tau>') \<and> (\<forall>\<rho>. \<Sigma> \<turnstile> \<rho> <: \<sigma> \<longrightarrow> \<Sigma> \<turnstile> \<rho> <: \<tau>))"
 
+lemma composableI:
+  "\<lbrakk> \<And>\<tau>'. \<Sigma> \<turnstile> \<tau> <: \<tau>' \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: \<tau>' ; \<And>\<sigma>'. \<Sigma> \<turnstile> \<sigma>' <: \<sigma> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma>' <: \<tau> \<rbrakk>
+  \<Longrightarrow> composable \<Sigma> \<sigma> \<tau>"
+  unfolding composable_def by blast
+
+lemma composable_upper: "\<lbrakk> composable \<Sigma> \<sigma> \<tau> ; \<Sigma> \<turnstile> \<tau> <: \<tau>' \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: \<tau>'"
+  and composable_lower: "\<lbrakk> composable \<Sigma> \<sigma> \<tau> ; \<Sigma> \<turnstile> \<sigma>' <: \<sigma> \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma>' <: \<tau>"
+  unfolding composable_def by blast+
+
 lemma composable_subty: "composable \<Sigma> \<sigma> \<tau> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: \<tau>"
-  unfolding composable_def by (blast intro: SubtyRefl)
+  using composable_upper SubtyRefl by blast
+
+lemma composable_upper_list: "\<lbrakk> list_all2 (composable \<Sigma>) \<sigma>s \<tau>s ; \<Sigma> \<turnstile> \<tau>s [<:] \<tau>s' \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma>s [<:] \<tau>s'"
+  and composable_lower_list: "\<lbrakk> list_all2 (composable \<Sigma>) \<sigma>s \<tau>s ; \<Sigma> \<turnstile> \<sigma>s' [<:] \<sigma>s \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma>s' [<:] \<tau>s"
+  unfolding subtys_list_all2 by (blast intro: list_all2_trans composable_upper composable_lower)+
 
 lemma composable_equiv:
   "\<lbrakk> list_all2 (composable \<Sigma>) \<sigma>s \<tau>s ; list_all2 (composable \<Sigma>) \<tau>s \<sigma>s \<rbrakk>
   \<Longrightarrow> list_all2 (\<lambda>\<sigma> \<tau>. \<Sigma> \<turnstile> \<sigma> \<approx> \<tau>) \<sigma>s \<tau>s"
   by (auto simp: list_all2_conv_all_nth composable_subty)
 
-(* Substitution for a variable, by composable lists of types: either both leave the variable, or they
-   substitute composable types *)
-lemma subst_var_composable:
-  assumes "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" and "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s"
-  shows "(subst \<sigma>s \<alpha>s (TyVar \<beta>) = TyVar \<beta> \<and> subst \<tau>s \<alpha>s (TyVar \<beta>) = TyVar \<beta>)
-     \<or> composable \<Sigma> (subst \<sigma>s \<alpha>s (TyVar \<beta>)) (subst \<tau>s \<alpha>s (TyVar \<beta>))
-       \<and> composable \<Sigma> (subst \<tau>s \<alpha>s (TyVar \<beta>)) (subst \<sigma>s \<alpha>s (TyVar \<beta>))"
-proof (cases "map_of (zip \<alpha>s \<sigma>s) \<beta>")
-  case None
-  then show ?thesis using assms by (simp add: map_of_zip_list_all2_None)
-next
-  case (Some \<sigma>)
-  with assms obtain \<tau> where "map_of (zip \<alpha>s \<tau>s) \<beta> = Some \<tau>" and "composable \<Sigma> \<sigma> \<tau>"
-    by (blast dest: map_of_zip_list_all2)
-  moreover with Some assms(2) have "composable \<Sigma> \<tau> \<sigma>" by (auto dest: map_of_zip_list_all2)
-  ultimately show ?thesis using Some by simp
-qed
+(* Subtyping at a type variable, from substitution of \<tau>s to substitution of \<sigma>s, when each type of \<sigma>s is
+   composable with the corresponding type of \<tau>s *)
+lemma composable_subst_var:
+  assumes "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s"
+  shows "\<Sigma> \<turnstile> subst \<tau>s \<alpha>s (TyVar \<alpha>) <: \<tau> \<Longrightarrow> \<Sigma> \<turnstile> subst \<sigma>s \<alpha>s (TyVar \<alpha>) <: \<tau>"
+    and "\<Sigma> \<turnstile> \<sigma> <: subst \<sigma>s \<alpha>s (TyVar \<alpha>) \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: subst \<tau>s \<alpha>s (TyVar \<alpha>)"
+  using rel_option_map_of_zip[OF assms, of \<alpha>s \<alpha>]
+  by (auto simp: rel_option_iff split: option.splits intro: composable_upper composable_lower)
 
-lemma composable_var_L:
-  "\<lbrakk> list_all2 (composable \<Sigma>) \<sigma>s \<tau>s ; list_all2 (composable \<Sigma>) \<tau>s \<sigma>s ; X = subst \<tau>s \<alpha>s (TyVar \<beta>) ; \<Sigma> \<turnstile> X <: Y \<rbrakk>
-  \<Longrightarrow> \<Sigma> \<turnstile> subst \<sigma>s \<alpha>s (TyVar \<beta>) <: Y"
-  using subst_var_composable[of \<Sigma> \<sigma>s \<tau>s \<alpha>s \<beta>] unfolding composable_def by auto
-
-lemma composable_var_R:
-  "\<lbrakk> list_all2 (composable \<Sigma>) \<sigma>s \<tau>s ; list_all2 (composable \<Sigma>) \<tau>s \<sigma>s ; Y = subst \<sigma>s \<alpha>s (TyVar \<beta>) ; \<Sigma> \<turnstile> X <: Y \<rbrakk>
-  \<Longrightarrow> \<Sigma> \<turnstile> X <: subst \<tau>s \<alpha>s (TyVar \<beta>)"
-  using subst_var_composable[of \<Sigma> \<sigma>s \<tau>s \<alpha>s \<beta>] unfolding composable_def by auto
-
-(* Substitution of composable types for the same variables, on either side of a subtyping *)
+(* Substitution of composable types for the same type variables, on either side of a subtyping *)
 lemma subst_composable:
   assumes wf: "wf_class_table \<Sigma>"
-  shows
-    "\<Sigma> \<turnstile> X <: Y \<Longrightarrow>
-     \<forall>\<sigma>s \<tau>s. list_all2 (composable \<Sigma>) \<sigma>s \<tau>s \<longrightarrow> list_all2 (composable \<Sigma>) \<tau>s \<sigma>s
-       \<longrightarrow> (\<forall>\<upsilon>. wf_ty \<Sigma> \<upsilon> \<longrightarrow> X = subst \<tau>s \<alpha>s \<upsilon> \<longrightarrow> \<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<upsilon> <: Y)
-        \<and> (\<forall>\<upsilon>. wf_ty \<Sigma> \<upsilon> \<longrightarrow> Y = subst \<sigma>s \<alpha>s \<upsilon> \<longrightarrow> \<Sigma> \<turnstile> X <: subst \<tau>s \<alpha>s \<upsilon>)"
-  and
-    "\<Sigma> \<turnstile> Xs [<:] Ys \<Longrightarrow>
-     \<forall>\<sigma>s \<tau>s. list_all2 (composable \<Sigma>) \<sigma>s \<tau>s \<longrightarrow> list_all2 (composable \<Sigma>) \<tau>s \<sigma>s
-       \<longrightarrow> (\<forall>\<upsilon>s. (\<forall>\<upsilon> \<in> set \<upsilon>s. wf_ty \<Sigma> \<upsilon>) \<longrightarrow> Xs = map (subst \<tau>s \<alpha>s) \<upsilon>s
-             \<longrightarrow> \<Sigma> \<turnstile> map (subst \<sigma>s \<alpha>s) \<upsilon>s [<:] Ys)
-        \<and> (\<forall>\<upsilon>s. (\<forall>\<upsilon> \<in> set \<upsilon>s. wf_ty \<Sigma> \<upsilon>) \<longrightarrow> Ys = map (subst \<sigma>s \<alpha>s) \<upsilon>s
-             \<longrightarrow> \<Sigma> \<turnstile> Xs [<:] map (subst \<tau>s \<alpha>s) \<upsilon>s)"
+  shows "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow>
+           \<forall>\<sigma>s \<tau>s. list_all2 (composable \<Sigma>) \<sigma>s \<tau>s \<longrightarrow> list_all2 (composable \<Sigma>) \<tau>s \<sigma>s
+             \<longrightarrow> (\<forall>\<sigma>'. wf_ty \<Sigma> \<sigma>' \<longrightarrow> \<sigma> = subst \<tau>s \<alpha>s \<sigma>' \<longrightarrow> \<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<sigma>' <: \<tau>)
+               \<and> (\<forall>\<tau>'. wf_ty \<Sigma> \<tau>' \<longrightarrow> \<tau> = subst \<sigma>s \<alpha>s \<tau>' \<longrightarrow> \<Sigma> \<turnstile> \<sigma> <: subst \<tau>s \<alpha>s \<tau>')"
+    and "\<Sigma> \<turnstile> \<sigma>s' [<:] \<tau>s' \<Longrightarrow>
+           \<forall>\<sigma>s \<tau>s. list_all2 (composable \<Sigma>) \<sigma>s \<tau>s \<longrightarrow> list_all2 (composable \<Sigma>) \<tau>s \<sigma>s
+             \<longrightarrow> (\<forall>\<sigma>s''. (\<forall>\<sigma> \<in> set \<sigma>s''. wf_ty \<Sigma> \<sigma>) \<longrightarrow> \<sigma>s' = map (subst \<tau>s \<alpha>s) \<sigma>s''
+                   \<longrightarrow> \<Sigma> \<turnstile> map (subst \<sigma>s \<alpha>s) \<sigma>s'' [<:] \<tau>s')
+               \<and> (\<forall>\<tau>s''. (\<forall>\<tau> \<in> set \<tau>s''. wf_ty \<Sigma> \<tau>) \<longrightarrow> \<tau>s' = map (subst \<sigma>s \<alpha>s) \<tau>s''
+                   \<longrightarrow> \<Sigma> \<turnstile> \<sigma>s' [<:] map (subst \<tau>s \<alpha>s) \<tau>s'')"
 proof (induction rule: subty_subtys.inducts)
   case (SubtyRefl \<tau>)
   show ?case by (blast dest: composable_equiv subst_equiv[THEN conjunct1])
 next
-  case (SubtyClassExtend C D \<omega>s \<tau>s' \<tau>')
+  case (SubtyClassExtend C D \<sigma>s' \<tau>s' \<tau>)
   let ?ps = "type_params \<Sigma> C"
-  have XY: "\<Sigma> \<turnstile> TyClass C \<tau>s' <: \<tau>'" using SubtyClassExtend(1,2) by (rule subty_subtys.intros)
+  have sub: "\<Sigma> \<turnstile> TyClass C \<tau>s' <: \<tau>" using SubtyClassExtend(1,2) by (rule subty_subtys.intros)
   show ?case
   proof (intro allI impI conjI)
-    fix \<sigma>s \<tau>s \<upsilon>
-    assume H: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s"
-      and wf\<upsilon>: "wf_ty \<Sigma> \<upsilon>" and eq: "TyClass C \<tau>s' = subst \<tau>s \<alpha>s \<upsilon>"
-    show "\<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<upsilon> <: \<tau>'"
-    proof (cases \<upsilon>)
-      case (TyVar \<beta>)
-      with H eq XY show ?thesis by (blast intro: composable_var_L)
+    fix \<sigma>s \<tau>s \<sigma>'
+    assume comp: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s"
+      and wf': "wf_ty \<Sigma> \<sigma>'" and eq: "TyClass C \<tau>s' = subst \<tau>s \<alpha>s \<sigma>'"
+    show "\<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<sigma>' <: \<tau>"
+    proof (cases \<sigma>')
+      case (TyVar \<alpha>)
+      show ?thesis using sub unfolding eq TyVar by (rule composable_subst_var(1)[OF comp(1)])
     next
-      case (TyClass C' \<upsilon>s)
-      with eq have [simp]: "C' = C" and \<tau>s': "\<tau>s' = map (subst \<tau>s \<alpha>s) \<upsilon>s" by simp_all
-      let ?\<upsilon> = "TyClass D (map (subst \<upsilon>s ?ps) \<omega>s)"
-      have wfC: "wf_ty \<Sigma> (TyClass C \<upsilon>s)" using wf\<upsilon> by (simp add: TyClass)
-      have wf\<upsilon>': "wf_ty \<Sigma> ?\<upsilon>" using wf_class_table_base[OF wf wfC SubtyClassExtend(1)] .
-      have eq1: "TyClass D (map (subst \<tau>s' ?ps) \<omega>s) = subst \<tau>s \<alpha>s ?\<upsilon>"
-        unfolding \<tau>s' by (rule base_subst[OF wf wfC SubtyClassExtend(1)])
-      have eq2: "subst \<sigma>s \<alpha>s ?\<upsilon> = TyClass D (map (subst (map (subst \<sigma>s \<alpha>s) \<upsilon>s) ?ps) \<omega>s)"
-        by (rule base_subst[OF wf wfC SubtyClassExtend(1), symmetric])
-      from SubtyClassExtend(3) H wf\<upsilon>' eq1 have "\<Sigma> \<turnstile> subst \<sigma>s \<alpha>s ?\<upsilon> <: \<tau>'" by blast
-      then have "\<Sigma> \<turnstile> TyClass D (map (subst (map (subst \<sigma>s \<alpha>s) \<upsilon>s) ?ps) \<omega>s) <: \<tau>'" unfolding eq2 .
-      then show ?thesis
-        using SubtyClassExtend(1) by (simp add: TyClass) (blast intro: Subtyping.SubtyClassExtend)
+      case (TyClass C' \<tau>s'')
+      with eq have [simp]: "C' = C" and \<tau>s': "\<tau>s' = map (subst \<tau>s \<alpha>s) \<tau>s''" by simp_all
+      have wf_C: "wf_ty \<Sigma> (TyClass C \<tau>s'')" using wf' by (simp add: TyClass)
+      note base = base_subst[OF wf wf_C SubtyClassExtend(1)]
+      let ?\<sigma> = "TyClass D (map (subst \<tau>s'' ?ps) \<sigma>s')"
+      have "TyClass D (map (subst \<tau>s' ?ps) \<sigma>s') = subst \<tau>s \<alpha>s ?\<sigma>" unfolding \<tau>s' by (rule base)
+      with SubtyClassExtend(3) comp wf_class_table_base[OF wf wf_C SubtyClassExtend(1)]
+      have "\<Sigma> \<turnstile> subst \<sigma>s \<alpha>s ?\<sigma> <: \<tau>" by blast
+      then have "\<Sigma> \<turnstile> TyClass D (map (subst (map (subst \<sigma>s \<alpha>s) \<tau>s'') ?ps) \<sigma>s') <: \<tau>" by (simp only: base)
+      then show ?thesis using SubtyClassExtend(1) by (auto simp: TyClass intro: Subtyping.SubtyClassExtend)
     qed (use eq in simp_all)
   next
-    fix \<sigma>s \<tau>s \<upsilon>
-    assume "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s" "wf_ty \<Sigma> \<upsilon>"
-      and "\<tau>' = subst \<sigma>s \<alpha>s \<upsilon>"
-    with SubtyClassExtend(3) have "\<Sigma> \<turnstile> TyClass D (map (subst \<tau>s' ?ps) \<omega>s) <: subst \<tau>s \<alpha>s \<upsilon>" by blast
-    then show "\<Sigma> \<turnstile> TyClass C \<tau>s' <: subst \<tau>s \<alpha>s \<upsilon>"
+    fix \<sigma>s \<tau>s \<tau>'
+    assume "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s" "wf_ty \<Sigma> \<tau>'"
+      and "\<tau> = subst \<sigma>s \<alpha>s \<tau>'"
+    with SubtyClassExtend(3) have "\<Sigma> \<turnstile> TyClass D (map (subst \<tau>s' ?ps) \<sigma>s') <: subst \<tau>s \<alpha>s \<tau>'" by blast
+    then show "\<Sigma> \<turnstile> TyClass C \<tau>s' <: subst \<tau>s \<alpha>s \<tau>'"
       using SubtyClassExtend(1) by (blast intro: Subtyping.SubtyClassExtend)
   qed
 next
-  case (SubtyClass \<rho>s \<rho>s' C)
-  have XY: "\<Sigma> \<turnstile> TyClass C \<rho>s <: TyClass C \<rho>s'" using SubtyClass(1,3) by (rule subty_subtys.intros)
+  case (SubtyClass \<sigma>s' \<tau>s' C)
+  have sub: "\<Sigma> \<turnstile> TyClass C \<sigma>s' <: TyClass C \<tau>s'" using SubtyClass(1,3) by (rule subty_subtys.intros)
   show ?case
   proof (intro allI impI conjI)
-    fix \<sigma>s \<tau>s \<upsilon>
-    assume H: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s"
-      and wf\<upsilon>: "wf_ty \<Sigma> \<upsilon>" and eq: "TyClass C \<rho>s = subst \<tau>s \<alpha>s \<upsilon>"
-    show "\<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<upsilon> <: TyClass C \<rho>s'"
-    proof (cases \<upsilon>)
-      case (TyVar \<beta>)
-      with H eq XY show ?thesis by (blast intro: composable_var_L)
+    fix \<sigma>s \<tau>s \<sigma>'
+    assume comp: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s"
+      and wf': "wf_ty \<Sigma> \<sigma>'" and eq: "TyClass C \<sigma>s' = subst \<tau>s \<alpha>s \<sigma>'"
+    show "\<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<sigma>' <: TyClass C \<tau>s'"
+    proof (cases \<sigma>')
+      case (TyVar \<alpha>)
+      show ?thesis using sub unfolding eq TyVar by (rule composable_subst_var(1)[OF comp(1)])
     next
-      case (TyClass C' \<upsilon>s)
-      with eq wf\<upsilon> have "C' = C" "\<rho>s = map (subst \<tau>s \<alpha>s) \<upsilon>s" "\<forall>\<upsilon> \<in> set \<upsilon>s. wf_ty \<Sigma> \<upsilon>" by simp_all
-      with SubtyClass(2,4) H show ?thesis by (auto simp: TyClass intro!: subty_subtys.intros)
+      case (TyClass C' \<sigma>s'')
+      with eq wf' have "C' = C" "\<sigma>s' = map (subst \<tau>s \<alpha>s) \<sigma>s''" "\<forall>\<sigma> \<in> set \<sigma>s''. wf_ty \<Sigma> \<sigma>" by simp_all
+      with SubtyClass(2,4) comp show ?thesis by (auto simp: TyClass intro!: subty_subtys.intros)
     qed (use eq in simp_all)
   next
-    fix \<sigma>s \<tau>s \<upsilon>
-    assume H: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s"
-      and wf\<upsilon>: "wf_ty \<Sigma> \<upsilon>" and eq: "TyClass C \<rho>s' = subst \<sigma>s \<alpha>s \<upsilon>"
-    show "\<Sigma> \<turnstile> TyClass C \<rho>s <: subst \<tau>s \<alpha>s \<upsilon>"
-    proof (cases \<upsilon>)
-      case (TyVar \<beta>)
-      with H eq XY show ?thesis by (blast intro: composable_var_R)
+    fix \<sigma>s \<tau>s \<tau>'
+    assume comp: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s"
+      and wf': "wf_ty \<Sigma> \<tau>'" and eq: "TyClass C \<tau>s' = subst \<sigma>s \<alpha>s \<tau>'"
+    show "\<Sigma> \<turnstile> TyClass C \<sigma>s' <: subst \<tau>s \<alpha>s \<tau>'"
+    proof (cases \<tau>')
+      case (TyVar \<alpha>)
+      show ?thesis using sub unfolding eq TyVar by (rule composable_subst_var(2)[OF comp(1)])
     next
-      case (TyClass C' \<upsilon>s)
-      with eq wf\<upsilon> have "C' = C" "\<rho>s' = map (subst \<sigma>s \<alpha>s) \<upsilon>s" "\<forall>\<upsilon> \<in> set \<upsilon>s. wf_ty \<Sigma> \<upsilon>" by simp_all
-      with SubtyClass(2,4) H show ?thesis by (auto simp: TyClass intro!: subty_subtys.intros)
+      case (TyClass C' \<tau>s'')
+      with eq wf' have "C' = C" "\<tau>s' = map (subst \<sigma>s \<alpha>s) \<tau>s''" "\<forall>\<tau> \<in> set \<tau>s''. wf_ty \<Sigma> \<tau>" by simp_all
+      with SubtyClass(2,4) comp show ?thesis by (auto simp: TyClass intro!: subty_subtys.intros)
     qed (use eq in simp_all)
   qed
 next
   case (SubtyNever \<tau>)
-  have XY: "\<Sigma> \<turnstile> TyPrim Never <: \<tau>" by (rule subty_subtys.intros)
-  { fix \<sigma>s \<tau>s \<upsilon>
-    assume "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s" "TyPrim Never = subst \<tau>s \<alpha>s \<upsilon>"
-    then have "\<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<upsilon> <: \<tau>" using XY
-      by (cases \<upsilon>) (auto simp del: subst.simps(1) intro: composable_var_L subty_subtys.intros) }
-  then show ?case by (blast intro: subty_subtys.intros)
+  have sub: "\<Sigma> \<turnstile> TyPrim Never <: \<tau>" by (rule subty_subtys.intros)
+  { fix \<sigma>s \<tau>s \<sigma>'
+    assume "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s" "wf_ty \<Sigma> \<sigma>'"
+    then have "TyPrim Never = subst \<tau>s \<alpha>s \<sigma>' \<Longrightarrow> \<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<sigma>' <: \<tau>"
+      and "\<tau> = subst \<sigma>s \<alpha>s \<sigma>' \<Longrightarrow> \<Sigma> \<turnstile> TyPrim Never <: subst \<tau>s \<alpha>s \<sigma>'"
+      using sub by (cases \<sigma>'; auto intro: composable_subst_var[simplified] subty_subtys.intros)+ }
+  then show ?case by blast
 next
   case (SubtyObject \<tau>)
-  have XY: "\<Sigma> \<turnstile> \<tau> <: TyPrim object" by (rule subty_subtys.intros)
-  { fix \<sigma>s \<tau>s \<upsilon>
-    assume "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s"
-      "TyPrim object = subst \<sigma>s \<alpha>s \<upsilon>"
-    then have "\<Sigma> \<turnstile> \<tau> <: subst \<tau>s \<alpha>s \<upsilon>" using XY
-      by (cases \<upsilon>) (auto simp del: subst.simps(1) intro: composable_var_R subty_subtys.intros) }
-  then show ?case by (blast intro: subty_subtys.intros)
+  have sub: "\<Sigma> \<turnstile> \<tau> <: TyPrim object" by (rule subty_subtys.intros)
+  { fix \<sigma>s \<tau>s \<sigma>'
+    assume "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s" "wf_ty \<Sigma> \<sigma>'"
+    then have "\<tau> = subst \<tau>s \<alpha>s \<sigma>' \<Longrightarrow> \<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<sigma>' <: TyPrim object"
+      and "TyPrim object = subst \<sigma>s \<alpha>s \<sigma>' \<Longrightarrow> \<Sigma> \<turnstile> \<tau> <: subst \<tau>s \<alpha>s \<sigma>'"
+      using sub by (cases \<sigma>'; auto intro: composable_subst_var[simplified] subty_subtys.intros)+ }
+  then show ?case by blast
 next
-  case SubtyIntFloat
-  have XY: "\<Sigma> \<turnstile> TyPrim int <: TyPrim float" by (rule subty_subtys.intros)
-  { fix \<sigma>s \<tau>s \<upsilon>
-    assume "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s"
-    then have "TyPrim int = subst \<tau>s \<alpha>s \<upsilon> \<Longrightarrow> \<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<upsilon> <: TyPrim float"
-      and "TyPrim float = subst \<sigma>s \<alpha>s \<upsilon> \<Longrightarrow> \<Sigma> \<turnstile> TyPrim int <: subst \<tau>s \<alpha>s \<upsilon>" using XY
-      by (cases \<upsilon>;
-          auto simp del: subst.simps(1) intro: composable_var_L composable_var_R subty_subtys.intros)+ }
+  case (SubtyIntFloat)
+  have sub: "\<Sigma> \<turnstile> TyPrim int <: TyPrim float" by (rule subty_subtys.intros)
+  { fix \<sigma>s \<tau>s \<sigma>'
+    assume "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s" "wf_ty \<Sigma> \<sigma>'"
+    then have "TyPrim int = subst \<tau>s \<alpha>s \<sigma>' \<Longrightarrow> \<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<sigma>' <: TyPrim float"
+      and "TyPrim float = subst \<sigma>s \<alpha>s \<sigma>' \<Longrightarrow> \<Sigma> \<turnstile> TyPrim int <: subst \<tau>s \<alpha>s \<sigma>'"
+      using sub by (cases \<sigma>'; auto intro: composable_subst_var[simplified] subty_subtys.intros)+ }
+  then show ?case by blast
+next
+  case (SubtyList \<sigma> \<tau>)
+  have sub: "\<Sigma> \<turnstile> TyList \<sigma> <: TyList \<tau>" using SubtyList(1,3) by (rule subty_subtys.intros)
+  { fix \<sigma>s \<tau>s \<sigma>'
+    assume "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s" "wf_ty \<Sigma> \<sigma>'"
+    then have "TyList \<sigma> = subst \<tau>s \<alpha>s \<sigma>' \<Longrightarrow> \<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<sigma>' <: TyList \<tau>"
+      and "TyList \<tau> = subst \<sigma>s \<alpha>s \<sigma>' \<Longrightarrow> \<Sigma> \<turnstile> TyList \<sigma> <: subst \<tau>s \<alpha>s \<sigma>'"
+      using sub SubtyList(2,4)
+      by (cases \<sigma>'; auto intro: composable_subst_var[simplified] subty_subtys.intros)+ }
+  then show ?case by blast
+next
+  case (SubtyDict \<sigma> \<tau>)
+  have sub: "\<Sigma> \<turnstile> TyDict \<sigma> <: TyDict \<tau>" using SubtyDict(1,3) by (rule subty_subtys.intros)
+  { fix \<sigma>s \<tau>s \<sigma>'
+    assume "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s" "wf_ty \<Sigma> \<sigma>'"
+    then have "TyDict \<sigma> = subst \<tau>s \<alpha>s \<sigma>' \<Longrightarrow> \<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<sigma>' <: TyDict \<tau>"
+      and "TyDict \<tau> = subst \<sigma>s \<alpha>s \<sigma>' \<Longrightarrow> \<Sigma> \<turnstile> TyDict \<sigma> <: subst \<tau>s \<alpha>s \<sigma>'"
+      using sub SubtyDict(2,4)
+      by (cases \<sigma>'; auto intro: composable_subst_var[simplified] subty_subtys.intros)+ }
+  then show ?case by blast
+next
+  case (SubtyCallable \<tau>s' \<sigma>s' \<sigma> \<tau>)
+  have sub: "\<Sigma> \<turnstile> TyCallable \<sigma>s' \<sigma> <: TyCallable \<tau>s' \<tau>" using SubtyCallable(1,3) by (rule subty_subtys.intros)
+  { fix \<sigma>s \<tau>s \<sigma>'
+    assume "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s" "wf_ty \<Sigma> \<sigma>'"
+    then have "TyCallable \<sigma>s' \<sigma> = subst \<tau>s \<alpha>s \<sigma>' \<Longrightarrow> \<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<sigma>' <: TyCallable \<tau>s' \<tau>"
+      and "TyCallable \<tau>s' \<tau> = subst \<sigma>s \<alpha>s \<sigma>' \<Longrightarrow> \<Sigma> \<turnstile> TyCallable \<sigma>s' \<sigma> <: subst \<tau>s \<alpha>s \<sigma>'"
+      using sub SubtyCallable(2,4)
+      by (cases \<sigma>'; auto intro: composable_subst_var[simplified] subty_subtys.intros)+ }
+  then show ?case by blast
+next
+  case (SubtyTuple \<sigma>s' \<tau>s')
+  have sub: "\<Sigma> \<turnstile> TyTuple \<sigma>s' <: TyTuple \<tau>s'" using SubtyTuple(1) by (rule subty_subtys.intros)
+  { fix \<sigma>s \<tau>s \<sigma>'
+    assume "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s" "wf_ty \<Sigma> \<sigma>'"
+    then have "TyTuple \<sigma>s' = subst \<tau>s \<alpha>s \<sigma>' \<Longrightarrow> \<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<sigma>' <: TyTuple \<tau>s'"
+      and "TyTuple \<tau>s' = subst \<sigma>s \<alpha>s \<sigma>' \<Longrightarrow> \<Sigma> \<turnstile> TyTuple \<sigma>s' <: subst \<tau>s \<alpha>s \<sigma>'"
+      using sub SubtyTuple(2)
+      by (cases \<sigma>'; auto intro: composable_subst_var[simplified] subty_subtys.intros)+ }
   then show ?case by blast
 next
   case (SubtySized \<tau>)
-  have XY: "\<Sigma> \<turnstile> \<tau> <: TyPrim Sized" using SubtySized(1) by (rule subty_subtys.intros)
+  have sub: "\<Sigma> \<turnstile> \<tau> <: TyPrim Sized" using SubtySized(1) by (rule subty_subtys.intros)
   show ?case
   proof (intro allI impI conjI)
-    fix \<sigma>s \<tau>s \<upsilon>
-    assume H: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s" and eq: "\<tau> = subst \<tau>s \<alpha>s \<upsilon>"
-    show "\<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<upsilon> <: TyPrim Sized"
-    proof (cases "\<exists>\<beta>. \<upsilon> = TyVar \<beta>")
+    fix \<sigma>s \<tau>s \<sigma>'
+    assume comp: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s"
+      and eq: "\<tau> = subst \<tau>s \<alpha>s \<sigma>'"
+    show "\<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<sigma>' <: TyPrim Sized"
+    proof (cases "\<exists>\<alpha>. \<sigma>' = TyVar \<alpha>")
       case True
-      with H eq XY show ?thesis by (blast intro: composable_var_L)
+      then obtain \<alpha> where var: "\<sigma>' = TyVar \<alpha>" ..
+      show ?thesis using sub unfolding eq var by (rule composable_subst_var(1)[OF comp(1)])
     next
       case False
-      with SubtySized(1) eq have "sized (subst \<sigma>s \<alpha>s \<upsilon>)" by (simp add: sized_subst_iff)
+      with SubtySized(1) eq have "sized (subst \<sigma>s \<alpha>s \<sigma>')" by (simp add: sized_subst)
       then show ?thesis by (rule subty_subtys.intros)
     qed
   next
-    fix \<sigma>s \<tau>s \<upsilon>
-    assume H: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s"
-      and eq: "TyPrim Sized = subst \<sigma>s \<alpha>s \<upsilon>"
-    show "\<Sigma> \<turnstile> \<tau> <: subst \<tau>s \<alpha>s \<upsilon>"
-    proof (cases \<upsilon>)
-      case (TyVar \<beta>)
-      with H eq XY show ?thesis by (blast intro: composable_var_R)
+    fix \<sigma>s \<tau>s \<tau>'
+    assume comp: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s"
+      and eq: "TyPrim Sized = subst \<sigma>s \<alpha>s \<tau>'"
+    show "\<Sigma> \<turnstile> \<tau> <: subst \<tau>s \<alpha>s \<tau>'"
+    proof (cases \<tau>')
+      case (TyVar \<alpha>)
+      show ?thesis using sub unfolding eq TyVar by (rule composable_subst_var(2)[OF comp(1)])
     qed (use eq SubtySized(1) in \<open>auto intro: subty_subtys.intros\<close>)
   qed
 next
-  case (SubtyList \<rho>0 \<rho>0')
-  have XY: "\<Sigma> \<turnstile> TyList \<rho>0 <: TyList \<rho>0'" using SubtyList(1,3) by (rule subty_subtys.intros)
-  { fix \<sigma>s \<tau>s \<upsilon>
-    assume H: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s" and "wf_ty \<Sigma> \<upsilon>"
-    then have "TyList \<rho>0 = subst \<tau>s \<alpha>s \<upsilon> \<Longrightarrow> \<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<upsilon> <: TyList \<rho>0'"
-      and "TyList \<rho>0' = subst \<sigma>s \<alpha>s \<upsilon> \<Longrightarrow> \<Sigma> \<turnstile> TyList \<rho>0 <: subst \<tau>s \<alpha>s \<upsilon>" using XY SubtyList(2,4)
-      by (cases \<upsilon>;
-          auto simp del: subst.simps(1) intro: composable_var_L composable_var_R subty_subtys.intros)+ }
-  then show ?case by blast
-next
-  case (SubtyDict \<rho>0 \<rho>0')
-  have XY: "\<Sigma> \<turnstile> TyDict \<rho>0 <: TyDict \<rho>0'" using SubtyDict(1,3) by (rule subty_subtys.intros)
-  { fix \<sigma>s \<tau>s \<upsilon>
-    assume H: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s" and "wf_ty \<Sigma> \<upsilon>"
-    then have "TyDict \<rho>0 = subst \<tau>s \<alpha>s \<upsilon> \<Longrightarrow> \<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<upsilon> <: TyDict \<rho>0'"
-      and "TyDict \<rho>0' = subst \<sigma>s \<alpha>s \<upsilon> \<Longrightarrow> \<Sigma> \<turnstile> TyDict \<rho>0 <: subst \<tau>s \<alpha>s \<upsilon>" using XY SubtyDict(2,4)
-      by (cases \<upsilon>;
-          auto simp del: subst.simps(1) intro: composable_var_L composable_var_R subty_subtys.intros)+ }
-  then show ?case by blast
-next
-  case (SubtyCallable \<rho>s' \<rho>s \<rho>0 \<rho>0')
-  have XY: "\<Sigma> \<turnstile> TyCallable \<rho>s \<rho>0 <: TyCallable \<rho>s' \<rho>0'" using SubtyCallable(1,3) by (rule subty_subtys.intros)
-  { fix \<sigma>s \<tau>s \<upsilon>
-    assume H: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s" and "wf_ty \<Sigma> \<upsilon>"
-    then have "TyCallable \<rho>s \<rho>0 = subst \<tau>s \<alpha>s \<upsilon> \<Longrightarrow> \<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<upsilon> <: TyCallable \<rho>s' \<rho>0'"
-      and "TyCallable \<rho>s' \<rho>0' = subst \<sigma>s \<alpha>s \<upsilon> \<Longrightarrow> \<Sigma> \<turnstile> TyCallable \<rho>s \<rho>0 <: subst \<tau>s \<alpha>s \<upsilon>"
-      using XY SubtyCallable(2,4)
-      by (cases \<upsilon>;
-          auto simp del: subst.simps(1) intro: composable_var_L composable_var_R subty_subtys.intros)+ }
-  then show ?case by blast
-next
-  case (SubtyTuple \<rho>s \<rho>s')
-  have XY: "\<Sigma> \<turnstile> TyTuple \<rho>s <: TyTuple \<rho>s'" using SubtyTuple(1) by (rule subty_subtys.intros)
-  { fix \<sigma>s \<tau>s \<upsilon>
-    assume H: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s" and "wf_ty \<Sigma> \<upsilon>"
-    then have "TyTuple \<rho>s = subst \<tau>s \<alpha>s \<upsilon> \<Longrightarrow> \<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<upsilon> <: TyTuple \<rho>s'"
-      and "TyTuple \<rho>s' = subst \<sigma>s \<alpha>s \<upsilon> \<Longrightarrow> \<Sigma> \<turnstile> TyTuple \<rho>s <: subst \<tau>s \<alpha>s \<upsilon>" using XY SubtyTuple(2)
-      by (cases \<upsilon>;
-          auto simp del: subst.simps(1) intro: composable_var_L composable_var_R subty_subtys.intros)+ }
-  then show ?case by blast
-next
   case (SubtyLiteral l \<tau>)
-  have XY: "\<Sigma> \<turnstile> TyLiteral l <: \<tau>" using SubtyLiteral(1) by (rule subty_subtys.intros)
+  have sub: "\<Sigma> \<turnstile> TyLiteral l <: \<tau>" using SubtyLiteral(1) by (rule subty_subtys.intros)
   show ?case
   proof (intro allI impI conjI)
-    fix \<sigma>s \<tau>s \<upsilon>
-    assume H: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s"
-      and eq: "TyLiteral l = subst \<tau>s \<alpha>s \<upsilon>"
-    show "\<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<upsilon> <: \<tau>"
-    proof (cases \<upsilon>)
-      case (TyVar \<beta>)
-      with H eq XY show ?thesis by (blast intro: composable_var_L)
-    qed (use eq XY in simp_all)
+    fix \<sigma>s \<tau>s \<sigma>'
+    assume comp: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s"
+      and eq: "TyLiteral l = subst \<tau>s \<alpha>s \<sigma>'"
+    show "\<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<sigma>' <: \<tau>"
+    proof (cases \<sigma>')
+      case (TyVar \<alpha>)
+      show ?thesis using sub unfolding eq TyVar by (rule composable_subst_var(1)[OF comp(1)])
+    qed (use eq sub in simp_all)
   next
-    fix \<sigma>s \<tau>s \<upsilon>
-    assume "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s" "wf_ty \<Sigma> \<upsilon>"
-      and "\<tau> = subst \<sigma>s \<alpha>s \<upsilon>"
-    with SubtyLiteral(2) have "\<Sigma> \<turnstile> base_type_lit l <: subst \<tau>s \<alpha>s \<upsilon>" by blast
-    then show "\<Sigma> \<turnstile> TyLiteral l <: subst \<tau>s \<alpha>s \<upsilon>" by (rule Subtyping.SubtyLiteral)
+    fix \<sigma>s \<tau>s \<tau>'
+    assume "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s" "wf_ty \<Sigma> \<tau>'"
+      and "\<tau> = subst \<sigma>s \<alpha>s \<tau>'"
+    with SubtyLiteral(2) have "\<Sigma> \<turnstile> base_type_lit l <: subst \<tau>s \<alpha>s \<tau>'" by blast
+    then show "\<Sigma> \<turnstile> TyLiteral l <: subst \<tau>s \<alpha>s \<tau>'" by (rule Subtyping.SubtyLiteral)
   qed
 next
   case (SubtyUnionLeft \<sigma> \<tau> \<tau>')
-  have XY: "\<Sigma> \<turnstile> \<sigma> <: TyUnion \<tau> \<tau>'" using SubtyUnionLeft(1) by (rule subty_subtys.intros)
+  have sub: "\<Sigma> \<turnstile> \<sigma> <: TyUnion \<tau> \<tau>'" using SubtyUnionLeft(1) by (rule subty_subtys.intros)
   show ?case
   proof (intro allI impI conjI)
-    fix \<sigma>s \<tau>s \<upsilon>
-    assume "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s" "wf_ty \<Sigma> \<upsilon>"
-      and "\<sigma> = subst \<tau>s \<alpha>s \<upsilon>"
-    with SubtyUnionLeft(2) have "\<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<upsilon> <: \<tau>" by blast
-    then show "\<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<upsilon> <: TyUnion \<tau> \<tau>'" by (rule Subtyping.SubtyUnionLeft)
+    fix \<sigma>s \<tau>s \<sigma>'
+    assume "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s" "wf_ty \<Sigma> \<sigma>'"
+      and "\<sigma> = subst \<tau>s \<alpha>s \<sigma>'"
+    with SubtyUnionLeft(2) have "\<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<sigma>' <: \<tau>" by blast
+    then show "\<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<sigma>' <: TyUnion \<tau> \<tau>'" by (rule Subtyping.SubtyUnionLeft)
   next
-    fix \<sigma>s \<tau>s \<upsilon>
-    assume H: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s"
-      and wf\<upsilon>: "wf_ty \<Sigma> \<upsilon>" and eq: "TyUnion \<tau> \<tau>' = subst \<sigma>s \<alpha>s \<upsilon>"
-    show "\<Sigma> \<turnstile> \<sigma> <: subst \<tau>s \<alpha>s \<upsilon>"
-    proof (cases \<upsilon>)
-      case (TyVar \<beta>)
-      with H eq XY show ?thesis by (blast intro: composable_var_R)
+    fix \<sigma>s \<tau>s \<tau>''
+    assume comp: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s"
+      and wf': "wf_ty \<Sigma> \<tau>''" and eq: "TyUnion \<tau> \<tau>' = subst \<sigma>s \<alpha>s \<tau>''"
+    show "\<Sigma> \<turnstile> \<sigma> <: subst \<tau>s \<alpha>s \<tau>''"
+    proof (cases \<tau>'')
+      case (TyVar \<alpha>)
+      show ?thesis using sub unfolding eq TyVar by (rule composable_subst_var(2)[OF comp(1)])
     next
-      case (TyUnion \<upsilon>1 \<upsilon>2)
-      with eq wf\<upsilon> have "\<tau> = subst \<sigma>s \<alpha>s \<upsilon>1" "wf_ty \<Sigma> \<upsilon>1" by simp_all
-      with SubtyUnionLeft(2) H have "\<Sigma> \<turnstile> \<sigma> <: subst \<tau>s \<alpha>s \<upsilon>1" by blast
+      case (TyUnion \<sigma>' \<sigma>'')
+      with eq wf' have "\<tau> = subst \<sigma>s \<alpha>s \<sigma>'" "wf_ty \<Sigma> \<sigma>'" by simp_all
+      with SubtyUnionLeft(2) comp have "\<Sigma> \<turnstile> \<sigma> <: subst \<tau>s \<alpha>s \<sigma>'" by blast
       then show ?thesis by (simp add: TyUnion Subtyping.SubtyUnionLeft)
     qed (use eq in simp_all)
   qed
 next
   case (SubtyUnionRight \<sigma> \<tau>' \<tau>)
-  have XY: "\<Sigma> \<turnstile> \<sigma> <: TyUnion \<tau> \<tau>'" using SubtyUnionRight(1) by (rule subty_subtys.intros)
+  have sub: "\<Sigma> \<turnstile> \<sigma> <: TyUnion \<tau> \<tau>'" using SubtyUnionRight(1) by (rule subty_subtys.intros)
   show ?case
   proof (intro allI impI conjI)
-    fix \<sigma>s \<tau>s \<upsilon>
-    assume "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s" "wf_ty \<Sigma> \<upsilon>"
-      and "\<sigma> = subst \<tau>s \<alpha>s \<upsilon>"
-    with SubtyUnionRight(2) have "\<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<upsilon> <: \<tau>'" by blast
-    then show "\<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<upsilon> <: TyUnion \<tau> \<tau>'" by (rule Subtyping.SubtyUnionRight)
+    fix \<sigma>s \<tau>s \<sigma>'
+    assume "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s" "wf_ty \<Sigma> \<sigma>'"
+      and "\<sigma> = subst \<tau>s \<alpha>s \<sigma>'"
+    with SubtyUnionRight(2) have "\<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<sigma>' <: \<tau>'" by blast
+    then show "\<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<sigma>' <: TyUnion \<tau> \<tau>'" by (rule Subtyping.SubtyUnionRight)
   next
-    fix \<sigma>s \<tau>s \<upsilon>
-    assume H: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s"
-      and wf\<upsilon>: "wf_ty \<Sigma> \<upsilon>" and eq: "TyUnion \<tau> \<tau>' = subst \<sigma>s \<alpha>s \<upsilon>"
-    show "\<Sigma> \<turnstile> \<sigma> <: subst \<tau>s \<alpha>s \<upsilon>"
-    proof (cases \<upsilon>)
-      case (TyVar \<beta>)
-      with H eq XY show ?thesis by (blast intro: composable_var_R)
+    fix \<sigma>s \<tau>s \<tau>''
+    assume comp: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s"
+      and wf': "wf_ty \<Sigma> \<tau>''" and eq: "TyUnion \<tau> \<tau>' = subst \<sigma>s \<alpha>s \<tau>''"
+    show "\<Sigma> \<turnstile> \<sigma> <: subst \<tau>s \<alpha>s \<tau>''"
+    proof (cases \<tau>'')
+      case (TyVar \<alpha>)
+      show ?thesis using sub unfolding eq TyVar by (rule composable_subst_var(2)[OF comp(1)])
     next
-      case (TyUnion \<upsilon>1 \<upsilon>2)
-      with eq wf\<upsilon> have "\<tau>' = subst \<sigma>s \<alpha>s \<upsilon>2" "wf_ty \<Sigma> \<upsilon>2" by simp_all
-      with SubtyUnionRight(2) H have "\<Sigma> \<turnstile> \<sigma> <: subst \<tau>s \<alpha>s \<upsilon>2" by blast
+      case (TyUnion \<sigma>' \<sigma>'')
+      with eq wf' have "\<tau>' = subst \<sigma>s \<alpha>s \<sigma>''" "wf_ty \<Sigma> \<sigma>''" by simp_all
+      with SubtyUnionRight(2) comp have "\<Sigma> \<turnstile> \<sigma> <: subst \<tau>s \<alpha>s \<sigma>''" by blast
       then show ?thesis by (simp add: TyUnion Subtyping.SubtyUnionRight)
     qed (use eq in simp_all)
   qed
 next
   case (SubtyUnion \<tau> \<sigma> \<tau>')
-  have XY: "\<Sigma> \<turnstile> TyUnion \<tau> \<tau>' <: \<sigma>" using SubtyUnion(1,3) by (rule subty_subtys.intros)
+  have sub: "\<Sigma> \<turnstile> TyUnion \<tau> \<tau>' <: \<sigma>" using SubtyUnion(1,3) by (rule subty_subtys.intros)
   show ?case
   proof (intro allI impI conjI)
-    fix \<sigma>s \<tau>s \<upsilon>
-    assume H: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s"
-      and wf\<upsilon>: "wf_ty \<Sigma> \<upsilon>" and eq: "TyUnion \<tau> \<tau>' = subst \<tau>s \<alpha>s \<upsilon>"
-    show "\<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<upsilon> <: \<sigma>"
-    proof (cases \<upsilon>)
-      case (TyVar \<beta>)
-      with H eq XY show ?thesis by (blast intro: composable_var_L)
+    fix \<sigma>s \<tau>s \<sigma>'
+    assume comp: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s"
+      and wf': "wf_ty \<Sigma> \<sigma>'" and eq: "TyUnion \<tau> \<tau>' = subst \<tau>s \<alpha>s \<sigma>'"
+    show "\<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<sigma>' <: \<sigma>"
+    proof (cases \<sigma>')
+      case (TyVar \<alpha>)
+      show ?thesis using sub unfolding eq TyVar by (rule composable_subst_var(1)[OF comp(1)])
     next
-      case (TyUnion \<upsilon>1 \<upsilon>2)
-      with eq wf\<upsilon> have "\<tau> = subst \<tau>s \<alpha>s \<upsilon>1" "\<tau>' = subst \<tau>s \<alpha>s \<upsilon>2" "wf_ty \<Sigma> \<upsilon>1" "wf_ty \<Sigma> \<upsilon>2"
+      case (TyUnion \<sigma>'' \<tau>'')
+      with eq wf' have "\<tau> = subst \<tau>s \<alpha>s \<sigma>''" "\<tau>' = subst \<tau>s \<alpha>s \<tau>''" "wf_ty \<Sigma> \<sigma>''" "wf_ty \<Sigma> \<tau>''"
         by simp_all
-      with SubtyUnion(2,4) H have "\<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<upsilon>1 <: \<sigma>" "\<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<upsilon>2 <: \<sigma>" by blast+
+      with SubtyUnion(2,4) comp have "\<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<sigma>'' <: \<sigma>" "\<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<tau>'' <: \<sigma>"
+        by blast+
       then show ?thesis by (simp add: TyUnion Subtyping.SubtyUnion)
     qed (use eq in simp_all)
   next
-    fix \<sigma>s \<tau>s \<upsilon>
-    assume "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s" "wf_ty \<Sigma> \<upsilon>"
-      and "\<sigma> = subst \<sigma>s \<alpha>s \<upsilon>"
-    with SubtyUnion(2,4) have "\<Sigma> \<turnstile> \<tau> <: subst \<tau>s \<alpha>s \<upsilon>" "\<Sigma> \<turnstile> \<tau>' <: subst \<tau>s \<alpha>s \<upsilon>" by blast+
-    then show "\<Sigma> \<turnstile> TyUnion \<tau> \<tau>' <: subst \<tau>s \<alpha>s \<upsilon>" by (rule Subtyping.SubtyUnion)
+    fix \<sigma>s \<tau>s \<tau>''
+    assume "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s" "wf_ty \<Sigma> \<tau>''"
+      and "\<sigma> = subst \<sigma>s \<alpha>s \<tau>''"
+    with SubtyUnion(2,4) have "\<Sigma> \<turnstile> \<tau> <: subst \<tau>s \<alpha>s \<tau>''" "\<Sigma> \<turnstile> \<tau>' <: subst \<tau>s \<alpha>s \<tau>''" by blast+
+    then show "\<Sigma> \<turnstile> TyUnion \<tau> \<tau>' <: subst \<tau>s \<alpha>s \<tau>''" by (rule Subtyping.SubtyUnion)
   qed
 next
   case SubtysNil
   show ?case by (auto intro: subty_subtys.intros)
 next
-  case (SubtysCons \<rho> \<rho>' \<rho>s \<rho>s')
+  case (SubtysCons \<sigma> \<tau> \<sigma>s' \<tau>s')
   show ?case
   proof (intro allI impI conjI)
-    fix \<sigma>s \<tau>s \<upsilon>s
-    assume H: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s"
-      and wf: "\<forall>\<upsilon> \<in> set \<upsilon>s. wf_ty \<Sigma> \<upsilon>" and eq: "\<rho> # \<rho>s = map (subst \<tau>s \<alpha>s) \<upsilon>s"
-    from eq obtain \<upsilon> \<upsilon>s' where \<upsilon>s: "\<upsilon>s = \<upsilon> # \<upsilon>s'" and "\<rho> = subst \<tau>s \<alpha>s \<upsilon>" "\<rho>s = map (subst \<tau>s \<alpha>s) \<upsilon>s'"
-      by (cases \<upsilon>s) auto
-    moreover have "wf_ty \<Sigma> \<upsilon>" "\<forall>\<upsilon> \<in> set \<upsilon>s'. wf_ty \<Sigma> \<upsilon>" using wf by (simp_all add: \<upsilon>s)
-    ultimately have "\<Sigma> \<turnstile> subst \<sigma>s \<alpha>s \<upsilon> <: \<rho>'" "\<Sigma> \<turnstile> map (subst \<sigma>s \<alpha>s) \<upsilon>s' [<:] \<rho>s'"
-      using SubtysCons(2,4) H by blast+
-    then show "\<Sigma> \<turnstile> map (subst \<sigma>s \<alpha>s) \<upsilon>s [<:] \<rho>' # \<rho>s'" by (simp add: \<upsilon>s Subtyping.SubtysCons)
+    fix \<sigma>s \<tau>s \<sigma>s''
+    assume comp: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s"
+      and wf': "\<forall>\<sigma> \<in> set \<sigma>s''. wf_ty \<Sigma> \<sigma>" and eq: "\<sigma> # \<sigma>s' = map (subst \<tau>s \<alpha>s) \<sigma>s''"
+    then show "\<Sigma> \<turnstile> map (subst \<sigma>s \<alpha>s) \<sigma>s'' [<:] \<tau> # \<tau>s'"
+      using SubtysCons(2,4) by (cases \<sigma>s'') (simp_all add: Subtyping.SubtysCons)
   next
-    fix \<sigma>s \<tau>s \<upsilon>s
-    assume H: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s"
-      and wf: "\<forall>\<upsilon> \<in> set \<upsilon>s. wf_ty \<Sigma> \<upsilon>" and eq: "\<rho>' # \<rho>s' = map (subst \<sigma>s \<alpha>s) \<upsilon>s"
-    from eq obtain \<upsilon> \<upsilon>s' where \<upsilon>s: "\<upsilon>s = \<upsilon> # \<upsilon>s'" and "\<rho>' = subst \<sigma>s \<alpha>s \<upsilon>" "\<rho>s' = map (subst \<sigma>s \<alpha>s) \<upsilon>s'"
-      by (cases \<upsilon>s) auto
-    moreover have "wf_ty \<Sigma> \<upsilon>" "\<forall>\<upsilon> \<in> set \<upsilon>s'. wf_ty \<Sigma> \<upsilon>" using wf by (simp_all add: \<upsilon>s)
-    ultimately have "\<Sigma> \<turnstile> \<rho> <: subst \<tau>s \<alpha>s \<upsilon>" "\<Sigma> \<turnstile> \<rho>s [<:] map (subst \<tau>s \<alpha>s) \<upsilon>s'"
-      using SubtysCons(2,4) H by blast+
-    then show "\<Sigma> \<turnstile> \<rho> # \<rho>s [<:] map (subst \<tau>s \<alpha>s) \<upsilon>s" by (simp add: \<upsilon>s Subtyping.SubtysCons)
+    fix \<sigma>s \<tau>s \<tau>s''
+    assume comp: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s"
+      and wf': "\<forall>\<tau> \<in> set \<tau>s''. wf_ty \<Sigma> \<tau>" and eq: "\<tau> # \<tau>s' = map (subst \<sigma>s \<alpha>s) \<tau>s''"
+    then show "\<Sigma> \<turnstile> \<sigma> # \<sigma>s' [<:] map (subst \<tau>s \<alpha>s) \<tau>s''"
+      using SubtysCons(2,4) by (cases \<tau>s'') (simp_all add: Subtyping.SubtysCons)
   qed
 qed
 
-lemma composableI:
-  "\<lbrakk> \<And>\<tau>'. \<Sigma> \<turnstile> \<tau> <: \<tau>' \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: \<tau>' ; \<And>\<rho>. \<Sigma> \<turnstile> \<rho> <: \<sigma> \<Longrightarrow> \<Sigma> \<turnstile> \<rho> <: \<tau> \<rbrakk> \<Longrightarrow> composable \<Sigma> \<sigma> \<tau>"
-  unfolding composable_def by blast
-
-lemma composable_L: "\<lbrakk> composable \<Sigma> \<sigma> \<tau> ; \<Sigma> \<turnstile> \<tau> <: \<tau>' \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: \<tau>'"
-  and composable_R: "\<lbrakk> composable \<Sigma> \<sigma> \<tau> ; \<Sigma> \<turnstile> \<rho> <: \<sigma> \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<rho> <: \<tau>"
-  unfolding composable_def by blast+
-
-lemma composables_L: "\<lbrakk> list_all2 (composable \<Sigma>) \<sigma>s \<tau>s ; \<Sigma> \<turnstile> \<tau>s [<:] \<tau>s' \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma>s [<:] \<tau>s'"
-  and composables_R: "\<lbrakk> list_all2 (composable \<Sigma>) \<sigma>s \<tau>s ; \<Sigma> \<turnstile> \<rho>s [<:] \<sigma>s \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<rho>s [<:] \<tau>s"
-  unfolding subtys_list_all2 by (blast intro: list_all2_trans composable_L composable_R)+
-
-lemma subtys_Nil: "\<Sigma> \<turnstile> \<rho>s [<:] [] \<Longrightarrow> \<rho>s = []"
-  by (simp add: subtys_list_all2)
-
-(* Subtyping of \<rho> by \<tau>, from subtyping of \<rho> by \<sigma>, by the last rule of the derivation: a rule whose conclusion
-   fixes the form of \<sigma> is a hypothesis, and the others carry over *)
-lemma subty_left_cases:
-  assumes "\<Sigma> \<turnstile> \<rho> <: \<sigma>"
-    and refl: "\<Sigma> \<turnstile> \<sigma> <: \<tau>"
-    and class_args: "\<And>C \<rho>s \<sigma>s. \<lbrakk> \<sigma> = TyClass C \<sigma>s ; \<Sigma> \<turnstile> \<rho>s [<:] \<sigma>s ; \<Sigma> \<turnstile> \<sigma>s [<:] \<rho>s \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> TyClass C \<rho>s <: \<tau>"
-    and object: "\<And>\<rho>. \<sigma> = TyPrim object \<Longrightarrow> \<Sigma> \<turnstile> \<rho> <: \<tau>"
-    and int_float: "\<sigma> = TyPrim float \<Longrightarrow> \<Sigma> \<turnstile> TyPrim int <: \<tau>"
-    and sized: "\<And>\<rho>. \<lbrakk> \<sigma> = TyPrim Sized ; sized \<rho> \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<rho> <: \<tau>"
-    and list: "\<And>\<rho>' \<sigma>'. \<lbrakk> \<sigma> = TyList \<sigma>' ; \<Sigma> \<turnstile> \<rho>' <: \<sigma>' ; \<Sigma> \<turnstile> \<sigma>' <: \<rho>' \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> TyList \<rho>' <: \<tau>"
-    and dict: "\<And>\<rho>' \<sigma>'. \<lbrakk> \<sigma> = TyDict \<sigma>' ; \<Sigma> \<turnstile> \<rho>' <: \<sigma>' ; \<Sigma> \<turnstile> \<sigma>' <: \<rho>' \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> TyDict \<rho>' <: \<tau>"
+(* Subtyping of \<sigma> by \<tau>', from subtyping of \<sigma> by \<tau>, by the last rule of the derivation: each rule which fixes
+   the form of \<tau> gives a hypothesis, and the other rules carry over *)
+lemma subty_supertype_cases:
+  assumes "\<Sigma> \<turnstile> \<sigma> <: \<tau>"
+    and refl: "\<Sigma> \<turnstile> \<tau> <: \<tau>'"
+    and class_args:
+      "\<And>C \<sigma>s \<tau>s. \<lbrakk> \<tau> = TyClass C \<tau>s ; \<Sigma> \<turnstile> \<sigma>s [<:] \<tau>s ; \<Sigma> \<turnstile> \<tau>s [<:] \<sigma>s \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> TyClass C \<sigma>s <: \<tau>'"
+    and object: "\<And>\<sigma>. \<tau> = TyPrim object \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: \<tau>'"
+    and int_float: "\<tau> = TyPrim float \<Longrightarrow> \<Sigma> \<turnstile> TyPrim int <: \<tau>'"
+    and sized: "\<And>\<sigma>. \<lbrakk> \<tau> = TyPrim Sized ; sized \<sigma> \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: \<tau>'"
+    and list: "\<And>\<sigma> \<sigma>'. \<lbrakk> \<tau> = TyList \<sigma>' ; \<Sigma> \<turnstile> \<sigma> <: \<sigma>' ; \<Sigma> \<turnstile> \<sigma>' <: \<sigma> \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> TyList \<sigma> <: \<tau>'"
+    and dict: "\<And>\<sigma> \<sigma>'. \<lbrakk> \<tau> = TyDict \<sigma>' ; \<Sigma> \<turnstile> \<sigma> <: \<sigma>' ; \<Sigma> \<turnstile> \<sigma>' <: \<sigma> \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> TyDict \<sigma> <: \<tau>'"
     and callable:
-      "\<And>\<rho>s \<rho>' \<sigma>s \<sigma>'. \<lbrakk> \<sigma> = TyCallable \<sigma>s \<sigma>' ; \<Sigma> \<turnstile> \<sigma>s [<:] \<rho>s ; \<Sigma> \<turnstile> \<rho>' <: \<sigma>' \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> TyCallable \<rho>s \<rho>' <: \<tau>"
-    and tuple: "\<And>\<rho>s \<sigma>s. \<lbrakk> \<sigma> = TyTuple \<sigma>s ; \<Sigma> \<turnstile> \<rho>s [<:] \<sigma>s \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> TyTuple \<rho>s <: \<tau>"
-    and union_left: "\<And>\<rho> \<sigma>' \<sigma>''. \<lbrakk> \<sigma> = TyUnion \<sigma>' \<sigma>'' ; \<Sigma> \<turnstile> \<rho> <: \<sigma>' \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<rho> <: \<tau>"
-    and union_right: "\<And>\<rho> \<sigma>' \<sigma>''. \<lbrakk> \<sigma> = TyUnion \<sigma>' \<sigma>'' ; \<Sigma> \<turnstile> \<rho> <: \<sigma>'' \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<rho> <: \<tau>"
-  shows "\<Sigma> \<turnstile> \<rho> <: \<tau>"
+      "\<And>\<sigma>s \<sigma> \<tau>s \<sigma>'. \<lbrakk> \<tau> = TyCallable \<tau>s \<sigma>' ; \<Sigma> \<turnstile> \<tau>s [<:] \<sigma>s ; \<Sigma> \<turnstile> \<sigma> <: \<sigma>' \<rbrakk>
+                    \<Longrightarrow> \<Sigma> \<turnstile> TyCallable \<sigma>s \<sigma> <: \<tau>'"
+    and tuple: "\<And>\<sigma>s \<tau>s. \<lbrakk> \<tau> = TyTuple \<tau>s ; \<Sigma> \<turnstile> \<sigma>s [<:] \<tau>s \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> TyTuple \<sigma>s <: \<tau>'"
+    and union_left: "\<And>\<sigma> \<sigma>' \<sigma>''. \<lbrakk> \<tau> = TyUnion \<sigma>' \<sigma>'' ; \<Sigma> \<turnstile> \<sigma> <: \<sigma>' \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: \<tau>'"
+    and union_right: "\<And>\<sigma> \<sigma>' \<sigma>''. \<lbrakk> \<tau> = TyUnion \<sigma>' \<sigma>'' ; \<Sigma> \<turnstile> \<sigma> <: \<sigma>'' \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: \<tau>'"
+  shows "\<Sigma> \<turnstile> \<sigma> <: \<tau>'"
 proof -
-  have "\<Sigma> \<turnstile> X <: Y \<Longrightarrow> Y = \<sigma> \<longrightarrow> \<Sigma> \<turnstile> X <: \<tau>" and "\<Sigma> \<turnstile> Xs [<:] Ys \<Longrightarrow> True" for X Y Xs Ys
+  have "\<Sigma> \<turnstile> \<sigma> <: \<sigma>' \<Longrightarrow> \<sigma>' = \<tau> \<longrightarrow> \<Sigma> \<turnstile> \<sigma> <: \<tau>'" and "\<Sigma> \<turnstile> \<sigma>s [<:] \<tau>s \<Longrightarrow> True" for \<sigma> \<sigma>' \<sigma>s \<tau>s
   proof (induction rule: subty_subtys.inducts)
     case SubtyRefl
     then show ?case using refl by blast
@@ -681,30 +639,31 @@ proof -
   with assms(1) show ?thesis by blast
 qed
 
-(* Subtyping of \<sigma> by \<tau>', from subtyping of \<tau> by \<tau>', by the last rule of the derivation: a rule whose conclusion
-   fixes the form of \<tau> is a hypothesis, and the others carry over *)
-lemma subty_right_cases:
+(* Subtyping of \<sigma> by \<tau>', from subtyping of \<tau> by \<tau>', by the last rule of the derivation: each rule which fixes
+   the form of \<tau> gives a hypothesis, and the other rules carry over *)
+lemma subty_subtype_cases:
   assumes "\<Sigma> \<turnstile> \<tau> <: \<tau>'"
     and refl: "\<Sigma> \<turnstile> \<sigma> <: \<tau>"
     and class_extend:
-      "\<And>C \<tau>s D \<omega>s Y. \<lbrakk> \<tau> = TyClass C \<tau>s ; base \<Sigma> C = Some (D, \<omega>s)
-                  ; \<Sigma> \<turnstile> TyClass D (map (subst \<tau>s (type_params \<Sigma> C)) \<omega>s) <: Y \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: Y"
+      "\<And>C \<tau>s D \<sigma>s \<tau>'. \<lbrakk> \<tau> = TyClass C \<tau>s ; base \<Sigma> C = Some (D, \<sigma>s)
+                  ; \<Sigma> \<turnstile> TyClass D (map (subst \<tau>s (type_params \<Sigma> C)) \<sigma>s) <: \<tau>' \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: \<tau>'"
     and class_args:
       "\<And>C \<tau>s \<tau>s'. \<lbrakk> \<tau> = TyClass C \<tau>s ; \<Sigma> \<turnstile> \<tau>s [<:] \<tau>s' ; \<Sigma> \<turnstile> \<tau>s' [<:] \<tau>s \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: TyClass C \<tau>s'"
-    and never: "\<And>Y. \<tau> = TyPrim Never \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: Y"
+    and never: "\<And>\<tau>'. \<tau> = TyPrim Never \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: \<tau>'"
     and int_float: "\<tau> = TyPrim int \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: TyPrim float"
     and sized: "sized \<tau> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: TyPrim Sized"
-    and list: "\<And>\<tau>0 \<tau>0'. \<lbrakk> \<tau> = TyList \<tau>0 ; \<Sigma> \<turnstile> \<tau>0 <: \<tau>0' ; \<Sigma> \<turnstile> \<tau>0' <: \<tau>0 \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: TyList \<tau>0'"
-    and dict: "\<And>\<tau>0 \<tau>0'. \<lbrakk> \<tau> = TyDict \<tau>0 ; \<Sigma> \<turnstile> \<tau>0 <: \<tau>0' ; \<Sigma> \<turnstile> \<tau>0' <: \<tau>0 \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: TyDict \<tau>0'"
+    and list: "\<And>\<sigma>' \<tau>'. \<lbrakk> \<tau> = TyList \<sigma>' ; \<Sigma> \<turnstile> \<sigma>' <: \<tau>' ; \<Sigma> \<turnstile> \<tau>' <: \<sigma>' \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: TyList \<tau>'"
+    and dict: "\<And>\<sigma>' \<tau>'. \<lbrakk> \<tau> = TyDict \<sigma>' ; \<Sigma> \<turnstile> \<sigma>' <: \<tau>' ; \<Sigma> \<turnstile> \<tau>' <: \<sigma>' \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: TyDict \<tau>'"
     and callable:
-      "\<And>\<tau>s \<tau>0 \<tau>s' \<tau>0'. \<lbrakk> \<tau> = TyCallable \<tau>s \<tau>0 ; \<Sigma> \<turnstile> \<tau>s' [<:] \<tau>s ; \<Sigma> \<turnstile> \<tau>0 <: \<tau>0' \<rbrakk>
-                    \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: TyCallable \<tau>s' \<tau>0'"
+      "\<And>\<tau>s \<sigma>' \<tau>s' \<tau>'. \<lbrakk> \<tau> = TyCallable \<tau>s \<sigma>' ; \<Sigma> \<turnstile> \<tau>s' [<:] \<tau>s ; \<Sigma> \<turnstile> \<sigma>' <: \<tau>' \<rbrakk>
+                    \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: TyCallable \<tau>s' \<tau>'"
     and tuple: "\<And>\<tau>s \<tau>s'. \<lbrakk> \<tau> = TyTuple \<tau>s ; \<Sigma> \<turnstile> \<tau>s [<:] \<tau>s' \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: TyTuple \<tau>s'"
-    and literal: "\<And>l Y. \<lbrakk> \<tau> = TyLiteral l ; \<Sigma> \<turnstile> base_type_lit l <: Y \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: Y"
-    and union: "\<And>\<tau>1 \<tau>2 Y. \<lbrakk> \<tau> = TyUnion \<tau>1 \<tau>2 ; \<Sigma> \<turnstile> \<tau>1 <: Y ; \<Sigma> \<turnstile> \<tau>2 <: Y \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: Y"
+    and literal: "\<And>l \<tau>'. \<lbrakk> \<tau> = TyLiteral l ; \<Sigma> \<turnstile> base_type_lit l <: \<tau>' \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: \<tau>'"
+    and union:
+      "\<And>\<sigma>' \<sigma>'' \<tau>'. \<lbrakk> \<tau> = TyUnion \<sigma>' \<sigma>'' ; \<Sigma> \<turnstile> \<sigma>' <: \<tau>' ; \<Sigma> \<turnstile> \<sigma>'' <: \<tau>' \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: \<tau>'"
   shows "\<Sigma> \<turnstile> \<sigma> <: \<tau>'"
 proof -
-  have "\<Sigma> \<turnstile> X <: Y \<Longrightarrow> X = \<tau> \<longrightarrow> \<Sigma> \<turnstile> \<sigma> <: Y" and "\<Sigma> \<turnstile> Xs [<:] Ys \<Longrightarrow> True" for X Y Xs Ys
+  have "\<Sigma> \<turnstile> \<sigma>' <: \<tau>' \<Longrightarrow> \<sigma>' = \<tau> \<longrightarrow> \<Sigma> \<turnstile> \<sigma> <: \<tau>'" and "\<Sigma> \<turnstile> \<sigma>s [<:] \<tau>s \<Longrightarrow> True" for \<sigma>' \<tau>' \<sigma>s \<tau>s
   proof (induction rule: subty_subtys.inducts)
     case SubtyRefl
     then show ?case using refl by blast
@@ -757,320 +716,331 @@ qed
 theorem subty_composable:
   assumes wf: "wf_class_table \<Sigma>"
   shows "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> wf_ty \<Sigma> \<sigma> \<longrightarrow> wf_ty \<Sigma> \<tau> \<longrightarrow> composable \<Sigma> \<sigma> \<tau>"
-    and "\<Sigma> \<turnstile> \<sigma>s [<:] \<tau>s \<Longrightarrow> (\<forall>\<sigma> \<in> set \<sigma>s. wf_ty \<Sigma> \<sigma>) \<longrightarrow> (\<forall>\<tau> \<in> set \<tau>s. wf_ty \<Sigma> \<tau>) \<longrightarrow> list_all2 (composable \<Sigma>) \<sigma>s \<tau>s"
+    and "\<Sigma> \<turnstile> \<sigma>s [<:] \<tau>s
+           \<Longrightarrow> (\<forall>\<sigma> \<in> set \<sigma>s. wf_ty \<Sigma> \<sigma>) \<longrightarrow> (\<forall>\<tau> \<in> set \<tau>s. wf_ty \<Sigma> \<tau>) \<longrightarrow> list_all2 (composable \<Sigma>) \<sigma>s \<tau>s"
 proof (induction rule: subty_subtys.inducts)
   case (SubtyRefl \<tau>)
   show ?case unfolding composable_def by blast
 next
-  case (SubtyClassExtend C D \<omega>s \<tau>s \<tau>')
-  let ?\<sigma> = "TyClass D (map (subst \<tau>s (type_params \<Sigma> C)) \<omega>s)"
-  have XY: "\<Sigma> \<turnstile> TyClass C \<tau>s <: \<tau>'" using SubtyClassExtend(1,2) by (rule subty_subtys.intros)
+  case (SubtyClassExtend C D \<sigma>s \<tau>s \<tau>)
+  let ?\<sigma> = "TyClass D (map (subst \<tau>s (type_params \<Sigma> C)) \<sigma>s)"
+  have sub: "\<Sigma> \<turnstile> TyClass C \<tau>s <: \<tau>" using SubtyClassExtend(1,2) by (rule subty_subtys.intros)
   show ?case
-  proof (intro impI composableI)
-    assume wf\<sigma>: "wf_ty \<Sigma> (TyClass C \<tau>s)" and "wf_ty \<Sigma> \<tau>'"
-    with SubtyClassExtend(3) wf_class_table_base[OF wf wf\<sigma> SubtyClassExtend(1)] have c: "composable \<Sigma> ?\<sigma> \<tau>'"
-      by blast
-    fix \<tau>''
-    assume "\<Sigma> \<turnstile> \<tau>' <: \<tau>''"
-    with c have "\<Sigma> \<turnstile> ?\<sigma> <: \<tau>''" by (rule composable_L)
-    then show "\<Sigma> \<turnstile> TyClass C \<tau>s <: \<tau>''" using SubtyClassExtend(1) by (blast intro: Subtyping.SubtyClassExtend)
-  next
-    assume wf\<sigma>: "wf_ty \<Sigma> (TyClass C \<tau>s)" and "wf_ty \<Sigma> \<tau>'"
-    with SubtyClassExtend(3) wf_class_table_base[OF wf wf\<sigma> SubtyClassExtend(1)] have c: "composable \<Sigma> ?\<sigma> \<tau>'"
-      by blast
-    fix \<rho>
-    assume "\<Sigma> \<turnstile> \<rho> <: TyClass C \<tau>s"
-    then show "\<Sigma> \<turnstile> \<rho> <: \<tau>'"
-    proof (rule subty_left_cases)
-      show "\<Sigma> \<turnstile> TyClass C \<tau>s <: \<tau>'" by (rule XY)
-      fix C' \<rho>s \<sigma>s
-      assume "TyClass C \<tau>s = TyClass C' \<sigma>s" and "\<Sigma> \<turnstile> \<rho>s [<:] \<sigma>s" and "\<Sigma> \<turnstile> \<sigma>s [<:] \<rho>s"
-      then have "\<Sigma> \<turnstile> TyClass D (map (subst \<rho>s (type_params \<Sigma> C)) \<omega>s) <: ?\<sigma>"
-        using subst_equiv[of \<Sigma> \<rho>s \<tau>s "type_params \<Sigma> C" "TyClass D \<omega>s"]
-        by (auto simp: subtys_list_all2 list_all2_conv_all_nth)
-      with c have "\<Sigma> \<turnstile> TyClass D (map (subst \<rho>s (type_params \<Sigma> C)) \<omega>s) <: \<tau>'" by (rule composable_R)
-      with \<open>TyClass C \<tau>s = TyClass C' \<sigma>s\<close> show "\<Sigma> \<turnstile> TyClass C' \<rho>s <: \<tau>'"
-        using SubtyClassExtend(1) by (auto intro: Subtyping.SubtyClassExtend)
-    qed simp_all
+  proof (intro impI)
+    assume wf_C: "wf_ty \<Sigma> (TyClass C \<tau>s)" and "wf_ty \<Sigma> \<tau>"
+    with SubtyClassExtend(3) wf_class_table_base[OF wf wf_C SubtyClassExtend(1)]
+    have comp: "composable \<Sigma> ?\<sigma> \<tau>" by blast
+    show "composable \<Sigma> (TyClass C \<tau>s) \<tau>"
+    proof (rule composableI)
+      fix \<tau>'
+      assume "\<Sigma> \<turnstile> \<tau> <: \<tau>'"
+      with comp have "\<Sigma> \<turnstile> ?\<sigma> <: \<tau>'" by (rule composable_upper)
+      then show "\<Sigma> \<turnstile> TyClass C \<tau>s <: \<tau>'" using SubtyClassExtend(1) by (blast intro: Subtyping.SubtyClassExtend)
+    next
+      fix \<sigma>'
+      assume "\<Sigma> \<turnstile> \<sigma>' <: TyClass C \<tau>s"
+      then show "\<Sigma> \<turnstile> \<sigma>' <: \<tau>"
+      proof (rule subty_supertype_cases)
+        show "\<Sigma> \<turnstile> TyClass C \<tau>s <: \<tau>" by (rule sub)
+        fix C' \<sigma>s' \<tau>s'
+        assume "TyClass C \<tau>s = TyClass C' \<tau>s'" and "\<Sigma> \<turnstile> \<sigma>s' [<:] \<tau>s'" and "\<Sigma> \<turnstile> \<tau>s' [<:] \<sigma>s'"
+        then have "\<Sigma> \<turnstile> TyClass D (map (subst \<sigma>s' (type_params \<Sigma> C)) \<sigma>s) <: ?\<sigma>"
+          using subst_equiv[of \<Sigma> \<sigma>s' \<tau>s "type_params \<Sigma> C" "TyClass D \<sigma>s"]
+          by (auto simp: subtys_list_all2 list_all2_conv_all_nth)
+        with comp have "\<Sigma> \<turnstile> TyClass D (map (subst \<sigma>s' (type_params \<Sigma> C)) \<sigma>s) <: \<tau>" by (rule composable_lower)
+        with \<open>TyClass C \<tau>s = TyClass C' \<tau>s'\<close> show "\<Sigma> \<turnstile> TyClass C' \<sigma>s' <: \<tau>"
+          using SubtyClassExtend(1) by (auto intro: Subtyping.SubtyClassExtend)
+      qed simp_all
+    qed
   qed
 next
   case (SubtyClass \<sigma>s \<tau>s C)
-  have XY: "\<Sigma> \<turnstile> TyClass C \<sigma>s <: TyClass C \<tau>s" using SubtyClass(1,3) by (rule subty_subtys.intros)
+  have sub: "\<Sigma> \<turnstile> TyClass C \<sigma>s <: TyClass C \<tau>s" using SubtyClass(1,3) by (rule subty_subtys.intros)
   show ?case
-  proof (intro impI composableI)
-    assume wf\<sigma>: "wf_ty \<Sigma> (TyClass C \<sigma>s)" and wf\<tau>: "wf_ty \<Sigma> (TyClass C \<tau>s)"
-    with SubtyClass(2,4) have c: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s" by simp_all
-    fix \<tau>'
-    assume "\<Sigma> \<turnstile> TyClass C \<tau>s <: \<tau>'"
-    then show "\<Sigma> \<turnstile> TyClass C \<sigma>s <: \<tau>'"
-    proof (rule subty_right_cases)
-      show "\<Sigma> \<turnstile> TyClass C \<sigma>s <: TyClass C \<tau>s" by (rule XY)
-      fix C' \<tau>s'' D \<omega>s Y
-      assume eq: "TyClass C \<tau>s = TyClass C' \<tau>s''" and base: "base \<Sigma> C' = Some (D, \<omega>s)"
-        and e: "\<Sigma> \<turnstile> TyClass D (map (subst \<tau>s'' (type_params \<Sigma> C')) \<omega>s) <: Y"
-      let ?ps = "type_params \<Sigma> C"
-      from eq have [simp]: "C' = C" "\<tau>s'' = \<tau>s" by simp_all
-      have base': "base \<Sigma> C = Some (D, \<omega>s)" using base by simp
-      have wfD: "wf_ty \<Sigma> (TyClass D \<omega>s)" using wf wf\<tau> base' unfolding wf_class_table_def by auto
-      have "TyClass D (map (subst \<tau>s'' (type_params \<Sigma> C')) \<omega>s) = subst \<tau>s ?ps (TyClass D \<omega>s)" by simp
-      then have "\<Sigma> \<turnstile> subst \<sigma>s ?ps (TyClass D \<omega>s) <: Y"
-        using subst_composable(1)[OF wf e, where \<alpha>s = ?ps] c wfD by blast
-      then show "\<Sigma> \<turnstile> TyClass C \<sigma>s <: Y" by (simp add: Subtyping.SubtyClassExtend[OF base'])
+  proof (intro impI)
+    assume "wf_ty \<Sigma> (TyClass C \<sigma>s)" and wf_C: "wf_ty \<Sigma> (TyClass C \<tau>s)"
+    with SubtyClass(2,4) have comp: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s"
+      by simp_all
+    show "composable \<Sigma> (TyClass C \<sigma>s) (TyClass C \<tau>s)"
+    proof (rule composableI)
+      fix \<tau>'
+      assume "\<Sigma> \<turnstile> TyClass C \<tau>s <: \<tau>'"
+      then show "\<Sigma> \<turnstile> TyClass C \<sigma>s <: \<tau>'"
+      proof (rule subty_subtype_cases)
+        show "\<Sigma> \<turnstile> TyClass C \<sigma>s <: TyClass C \<tau>s" by (rule sub)
+        fix C' \<tau>s' D \<sigma>s' \<tau>'
+        assume eq: "TyClass C \<tau>s = TyClass C' \<tau>s'" and base: "base \<Sigma> C' = Some (D, \<sigma>s')"
+          and sub': "\<Sigma> \<turnstile> TyClass D (map (subst \<tau>s' (type_params \<Sigma> C')) \<sigma>s') <: \<tau>'"
+        let ?ps = "type_params \<Sigma> C"
+        from eq have [simp]: "C' = C" "\<tau>s' = \<tau>s" by simp_all
+        have wf_D: "wf_ty \<Sigma> (TyClass D \<sigma>s')" using wf wf_C base unfolding wf_class_table_def by auto
+        have "TyClass D (map (subst \<tau>s' (type_params \<Sigma> C')) \<sigma>s') = subst \<tau>s ?ps (TyClass D \<sigma>s')" by simp
+        then have "\<Sigma> \<turnstile> subst \<sigma>s ?ps (TyClass D \<sigma>s') <: \<tau>'"
+          using subst_composable(1)[OF wf sub', where \<alpha>s = ?ps] comp wf_D by blast
+        then show "\<Sigma> \<turnstile> TyClass C \<sigma>s <: \<tau>'" using base by (auto intro: Subtyping.SubtyClassExtend)
+      next
+        fix C' \<tau>s' \<tau>s''
+        assume "TyClass C \<tau>s = TyClass C' \<tau>s'" and "\<Sigma> \<turnstile> \<tau>s' [<:] \<tau>s''" and "\<Sigma> \<turnstile> \<tau>s'' [<:] \<tau>s'"
+        with comp show "\<Sigma> \<turnstile> TyClass C \<sigma>s <: TyClass C' \<tau>s''"
+          by (auto intro: Subtyping.SubtyClass composable_upper_list composable_lower_list)
+      next
+        assume "sized (TyClass C \<tau>s)"
+        with SubtyClass(1) show "\<Sigma> \<turnstile> TyClass C \<sigma>s <: TyPrim Sized"
+          by (auto intro: Subtyping.SubtySized dest: subtys_Nil elim: sized.elims)
+      qed simp_all
     next
-      fix C' \<tau>s'' \<tau>s'
-      assume "TyClass C \<tau>s = TyClass C' \<tau>s''" and "\<Sigma> \<turnstile> \<tau>s'' [<:] \<tau>s'" and "\<Sigma> \<turnstile> \<tau>s' [<:] \<tau>s''"
-      with c show "\<Sigma> \<turnstile> TyClass C \<sigma>s <: TyClass C' \<tau>s'"
-        by (auto intro: Subtyping.SubtyClass composables_L composables_R)
-    next
-      assume "sized (TyClass C \<tau>s)"
-      with SubtyClass(1) show "\<Sigma> \<turnstile> TyClass C \<sigma>s <: TyPrim Sized"
-        by (auto intro: Subtyping.SubtySized dest: subtys_Nil elim: sized.elims)
-    qed simp_all
-  next
-    assume wf\<sigma>: "wf_ty \<Sigma> (TyClass C \<sigma>s)" and wf\<tau>: "wf_ty \<Sigma> (TyClass C \<tau>s)"
-    with SubtyClass(2,4) have c: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s" by simp_all
-    fix \<rho>
-    assume "\<Sigma> \<turnstile> \<rho> <: TyClass C \<sigma>s"
-    then show "\<Sigma> \<turnstile> \<rho> <: TyClass C \<tau>s"
-    proof (rule subty_left_cases)
-      show "\<Sigma> \<turnstile> TyClass C \<sigma>s <: TyClass C \<tau>s" by (rule XY)
-      fix C' \<rho>s \<sigma>s'
-      assume "TyClass C \<sigma>s = TyClass C' \<sigma>s'" and "\<Sigma> \<turnstile> \<rho>s [<:] \<sigma>s'" and "\<Sigma> \<turnstile> \<sigma>s' [<:] \<rho>s"
-      with c show "\<Sigma> \<turnstile> TyClass C' \<rho>s <: TyClass C \<tau>s"
-        by (auto intro: Subtyping.SubtyClass composables_L composables_R)
-    qed simp_all
+      fix \<sigma>'
+      assume "\<Sigma> \<turnstile> \<sigma>' <: TyClass C \<sigma>s"
+      then show "\<Sigma> \<turnstile> \<sigma>' <: TyClass C \<tau>s"
+      proof (rule subty_supertype_cases)
+        show "\<Sigma> \<turnstile> TyClass C \<sigma>s <: TyClass C \<tau>s" by (rule sub)
+        fix C' \<sigma>s' \<sigma>s''
+        assume "TyClass C \<sigma>s = TyClass C' \<sigma>s''" and "\<Sigma> \<turnstile> \<sigma>s' [<:] \<sigma>s''" and "\<Sigma> \<turnstile> \<sigma>s'' [<:] \<sigma>s'"
+        with comp show "\<Sigma> \<turnstile> TyClass C' \<sigma>s' <: TyClass C \<tau>s"
+          by (auto intro: Subtyping.SubtyClass composable_upper_list composable_lower_list)
+      qed simp_all
+    qed
   qed
 next
   case (SubtyNever \<tau>)
   show ?case
   proof (intro impI composableI)
-    fix \<rho>
-    assume "\<Sigma> \<turnstile> \<rho> <: TyPrim Never"
-    then show "\<Sigma> \<turnstile> \<rho> <: \<tau>" by (rule subty_left_cases) (simp_all add: Subtyping.SubtyNever)
+    fix \<sigma>
+    assume "\<Sigma> \<turnstile> \<sigma> <: TyPrim Never"
+    then show "\<Sigma> \<turnstile> \<sigma> <: \<tau>" by (rule subty_supertype_cases) (simp_all add: Subtyping.SubtyNever)
   qed (rule Subtyping.SubtyNever)
 next
-  case (SubtyObject \<tau>)
+  case (SubtyObject \<sigma>)
   show ?case
   proof (intro impI composableI)
-    fix \<tau>'
-    assume "\<Sigma> \<turnstile> TyPrim object <: \<tau>'"
-    then show "\<Sigma> \<turnstile> \<tau> <: \<tau>'" by (rule subty_right_cases) (simp_all add: Subtyping.SubtyObject)
+    fix \<tau>
+    assume "\<Sigma> \<turnstile> TyPrim object <: \<tau>"
+    then show "\<Sigma> \<turnstile> \<sigma> <: \<tau>" by (rule subty_subtype_cases) (simp_all add: Subtyping.SubtyObject)
   qed (rule Subtyping.SubtyObject)
 next
   case SubtyIntFloat
   show ?case
   proof (intro impI composableI)
-    fix \<tau>'
-    assume "\<Sigma> \<turnstile> TyPrim float <: \<tau>'"
-    then show "\<Sigma> \<turnstile> TyPrim int <: \<tau>'" by (rule subty_right_cases) (simp_all add: Subtyping.SubtyIntFloat)
+    fix \<tau>
+    assume "\<Sigma> \<turnstile> TyPrim float <: \<tau>"
+    then show "\<Sigma> \<turnstile> TyPrim int <: \<tau>" by (rule subty_subtype_cases) (simp_all add: Subtyping.SubtyIntFloat)
   next
-    fix \<rho>
-    assume "\<Sigma> \<turnstile> \<rho> <: TyPrim int"
-    then show "\<Sigma> \<turnstile> \<rho> <: TyPrim float" by (rule subty_left_cases) (simp_all add: Subtyping.SubtyIntFloat)
+    fix \<sigma>
+    assume "\<Sigma> \<turnstile> \<sigma> <: TyPrim int"
+    then show "\<Sigma> \<turnstile> \<sigma> <: TyPrim float" by (rule subty_supertype_cases) (simp_all add: Subtyping.SubtyIntFloat)
   qed
 next
-  case (SubtySized \<tau>)
-  have XY: "\<Sigma> \<turnstile> \<tau> <: TyPrim Sized" using SubtySized(1) by (rule subty_subtys.intros)
+  case (SubtySized \<sigma>)
+  have sub: "\<Sigma> \<turnstile> \<sigma> <: TyPrim Sized" using SubtySized(1) by (rule subty_subtys.intros)
   show ?case
   proof (intro impI composableI)
-    fix \<tau>'
-    assume "\<Sigma> \<turnstile> TyPrim Sized <: \<tau>'"
-    then show "\<Sigma> \<turnstile> \<tau> <: \<tau>'" by (rule subty_right_cases) (simp_all add: XY)
+    fix \<tau>
+    assume "\<Sigma> \<turnstile> TyPrim Sized <: \<tau>"
+    then show "\<Sigma> \<turnstile> \<sigma> <: \<tau>" by (rule subty_subtype_cases) (simp_all add: sub)
   next
-    fix \<rho>
-    assume "\<Sigma> \<turnstile> \<rho> <: \<tau>"
-    then show "\<Sigma> \<turnstile> \<rho> <: TyPrim Sized"
-      by (rule subty_left_cases)
-         (insert SubtySized(1) XY, auto intro: Subtyping.SubtySized dest: subtys_Nil elim: sized.elims)
+    fix \<sigma>'
+    assume "\<Sigma> \<turnstile> \<sigma>' <: \<sigma>"
+    then show "\<Sigma> \<turnstile> \<sigma>' <: TyPrim Sized"
+      by (rule subty_supertype_cases)
+         (insert SubtySized(1) sub, auto intro: Subtyping.SubtySized dest: subtys_Nil elim: sized.elims)
   qed
 next
-  case (SubtyList \<sigma>0 \<tau>0)
-  have XY: "\<Sigma> \<turnstile> TyList \<sigma>0 <: TyList \<tau>0" using SubtyList(1,3) by (rule subty_subtys.intros)
+  case (SubtyList \<sigma> \<tau>)
+  have sub: "\<Sigma> \<turnstile> TyList \<sigma> <: TyList \<tau>" using SubtyList(1,3) by (rule subty_subtys.intros)
   show ?case
-  proof (intro impI composableI)
-    assume "wf_ty \<Sigma> (TyList \<sigma>0)" "wf_ty \<Sigma> (TyList \<tau>0)"
-    with SubtyList(2,4) have c: "composable \<Sigma> \<sigma>0 \<tau>0" "composable \<Sigma> \<tau>0 \<sigma>0" by simp_all
-    fix \<tau>'
-    assume "\<Sigma> \<turnstile> TyList \<tau>0 <: \<tau>'"
-    then show "\<Sigma> \<turnstile> TyList \<sigma>0 <: \<tau>'"
-      by (rule subty_right_cases)
-         (auto simp: XY
-           intro: Subtyping.SubtySized Subtyping.SubtyList composable_L[OF c(1)] composable_R[OF c(2)])
-  next
-    assume "wf_ty \<Sigma> (TyList \<sigma>0)" "wf_ty \<Sigma> (TyList \<tau>0)"
-    with SubtyList(2,4) have c: "composable \<Sigma> \<sigma>0 \<tau>0" "composable \<Sigma> \<tau>0 \<sigma>0" by simp_all
-    fix \<rho>
-    assume "\<Sigma> \<turnstile> \<rho> <: TyList \<sigma>0"
-    then show "\<Sigma> \<turnstile> \<rho> <: TyList \<tau>0"
-      by (rule subty_left_cases)
-         (auto simp: XY intro: Subtyping.SubtyList composable_R[OF c(1)] composable_L[OF c(2)])
+  proof (intro impI)
+    assume "wf_ty \<Sigma> (TyList \<sigma>)" "wf_ty \<Sigma> (TyList \<tau>)"
+    with SubtyList(2,4) have comp: "composable \<Sigma> \<sigma> \<tau>" "composable \<Sigma> \<tau> \<sigma>" by simp_all
+    show "composable \<Sigma> (TyList \<sigma>) (TyList \<tau>)"
+    proof (rule composableI)
+      fix \<tau>'
+      assume "\<Sigma> \<turnstile> TyList \<tau> <: \<tau>'"
+      then show "\<Sigma> \<turnstile> TyList \<sigma> <: \<tau>'"
+        by (rule subty_subtype_cases)
+           (auto simp: sub intro: Subtyping.SubtySized Subtyping.SubtyList composable_upper[OF comp(1)]
+              composable_lower[OF comp(2)])
+    next
+      fix \<sigma>'
+      assume "\<Sigma> \<turnstile> \<sigma>' <: TyList \<sigma>"
+      then show "\<Sigma> \<turnstile> \<sigma>' <: TyList \<tau>"
+        by (rule subty_supertype_cases)
+           (auto simp: sub intro: Subtyping.SubtyList composable_lower[OF comp(1)] composable_upper[OF comp(2)])
+    qed
   qed
 next
-  case (SubtyDict \<sigma>0 \<tau>0)
-  have XY: "\<Sigma> \<turnstile> TyDict \<sigma>0 <: TyDict \<tau>0" using SubtyDict(1,3) by (rule subty_subtys.intros)
+  case (SubtyDict \<sigma> \<tau>)
+  have sub: "\<Sigma> \<turnstile> TyDict \<sigma> <: TyDict \<tau>" using SubtyDict(1,3) by (rule subty_subtys.intros)
   show ?case
-  proof (intro impI composableI)
-    assume "wf_ty \<Sigma> (TyDict \<sigma>0)" "wf_ty \<Sigma> (TyDict \<tau>0)"
-    with SubtyDict(2,4) have c: "composable \<Sigma> \<sigma>0 \<tau>0" "composable \<Sigma> \<tau>0 \<sigma>0" by simp_all
-    fix \<tau>'
-    assume "\<Sigma> \<turnstile> TyDict \<tau>0 <: \<tau>'"
-    then show "\<Sigma> \<turnstile> TyDict \<sigma>0 <: \<tau>'"
-      by (rule subty_right_cases)
-         (auto simp: XY
-           intro: Subtyping.SubtySized Subtyping.SubtyDict composable_L[OF c(1)] composable_R[OF c(2)])
-  next
-    assume "wf_ty \<Sigma> (TyDict \<sigma>0)" "wf_ty \<Sigma> (TyDict \<tau>0)"
-    with SubtyDict(2,4) have c: "composable \<Sigma> \<sigma>0 \<tau>0" "composable \<Sigma> \<tau>0 \<sigma>0" by simp_all
-    fix \<rho>
-    assume "\<Sigma> \<turnstile> \<rho> <: TyDict \<sigma>0"
-    then show "\<Sigma> \<turnstile> \<rho> <: TyDict \<tau>0"
-      by (rule subty_left_cases)
-         (auto simp: XY intro: Subtyping.SubtyDict composable_R[OF c(1)] composable_L[OF c(2)])
+  proof (intro impI)
+    assume "wf_ty \<Sigma> (TyDict \<sigma>)" "wf_ty \<Sigma> (TyDict \<tau>)"
+    with SubtyDict(2,4) have comp: "composable \<Sigma> \<sigma> \<tau>" "composable \<Sigma> \<tau> \<sigma>" by simp_all
+    show "composable \<Sigma> (TyDict \<sigma>) (TyDict \<tau>)"
+    proof (rule composableI)
+      fix \<tau>'
+      assume "\<Sigma> \<turnstile> TyDict \<tau> <: \<tau>'"
+      then show "\<Sigma> \<turnstile> TyDict \<sigma> <: \<tau>'"
+        by (rule subty_subtype_cases)
+           (auto simp: sub intro: Subtyping.SubtySized Subtyping.SubtyDict composable_upper[OF comp(1)]
+              composable_lower[OF comp(2)])
+    next
+      fix \<sigma>'
+      assume "\<Sigma> \<turnstile> \<sigma>' <: TyDict \<sigma>"
+      then show "\<Sigma> \<turnstile> \<sigma>' <: TyDict \<tau>"
+        by (rule subty_supertype_cases)
+           (auto simp: sub intro: Subtyping.SubtyDict composable_lower[OF comp(1)] composable_upper[OF comp(2)])
+    qed
   qed
 next
-  case (SubtyCallable \<tau>s \<sigma>s \<sigma>0 \<tau>0)
-  have XY: "\<Sigma> \<turnstile> TyCallable \<sigma>s \<sigma>0 <: TyCallable \<tau>s \<tau>0" using SubtyCallable(1,3) by (rule subty_subtys.intros)
+  case (SubtyCallable \<tau>s \<sigma>s \<sigma> \<tau>)
+  have sub: "\<Sigma> \<turnstile> TyCallable \<sigma>s \<sigma> <: TyCallable \<tau>s \<tau>" using SubtyCallable(1,3) by (rule subty_subtys.intros)
   show ?case
-  proof (intro impI composableI)
-    assume "wf_ty \<Sigma> (TyCallable \<sigma>s \<sigma>0)" "wf_ty \<Sigma> (TyCallable \<tau>s \<tau>0)"
-    with SubtyCallable(2,4) have c: "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s" "composable \<Sigma> \<sigma>0 \<tau>0" by simp_all
-    fix \<tau>'
-    assume "\<Sigma> \<turnstile> TyCallable \<tau>s \<tau>0 <: \<tau>'"
-    then show "\<Sigma> \<turnstile> TyCallable \<sigma>s \<sigma>0 <: \<tau>'"
-      by (rule subty_right_cases)
-         (auto simp: XY intro: Subtyping.SubtyCallable composables_R[OF c(1)] composable_L[OF c(2)])
-  next
-    assume "wf_ty \<Sigma> (TyCallable \<sigma>s \<sigma>0)" "wf_ty \<Sigma> (TyCallable \<tau>s \<tau>0)"
-    with SubtyCallable(2,4) have c: "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s" "composable \<Sigma> \<sigma>0 \<tau>0" by simp_all
-    fix \<rho>
-    assume "\<Sigma> \<turnstile> \<rho> <: TyCallable \<sigma>s \<sigma>0"
-    then show "\<Sigma> \<turnstile> \<rho> <: TyCallable \<tau>s \<tau>0"
-      by (rule subty_left_cases)
-         (auto simp: XY intro: Subtyping.SubtyCallable composables_L[OF c(1)] composable_R[OF c(2)])
+  proof (intro impI)
+    assume "wf_ty \<Sigma> (TyCallable \<sigma>s \<sigma>)" "wf_ty \<Sigma> (TyCallable \<tau>s \<tau>)"
+    with SubtyCallable(2,4) have comp: "list_all2 (composable \<Sigma>) \<tau>s \<sigma>s" "composable \<Sigma> \<sigma> \<tau>" by simp_all
+    show "composable \<Sigma> (TyCallable \<sigma>s \<sigma>) (TyCallable \<tau>s \<tau>)"
+    proof (rule composableI)
+      fix \<tau>'
+      assume "\<Sigma> \<turnstile> TyCallable \<tau>s \<tau> <: \<tau>'"
+      then show "\<Sigma> \<turnstile> TyCallable \<sigma>s \<sigma> <: \<tau>'"
+        by (rule subty_subtype_cases)
+           (auto simp: sub intro: Subtyping.SubtyCallable composable_lower_list[OF comp(1)]
+              composable_upper[OF comp(2)])
+    next
+      fix \<sigma>'
+      assume "\<Sigma> \<turnstile> \<sigma>' <: TyCallable \<sigma>s \<sigma>"
+      then show "\<Sigma> \<turnstile> \<sigma>' <: TyCallable \<tau>s \<tau>"
+        by (rule subty_supertype_cases)
+           (auto simp: sub intro: Subtyping.SubtyCallable composable_upper_list[OF comp(1)]
+              composable_lower[OF comp(2)])
+    qed
   qed
 next
   case (SubtyTuple \<sigma>s \<tau>s)
-  have XY: "\<Sigma> \<turnstile> TyTuple \<sigma>s <: TyTuple \<tau>s" using SubtyTuple(1) by (rule subty_subtys.intros)
+  have sub: "\<Sigma> \<turnstile> TyTuple \<sigma>s <: TyTuple \<tau>s" using SubtyTuple(1) by (rule subty_subtys.intros)
   show ?case
-  proof (intro impI composableI)
+  proof (intro impI)
     assume "wf_ty \<Sigma> (TyTuple \<sigma>s)" "wf_ty \<Sigma> (TyTuple \<tau>s)"
-    with SubtyTuple(2) have c: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" by simp
-    fix \<tau>'
-    assume "\<Sigma> \<turnstile> TyTuple \<tau>s <: \<tau>'"
-    then show "\<Sigma> \<turnstile> TyTuple \<sigma>s <: \<tau>'"
-      by (rule subty_right_cases)
-         (auto simp: XY intro: Subtyping.SubtySized Subtyping.SubtyTuple composables_L[OF c])
-  next
-    assume "wf_ty \<Sigma> (TyTuple \<sigma>s)" "wf_ty \<Sigma> (TyTuple \<tau>s)"
-    with SubtyTuple(2) have c: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" by simp
-    fix \<rho>
-    assume "\<Sigma> \<turnstile> \<rho> <: TyTuple \<sigma>s"
-    then show "\<Sigma> \<turnstile> \<rho> <: TyTuple \<tau>s"
-      by (rule subty_left_cases) (auto simp: XY intro: Subtyping.SubtyTuple composables_R[OF c])
+    with SubtyTuple(2) have comp: "list_all2 (composable \<Sigma>) \<sigma>s \<tau>s" by simp
+    show "composable \<Sigma> (TyTuple \<sigma>s) (TyTuple \<tau>s)"
+    proof (rule composableI)
+      fix \<tau>'
+      assume "\<Sigma> \<turnstile> TyTuple \<tau>s <: \<tau>'"
+      then show "\<Sigma> \<turnstile> TyTuple \<sigma>s <: \<tau>'"
+        by (rule subty_subtype_cases)
+           (auto simp: sub intro: Subtyping.SubtySized Subtyping.SubtyTuple composable_upper_list[OF comp])
+    next
+      fix \<sigma>'
+      assume "\<Sigma> \<turnstile> \<sigma>' <: TyTuple \<sigma>s"
+      then show "\<Sigma> \<turnstile> \<sigma>' <: TyTuple \<tau>s"
+        by (rule subty_supertype_cases)
+           (auto simp: sub intro: Subtyping.SubtyTuple composable_lower_list[OF comp])
+    qed
   qed
 next
   case (SubtyLiteral l \<tau>)
-  have XY: "\<Sigma> \<turnstile> TyLiteral l <: \<tau>" using SubtyLiteral(1) by (rule subty_subtys.intros)
+  have sub: "\<Sigma> \<turnstile> TyLiteral l <: \<tau>" using SubtyLiteral(1) by (rule subty_subtys.intros)
   show ?case
   proof (intro impI composableI)
     assume "wf_ty \<Sigma> \<tau>"
-    with SubtyLiteral(2) have c: "composable \<Sigma> (base_type_lit l) \<tau>" by (cases l) simp_all
+    with SubtyLiteral(2) have comp: "composable \<Sigma> (base_type_lit l) \<tau>" by (cases l) simp_all
     fix \<tau>'
     assume "\<Sigma> \<turnstile> \<tau> <: \<tau>'"
-    with c have "\<Sigma> \<turnstile> base_type_lit l <: \<tau>'" by (rule composable_L)
+    with comp have "\<Sigma> \<turnstile> base_type_lit l <: \<tau>'" by (rule composable_upper)
     then show "\<Sigma> \<turnstile> TyLiteral l <: \<tau>'" by (rule Subtyping.SubtyLiteral)
   next
-    fix \<rho>
-    assume "\<Sigma> \<turnstile> \<rho> <: TyLiteral l"
-    then show "\<Sigma> \<turnstile> \<rho> <: \<tau>" by (rule subty_left_cases) (simp_all add: XY)
+    fix \<sigma>
+    assume "\<Sigma> \<turnstile> \<sigma> <: TyLiteral l"
+    then show "\<Sigma> \<turnstile> \<sigma> <: \<tau>" by (rule subty_supertype_cases) (simp_all add: sub)
   qed
 next
   case (SubtyUnionLeft \<sigma> \<tau> \<tau>')
-  have XY: "\<Sigma> \<turnstile> \<sigma> <: TyUnion \<tau> \<tau>'" using SubtyUnionLeft(1) by (rule subty_subtys.intros)
+  have sub: "\<Sigma> \<turnstile> \<sigma> <: TyUnion \<tau> \<tau>'" using SubtyUnionLeft(1) by (rule subty_subtys.intros)
   show ?case
-  proof (intro impI composableI)
+  proof (intro impI)
     assume "wf_ty \<Sigma> \<sigma>" "wf_ty \<Sigma> (TyUnion \<tau> \<tau>')"
-    with SubtyUnionLeft(2) have c: "composable \<Sigma> \<sigma> \<tau>" by simp
-    fix \<tau>''
-    assume "\<Sigma> \<turnstile> TyUnion \<tau> \<tau>' <: \<tau>''"
-    then show "\<Sigma> \<turnstile> \<sigma> <: \<tau>''" by (rule subty_right_cases) (auto simp: XY intro: composable_L[OF c])
-  next
-    assume "wf_ty \<Sigma> \<sigma>" "wf_ty \<Sigma> (TyUnion \<tau> \<tau>')"
-    with SubtyUnionLeft(2) have c: "composable \<Sigma> \<sigma> \<tau>" by simp
-    fix \<rho>
-    assume "\<Sigma> \<turnstile> \<rho> <: \<sigma>"
-    with c have "\<Sigma> \<turnstile> \<rho> <: \<tau>" by (rule composable_R)
-    then show "\<Sigma> \<turnstile> \<rho> <: TyUnion \<tau> \<tau>'" by (rule Subtyping.SubtyUnionLeft)
+    with SubtyUnionLeft(2) have comp: "composable \<Sigma> \<sigma> \<tau>" by simp
+    show "composable \<Sigma> \<sigma> (TyUnion \<tau> \<tau>')"
+    proof (rule composableI)
+      fix \<tau>''
+      assume "\<Sigma> \<turnstile> TyUnion \<tau> \<tau>' <: \<tau>''"
+      then show "\<Sigma> \<turnstile> \<sigma> <: \<tau>''" by (rule subty_subtype_cases) (auto simp: sub intro: composable_upper[OF comp])
+    next
+      fix \<sigma>'
+      assume "\<Sigma> \<turnstile> \<sigma>' <: \<sigma>"
+      with comp have "\<Sigma> \<turnstile> \<sigma>' <: \<tau>" by (rule composable_lower)
+      then show "\<Sigma> \<turnstile> \<sigma>' <: TyUnion \<tau> \<tau>'" by (rule Subtyping.SubtyUnionLeft)
+    qed
   qed
 next
   case (SubtyUnionRight \<sigma> \<tau>' \<tau>)
-  have XY: "\<Sigma> \<turnstile> \<sigma> <: TyUnion \<tau> \<tau>'" using SubtyUnionRight(1) by (rule subty_subtys.intros)
+  have sub: "\<Sigma> \<turnstile> \<sigma> <: TyUnion \<tau> \<tau>'" using SubtyUnionRight(1) by (rule subty_subtys.intros)
   show ?case
-  proof (intro impI composableI)
+  proof (intro impI)
     assume "wf_ty \<Sigma> \<sigma>" "wf_ty \<Sigma> (TyUnion \<tau> \<tau>')"
-    with SubtyUnionRight(2) have c: "composable \<Sigma> \<sigma> \<tau>'" by simp
-    fix \<tau>''
-    assume "\<Sigma> \<turnstile> TyUnion \<tau> \<tau>' <: \<tau>''"
-    then show "\<Sigma> \<turnstile> \<sigma> <: \<tau>''" by (rule subty_right_cases) (auto simp: XY intro: composable_L[OF c])
-  next
-    assume "wf_ty \<Sigma> \<sigma>" "wf_ty \<Sigma> (TyUnion \<tau> \<tau>')"
-    with SubtyUnionRight(2) have c: "composable \<Sigma> \<sigma> \<tau>'" by simp
-    fix \<rho>
-    assume "\<Sigma> \<turnstile> \<rho> <: \<sigma>"
-    with c have "\<Sigma> \<turnstile> \<rho> <: \<tau>'" by (rule composable_R)
-    then show "\<Sigma> \<turnstile> \<rho> <: TyUnion \<tau> \<tau>'" by (rule Subtyping.SubtyUnionRight)
+    with SubtyUnionRight(2) have comp: "composable \<Sigma> \<sigma> \<tau>'" by simp
+    show "composable \<Sigma> \<sigma> (TyUnion \<tau> \<tau>')"
+    proof (rule composableI)
+      fix \<tau>''
+      assume "\<Sigma> \<turnstile> TyUnion \<tau> \<tau>' <: \<tau>''"
+      then show "\<Sigma> \<turnstile> \<sigma> <: \<tau>''" by (rule subty_subtype_cases) (auto simp: sub intro: composable_upper[OF comp])
+    next
+      fix \<sigma>'
+      assume "\<Sigma> \<turnstile> \<sigma>' <: \<sigma>"
+      with comp have "\<Sigma> \<turnstile> \<sigma>' <: \<tau>'" by (rule composable_lower)
+      then show "\<Sigma> \<turnstile> \<sigma>' <: TyUnion \<tau> \<tau>'" by (rule Subtyping.SubtyUnionRight)
+    qed
   qed
 next
   case (SubtyUnion \<tau> \<sigma> \<tau>')
-  have XY: "\<Sigma> \<turnstile> TyUnion \<tau> \<tau>' <: \<sigma>" using SubtyUnion(1,3) by (rule subty_subtys.intros)
+  have sub: "\<Sigma> \<turnstile> TyUnion \<tau> \<tau>' <: \<sigma>" using SubtyUnion(1,3) by (rule subty_subtys.intros)
   show ?case
-  proof (intro impI composableI)
+  proof (intro impI)
     assume "wf_ty \<Sigma> (TyUnion \<tau> \<tau>')" "wf_ty \<Sigma> \<sigma>"
-    with SubtyUnion(2,4) have c: "composable \<Sigma> \<tau> \<sigma>" "composable \<Sigma> \<tau>' \<sigma>" by simp_all
-    fix \<tau>''
-    assume "\<Sigma> \<turnstile> \<sigma> <: \<tau>''"
-    with c have "\<Sigma> \<turnstile> \<tau> <: \<tau>''" "\<Sigma> \<turnstile> \<tau>' <: \<tau>''" by (blast intro: composable_L)+
-    then show "\<Sigma> \<turnstile> TyUnion \<tau> \<tau>' <: \<tau>''" by (rule Subtyping.SubtyUnion)
-  next
-    assume "wf_ty \<Sigma> (TyUnion \<tau> \<tau>')" "wf_ty \<Sigma> \<sigma>"
-    with SubtyUnion(2,4) have c: "composable \<Sigma> \<tau> \<sigma>" "composable \<Sigma> \<tau>' \<sigma>" by simp_all
-    fix \<rho>
-    assume "\<Sigma> \<turnstile> \<rho> <: TyUnion \<tau> \<tau>'"
-    then show "\<Sigma> \<turnstile> \<rho> <: \<sigma>"
-      by (rule subty_left_cases) (auto simp: XY intro: composable_R[OF c(1)] composable_R[OF c(2)])
+    with SubtyUnion(2,4) have comp: "composable \<Sigma> \<tau> \<sigma>" "composable \<Sigma> \<tau>' \<sigma>" by simp_all
+    show "composable \<Sigma> (TyUnion \<tau> \<tau>') \<sigma>"
+    proof (rule composableI)
+      fix \<tau>''
+      assume "\<Sigma> \<turnstile> \<sigma> <: \<tau>''"
+      with comp have "\<Sigma> \<turnstile> \<tau> <: \<tau>''" "\<Sigma> \<turnstile> \<tau>' <: \<tau>''" by (blast intro: composable_upper)+
+      then show "\<Sigma> \<turnstile> TyUnion \<tau> \<tau>' <: \<tau>''" by (rule Subtyping.SubtyUnion)
+    next
+      fix \<sigma>'
+      assume "\<Sigma> \<turnstile> \<sigma>' <: TyUnion \<tau> \<tau>'"
+      then show "\<Sigma> \<turnstile> \<sigma>' <: \<sigma>"
+        by (rule subty_supertype_cases)
+           (auto simp: sub intro: composable_lower[OF comp(1)] composable_lower[OF comp(2)])
+    qed
   qed
-next
-  case SubtysNil
-  show ?case by simp
-next
-  case (SubtysCons \<sigma> \<tau> \<sigma>s \<tau>s)
-  then show ?case by simp
-qed
+qed simp_all
 
 theorem subty_trans:
   "\<lbrakk> wf_class_table \<Sigma> ; wf_ty \<Sigma> \<sigma> ; wf_ty \<Sigma> \<tau> ; \<Sigma> \<turnstile> \<sigma> <: \<tau> ; \<Sigma> \<turnstile> \<tau> <: \<tau>' \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: \<tau>'"
-  by (blast dest: subty_composable(1) composable_L)
+  by (blast dest: subty_composable(1) composable_upper)
 
-(* Substitution preserves subtyping *)
+(* Preservation of subtyping by substitution *)
 lemma subst_subty:
   assumes wf: "wf_class_table \<Sigma>"
   shows "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> wf_ty \<Sigma> \<sigma> \<longrightarrow> wf_ty \<Sigma> \<tau> \<longrightarrow> \<Sigma> \<turnstile> subst \<tau>s \<alpha>s \<sigma> <: subst \<tau>s \<alpha>s \<tau>"
     and "\<Sigma> \<turnstile> \<sigma>s [<:] \<tau>s' \<Longrightarrow> (\<forall>\<sigma> \<in> set \<sigma>s. wf_ty \<Sigma> \<sigma>) \<longrightarrow> (\<forall>\<tau> \<in> set \<tau>s'. wf_ty \<Sigma> \<tau>)
            \<longrightarrow> \<Sigma> \<turnstile> map (subst \<tau>s \<alpha>s) \<sigma>s [<:] map (subst \<tau>s \<alpha>s) \<tau>s'"
 proof (induction rule: subty_subtys.inducts)
-  case (SubtyClassExtend C D \<omega>s \<sigma>s \<tau>)
+  case (SubtyClassExtend C D \<sigma>s \<tau>s' \<tau>)
   show ?case
   proof (intro impI)
-    assume wf\<sigma>: "wf_ty \<Sigma> (TyClass C \<sigma>s)" and "wf_ty \<Sigma> \<tau>"
-    with SubtyClassExtend(3) wf_class_table_base[OF wf wf\<sigma> SubtyClassExtend(1)]
-    have "\<Sigma> \<turnstile> subst \<tau>s \<alpha>s (TyClass D (map (subst \<sigma>s (type_params \<Sigma> C)) \<omega>s)) <: subst \<tau>s \<alpha>s \<tau>" by blast
-    then show "\<Sigma> \<turnstile> subst \<tau>s \<alpha>s (TyClass C \<sigma>s) <: subst \<tau>s \<alpha>s \<tau>"
-      unfolding base_subst[OF wf wf\<sigma> SubtyClassExtend(1), symmetric]
+    assume wf_C: "wf_ty \<Sigma> (TyClass C \<tau>s')" and "wf_ty \<Sigma> \<tau>"
+    with SubtyClassExtend(3) wf_class_table_base[OF wf wf_C SubtyClassExtend(1)]
+    have "\<Sigma> \<turnstile> subst \<tau>s \<alpha>s (TyClass D (map (subst \<tau>s' (type_params \<Sigma> C)) \<sigma>s)) <: subst \<tau>s \<alpha>s \<tau>" by blast
+    then show "\<Sigma> \<turnstile> subst \<tau>s \<alpha>s (TyClass C \<tau>s') <: subst \<tau>s \<alpha>s \<tau>"
+      unfolding base_subst[OF wf wf_C SubtyClassExtend(1), symmetric]
       using SubtyClassExtend(1) by (simp add: Subtyping.SubtyClassExtend)
   qed
 next
+  case (SubtySized \<tau>)
+  then have "\<nexists>\<alpha>. \<tau> = TyVar \<alpha>" by auto
+  with SubtySized show ?case by (simp add: sized_subst Subtyping.SubtySized)
+next
   case (SubtyLiteral l \<tau>)
   then show ?case by (cases l) (auto intro: Subtyping.SubtyLiteral)
-qed (auto intro: subty_subtys.intros sized_subst)
+qed (auto intro: subty_subtys.intros)
 
 end

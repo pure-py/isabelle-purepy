@@ -200,7 +200,7 @@ proof (intro allI impI)
   with chk have "\<Sigma> \<turnstile> TyPrim NoneType <: \<tau>" by (auto split: if_splits)
   then have "\<turnstile> VLit LitNone : Ty (inst \<eta> \<tau>)"
     by (intro ValSub[OF ValLit] SubtyLiteral)
-       (auto dest: subst_subty[where \<tau>s = "map snd \<eta>" and \<alpha>s = "map fst \<eta>"])
+       (auto dest: subst_subty'[where \<tau>s = "map snd \<eta>" and \<alpha>s = "map fst \<eta>"])
   then show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (returns\<^sub>o (VLit LitNone)) R" by (simp add: \<zeta>)
 qed
 

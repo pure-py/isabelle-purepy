@@ -112,17 +112,17 @@ subsection \<open>Subtyping\<close>
 
 (* Transitivity and substitution without the well-formedness of the types they need; delete once the types
    produced by checking are shown well-formed and the hypotheses supplied *)
-lemma subty_trans: "\<lbrakk> \<Sigma> \<turnstile> \<sigma> <: \<tau> ; \<Sigma> \<turnstile> \<tau> <: \<tau>' \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: \<tau>'"
+lemma subty_trans': "\<lbrakk> \<Sigma> \<turnstile> \<sigma> <: \<tau> ; \<Sigma> \<turnstile> \<tau> <: \<tau>' \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: \<tau>'"
   sorry
 
-lemma subst_subty: "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> \<Sigma> \<turnstile> subst \<tau>s \<alpha>s \<sigma> <: subst \<tau>s \<alpha>s \<tau>"
+lemma subst_subty': "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> \<Sigma> \<turnstile> subst \<tau>s \<alpha>s \<sigma> <: subst \<tau>s \<alpha>s \<tau>"
   sorry
 
 lemma joins_upper: "\<tau> \<in> set \<tau>s \<Longrightarrow> \<Sigma> \<turnstile> \<tau> <: joins \<Sigma> \<tau>s"
-  by (induction \<tau>s) (auto simp: joins_def intro: join_upper subty_trans)
+  by (induction \<tau>s) (auto simp: joins_def intro: join_upper subty_trans')
 
 lemma result_typed_sub: "\<lbrakk> result_typed r (inst \<eta> \<sigma>) ; \<Sigma> \<turnstile> \<sigma> <: \<tau> \<rbrakk> \<Longrightarrow> result_typed r (inst \<eta> \<tau>)"
-  by (cases r) (auto intro: ValSub subst_subty)
+  by (cases r) (auto intro: ValSub subst_subty')
 
 lemma wf_lit_bool: "\<turnstile> VLit (LitBool b) : Ty (TyPrim bool)"
   by (rule ValSub[OF ValLit], rule SubtyLiteral) (simp add: SubtyRefl)
@@ -249,7 +249,7 @@ next
   have "length (map (inst \<eta>) \<tau>s) = length \<alpha>s" by (simp add: len)
   from v this closed have "\<turnstile> v : Ty (subst (map (inst \<eta>) \<tau>s) \<alpha>s (inst ?\<eta>' \<sigma>))" by (rule ValInst)
   then have "\<turnstile> v : Ty (inst \<eta> (subst \<tau>s \<alpha>s \<sigma>))" by (simp only: inst_subst[OF wf_env_closed[OF env] len])
-  then show "result_typed (Val v) (inst \<eta> \<tau>)" using sub by (auto intro: ValSub subst_subty)
+  then show "result_typed (Val v) (inst \<eta> \<tau>)" using sub by (auto intro: ValSub subst_subty')
 qed simp
 
 lemma var_unknown_sound: "fmlookup \<rho> x = None \<Longrightarrow> sound_expr \<rho> (ExprVar x) (Aborts NameError)"
@@ -411,7 +411,7 @@ proof -
   proof -
     from that obtain i where "i < length vs" and "v = vs ! i" by (auto simp: in_set_conv_nth)
     with vs have "\<turnstile> v : Ty (inst \<eta> (\<tau>s ! i))" and "\<tau>s ! i \<in> set \<tau>s" by (auto simp: list_all2_conv_all_nth)
-    with sub show ?thesis by (blast intro: ValSub subst_subty)
+    with sub show ?thesis by (blast intro: ValSub subst_subty')
   qed
   then show ?thesis by (auto intro!: ValList)
 qed
