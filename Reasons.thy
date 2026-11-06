@@ -67,6 +67,7 @@ datatype reason =
   | ModuleAsValue name
   | ImportOfContainedModule name name
   | PredefinedNameAsValue name
+  | PredefinedNameAsPattern name
   | TypeParameterAsValue var
   | TypeSchemeAsValue name
   | NoTypeArgument var

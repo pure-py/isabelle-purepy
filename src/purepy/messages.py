@@ -228,6 +228,10 @@ def callee_name(e: Expr) -> str | None:
             return None
 
 
+def builtin_class(x: str) -> bool:
+    return isinstance(getattr(builtins, x, None), type)
+
+
 def excluded_name(name: str) -> tuple[str, Classification]:
     """Qualified name of an excluded built-in, module member or type attribute, with its classification"""
     return (f"'{name}'", BY_DESIGN if name in EXCLUDED_BY_DESIGN else FOR_NOW)
@@ -264,6 +268,8 @@ def excluded_feature(r: Reason) -> tuple[str, Classification] | None:
             return ("print inside function", FOR_NOW)
         case Reasons.UndefinedVariable(x) if x in BUILTINS:
             return excluded_name(x)
+        case Reasons.PredefinedNameAsPattern(q) if builtin_class(unparse_name(q)):
+            return (f"constructor pattern for built-in class '{unparse_name(q)}'", FOR_NOW)
         case Reasons.UnknownModule(q) if Syntax.root(q) in sys.stdlib_module_names:
             return (f"module '{unparse_name(q)}'", FOR_NOW)
         case Reasons.UnknownMember(x, q) if (
@@ -344,7 +350,7 @@ def message(r: Reason) -> str:
             return f"'{x}' is not bound as a predefined name"
         case Reasons.NotTypeExpression(e):
             return f"'{unparse_expr(e)}' is not a type expression"
-        case Reasons.NotClass(q):
+        case Reasons.NotClass(q) | Reasons.PredefinedNameAsPattern(q):
             return f"'{unparse_name(q)}' is not a declared class"
         case Reasons.ClassArityMismatch(q, m, n):
             return f"class '{unparse_name(q)}' expects {m} type arguments, given {n}"

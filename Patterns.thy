@@ -8,6 +8,7 @@ where
 "check_pattern_class \<Gamma> q =
   (case resolve_name \<Gamma> q of
      Some (Type C) \<Rightarrow> if C = range_class then Fail (Violates RulePatConstr RangePattern) else Ok C
+   | Some PredefName \<Rightarrow> Fail (PredefinedNameAsPattern q)
    | _ \<Rightarrow> Fail (NotClass q))"
 
 definition pattern_class :: "cxt \<Rightarrow> name \<Rightarrow> name"
