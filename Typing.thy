@@ -468,9 +468,9 @@ and check_def :: "class_table \<Rightarrow> cxt \<Rightarrow> func \<Rightarrow>
 and check_def_at :: "class_table \<Rightarrow> cxt \<Rightarrow> func located \<Rightarrow> ty_scheme \<Rightarrow> unit may_fail"
 where
 "check_stmt \<Sigma> \<Gamma> \<zeta> StmtPass = Ok (Assigns\<^sub>R fmempty None)" |
-"check_stmt \<Sigma> \<Gamma> \<zeta> (StmtDeclare x \<psi>) = by_rule RuleDeclare (do {
+"check_stmt \<Sigma> \<Gamma> \<zeta> (StmtDeclare x \<psi>) = do {
    check_unbound \<Gamma> x; \<tau> \<leftarrow> resolve_type \<Sigma> \<Gamma> \<psi>; Ok (Assigns\<^sub>R (fmupd x (DU \<tau>) fmempty) None)
- })" |
+ }" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssign x None e) =
   by_rule RuleAssign (case fmlookup \<Gamma> x of
      Some (DU \<tau>) \<Rightarrow> do { check_expr_at \<Sigma> \<Gamma> e \<tau>; Ok (Assigns\<^sub>R (fmupd x (Ty \<tau>) fmempty) None) }
@@ -524,7 +524,7 @@ where
      Assigns\<^sub>R \<Delta> r \<Rightarrow> do { R' \<leftarrow> check_stmt_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) \<zeta> s'; Ok (Assigns\<^sub>R \<Delta> r \<otimes> R') }
    | Returns\<^sub>R \<Rightarrow> Fail (Located (pos_of s') UnreachableStatement)
  })" |
-"check_stmt \<Sigma> \<Gamma> \<zeta> (StmtMutualRegion ds) = by_rule RuleDefs (do {
+"check_stmt \<Sigma> \<Gamma> \<zeta> (StmtMutualRegion ds) = do {
    (case redeclared node {} (map (\<lambda>d. At (pos_of d) (def_name (node d))) ds) of
       Some f \<Rightarrow> Fail (Located (pos_of f) (Redeclaration (node f)))
     | None \<Rightarrow> Ok ());
@@ -533,7 +533,7 @@ where
    let \<Delta> = fmap_of_list (zip (map (def_name \<circ> node) ds) (map signature_entry \<pi>s));
    all_sum (map2 (check_def_at \<Sigma> (\<Gamma> \<otimes> \<Delta>)) ds \<pi>s);
    Ok (Assigns\<^sub>R \<Delta> None)
- })" |
+ }" |
 "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtMatch e bs) = do {
    \<sigma> \<leftarrow> synth_expr_at \<Sigma> \<Gamma> e;
    (\<Delta>s, \<tau>, L) \<leftarrow> match_cases \<Sigma> \<Gamma> \<sigma> (shapes \<Sigma> \<sigma> {}) (map fst bs);

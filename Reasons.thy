@@ -14,9 +14,9 @@ datatype rule =
   | RuleListComp | RuleDictComp | RuleQualGuard | RuleQualGenerator
   | RuleSubtyClassExtend | RuleSubtyClass | RuleSubtySized | RuleSubtyList | RuleSubtyDict | RuleSubtyCallable
   | RuleSubtyTuple | RuleSubtyLiteral | RuleSubtyUnion
-  | RuleDeclare | RuleAssign | RuleDeclareAssign | RuleCallStmt
+  | RuleAssign | RuleDeclareAssign | RuleCallStmt
   | RuleAssert | RuleAssertMsg | RuleAssertFalseMsg | RuleReturnNone | RuleReturn | RuleIf | RuleIfElse
-  | RuleSeq | RuleDefs | RuleMatchPartial | RuleDefSignature | RuleDefBody
+  | RuleSeq | RuleMatchPartial | RuleDefSignature | RuleDefBody
   | RuleCheckVar | RuleCheckAs | RuleCheckTupleNone | RuleCheckListNone | RuleCheckConstr | RulePatConstr
   | RuleInstanceAbove | RuleInstanceBelow
   | RulePatShapes
