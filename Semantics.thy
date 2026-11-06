@@ -49,7 +49,7 @@ function (sequential) match :: "env \<Rightarrow> pat \<Rightarrow> val \<Righta
     "env \<Rightarrow> name \<Rightarrow> pat located list \<Rightarrow> (var \<times> pat located) list \<Rightarrow> (var \<times> val) list \<Rightarrow> match_result"
 where
 "match \<rho> (PatLiteral l) v =
-  (if is_bool (VLit l) \<and> as_float v \<noteq> None then NoMatch
+  (if is_bool (VLit l) \<and> is_number v then NoMatch
    else case eq (VLit l) v of Val True \<Rightarrow> Match \<epsilon> | Val False \<Rightarrow> NoMatch | Aborts \<kappa> \<Rightarrow> MatchAborts \<kappa>)" |
 "match \<rho> (PatVar x) v = Match (fmupd x v \<epsilon>)" |
 "match \<rho> PatWildcard v = Match \<epsilon>" |

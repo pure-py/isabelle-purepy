@@ -74,7 +74,7 @@ Run the `Release` GitHub Action manually. The version number of a release is tha
 | File                        | Content                                                                        |
 |-----------------------------|--------------------------------------------------------------------------------|
 | `Util.thy`                  | Shared utilities                                                               |
-| `Floats.thy`                | Floats as an abstract type with uninterpreted arithmetic                       |
+| `Floats.thy`                | Floats as an abstract type, with its IEEE 754 interface uninterpreted          |
 | `Strings.thy`               | Strings and identifiers as lists of Unicode code points                        |
 | `Positions.thy`             | Syntax nodes with their positions in the source                                |
 | `Syntax.thy`                | Abstract syntax and syntactic analyses                                         |

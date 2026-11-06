@@ -16,11 +16,11 @@ lemma merges_Ok: "merges \<Sigma> X ms = Ok R \<Longrightarrow> \<exists>Rs. tho
   by (auto simp: merges_def bind_sum_def split: sum.splits)
 
 lemma check_stmt_if:
-  "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtIf e s elifs else') = do {
+  "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtIf e s elifs else') = by_rule (if else' = None then RuleIf else RuleIfElse) (do {
      check_expr_at \<Sigma> \<Gamma> e (TyPrim bool);
      merges \<Sigma> (set (declares (StmtIf e s elifs else')))
        (check_stmt_at \<Sigma> \<Gamma> \<zeta> s # check_elif \<Sigma> \<Gamma> \<zeta> (elifs, else'))
-   }"
+   })"
   by simp
 
 (* Return type over the type variables bound by \<eta> *)

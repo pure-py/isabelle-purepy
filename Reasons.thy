@@ -3,6 +3,32 @@ theory Reasons
   imports Contexts
 begin
 
+(* Rules of the specification *)
+datatype rule =
+    RuleVar | RuleAttrModule | RuleQualified | RuleAttrObject | RuleCall
+  | RuleCallLambdaSyn | RuleCallee | RuleCalleeScheme | RuleConstr | RuleConstrExplicit | RuleBinop
+  | RuleUnop | RuleCondSyn | RuleAnd | RuleOr | RuleSubscriptList
+  | RuleSubscriptStr | RuleSubscriptDict | RuleSubscriptTuple | RuleSubscriptTupleNeg | RuleSubscriptTupleInt
+  | RuleSynList | RuleSynDict | RuleSynListComp | RuleSynDictComp
+  | RuleVarScheme | RuleCallLambda | RuleLambda | RuleList | RuleTuple | RuleDict | RuleCond
+  | RuleListComp | RuleDictComp | RuleQualGuard | RuleQualGenerator
+  | RuleSubtyClassExtend | RuleSubtyClass | RuleSubtySized | RuleSubtyList | RuleSubtyDict | RuleSubtyCallable
+  | RuleSubtyTuple | RuleSubtyLiteral | RuleSubtyUnion
+  | RuleAssign | RuleDeclareAssign | RuleCallStmt
+  | RuleAssert | RuleAssertMsg | RuleAssertFalseMsg | RuleReturnNone | RuleReturn | RuleIf | RuleIfElse
+  | RuleSeq | RuleMatchPartial | RuleDefSignature | RuleDefBody
+  | RuleCheckVar | RuleCheckAs | RuleCheckTupleNone | RuleCheckListNone | RuleCheckConstr | RulePatConstr
+  | RuleInstanceAbove | RuleInstanceBelow
+  | RulePatShapes
+  | RuleTopSeq | RuleClass | RuleClassExtend | RuleTypeAlias
+  | RuleTyClass | RuleTyAlias | RuleTyDict
+  | RuleModule | RuleImport | RuleFromImport | RuleImpMember
+
+(* Judgements of the specification *)
+datatype judgement =
+    JudgementSynth | JudgementCallee | JudgementResolveName | JudgementResolveType | JudgementCheckPattern
+  | JudgementModule
+
 (* Reasons for ill-formedness *)
 datatype reason =
     DuplicateField var var
@@ -46,6 +72,7 @@ datatype reason =
   | ModuleAsValue name
   | ImportOfContainedModule name name
   | PredefinedNameAsValue name
+  | PredefinedNameAsPattern name
   | TypeParameterAsValue var
   | TypeSchemeAsValue name
   | NoTypeArgument var
@@ -70,6 +97,10 @@ datatype reason =
   | ImportCycle "name list"
   | MypyCompatibility reason
   | Located pos reason
+  (* Reason for the failure of a premise or side condition of a rule *)
+  | Violates rule reason
+  (* Reason for the failure of a judgement which selects no rule *)
+  | SelectsNoRule judgement reason
 
 type_synonym 'a may_fail = "reason + 'a"
 
@@ -83,6 +114,8 @@ where
 fun locate_reason :: "pos \<Rightarrow> reason \<Rightarrow> reason"
 where
 "locate_reason p (Located p' r) = Located p' r" |
+"locate_reason p (Violates n r) = Violates n (locate_reason p r)" |
+"locate_reason p (SelectsNoRule j r) = SelectsNoRule j (locate_reason p r)" |
 "locate_reason p r = Located p r"
 
 definition locate :: "pos \<Rightarrow> 'a may_fail \<Rightarrow> 'a may_fail"
@@ -91,6 +124,31 @@ where
 
 lemma locate_Ok [simp]: "(locate p m = Ok x) = (m = Ok x)"
   by (cases m) (simp_all add: locate_def)
+
+lemma map_sum_id_Ok [simp]: "(map_sum f id m = Ok x) = (m = Ok x)"
+  by (cases m) simp_all
+
+(* Reason r under rule n, unless r is already under a rule or a judgement which selects no rule *)
+fun violates :: "rule \<Rightarrow> reason \<Rightarrow> reason"
+where
+"violates n (Located p r) = Located p (violates n r)" |
+"violates n (MypyCompatibility r) = MypyCompatibility (violates n r)" |
+"violates n (Violates n' r) = Violates n' r" |
+"violates n (SelectsNoRule j r) = SelectsNoRule j r" |
+"violates n r = Violates n r"
+
+abbreviation by_rule :: "rule \<Rightarrow> 'a may_fail \<Rightarrow> 'a may_fail"
+where
+"by_rule n \<equiv> map_sum (violates n) id"
+
+(* Reason r without the rule it violates or the judgement which selects no rule *)
+fun without_rule :: "reason \<Rightarrow> reason"
+where
+"without_rule (Located p r) = Located p (without_rule r)" |
+"without_rule (MypyCompatibility r) = MypyCompatibility (without_rule r)" |
+"without_rule (Violates _ r) = without_rule r" |
+"without_rule (SelectsNoRule _ r) = without_rule r" |
+"without_rule r = r"
 
 definition not_type_name :: "cxt \<Rightarrow> name \<Rightarrow> reason"
 where
@@ -152,7 +210,7 @@ where
 fun synth_failure :: "'a may_fail list \<Rightarrow> reason"
 where
 "synth_failure [] = NotSynthesised" |
-"synth_failure (Fail r # ms) = (if unlocated r = NotSynthesised then synth_failure ms else r)" |
+"synth_failure (Fail r # ms) = (if unlocated (without_rule r) = NotSynthesised then synth_failure ms else r)" |
 "synth_failure (Ok _ # ms) = synth_failure ms"
 
 end

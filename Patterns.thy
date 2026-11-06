@@ -7,8 +7,9 @@ definition check_pattern_class :: "cxt \<Rightarrow> name \<Rightarrow> name may
 where
 "check_pattern_class \<Gamma> q =
   (case resolve_name \<Gamma> q of
-     Some (Type C) \<Rightarrow> if C = range_class then Fail RangePattern else Ok C
-   | _ \<Rightarrow> Fail (NotClass q))"
+     Some (Type C) \<Rightarrow> if C = range_class then Fail (Violates RulePatConstr RangePattern) else Ok C
+   | Some PredefName \<Rightarrow> Fail (SelectsNoRule JudgementCheckPattern (PredefinedNameAsPattern q))
+   | _ \<Rightarrow> Fail (SelectsNoRule JudgementCheckPattern (NotClass q)))"
 
 definition pattern_class :: "cxt \<Rightarrow> name \<Rightarrow> name"
 where
@@ -120,16 +121,18 @@ function
   check_pat_at :: "class_table \<Rightarrow> cxt \<Rightarrow> pat located \<Rightarrow> ty \<Rightarrow> (var, ty) fmap may_fail"
 where
 "check_pat \<Sigma> \<Gamma> PatWildcard \<tau> = Ok fmempty" |
-"check_pat \<Sigma> \<Gamma> (PatVar x) \<tau> = do { check_unbound \<Gamma> x; Ok (fmupd x \<tau> fmempty) }" |
+"check_pat \<Sigma> \<Gamma> (PatVar x) \<tau> = by_rule RuleCheckVar (do { check_unbound \<Gamma> x; Ok (fmupd x \<tau> fmempty) })" |
 "check_pat \<Sigma> \<Gamma> (PatAs p x) \<tau> =
-  do {
+  by_rule RuleCheckAs (do {
     check_unbound \<Gamma> x; \<Delta> \<leftarrow> check_pat_at \<Sigma> \<Gamma> p \<tau>;
     Ok (\<Delta> \<otimes> fmupd x (matched_as \<Sigma> \<Gamma> \<tau> (node p)) fmempty)
-  }" |
+  })" |
 "check_pat \<Sigma> \<Gamma> (PatLiteral _) \<tau> = Ok fmempty" |
 "check_pat \<Sigma> \<Gamma> (PatTuple ps) \<tau> = do {
-   ensure (\<not> has_values \<Sigma> ListKind \<tau>) (SequenceKindMismatch TupleKind \<tau> ListKind);
-   ensure (\<not> has_values \<Sigma> RangeKind \<tau>) (SequenceKindMismatch TupleKind \<tau> RangeKind);
+   by_rule RuleCheckTupleNone (do {
+     ensure (\<not> has_values \<Sigma> ListKind \<tau>) (SequenceKindMismatch TupleKind \<tau> ListKind);
+     ensure (\<not> has_values \<Sigma> RangeKind \<tau>) (SequenceKindMismatch TupleKind \<tau> RangeKind)
+   });
    bindings_at \<Sigma> (PatTuple ps)
      (map (\<lambda>\<sigma>. case \<sigma> of
                  TyTuple \<sigma>s \<Rightarrow>
@@ -139,8 +142,10 @@ where
        (disjuncts \<tau>))
  }" |
 "check_pat \<Sigma> \<Gamma> (PatList ps) \<tau> = do {
-   ensure (\<not> has_values \<Sigma> TupleKind \<tau>) (SequenceKindMismatch ListKind \<tau> TupleKind);
-   ensure (\<not> has_values \<Sigma> RangeKind \<tau>) (SequenceKindMismatch ListKind \<tau> RangeKind);
+   by_rule RuleCheckListNone (do {
+     ensure (\<not> has_values \<Sigma> TupleKind \<tau>) (SequenceKindMismatch ListKind \<tau> TupleKind);
+     ensure (\<not> has_values \<Sigma> RangeKind \<tau>) (SequenceKindMismatch ListKind \<tau> RangeKind)
+   });
    bindings_at \<Sigma> (PatList ps)
      (map (\<lambda>\<sigma>. case \<sigma> of
                  TyList \<sigma>' \<Rightarrow> Some (pattern_bindings (map (\<lambda>p. check_pat_at \<Sigma> \<Gamma> p \<sigma>') ps))
@@ -153,7 +158,7 @@ where
                 TyDict \<sigma>' \<Rightarrow> Some (pattern_bindings (map (\<lambda>p. check_pat_at \<Sigma> \<Gamma> p \<sigma>') (map snd kps)))
               | _ \<Rightarrow> None)
       (disjuncts \<tau>))" |
-"check_pat \<Sigma> \<Gamma> (PatConstr q (ps, kps)) \<tau> = do {
+"check_pat \<Sigma> \<Gamma> (PatConstr q (ps, kps)) \<tau> = by_rule RuleCheckConstr (do {
    C \<leftarrow> check_pattern_class \<Gamma> q;
    check_field_map (PatternArityMismatch (short_name C)) (UnknownFieldInPattern (short_name C))
      (field_names \<Sigma> C) (length ps) (map fst kps);
@@ -163,9 +168,12 @@ where
                    Some (pattern_bindings
                      (map2 (check_pat_at \<Sigma> \<Gamma>) (field_patterns \<Sigma> C (ps, kps)) (field_types \<Sigma> C \<sigma>s)))
                | NoInstance \<Rightarrow> None
-               | Undetermined \<Rightarrow> Some (Fail (PatternClassUndetermined (short_name C) \<sigma>)))
+               | Undetermined \<Rightarrow>
+                   Some (Fail (Violates
+                     (if instance_above \<Sigma> C \<sigma> = Undetermined then RuleInstanceAbove else RuleInstanceBelow)
+                     (PatternClassUndetermined (short_name C) \<sigma>))))
        (disjuncts \<tau>))
- }" |
+ })" |
 
 "check_pat_at \<Sigma> \<Gamma> (At p q) \<tau> = locate p (check_pat \<Sigma> \<Gamma> q \<tau>)"
 by pat_completeness auto
