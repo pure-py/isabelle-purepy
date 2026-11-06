@@ -31,6 +31,21 @@ lemma map_of_zip_map_snd:
 lemma map_of_filter_key: "map_of (filter (\<lambda>(k, _). P k) xs) k = (if P k then map_of xs k else None)"
   by (induction xs) auto
 
+lemma map_of_zip_list_all2:
+  "\<lbrakk> list_all2 P \<sigma>s \<tau>s ; map_of (zip \<alpha>s \<sigma>s) \<alpha> = Some \<sigma> \<rbrakk>
+  \<Longrightarrow> \<exists>\<tau>. map_of (zip \<alpha>s \<tau>s) \<alpha> = Some \<tau> \<and> P \<sigma> \<tau>"
+proof (induction arbitrary: \<alpha>s rule: list_all2_induct)
+  case (Cons \<sigma>' \<sigma>s \<tau>' \<tau>s)
+  then show ?case by (cases \<alpha>s) auto
+qed simp
+
+lemma map_of_zip_list_all2_None:
+  "\<lbrakk> list_all2 P \<sigma>s \<tau>s ; map_of (zip \<alpha>s \<sigma>s) \<alpha> = None \<rbrakk> \<Longrightarrow> map_of (zip \<alpha>s \<tau>s) \<alpha> = None"
+proof (induction arbitrary: \<alpha>s rule: list_all2_induct)
+  case (Cons \<sigma>' \<sigma>s \<tau>' \<tau>s)
+  then show ?case by (cases \<alpha>s) auto
+qed simp
+
 (* Termination through lists of pairs and finite maps *)
 lemma size_prod_pair [simp]: "size_prod f g p = f (fst p) + g (snd p) + Suc 0"
   by (cases p) simp

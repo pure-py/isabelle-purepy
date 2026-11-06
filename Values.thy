@@ -396,7 +396,9 @@ where
 "resolve \<rho> (Simple x) = fmlookup \<rho> x" |
 "resolve \<rho> (Qualified q y) = (case resolve \<rho> q of Some (VModLoaded _ \<rho>') \<Rightarrow> fmlookup \<rho>' y | _ \<Rightarrow> None)"
 
-locale evaluation = fixes \<Sigma> :: class_table
+locale evaluation =
+  fixes \<Sigma> :: class_table
+  assumes wf_class_table: "wf_class_table \<Sigma>"
 begin
 
 type_synonym overload = "(val \<Rightarrow> val \<Rightarrow> bool) \<times> (val \<Rightarrow> val \<Rightarrow> val result)"

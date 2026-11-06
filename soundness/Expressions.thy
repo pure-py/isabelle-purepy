@@ -110,6 +110,8 @@ where
 
 subsection \<open>Subtyping\<close>
 
+(* Transitivity and substitution without the well-formedness of the types they need; delete once the types
+   produced by checking are shown well-formed and the hypotheses supplied *)
 lemma subty_trans: "\<lbrakk> \<Sigma> \<turnstile> \<sigma> <: \<tau> ; \<Sigma> \<turnstile> \<tau> <: \<tau>' \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: \<tau>'"
   sorry
 

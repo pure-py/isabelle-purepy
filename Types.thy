@@ -1,4 +1,4 @@
-(* Type resolution, substitution and class definitions *)
+(* Type resolution, substitution, class definitions and well-formed class tables *)
 theory Types
   imports Reasons
 begin
@@ -136,6 +136,65 @@ where
              | _ \<Rightarrow> undefined)
         | TypeStmt _ _ _ \<Rightarrow> undefined)
    | None \<Rightarrow> undefined)"
+
+(* Substitution into a type over \<alpha>s, instantiated at as many types as \<alpha>s has variables *)
+lemma subst_subst:
+  "\<lbrakk> fv \<omega> \<subseteq> set \<alpha>s ; length \<upsilon>s = length \<alpha>s \<rbrakk>
+  \<Longrightarrow> subst \<tau>s \<beta>s (subst \<upsilon>s \<alpha>s \<omega>) = subst (map (subst \<tau>s \<beta>s) \<upsilon>s) \<alpha>s \<omega>"
+proof (induction \<omega>)
+  case (TyVar \<gamma>)
+  then obtain \<upsilon> where "map_of (zip \<alpha>s \<upsilon>s) \<gamma> = Some \<upsilon>" using map_of_zip_is_Some by fastforce
+  with TyVar show ?case by (simp add: map_of_zip_map_snd)
+qed (simp_all cong: map_cong, blast+)
+
+lemma subst_subst_map:
+  "\<lbrakk> \<forall>\<omega> \<in> set \<omega>s. fv \<omega> \<subseteq> set \<alpha>s ; length \<upsilon>s = length \<alpha>s \<rbrakk>
+  \<Longrightarrow> map (subst (map (subst \<tau>s \<beta>s) \<upsilon>s) \<alpha>s) \<omega>s = map (subst \<tau>s \<beta>s) (map (subst \<upsilon>s \<alpha>s) \<omega>s)"
+  by (induction \<omega>s) (simp_all add: subst_subst)
+
+lemma subst_base_type_lit [simp]: "subst \<tau>s \<alpha>s (base_type_lit l) = base_type_lit l"
+  by (cases l) simp_all
+
+lemma sized_subst: "sized \<tau> \<Longrightarrow> sized (subst \<tau>s \<alpha>s \<tau>)"
+  by (cases \<tau>) (auto elim: sized.elims)
+
+lemma sized_subst_iff: "\<nexists>\<alpha>. \<upsilon> = TyVar \<alpha> \<Longrightarrow> sized (subst \<tau>s \<alpha>s \<upsilon>) = sized \<upsilon>"
+  by (cases \<upsilon>) (auto elim: sized.elims)
+
+(* Classes of \<Sigma> instantiated at as many type arguments as they have parameters *)
+fun wf_ty :: "class_table \<Rightarrow> ty \<Rightarrow> bool"
+where
+"wf_ty \<Sigma> (TyList \<tau>) = wf_ty \<Sigma> \<tau>" |
+"wf_ty \<Sigma> (TyTuple \<tau>s) = (\<forall>\<tau> \<in> set \<tau>s. wf_ty \<Sigma> \<tau>)" |
+"wf_ty \<Sigma> (TyDict \<tau>) = wf_ty \<Sigma> \<tau>" |
+"wf_ty \<Sigma> (TyCallable \<sigma>s \<tau>) = ((\<forall>\<sigma> \<in> set \<sigma>s. wf_ty \<Sigma> \<sigma>) \<and> wf_ty \<Sigma> \<tau>)" |
+"wf_ty \<Sigma> (TyClass C \<tau>s) =
+  (C |\<in>| fmdom \<Sigma> \<and> length \<tau>s = length (type_params \<Sigma> C) \<and> (\<forall>\<tau> \<in> set \<tau>s. wf_ty \<Sigma> \<tau>))" |
+"wf_ty \<Sigma> (TyUnion \<sigma> \<tau>) = (wf_ty \<Sigma> \<sigma> \<and> wf_ty \<Sigma> \<tau>)" |
+"wf_ty \<Sigma> _ = True"
+
+lemma wf_ty_subst:
+  "\<lbrakk> wf_ty \<Sigma> \<upsilon> ; \<forall>\<tau> \<in> set \<tau>s. wf_ty \<Sigma> \<tau> \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> (subst \<tau>s \<alpha>s \<upsilon>)"
+  by (induction \<upsilon>) (auto split: option.splits dest!: map_of_SomeD set_zip_rightD)
+
+(* Base class of each class a well-formed instantiation over the type parameters of the class *)
+definition wf_class_table :: "class_table \<Rightarrow> bool"
+where
+"wf_class_table \<Sigma> =
+  (\<forall>C D \<omega>s. C |\<in>| fmdom \<Sigma> \<longrightarrow> base \<Sigma> C = Some (D, \<omega>s)
+     \<longrightarrow> wf_ty \<Sigma> (TyClass D \<omega>s) \<and> (\<forall>\<omega> \<in> set \<omega>s. fv \<omega> \<subseteq> set (type_params \<Sigma> C)))"
+
+lemma wf_class_table_base:
+  "\<lbrakk> wf_class_table \<Sigma> ; wf_ty \<Sigma> (TyClass C \<tau>s) ; base \<Sigma> C = Some (D, \<omega>s) \<rbrakk>
+  \<Longrightarrow> wf_ty \<Sigma> (TyClass D (map (subst \<tau>s (type_params \<Sigma> C)) \<omega>s))"
+  unfolding wf_class_table_def by (auto intro: wf_ty_subst)
+
+(* Base of a class at substituted type arguments as a substitution instance of its base at the arguments *)
+lemma base_subst:
+  "\<lbrakk> wf_class_table \<Sigma> ; wf_ty \<Sigma> (TyClass C \<upsilon>s) ; base \<Sigma> C = Some (D, \<omega>s) \<rbrakk>
+  \<Longrightarrow> TyClass D (map (subst (map (subst \<tau>s \<beta>s) \<upsilon>s) (type_params \<Sigma> C)) \<omega>s) =
+      subst \<tau>s \<beta>s (TyClass D (map (subst \<upsilon>s (type_params \<Sigma> C)) \<omega>s))"
+  unfolding wf_class_table_def by (simp add: subst_subst_map)
 
 fun instantiate :: "field_scheme \<Rightarrow> ty list \<Rightarrow> (var \<times> ty) list"
 where
