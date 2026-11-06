@@ -16,6 +16,12 @@ where
 "base_type (TyLiteral l) = base_type_lit l" |
 "base_type \<tau> = \<tau>"
 
+lemma fv_base_type_lit [simp]: "fv (base_type_lit l) = {}"
+  by (cases l) simp_all
+
+lemma fv_base_type [simp]: "fv (base_type \<tau>) = fv \<tau>"
+  by (cases \<tau>) simp_all
+
 fun literal_type :: "ty \<Rightarrow> bool"
 where
 "literal_type (TyLiteral _) = True" |

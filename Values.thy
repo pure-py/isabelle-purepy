@@ -262,6 +262,21 @@ where
 "update \<delta> [] = \<delta>" |
 "update \<delta> ((w, v) # \<delta>') = update (setitem \<delta> w v) \<delta>'"
 
+lemma set_setitem: "set (setitem \<delta> w v) \<subseteq> insert (w, v) (set \<delta>)"
+  by (induction \<delta>) (auto split: if_splits)
+
+lemma fst_setitem: "fst ` set (setitem \<delta> w v) = insert w (fst ` set \<delta>)"
+  by (induction \<delta> w v rule: setitem.induct) (simp_all add: insert_commute)
+
+lemma distinct_setitem: "distinct (map fst \<delta>) \<Longrightarrow> distinct (map fst (setitem \<delta> w v))"
+  by (induction \<delta> w v rule: setitem.induct) (auto simp: fst_setitem)
+
+lemma set_update: "set (update \<delta> \<delta>') \<subseteq> set \<delta> \<union> set \<delta>'"
+  by (induction \<delta> \<delta>' rule: update.induct) (auto dest: set_setitem[THEN subsetD])
+
+lemma distinct_update: "distinct (map fst \<delta>) \<Longrightarrow> distinct (map fst (update \<delta> \<delta>'))"
+  by (induction \<delta> \<delta>' rule: update.induct) (auto intro: distinct_setitem)
+
 fun dict_entries :: "val list \<Rightarrow> (str \<times> val) list option"
 where
 "dict_entries [] = Some []" |
