@@ -383,7 +383,7 @@ lemma list_typed:
 proof
   assume "synth_expr \<Sigma> \<Gamma> (ExprList es) = Ok \<tau>"
   then obtain \<tau>' where "elements_join \<Sigma> \<Gamma> es = Ok \<tau>'" and "\<tau> = TyList \<tau>'"
-    by (auto simp: bind_sum_def split: sum.splits)
+    by (auto simp: bind_sum_def split: sum.splits if_splits)
   with elements_join_Ok[OF this(1) assms(2)] show ?thesis by blast
 next
   assume "check_expr' \<Sigma> \<Gamma> (ExprList es) \<tau> = Some (Ok ()) \<and> fv \<tau> \<subseteq> fst ` set \<eta>"

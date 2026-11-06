@@ -3,6 +3,27 @@ theory Reasons
   imports Contexts
 begin
 
+(* Rules of the specification *)
+datatype rule =
+    RuleVar | RuleAttrModule | RuleQualified | RuleAttrObject | RuleAttrUnion | RuleCall | RuleCallUnion
+  | RuleCallLambdaSyn | RuleCallee | RuleCalleeScheme | RuleConstr | RuleConstrExplicit | RuleBinop
+  | RuleUnop | RuleCondSyn | RuleAnd | RuleOr | RuleSubscriptList
+  | RuleSubscriptStr | RuleSubscriptDict | RuleSubscriptTuple | RuleSubscriptTupleNeg | RuleSubscriptTupleInt
+  | RuleSubscriptUnion | RuleSynList | RuleSynTuple | RuleSynDict | RuleSynListComp | RuleSynDictComp
+  | RuleVarScheme | RuleCallLambda | RuleLambda | RuleList | RuleTuple | RuleDict | RuleCond
+  | RuleListComp | RuleDictComp | RuleQualGuard | RuleQualGenerator
+  | RuleSubtyClassExtend | RuleSubtyClass | RuleSubtySized | RuleSubtyList | RuleSubtyDict | RuleSubtyCallable
+  | RuleSubtyTuple | RuleSubtyLiteral | RuleSubtyUnion
+  | RuleDeclare | RuleAssign | RuleDeclareAssign | RuleExprStmt | RulePrint | RuleCallStmt | RuleCallStmtUnion
+  | RuleAssert | RuleAssertMsg | RuleAssertFalseMsg | RuleReturnNone | RuleReturn | RuleIf | RuleIfElse
+  | RuleSeq | RuleDefs | RuleMatch | RuleMatchPartial | RuleDefSignature | RuleDefBody
+  | RuleCheckVar | RuleCheckAs | RuleCheckTupleNone | RuleCheckListNone | RuleCheckConstr | RulePatConstr
+  | RulePatShapes
+  | RuleTopSeq | RuleClass | RuleClassExtend | RuleTypeAlias
+  | RuleTyName | RuleTyClass | RuleTyAlias | RuleTyLiteral | RuleTyList | RuleTyDict | RuleTyTuple
+  | RuleTyCallable | RuleTyUnion
+  | RuleModule | RuleImport | RuleFromImport | RuleSubmodulesCons | RuleImpMember
+
 (* Reasons for ill-formedness *)
 datatype reason =
     DuplicateField var var
@@ -70,25 +91,8 @@ datatype reason =
   | ImportCycle "name list"
   | MypyCompatibility reason
   | Located pos reason
-  (* Reason under the judgement or statement named, for a reason which several can raise *)
-  | InModuleAttribute reason
-  | InImportedName reason
-  | InImport reason
-  | InTypeExpression reason
-  | InPattern reason
-  | InIf reason
-  | InMatch reason
-  | InSignature reason
-  | InDeclaration reason
-  | InDefs reason
-  | InBody reason
-  | InModule reason
-  | InAssignment reason
-  | InScheme reason
-  | InSubscript reason
-  | InLambdaCall reason
-  | InGenerator reason
-  | InCallee reason
+  (* Reason for the failure of a premise or side condition of a rule *)
+  | Violates rule reason
 
 type_synonym 'a may_fail = "reason + 'a"
 
@@ -102,24 +106,7 @@ where
 fun locate_reason :: "pos \<Rightarrow> reason \<Rightarrow> reason"
 where
 "locate_reason p (Located p' r) = Located p' r" |
-"locate_reason p (InModuleAttribute r) = InModuleAttribute (locate_reason p r)" |
-"locate_reason p (InImportedName r) = InImportedName (locate_reason p r)" |
-"locate_reason p (InImport r) = InImport (locate_reason p r)" |
-"locate_reason p (InTypeExpression r) = InTypeExpression (locate_reason p r)" |
-"locate_reason p (InPattern r) = InPattern (locate_reason p r)" |
-"locate_reason p (InIf r) = InIf (locate_reason p r)" |
-"locate_reason p (InMatch r) = InMatch (locate_reason p r)" |
-"locate_reason p (InSignature r) = InSignature (locate_reason p r)" |
-"locate_reason p (InDeclaration r) = InDeclaration (locate_reason p r)" |
-"locate_reason p (InDefs r) = InDefs (locate_reason p r)" |
-"locate_reason p (InBody r) = InBody (locate_reason p r)" |
-"locate_reason p (InModule r) = InModule (locate_reason p r)" |
-"locate_reason p (InAssignment r) = InAssignment (locate_reason p r)" |
-"locate_reason p (InScheme r) = InScheme (locate_reason p r)" |
-"locate_reason p (InSubscript r) = InSubscript (locate_reason p r)" |
-"locate_reason p (InLambdaCall r) = InLambdaCall (locate_reason p r)" |
-"locate_reason p (InGenerator r) = InGenerator (locate_reason p r)" |
-"locate_reason p (InCallee r) = InCallee (locate_reason p r)" |
+"locate_reason p (Violates n r) = Violates n (locate_reason p r)" |
 "locate_reason p r = Located p r"
 
 definition locate :: "pos \<Rightarrow> 'a may_fail \<Rightarrow> 'a may_fail"
@@ -131,6 +118,26 @@ lemma locate_Ok [simp]: "(locate p m = Ok x) = (m = Ok x)"
 
 lemma map_sum_id_Ok [simp]: "(map_sum f id m = Ok x) = (m = Ok x)"
   by (cases m) simp_all
+
+(* Reason r under rule n, unless r is already under a rule *)
+fun violates :: "rule \<Rightarrow> reason \<Rightarrow> reason"
+where
+"violates n (Located p r) = Located p (violates n r)" |
+"violates n (MypyCompatibility r) = MypyCompatibility (violates n r)" |
+"violates n (Violates n' r) = Violates n' r" |
+"violates n r = Violates n r"
+
+abbreviation by_rule :: "rule \<Rightarrow> 'a may_fail \<Rightarrow> 'a may_fail"
+where
+"by_rule n \<equiv> map_sum (violates n) id"
+
+(* Reason r without the rule it violates *)
+fun without_rule :: "reason \<Rightarrow> reason"
+where
+"without_rule (Located p r) = Located p (without_rule r)" |
+"without_rule (MypyCompatibility r) = MypyCompatibility (without_rule r)" |
+"without_rule (Violates _ r) = without_rule r" |
+"without_rule r = r"
 
 definition not_type_name :: "cxt \<Rightarrow> name \<Rightarrow> reason"
 where

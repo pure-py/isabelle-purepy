@@ -234,29 +234,14 @@ def excluded_name(name: str) -> tuple[str, Classification]:
 
 
 def unwrapped(r: Reason) -> Reason:
-    """r without the judgements wrapped around it"""
+    """r without the rule it violates"""
     match r:
-        case (
-            Reasons.InModuleAttribute(r_)
-            | Reasons.InImportedName(r_)
-            | Reasons.InImport(r_)
-            | Reasons.InTypeExpression(r_)
-            | Reasons.InPattern(r_)
-            | Reasons.InIf(r_)
-            | Reasons.InMatch(r_)
-            | Reasons.InSignature(r_)
-            | Reasons.InDeclaration(r_)
-            | Reasons.InDefs(r_)
-            | Reasons.InBody(r_)
-            | Reasons.InModule(r_)
-            | Reasons.InAssignment(r_)
-            | Reasons.InScheme(r_)
-            | Reasons.InSubscript(r_)
-            | Reasons.InLambdaCall(r_)
-            | Reasons.InGenerator(r_)
-            | Reasons.InCallee(r_)
-        ):
+        case Reasons.Violates(_, r_):
             return unwrapped(r_)
+        case Reasons.Located(p, r_):
+            return Reasons.Located(p, unwrapped(r_))
+        case Reasons.MypyCompatibility(r_):
+            return Reasons.MypyCompatibility(unwrapped(r_))
         case _:
             return r
 

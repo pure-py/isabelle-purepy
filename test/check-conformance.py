@@ -5,9 +5,10 @@ import re
 import sys
 
 import purepy_conformance
-from purepy_conformance import Results, main_module, run, suite, tests
+from purepy_conformance import PurePyOutcome, Results, main_module, run, suite, tests
 
-from purepy.rules import rules_cited
+from purepy.check_program import check_module, check_program
+from purepy.rules import rule_names
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 TEST = ROOT / "test"
@@ -32,17 +33,27 @@ def check_lint(r: Results) -> None:
                 break
 
 
+def rule_violated(test: pathlib.Path) -> str | None:
+    d = check_program(main_module(test)) if test.is_dir() else check_module(test)
+    return None if d is None else d.rule
+
+
 def check_rules(r: Results) -> None:
-    """Every rule the type checker cites is cited by a test of the suite, so exists in the specification"""
-    with r.test("rules cited by the type checker"):
+    """Each test of an ill-formed program rejected under the rule it cites, and each rule reached by such a test"""
+    with r.test("rules violated"):
         with suite() as path:
             cited = {
-                m.group(1)
+                test.relative_to(path): (m.group(1), rule_violated(test))
                 for test in tests(path)
-                if (m := CITATION.match(main_module(test).read_text().split("\n", 1)[0]))
+                if test.relative_to(path).parts[1] == PurePyOutcome.TYPING_REJECTS
+                and (m := CITATION.match(main_module(test).read_text().split("\n", 1)[0]))
             }
-        for name in sorted(rules_cited() - cited):
-            r.fail(f"{name} not cited by the conformance suite")
+        for test, (name, violated) in sorted(cited.items()):
+            if violated != name:
+                r.fail(f"{test} cites {name}, rejected under {violated}")
+        reached = {name for name, violated in cited.values() if violated == name}
+        for name in sorted(rule_names() - reached):
+            r.fail(f"{name} reached by no test citing it")
 
 
 def main() -> None:
