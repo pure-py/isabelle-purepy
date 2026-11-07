@@ -287,6 +287,18 @@ next
   then show ?case by (cases l) auto
 qed auto
 
+lemma subty_callable_inv:
+  "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> \<tau> = TyCallable \<tau>s \<tau>' \<Longrightarrow> \<not> is_union \<sigma> \<Longrightarrow> \<sigma> \<noteq> TyPrim Never
+    \<Longrightarrow> \<exists>\<sigma>s \<sigma>'. \<sigma> = TyCallable \<sigma>s \<sigma>' \<and> \<Sigma> \<turnstile> \<tau>s [<:] \<sigma>s \<and> \<Sigma> \<turnstile> \<sigma>' <: \<tau>'"
+  and "\<Sigma> \<turnstile> \<sigma>s' [<:] \<tau>s'' \<Longrightarrow> True"
+proof (induction rule: subty_subtys.inducts)
+  case (SubtyRefl \<tau>)
+  then show ?case by (auto simp: subtys_list_all2 intro: list.rel_refl subty_subtys.SubtyRefl)
+next
+  case (SubtyLiteral l \<tau>)
+  then show ?case by (cases l) auto
+qed auto
+
 lemma subty_class_inv:
   "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> \<tau> = TyClass C \<tau>s \<Longrightarrow> \<not> is_union \<sigma> \<Longrightarrow> \<sigma> \<noteq> TyPrim Never \<Longrightarrow> \<exists>D \<sigma>s. \<sigma> = TyClass D \<sigma>s"
   and "\<Sigma> \<turnstile> \<sigma>s' [<:] \<tau>s' \<Longrightarrow> True"

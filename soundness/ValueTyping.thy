@@ -93,6 +93,12 @@ proof (induction \<sigma>)
   qed
 qed (simp_all cong: map_cong)
 
+(* Type scheme of a function signature *)
+fun callable_scheme :: "ty_scheme \<Rightarrow> bool"
+where
+"callable_scheme (TyScheme _ (TyCallable _ _)) = True" |
+"callable_scheme _ = False"
+
 context evaluation
 begin
 
@@ -140,7 +146,8 @@ ValPUScheme: "v = VUnbound \<or> \<turnstile> v : Scheme \<pi> \<Longrightarrow>
 
 WfEnv:
   "\<lbrakk> closed_inst \<eta> ; tyvars \<Gamma> \<subseteq> fst ` set \<eta>
-   ; \<forall>x \<theta>. fmlookup \<Gamma> x = Some \<theta> \<longrightarrow> \<theta> \<noteq> TypeVar \<longrightarrow> (\<exists>v. fmlookup \<rho> x = Some v \<and> \<turnstile> v : inst_entry \<eta> \<theta>) \<rbrakk>
+   ; \<forall>x \<theta>. fmlookup \<Gamma> x = Some \<theta> \<longrightarrow> \<theta> \<noteq> TypeVar \<longrightarrow> (\<exists>v. fmlookup \<rho> x = Some v \<and> \<turnstile> v : inst_entry \<eta> \<theta>)
+   ; \<forall>x \<pi>. fmlookup \<Gamma> x = Some (Scheme \<pi>) \<longrightarrow> callable_scheme \<pi> \<rbrakk>
   \<Longrightarrow> \<eta> \<turnstile> \<rho> : \<Gamma>"
 
 inductive_cases WfEnvE: "\<eta> \<turnstile> \<rho> : \<Gamma>"
@@ -154,6 +161,9 @@ lemma wf_env_tyvars: "\<eta> \<turnstile> \<rho> : \<Gamma> \<Longrightarrow> ty
 lemma wf_env_fv: "\<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; fv (\<tau> :: ty) \<subseteq> tyvars \<Gamma> \<rbrakk> \<Longrightarrow> fv \<tau> \<subseteq> fst ` set \<eta>"
   using wf_env_tyvars by blast
 
+lemma wf_env_scheme: "\<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; fmlookup \<Gamma> x = Some (Scheme \<pi>) \<rbrakk> \<Longrightarrow> callable_scheme \<pi>"
+  by (auto elim!: WfEnvE)
+
 lemma wf_env_lookup:
   "\<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; fmlookup \<Gamma> x = Some \<theta> ; \<theta> \<noteq> TypeVar \<rbrakk>
   \<Longrightarrow> \<exists>v. fmlookup \<rho> x = Some v \<and> \<turnstile> v : inst_entry \<eta> \<theta>"
@@ -165,8 +175,11 @@ lemma wf_env_add:
   assumes "\<eta> \<turnstile> \<rho> : \<Gamma>" and "tyvars \<Delta> \<subseteq> fst ` set \<eta>" and "fmdom \<rho>' |\<subseteq>| fmdom \<Delta>"
     and "\<And>x \<theta>. \<lbrakk> fmlookup \<Delta> x = Some \<theta> ; \<theta> \<noteq> TypeVar \<rbrakk>
           \<Longrightarrow> \<exists>v. fmlookup (\<rho> \<otimes> \<rho>') x = Some v \<and> \<turnstile> v : inst_entry \<eta> \<theta>"
+    and "\<And>x \<pi>. fmlookup \<Delta> x = Some (Scheme \<pi>) \<Longrightarrow> callable_scheme \<pi>"
   shows "\<eta> \<turnstile> \<rho> \<otimes> \<rho>' : \<Gamma> \<otimes> \<Delta>"
 proof (rule WfEnv)
+  show "\<forall>x \<pi>. fmlookup (\<Gamma> \<otimes> \<Delta>) x = Some (Scheme \<pi>) \<longrightarrow> callable_scheme \<pi>"
+    using assms(5) wf_env_scheme[OF assms(1)] by (auto split: if_splits)
   show "closed_inst \<eta>" using assms(1) by (rule wf_env_closed)
   show "tyvars (\<Gamma> \<otimes> \<Delta>) \<subseteq> fst ` set \<eta>" using wf_env_tyvars[OF assms(1)] assms(2) tyvars_add by blast
   show "\<forall>x \<theta>. fmlookup (\<Gamma> \<otimes> \<Delta>) x = Some \<theta> \<longrightarrow> \<theta> \<noteq> TypeVar
@@ -190,6 +203,7 @@ qed
 
 lemma wf_env_upd:
   assumes "\<eta> \<turnstile> \<rho> : \<Gamma>" and "\<theta> \<noteq> TypeVar" and "fv_entry \<theta> \<subseteq> fst ` set \<eta>" and "\<turnstile> v : inst_entry \<eta> \<theta>"
+    and "\<forall>\<pi>. \<theta> = Scheme \<pi> \<longrightarrow> callable_scheme \<pi>"
   shows "\<eta> \<turnstile> fmupd x v \<rho> : fmupd x \<theta> \<Gamma>"
 proof -
   have "\<eta> \<turnstile> \<rho> \<otimes> fmupd x v fmempty : \<Gamma> \<otimes> fmupd x \<theta> fmempty"
@@ -200,11 +214,11 @@ qed
 (* Rebinding in the context alone *)
 lemma wf_env_upd_cxt:
   assumes "\<eta> \<turnstile> \<rho> : \<Gamma>" and "\<theta> \<noteq> TypeVar" and "fv_entry \<theta> \<subseteq> fst ` set \<eta>" and "fmlookup \<rho> x = Some v"
-    and "\<turnstile> v : inst_entry \<eta> \<theta>"
+    and "\<turnstile> v : inst_entry \<eta> \<theta>" and "\<forall>\<pi>. \<theta> = Scheme \<pi> \<longrightarrow> callable_scheme \<pi>"
   shows "\<eta> \<turnstile> \<rho> : fmupd x \<theta> \<Gamma>"
 proof -
   have "fmupd x v \<rho> = \<rho>" using assms(4) by (intro fmap_ext) auto
-  with wf_env_upd[OF assms(1-3,5), of x] show ?thesis by simp
+  with wf_env_upd[OF assms(1-3,5,6), of x] show ?thesis by simp
 qed
 
 lemma wf_unbound:

@@ -183,6 +183,22 @@ next
   then show ?case by (fastforce simp: UN_subset_iff)
 qed auto
 
+lemma fv_subst_minus:
+  "length \<tau>s = length \<alpha>s \<Longrightarrow> fv (subst \<tau>s \<alpha>s \<sigma>) \<subseteq> \<Union> (fv ` set \<tau>s) \<union> (fv \<sigma> - set \<alpha>s)"
+proof (induction \<sigma>)
+  case (TyVar \<alpha>)
+  show ?case
+  proof (cases "\<alpha> \<in> set \<alpha>s")
+    case True
+    with TyVar obtain \<tau> where "map_of (zip \<alpha>s \<tau>s) \<alpha> = Some \<tau>" using map_of_zip_is_Some by fastforce
+    then show ?thesis by (auto dest: map_of_SomeD set_zip_rightD)
+  next
+    case False
+    then have "map_of (zip \<alpha>s \<tau>s) \<alpha> = None" by (auto simp: map_of_eq_None_iff dest: set_zip_leftD)
+    with False show ?thesis by simp
+  qed
+qed (fastforce simp: UN_subset_iff)+
+
 (* Composition of two substitutions, applied to the types of a list of pairs, each type with free type variables
    among those of the first *)
 lemma map_subst_subst:
