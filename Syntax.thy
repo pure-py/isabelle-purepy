@@ -502,6 +502,50 @@ where
    })" |
 "type_expr_of _ = None"
 
+(* Type expression denoted by a subscript: a class or alias name applied to type arguments, or a type headed by
+   a predefined name *)
+lemma type_expr_of_subscript:
+  assumes "type_expr_of (At p (ExprSubscript e e')) = Some \<psi>"
+  shows "(\<exists>q \<psi>s. dotted_name (node e) = Some q \<and> \<psi> = TyExprName q \<psi>s)
+    \<or> node e = ExprVar (var ''Literal'') \<and> (\<exists>l. \<psi> = TyExprLiteral l)
+    \<or> node e = ExprVar (var ''Callable'') \<and> (\<exists>\<psi>s \<psi>'. \<psi> = TyExprCallable \<psi>s \<psi>')
+    \<or> node e = ExprVar (var ''list'') \<and> (\<exists>\<psi>'. \<psi> = TyExprList \<psi>')
+    \<or> node e = ExprVar (var ''tuple'') \<and> (\<exists>\<psi>s. \<psi> = TyExprTuple \<psi>s)
+    \<or> node e = ExprVar (var ''dict'') \<and> (\<exists>\<psi>'. \<psi> = TyExprDict \<psi>')"
+proof (cases "node e")
+  case (ExprVar x)
+  consider "x = var ''Literal''" | "x = var ''Callable''" | "x = var ''list''" | "x = var ''tuple''"
+    | "x = var ''dict''" | "x \<notin> {var ''Literal'', var ''Callable'', var ''list'', var ''tuple'', var ''dict''}"
+    by blast
+  then show ?thesis
+  proof cases
+    case 1
+    with assms ExprVar show ?thesis by (auto simp: Let_def split: expr.splits lit.splits)
+  next
+    case 2
+    with assms ExprVar show ?thesis
+      by (auto simp: Let_def bind_eq_Some_conv split: located.splits expr.splits list.splits)
+  next
+    case 3
+    with assms ExprVar obtain \<psi>s where "(case \<psi>s of [\<psi>'] \<Rightarrow> Some (TyExprList \<psi>') | _ \<Rightarrow> None) = Some \<psi>"
+      by (auto simp: Let_def bind_eq_Some_conv)
+    with 3 ExprVar show ?thesis by (cases \<psi>s rule: remdups_adj.cases) auto
+  next
+    case 4
+    with assms ExprVar show ?thesis by (auto simp: Let_def bind_eq_Some_conv)
+  next
+    case 5
+    with assms ExprVar obtain \<psi>s
+      where "(case \<psi>s of [TyExprPrim str, \<psi>'] \<Rightarrow> Some (TyExprDict \<psi>') | _ \<Rightarrow> None) = Some \<psi>"
+      by (auto simp: Let_def bind_eq_Some_conv)
+    with 5 ExprVar show ?thesis
+      by (cases \<psi>s rule: remdups_adj.cases) (auto split: list.split_asm ty_expr.split_asm prim_ty.split_asm)
+  next
+    case 6
+    with assms ExprVar show ?thesis by (auto simp: Let_def bind_eq_Some_conv)
+  qed
+qed (use assms in \<open>auto simp: Let_def bind_eq_Some_conv\<close>)
+
 consts
   binds :: "'a \<Rightarrow> var set"
   assigns :: "'a \<Rightarrow> var set"

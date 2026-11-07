@@ -134,6 +134,38 @@ definition resolve_type :: "class_table \<Rightarrow> cxt \<Rightarrow> ty_expr 
 where
 "resolve_type \<Sigma> \<Gamma> \<psi> = resolve_type' \<Sigma> \<Gamma> [] (aliases \<Gamma>) \<psi>"
 
+(* Predefined name heading a type expression, checked by successful type resolution *)
+lemma resolve_type_head:
+  assumes "resolve_type' \<Sigma> \<Gamma> A n \<psi> = Ok \<tau>"
+  shows "case \<psi> of
+           TyExprLiteral _ \<Rightarrow> fmlookup \<Gamma> (var ''Literal'') = Some PredefName
+         | TyExprList _ \<Rightarrow> fmlookup \<Gamma> (var ''list'') = Some PredefName
+         | TyExprDict _ \<Rightarrow> fmlookup \<Gamma> (var ''dict'') = Some PredefName
+         | TyExprTuple _ \<Rightarrow> fmlookup \<Gamma> (var ''tuple'') = Some PredefName
+         | TyExprCallable _ _ \<Rightarrow> fmlookup \<Gamma> (var ''Callable'') = Some PredefName
+         | _ \<Rightarrow> True"
+  using assms
+  by (cases \<psi>) (auto simp: check_type_head_def check_predefined_def ensure_def bind_sum_def split: sum.splits if_splits)
+
+(* Type supplied as the type arguments of a class name, as the class at as many type arguments as it has type
+   parameters *)
+lemma resolve_type_subscript_class:
+  assumes C: "class_of_name \<Gamma> (node e') = Some C"
+    and \<psi>: "type_expr_of (At p (ExprSubscript e' e'')) = Some \<psi>" and \<tau>: "resolve_type \<Sigma> \<Gamma> \<psi> = Ok \<tau>"
+  shows "\<exists>\<tau>s. \<tau> = TyClass C \<tau>s \<and> length \<tau>s = length (type_params \<Sigma> C)"
+proof -
+  from C obtain q where q: "dotted_name (node e') = Some q" and entry: "resolve_name \<Gamma> q = Some (Type C)"
+    by (auto simp: class_of_name_def entry_of_def bind_eq_Some_conv split: option.splits cxt_entry.splits)
+  have head: "fmlookup \<Gamma> x \<noteq> Some PredefName" if "node e' = ExprVar x" for x
+    using that q entry by (auto simp: resolve_name_def)
+  have \<tau>': "resolve_type' \<Sigma> \<Gamma> [] (aliases \<Gamma>) \<psi> = Ok \<tau>" using \<tau> by (simp add: resolve_type_def)
+  from type_expr_of_subscript[OF \<psi>] resolve_type_head[OF \<tau>'] head q obtain \<psi>s where "\<psi> = TyExprName q \<psi>s"
+    by auto
+  moreover have "\<not> (\<psi>s = [] \<and> (case q of Simple x \<Rightarrow> fmlookup \<Gamma> x = Some TypeVar | Qualified _ _ \<Rightarrow> False))" for \<psi>s
+    using resolve_name_lookup[OF entry] by (cases q) auto
+  ultimately show ?thesis using \<tau>' entry by (auto simp: Let_def bind_sum_def split: sum.splits if_splits)
+qed
+
 definition base :: "class_table \<Rightarrow> name \<Rightarrow> (name \<times> ty list) option"
 where
 "base \<Sigma> C =
@@ -299,8 +331,8 @@ where
 "inherits_within (Suc n) \<Sigma> C = (case base \<Sigma> C of None \<Rightarrow> True | Some (D, _) \<Rightarrow> inherits_within n \<Sigma> D)"
 
 (* Class table of dataclasses, each with fewer classes in its chain of base classes than the table has, a base
-   class other than range which is a well-formed type over its type parameters, and declared fields with types
-   over them *)
+   class other than range which is a well-formed type over its type parameters, declared fields with types over
+   them, and distinct field names *)
 definition wf_class_table :: "class_table \<Rightarrow> bool"
 where
 "wf_class_table \<Sigma> =
@@ -309,7 +341,8 @@ where
      \<and> inherits_within (fcard (fmdom \<Sigma>)) \<Sigma> C
      \<and> (\<forall>D \<sigma>s. base \<Sigma> C = Some (D, \<sigma>s)
           \<longrightarrow> D \<noteq> range_class \<and> wf_ty \<Sigma> (TyClass D \<sigma>s) \<and> (\<forall>\<sigma> \<in> set \<sigma>s. fv \<sigma> \<subseteq> set (type_params \<Sigma> C)))
-     \<and> (\<forall>(x, \<sigma>) \<in> set (declared_fields \<Sigma> C (map TyVar (type_params \<Sigma> C))). fv \<sigma> \<subseteq> set (type_params \<Sigma> C)))"
+     \<and> (\<forall>(x, \<sigma>) \<in> set (declared_fields \<Sigma> C (map TyVar (type_params \<Sigma> C))). fv \<sigma> \<subseteq> set (type_params \<Sigma> C))
+     \<and> distinct (field_names \<Sigma> C))"
 
 lemma wf_class_table_dataclass:
   assumes "wf_class_table \<Sigma>" and "C |\<in>| fmdom \<Sigma>"
@@ -338,6 +371,9 @@ lemma wf_class_table_declared_fields:
   "\<lbrakk> wf_class_table \<Sigma> ; C |\<in>| fmdom \<Sigma> ; (x, \<sigma>) \<in> set (declared_fields \<Sigma> C (map TyVar (type_params \<Sigma> C))) \<rbrakk>
   \<Longrightarrow> fv \<sigma> \<subseteq> set (type_params \<Sigma> C)"
   unfolding wf_class_table_def by fast
+
+lemma wf_class_table_distinct: "\<lbrakk> wf_class_table \<Sigma> ; C |\<in>| fmdom \<Sigma> \<rbrakk> \<Longrightarrow> distinct (field_names \<Sigma> C)"
+  unfolding wf_class_table_def by blast
 
 lemma wf_class_table_base:
   "\<lbrakk> wf_class_table \<Sigma> ; wf_ty \<Sigma> (TyClass C \<tau>s) ; base \<Sigma> C = Some (D, \<sigma>s) \<rbrakk>
