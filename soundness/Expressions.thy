@@ -1020,10 +1020,203 @@ proof (rule sound_expr_typedI)
   qed
 qed simp_all
 
+(* Subtyping by a literal type of a type other than a union or Never, as the literal type itself *)
+lemma subty_literal_inv:
+  "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> \<tau> = TyLiteral l \<Longrightarrow> \<not> is_union \<sigma> \<Longrightarrow> \<sigma> \<noteq> TyPrim Never \<Longrightarrow> \<sigma> = TyLiteral l"
+  and "\<Sigma> \<turnstile> \<sigma>s [<:] \<tau>s \<Longrightarrow> True"
+proof (induction rule: subty_subtys.inducts)
+  case (SubtyLiteral l' \<tau>)
+  then show ?case by (cases l') auto
+qed auto
+
+lemma wf_lit: "\<turnstile> v : Ty (TyLiteral l) \<Longrightarrow> v = VLit l"
+proof -
+  assume "\<turnstile> v : Ty (TyLiteral l)"
+  from wf_val_intro(1)[OF this] obtain \<sigma> where intro: "intro_typed v \<sigma>" and sub: "\<Sigma> \<turnstile> \<sigma> <: TyLiteral l"
+    by blast
+  from subty_literal_inv(1)[OF sub refl] intro_typed_nonunion[OF intro] have "\<sigma> = TyLiteral l" by blast
+  with intro show "v = VLit l" by (cases v) auto
+qed
+
+lemma wf_dict_entries:
+  assumes "\<turnstile> v : Ty (TyDict \<tau>)"
+  obtains \<delta> where "v = VDict \<delta>" and "\<forall>w u. (w, u) \<in> set \<delta> \<longrightarrow> \<turnstile> u : Ty \<tau>"
+proof -
+  from wf_val_intro(1)[OF assms] obtain \<sigma> where intro: "intro_typed v \<sigma>" and sub: "\<Sigma> \<turnstile> \<sigma> <: TyDict \<tau>"
+    by blast
+  from subty_dict_inv(1)[OF sub refl] intro_typed_nonunion[OF intro] obtain \<sigma>' where \<sigma>: "\<sigma> = TyDict \<sigma>'"
+    and sub': "\<Sigma> \<turnstile> \<sigma>' <: \<tau>"
+    by blast
+  from intro \<sigma> obtain \<delta> where v: "v = VDict \<delta>" and "\<forall>w u. (w, u) \<in> set \<delta> \<longrightarrow> \<turnstile> u : Ty \<sigma>'"
+    by (cases v) auto
+  with sub' that show thesis by (blast intro: ValSub)
+qed
+
+(* Element at an integer index of a sequence with elements satisfying P, or an index error *)
+lemma getitem_elems:
+  assumes "elems v = Some vs" and "\<forall>u \<in> set vs. P u"
+  shows "wf_result P (getitem v (VLit (LitInt n)))"
+  using assms by (cases v rule: elems.cases) (auto simp: Let_def nat_less_iff)
+
+(* String, as a sequence of strings *)
+lemma str_elems: "\<exists>vs. elems (VLit (LitString w)) = Some vs \<and> (\<forall>u \<in> set vs. \<turnstile> u : Ty (TyPrim str))"
+  by (auto intro: wf_str_char)
+
+(* Subscript of a value typed at a type with base type str *)
+lemma subscript_str:
+  assumes "base_type \<sigma> = TyPrim str" and "\<turnstile> v : Ty (inst \<eta> \<sigma>)"
+    and "wf_result (\<lambda>u. \<exists>n. u = VLit (LitInt n)) r"
+  shows "result_typed (mlet r (getitem v)) (TyPrim str)"
+proof -
+  have "\<exists>w. v = VLit (LitString w)"
+  proof (cases \<sigma>)
+    case (TyPrim p)
+    with assms(1, 2) show ?thesis by (auto dest: wf_str[OF _ SubtyRefl])
+  next
+    case (TyLiteral l)
+    with assms(1, 2) show ?thesis by (cases l) (auto dest: wf_lit)
+  qed (use assms(1) in simp_all)
+  then obtain w where v: "v = VLit (LitString w)" by blast
+  from str_elems obtain vs where "elems v = Some vs" and "\<forall>u \<in> set vs. \<turnstile> u : Ty (TyPrim str)"
+    unfolding v by blast
+  note get = getitem_elems[OF this]
+  with assms(3) show ?thesis by (cases r) auto
+qed
+
+(* Result of a subscript of a value typed at \<sigma>, with the index typed by the checks and synthesis supplied to
+   the typing of the subscript *)
+lemma subscript_result:
+  assumes "subscript_type \<Sigma> \<sigma> int_ok str_ok p idx = Ok \<tau>" and "\<turnstile> v : Ty (inst \<eta> \<sigma>)"
+    and int: "int_ok = Ok () \<Longrightarrow> wf_result (\<lambda>u. \<exists>n. u = VLit (LitInt n)) r"
+    and str: "str_ok = Ok () \<Longrightarrow> wf_result (\<lambda>u. \<exists>w. u = VLit (LitString w)) r"
+    and idx: "\<And>\<iota>. idx = Ok \<iota> \<Longrightarrow> result_typed r (inst \<eta> \<iota>)"
+  shows "result_typed (mlet r (getitem v)) (inst \<eta> \<tau>)"
+  using assms(1, 2)
+proof (induction \<sigma> arbitrary: \<tau> v)
+  case (TyUnion \<sigma>1 \<sigma>2)
+  from TyUnion.prems(1) obtain \<tau>1 \<tau>2 where \<tau>1: "subscript_type \<Sigma> \<sigma>1 int_ok str_ok p idx = Ok \<tau>1"
+    and \<tau>2: "subscript_type \<Sigma> \<sigma>2 int_ok str_ok p idx = Ok \<tau>2" and \<tau>: "\<tau> = \<tau>1 \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>2"
+    by (auto simp: bind_sum_def split: sum.splits)
+  from TyUnion.prems(2) have "\<turnstile> v : Ty (inst \<eta> \<sigma>1) \<or> \<turnstile> v : Ty (inst \<eta> \<sigma>2)" by (auto dest: wf_val_union)
+  then show ?case
+  proof
+    assume "\<turnstile> v : Ty (inst \<eta> \<sigma>1)"
+    from result_typed_sub[OF TyUnion.IH(1)[OF \<tau>1 this] join_upper(1)] \<tau> show ?thesis by simp
+  next
+    assume "\<turnstile> v : Ty (inst \<eta> \<sigma>2)"
+    from result_typed_sub[OF TyUnion.IH(2)[OF \<tau>2 this] join_upper(2)] \<tau> show ?thesis by simp
+  qed
+next
+  case (TyList \<sigma>')
+  then have "int_ok = Ok ()" and \<tau>: "\<tau> = \<sigma>'" by (auto simp: bind_sum_def split: sum.splits)
+  with int have r: "wf_result (\<lambda>u. \<exists>n. u = VLit (LitInt n)) r" by blast
+  from TyList.prems(2) obtain vs where v: "v = VList vs" and vs: "\<forall>u \<in> set vs. \<turnstile> u : Ty (inst \<eta> \<sigma>')"
+    by (auto elim: wf_list)
+  have "elems v = Some vs" by (simp add: v)
+  note get = getitem_elems[OF this vs]
+  with r \<tau> show ?case by (cases r) auto
+next
+  case (TyDict \<sigma>')
+  then have "str_ok = Ok ()" and \<tau>: "\<tau> = \<sigma>'" by (auto simp: bind_sum_def split: sum.splits)
+  with str have r: "wf_result (\<lambda>u. \<exists>w. u = VLit (LitString w)) r" by blast
+  from TyDict.prems(2) obtain \<delta> where v: "v = VDict \<delta>"
+    and \<delta>: "\<forall>w u. (w, u) \<in> set \<delta> \<longrightarrow> \<turnstile> u : Ty (inst \<eta> \<sigma>')"
+    by (auto elim: wf_dict_entries)
+  have get: "wf_result (\<lambda>u. \<turnstile> u : Ty (inst \<eta> \<sigma>')) (getitem v (VLit (LitString w)))" for w
+    using \<delta> by (auto simp: v split: option.splits dest!: map_of_SomeD)
+  with r \<tau> show ?case by (cases r) auto
+next
+  case (TyTuple \<sigma>s)
+  from TyTuple.prems(2) obtain vs where v: "v = VTuple vs"
+    and vs: "list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) vs (map (inst \<eta>) \<sigma>s)"
+    by (auto elim: wf_tuple)
+  have len: "length vs = length \<sigma>s" using vs by (auto dest: list_all2_lengthD)
+  from TyTuple.prems(1) obtain \<iota> where \<iota>: "idx = Ok \<iota>" by (auto simp: bind_sum_def split: sum.splits)
+  with idx have r: "result_typed r (inst \<eta> \<iota>)" by blast
+  show ?case
+  proof (cases "\<iota> = TyPrim int")
+    case True
+    with TyTuple.prems(1) \<iota> have \<tau>: "\<tau> = joins \<Sigma> \<sigma>s" by (simp add: bind_sum_def)
+    have "\<turnstile> u : Ty (inst \<eta> (joins \<Sigma> \<sigma>s))" if "u \<in> set vs" for u
+    proof -
+      from that obtain k where k: "k < length vs" and u: "u = vs ! k" by (auto simp: in_set_conv_nth)
+      from list_all2_nthD[OF vs k] k len u have "\<turnstile> u : Ty (inst \<eta> (\<sigma>s ! k))" by simp
+      from wf_val_inst_sub[OF this joins_upper] k len show ?thesis by simp
+    qed
+    moreover have "elems v = Some vs" by (simp add: v)
+    ultimately have get: "wf_result (\<lambda>u. \<turnstile> u : Ty (inst \<eta> (joins \<Sigma> \<sigma>s))) (getitem v (VLit (LitInt n)))" for n
+      by (blast intro: getitem_elems)
+    with r True \<tau> show ?thesis by (cases r) (auto dest: wf_int[OF _ SubtyRefl])
+  next
+    case False
+    have "\<exists>n. \<iota> = TyLiteral (LitInt n)"
+      using TyTuple.prems(1) \<iota> False by (auto simp: bind_sum_def split: ty.splits lit.splits prim_ty.splits)
+    then obtain n where \<iota>': "\<iota> = TyLiteral (LitInt n)" by blast
+    define i where "i = (if n < 0 then of_nat (length \<sigma>s) + n else n)"
+    have range: "0 \<le> i" "i < of_nat (length \<sigma>s)" and \<tau>: "\<tau> = \<sigma>s ! nat i"
+      using TyTuple.prems(1) \<iota> \<iota>' by (auto simp: bind_sum_def Let_def i_def split: if_splits)
+    have k: "nat i < length vs" using range len by (simp add: nat_less_iff)
+    from list_all2_nthD[OF vs k] len \<tau> k have elem: "\<turnstile> vs ! nat i : Ty (inst \<eta> \<tau>)" by simp
+    have "getitem v (VLit (LitInt n)) = Val (vs ! nat i)" using v range len by (auto simp: Let_def i_def)
+    with r \<iota>' elem show ?thesis by (cases r) (auto dest!: wf_lit)
+  qed
+next
+  case (TyPrim p)
+  then have "base_type (TyPrim p) = TyPrim str" and "int_ok = Ok ()" and "\<tau> = TyPrim str"
+    by (auto simp: bind_sum_def split: if_splits sum.splits)
+  with int subscript_str[OF this(1) TyPrim.prems(2)] show ?case by simp
+next
+  case (TyLiteral l)
+  then have "base_type (TyLiteral l) = TyPrim str" and "int_ok = Ok ()" and "\<tau> = TyPrim str"
+    by (auto simp: bind_sum_def split: if_splits sum.splits)
+  with int subscript_str[OF this(1) TyLiteral.prems(2)] show ?case by simp
+qed (simp_all split: if_splits)
+
 lemma subscript_sound:
-  "\<lbrakk> sound_expr \<rho> (node e) (Val v) ; \<not> is_class v ; sound_expr \<rho> (node e') r \<rbrakk>
-  \<Longrightarrow> sound_expr \<rho> (ExprSubscript e e') (mlet r (getitem v))"
-  sorry
+  assumes callee: "sound_expr \<rho> (node e) (Val v)" and nonclass: "\<not> is_class v"
+    and index: "sound_expr \<rho> (node e') r"
+  shows "sound_expr \<rho> (ExprSubscript e e') (mlet r (getitem v))"
+proof (rule sound_exprI)
+  fix \<eta> \<Gamma> \<tau>
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "synth_expr \<Sigma> \<Gamma> (ExprSubscript e e') = Ok \<tau>"
+  then obtain \<sigma> where \<sigma>: "synth_expr_at \<Sigma> \<Gamma> e = Ok \<sigma>"
+    and sub: "subscript_type \<Sigma> \<sigma> (check_expr_at \<Sigma> \<Gamma> e' (TyPrim int)) (check_expr_at \<Sigma> \<Gamma> e' (TyPrim str))
+      (pos_of e') (synth_expr_at \<Sigma> \<Gamma> e') = Ok \<tau>"
+    by (auto simp: bind_sum_def split: sum.splits)
+  from sound_expr_synth_at[OF callee env \<sigma>] have v: "\<turnstile> v : Ty (inst \<eta> \<sigma>)" by simp
+  show "result_typed (mlet r (getitem v)) (inst \<eta> \<tau>)"
+  proof (rule subscript_result[OF sub v])
+    assume "check_expr_at \<Sigma> \<Gamma> e' (TyPrim int) = Ok ()"
+    from prim_operand[OF index env this] show "wf_result (\<lambda>u. \<exists>n. u = VLit (LitInt n)) r"
+      by (cases r) (auto dest: wf_int[OF _ SubtyRefl])
+  next
+    assume "check_expr_at \<Sigma> \<Gamma> e' (TyPrim str) = Ok ()"
+    from prim_operand[OF index env this] show "wf_result (\<lambda>u. \<exists>w. u = VLit (LitString w)) r"
+      by (cases r) (auto dest: wf_str[OF _ SubtyRefl])
+  next
+    fix \<iota>
+    assume "synth_expr_at \<Sigma> \<Gamma> e' = Ok \<iota>"
+    from sound_expr_synth_at[OF index env this] show "result_typed r (inst \<eta> \<iota>)" .
+  qed
+next
+  fix \<eta> \<Gamma> \<tau>
+  assume "check_expr' \<Sigma> \<Gamma> (ExprSubscript e e') \<tau> = Some (Ok ())"
+  then show "result_typed (mlet r (getitem v)) (inst \<eta> \<tau>)" by (simp add: var_scheme_None)
+next
+  fix \<eta> \<Gamma>
+  assume "call_stmt \<Sigma> \<Gamma> (ExprSubscript e e')"
+  then show "result_typed (mlet r (getitem v)) (inst \<eta> (TyPrim object))" by simp
+next
+  show "sound_name \<rho> (ExprSubscript e e') (mlet r (getitem v))"
+    unfolding sound_name_def
+  proof (intro allI impI)
+    fix \<eta> \<Gamma> \<theta>
+    assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "expr_entry \<Gamma> (ExprSubscript e e') = Some \<theta>"
+    then obtain C where "class_of_name \<Gamma> (node e) = Some C" by auto
+    from sound_expr_class[OF callee env class_of_name_entry[OF this]] nonclass
+    show "wf_result (\<lambda>v'. \<turnstile> v' : inst_entry \<eta> \<theta>) (mlet r (getitem v))" by simp
+  qed
+qed
 
 lemma class_type_args_sound:
   assumes "sound_expr \<rho> (node e) (Val (VClass C))" and "type_args_of e' = Some \<psi>s"
