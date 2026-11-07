@@ -2614,7 +2614,8 @@ proof (rule sound_exprI)
     by (rule constr_call_typed[OF callee env synth class_callee_lambda[OF eval]])
   have names: "field_names \<Sigma> C = map fst x\<sigma>s" using fields by (simp add: field_names_def)
   note n_kws = constructor_args_Ok(1, 2)[OF cargs]
-  have "length \<sigma>es = length es + length kws" using arg_cong[OF constructor_args_exprs(1)[OF cargs], of length] by simp
+  have "length \<sigma>es = length es + length kws"
+    using arg_cong[OF constructor_args_exprs(1)[OF cargs], of length] by simp
   with sound_exprs_typed[OF args env typed[unfolded constructor_args_exprs(1)[OF cargs]]]
   have "length us = length es + length kws" by (auto dest: list_all2_lengthD)
   with none n_kws names show "result_typed (Aborts TypeError) (inst \<eta> \<tau>)"
