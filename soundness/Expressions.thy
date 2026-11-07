@@ -1485,17 +1485,6 @@ next
   show "wf_result (\<lambda>v. \<turnstile> v : inst_entry \<eta> \<theta>) (Aborts \<kappa>)" by simp
 qed
 
-lemma call_def_arity_sound:
-  "\<lbrakk> sound_expr \<rho> (node e) (Val Def(\<rho>', ds, j)) ; node (ds ! j) = Def f \<alpha>s xps \<psi> s ; sound_exprs \<rho> es (Val us)
-   ; length xps \<noteq> length us ; j < length ds \<rbrakk>
-  \<Longrightarrow> sound_expr \<rho> (ExprCall e (es, [])) (Aborts TypeError)"
-  sorry
-
-lemma call_prim_sound:
-  "\<lbrakk> sound_expr \<rho> (node e) (Val (VPrim f)) ; sound_exprs \<rho> es (Val us) \<rbrakk>
-  \<Longrightarrow> sound_expr \<rho> (ExprCall e (es, [])) (prim_meaning f us)"
-  sorry
-
 lemma entry_of_expr_entry: "entry_of \<Gamma> e = Some \<theta> \<Longrightarrow> expr_entry \<Gamma> e = Some \<theta>"
   by (cases e) (simp_all add: entry_of_def)
 
@@ -2090,6 +2079,276 @@ proof (intro conjI allI impI)
   qed
 qed simp
 
+lemma range_lookup: "fmlookup \<Sigma> range_class = fmlookup predefined_classes range_class"
+  using predefined by (auto simp: fmsubset.rep_eq map_le_def predefined_classes_def)
+
+lemma range_fields:
+  "field_names \<Sigma> range_class = [var ''start'', var ''stop'']"
+  "field_types \<Sigma> range_class \<tau>s = [TyPrim int, TyPrim int]"
+proof -
+  have "range_class |\<in>| fmdom \<Sigma>" using range_lookup by (simp add: predefined_classes_def fmlookup_dom_iff)
+  from wf_class_table_inherits[OF wf_class_table this] obtain n where n: "fcard (fmdom \<Sigma>) = Suc n"
+    by (cases "fcard (fmdom \<Sigma>)") simp_all
+  have "fields \<Sigma> range_class = FieldScheme [] [(var ''start'', TyPrim int), (var ''stop'', TyPrim int)]"
+    using range_lookup n
+    by (simp add: fields_def instantiated_ancestors_def Let_def type_params_def base_def declared_fields_def
+        predefined_classes_def resolve_type_def check_type_head_def check_predefined_def ensure_def
+        type_context_def \<P>_def fmlookup_of_list fmconst_def)
+  then show "field_names \<Sigma> range_class = [var ''start'', var ''stop'']"
+    and "field_types \<Sigma> range_class \<tau>s = [TyPrim int, TyPrim int]"
+    by (simp_all add: field_names_def field_types_def)
+qed
+
+(* Class below range, which has no subclasses *)
+lemma subty_range:
+  "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> \<sigma> = TyClass C \<sigma>s \<Longrightarrow> \<tau> = TyClass range_class \<tau>s \<Longrightarrow> C |\<in>| fmdom \<Sigma> \<Longrightarrow> C = range_class"
+  and "\<Sigma> \<turnstile> \<sigma>s' [<:] \<tau>s' \<Longrightarrow> True"
+proof (induction arbitrary: C \<sigma>s rule: subty_subtys.inducts)
+  case (SubtyClassExtend C' D \<rho>s \<tau>s' \<tau>)
+  then have "D \<noteq> range_class" and "D |\<in>| fmdom \<Sigma>" using wf_class_table_baseD[OF wf_class_table] by auto
+  with SubtyClassExtend show ?case by auto
+qed auto
+
+lemma iter_range:
+  assumes "\<turnstile> VObject C xvs : Ty (TyClass range_class \<tau>s)"
+  shows "iter (VObject C xvs) \<noteq> None"
+proof -
+  from assms obtain \<tau>s' where C: "C |\<in>| fmdom \<Sigma>" and names: "map fst xvs = field_names \<Sigma> C"
+    and fields: "list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) (map snd xvs) (field_types \<Sigma> C \<tau>s')"
+    and sub: "\<Sigma> \<turnstile> TyClass C \<tau>s' <: TyClass range_class \<tau>s"
+    by (rule wf_object)
+  from subty_range(1)[OF sub refl refl C] have range: "C = range_class" .
+  with names have "map fst xvs = [var ''start'', var ''stop'']" by (simp add: range_fields)
+  then obtain u u' where xvs: "xvs = [(var ''start'', u), (var ''stop'', u')]" by (auto simp: map_eq_Cons_conv)
+  with fields range have "\<turnstile> u : Ty (TyPrim int)" and "\<turnstile> u' : Ty (TyPrim int)" by (simp_all add: range_fields)
+  then obtain m n where "u = VLit (LitInt m)" and "u' = VLit (LitInt n)" by (blast dest: wf_int[OF _ SubtyRefl])
+  with xvs range show ?thesis by simp
+qed
+
+lemma prim_entry_types:
+  "\<lbrakk> fmlookup (\<E> \<A>) q = Some \<rho> ; fmlookup \<rho> x = Some (VPrim f) ; fmlookup \<P> q = Some \<Gamma> ; fmlookup \<Gamma> x = Some \<theta> \<rbrakk>
+  \<Longrightarrow> f = PrimLen \<and> \<theta> = Ty (TyCallable [TyPrim Sized] (TyPrim int))
+    \<or> f = PrimRound \<and> \<theta> = Ty (TyCallable [TyPrim float] (TyPrim int))
+    \<or> f = PrimExit \<and> \<theta> = Ty (TyCallable [TyPrim int] (TyPrim Never))"
+  by (auto simp: \<E>_def \<P>_def builtins_def name_of_def fmlookup_of_list split: if_splits)
+
+(* Subtyping by Sized of a type other than a union or Never *)
+lemma subty_sized_inv:
+  "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> \<tau> = TyPrim Sized \<Longrightarrow> \<not> is_union \<sigma> \<Longrightarrow> \<sigma> \<noteq> TyPrim Never
+    \<Longrightarrow> sized \<sigma> \<or> \<sigma> = TyPrim Sized \<or> (\<exists>w. \<sigma> = TyLiteral (LitString w))
+      \<or> (\<exists>C \<sigma>s. \<sigma> = TyClass C \<sigma>s \<and> \<Sigma> \<turnstile> \<sigma> <: TyClass range_class [])"
+  and "\<Sigma> \<turnstile> \<sigma>s' [<:] \<tau>s' \<Longrightarrow> True"
+proof (induction rule: subty_subtys.inducts)
+  case (SubtyClassExtend C D \<sigma>s \<tau>s \<tau>)
+  let ?\<sigma> = "TyClass D (map (subst \<tau>s (type_params \<Sigma> C)) \<sigma>s)"
+  from SubtyClassExtend(3, 4) have "sized ?\<sigma> \<or> (\<exists>C' \<sigma>s'. ?\<sigma> = TyClass C' \<sigma>s' \<and> \<Sigma> \<turnstile> ?\<sigma> <: TyClass range_class [])"
+    by simp
+  then have "\<Sigma> \<turnstile> ?\<sigma> <: TyClass range_class []"
+  proof
+    assume "sized ?\<sigma>"
+    then have "D = range_class" and "map (subst \<tau>s (type_params \<Sigma> C)) \<sigma>s = []"
+      by (cases "map (subst \<tau>s (type_params \<Sigma> C)) \<sigma>s"; simp)+
+    then show ?thesis by (simp add: subty_subtys.SubtyRefl)
+  qed blast
+  with SubtyClassExtend(1) show ?case by (blast intro: subty_subtys.SubtyClassExtend)
+next
+  case (SubtyLiteral l \<tau>)
+  then show ?case by (cases l) auto
+qed auto
+
+lemma iter_sized:
+  assumes "\<turnstile> v : Ty \<tau>" and "\<Sigma> \<turnstile> \<tau> <: TyPrim Sized"
+  shows "iter v \<noteq> None"
+proof -
+  from wf_val_intro(1)[OF assms(1)] obtain \<sigma> where intro: "intro_typed v \<sigma>" and "\<Sigma> \<turnstile> \<sigma> <: \<tau>" by blast
+  from subty_trans'[OF this(2) assms(2)] have sub: "\<Sigma> \<turnstile> \<sigma> <: TyPrim Sized" .
+  from subty_sized_inv(1)[OF sub refl] intro_typed_nonunion[OF intro]
+  consider (sized) "sized \<sigma>" | (literal) w where "\<sigma> = TyLiteral (LitString w)"
+    | (range) C \<sigma>s where "\<sigma> = TyClass C \<sigma>s" and "\<Sigma> \<turnstile> \<sigma> <: TyClass range_class []"
+    | (top) "\<sigma> = TyPrim Sized"
+    by blast
+  then show ?thesis
+  proof cases
+    case sized
+    with intro show ?thesis
+    proof (cases v)
+      case (VObject C xvs)
+      with intro obtain \<tau>s where \<sigma>: "\<sigma> = TyClass C \<tau>s" by auto
+      with sized have "C = range_class" and "\<tau>s = []" by (cases \<tau>s; simp)+
+      with intro_typed_wf[OF intro] \<sigma> VObject have "\<turnstile> VObject C xvs : Ty (TyClass range_class [])" by simp
+      then show ?thesis unfolding VObject by (rule iter_range)
+    qed (auto elim: sized.elims)
+  next
+    case literal
+    with intro show ?thesis by (cases v) auto
+  next
+    case (range C \<sigma>s)
+    with intro obtain xvs where v: "v = VObject C xvs" by (cases v) auto
+    from ValSub[OF intro_typed_wf[OF intro] range(2)] have "\<turnstile> VObject C xvs : Ty (TyClass range_class [])"
+      by (simp add: v)
+    then show ?thesis unfolding v by (rule iter_range)
+  next
+    case top
+    with intro show ?thesis by (cases v) auto
+  qed
+qed
+
+(* Meaning of a primitive function at arguments typed by its parameter types *)
+lemma prim_meaning_typed:
+  assumes "intro_typed (VPrim f) (TyCallable \<sigma>s \<tau>)" and "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty \<sigma>) us \<sigma>s"
+  shows "result_typed (prim_meaning f us) \<tau>"
+proof -
+  from assms(1) obtain \<A> q \<rho> x \<Gamma> where "fmlookup (\<E> \<A>) q = Some \<rho>" and "fmlookup \<rho> x = Some (VPrim f)"
+    and "fmlookup \<P> q = Some \<Gamma>" and "fmlookup \<Gamma> x = Some (Ty (TyCallable \<sigma>s \<tau>))"
+    by auto
+  from prim_entry_types[OF this] consider
+      (len) "f = PrimLen" "\<sigma>s = [TyPrim Sized]" "\<tau> = TyPrim int"
+    | (round) "f = PrimRound" "\<sigma>s = [TyPrim float]" "\<tau> = TyPrim int"
+    | (exit) "f = PrimExit" "\<sigma>s = [TyPrim int]" "\<tau> = TyPrim Never"
+    by auto
+  then show ?thesis
+  proof cases
+    case len
+    with assms(2) obtain u where us: "us = [u]" and "\<turnstile> u : Ty (TyPrim Sized)" by (auto simp: list_all2_Cons2)
+    from iter_sized[OF this(2) SubtyRefl] obtain vs where "iter u = Some vs" by auto
+    with us len show ?thesis by (simp add: wf_int_lit)
+  next
+    case round
+    with assms(2) obtain u where us: "us = [u]" and u: "\<turnstile> u : Ty (TyPrim float)" by (auto simp: list_all2_Cons2)
+    from u obtain l where "u = VLit l" and "prim_subtype float (TyLiteral l)"
+      by (rule wf_prim_lit[OF _ SubtyRefl]) simp
+    with us round show ?thesis
+      by (cases l) (auto simp: wf_int_lit split: option.splits ereal.splits)
+  next
+    case exit
+    with assms(2) obtain u where us: "us = [u]" and u: "\<turnstile> u : Ty (TyPrim int)" by (auto simp: list_all2_Cons2)
+    from wf_int[OF u SubtyRefl] us exit show ?thesis by auto
+  qed
+qed
+
+lemma call_prim_sound:
+  assumes "\<rho>, node e \<Rightarrow>\<^sub>e Val (VPrim f)" and "sound_expr \<rho> (node e) (Val (VPrim f))"
+    and "sound_exprs \<rho> es (Val us)"
+  shows "sound_expr \<rho> (ExprCall e (es, [])) (prim_meaning f us)"
+  unfolding sound_expr_def
+proof (intro conjI allI impI)
+  fix \<eta> \<Gamma> \<tau>
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and typed: "has_type \<Sigma> \<eta> \<Gamma> (ExprCall e (es, [])) \<tau>"
+  have callable: "result_typed (prim_meaning f us) (inst \<eta> \<tau>')"
+    if "\<turnstile> VPrim f : Ty (inst \<eta> (TyCallable \<sigma>s \<tau>'))" and "list_all2 (has_type_at \<Sigma> \<eta> \<Gamma>) es \<sigma>s" for \<sigma>s \<tau>'
+  proof -
+    from that(1) obtain \<sigma>s' \<tau>'' where intro: "intro_typed (VPrim f) (TyCallable \<sigma>s' \<tau>'')"
+      and sub: "\<Sigma> \<turnstile> map (inst \<eta>) \<sigma>s [<:] \<sigma>s'" and ret: "\<Sigma> \<turnstile> \<tau>'' <: inst \<eta> \<tau>'"
+      by (auto elim: wf_callable)
+    from sound_exprs_typed[OF assms(3) env that(2)]
+    have args: "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty \<sigma>) us (map (inst \<eta>) \<sigma>s)" by (simp add: list.rel_map)
+    have "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty \<sigma>) us \<sigma>s'"
+      by (rule list_all2_trans[OF _ args sub[unfolded subtys_list_all2]]) (rule ValSub)
+    from prim_meaning_typed[OF intro this] ret show ?thesis
+      by (cases "prim_meaning f us") (auto intro: ValSub)
+  qed
+  show "result_typed (prim_meaning f us) (inst \<eta> \<tau>)"
+  proof (cases "lambda_of (node e)")
+    case (Some xe)
+    then obtain xs e' where "node e = ExprLambda xs e'" by (cases "node e") auto
+    with assms(1) show ?thesis by (auto elim: LambdaE)
+  next
+    case None
+    show ?thesis
+    proof (cases "constructor_class \<Sigma> \<Gamma> e")
+      case (Some m)
+      from constructor_class_entry[OF this] obtain C where "expr_entry \<Gamma> (node e) = Some (Type C)" by blast
+      from sound_expr_class[OF assms(2) env this] show ?thesis by simp
+    next
+      case c: None
+      from typed None c show ?thesis
+      proof (cases rule: call_typed_callee)
+        case (synth \<sigma> \<tau>')
+        from assms(2) env synth(1, 2) obtain \<sigma>s \<tau>'' where "\<turnstile> VPrim f : Ty (inst \<eta> (TyCallable \<sigma>s \<tau>''))"
+          and "list_all2 (has_type_at \<Sigma> \<eta> \<Gamma>) es \<sigma>s" and sub: "\<Sigma> \<turnstile> \<tau>'' <: \<tau>'"
+          by (rule callee_call)
+        from callable[OF this(1, 2)] have "result_typed (prim_meaning f us) (inst \<eta> \<tau>')"
+          using sub by (rule result_typed_sub)
+        then show ?thesis using synth(3) by (rule result_typed_sub)
+      next
+        case (stmt \<sigma>)
+        from assms(2) env stmt(1, 2) obtain \<sigma>s \<tau>'' where "\<turnstile> VPrim f : Ty (inst \<eta> (TyCallable \<sigma>s \<tau>''))"
+          and "list_all2 (has_type_at \<Sigma> \<eta> \<Gamma>) es \<sigma>s"
+          by (rule callee_call_stmt)
+        from callable[OF this] have "result_typed (prim_meaning f us) (inst \<eta> (TyPrim object))"
+          by (rule result_typed_sub) (rule SubtyObject)
+        with stmt(3) show ?thesis by simp
+      qed
+    qed
+  qed
+qed simp
+
+lemma def_signatures_arity:
+  assumes "those_sum (map (\<lambda>d. locate (pos_of d) (def_signature \<Sigma> \<Gamma> (node d))) ds) = Ok \<pi>s" and "i < length ds"
+    and "node (ds ! i) = Def f \<alpha>s xps \<psi> s" and "\<pi>s ! i = TyScheme \<alpha>s' (TyCallable \<sigma>s \<tau>)"
+  shows "length \<sigma>s = length xps"
+proof -
+  from those_sum_map_Ok[OF assms(1)] assms(2)
+  have "locate (pos_of (ds ! i)) (def_signature \<Sigma> \<Gamma> (node (ds ! i))) = Ok (\<pi>s ! i)"
+    by (simp add: list_all2_conv_all_nth)
+  with assms(3, 4) obtain \<sigma>s'
+    where "those_sum (map (resolve_type \<Sigma> (\<Gamma> \<otimes> fmconst (set \<alpha>s) TypeVar) \<circ> snd) xps) = Ok \<sigma>s'"
+    and "\<sigma>s = \<sigma>s'"
+    by (cases "pos_of (ds ! i)") (auto simp: Let_def bind_sum_def split: sum.splits option.splits)
+  then show ?thesis by (auto dest!: those_sum_map_Ok list_all2_lengthD)
+qed
+
+lemma call_def_arity_sound:
+  assumes "\<rho>, node e \<Rightarrow>\<^sub>e Val Def(\<rho>', ds, j)" and "sound_expr \<rho> (node e) (Val Def(\<rho>', ds, j))"
+    and "node (ds ! j) = Def f \<alpha>s xps \<psi> s" and "sound_exprs \<rho> es (Val us)" and "length xps \<noteq> length us"
+    and "j < length ds"
+  shows "sound_expr \<rho> (ExprCall e (es, [])) (Aborts TypeError)"
+  unfolding sound_expr_def
+proof (intro conjI allI impI)
+  fix \<eta> \<Gamma> \<tau>
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and typed: "has_type \<Sigma> \<eta> \<Gamma> (ExprCall e (es, [])) \<tau>"
+  have arity: False if "\<turnstile> Def(\<rho>', ds, j) : Ty (inst \<eta> (TyCallable \<sigma>s \<tau>'))"
+    and "list_all2 (has_type_at \<Sigma> \<eta> \<Gamma>) es \<sigma>s" for \<sigma>s \<tau>'
+  proof -
+    from that(1) obtain \<sigma>s' \<tau>'' where intro: "intro_typed Def(\<rho>', ds, j) (TyCallable \<sigma>s' \<tau>'')"
+      and sub: "\<Sigma> \<turnstile> map (inst \<eta>) \<sigma>s [<:] \<sigma>s'"
+      by (auto elim: wf_callable)
+    from intro obtain \<Gamma>' \<pi>s \<alpha>s' \<sigma>sD \<tau>D \<tau>s where
+      sigs: "those_sum (map (\<lambda>d. locate (pos_of d) (def_signature \<Sigma> \<Gamma>' (node d))) ds) = Ok \<pi>s"
+      and \<pi>: "\<pi>s ! j = TyScheme \<alpha>s' (TyCallable \<sigma>sD \<tau>D)" and "length \<sigma>s' = length \<sigma>sD"
+      by auto
+    moreover from def_signatures_arity[OF sigs assms(6, 3) \<pi>] have "length \<sigma>sD = length xps" .
+    moreover from sub have "length \<sigma>s' = length \<sigma>s" by (auto simp: subtys_list_all2 dest: list_all2_lengthD)
+    moreover from sound_exprs_typed[OF assms(4) env that(2)] have "length us = length \<sigma>s"
+      by (rule list_all2_lengthD)
+    ultimately show False using assms(5) by simp
+  qed
+  show "result_typed (Aborts TypeError) (inst \<eta> \<tau>)"
+  proof (cases "lambda_of (node e)")
+    case (Some xe)
+    then obtain xs e' where "node e = ExprLambda xs e'" by (cases "node e") auto
+    with assms(1) show ?thesis by (auto elim: LambdaE)
+  next
+    case None
+    show ?thesis
+    proof (cases "constructor_class \<Sigma> \<Gamma> e")
+      case (Some m)
+      from constructor_class_entry[OF this] obtain C where "expr_entry \<Gamma> (node e) = Some (Type C)" by blast
+      from sound_expr_class[OF assms(2) env this] show ?thesis by simp
+    next
+      case c: None
+      from typed None c show ?thesis
+      proof (cases rule: call_typed_callee)
+        case (synth \<sigma> \<tau>')
+        from assms(2) env synth(1, 2) show ?thesis by (rule callee_call) (metis arity)
+      next
+        case (stmt \<sigma>)
+        from assms(2) env stmt(1, 2) show ?thesis by (rule callee_call_stmt) (metis arity)
+      qed
+    qed
+  qed
+qed simp
+
 lemma call_fail_sound:
   assumes "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa>" and "sound_expr \<rho> (node e) (Aborts \<kappa>)"
   shows "sound_expr \<rho> (ExprCall e (es, kws)) (Aborts \<kappa>)"
@@ -2178,52 +2437,6 @@ lemma qual_guard_nonbool_sound:
   "\<lbrakk> sound_expr \<rho> (node e) (Val v) ; v \<notin> {true, false} \<rbrakk>
   \<Longrightarrow> sound_quals \<rho> (At p (Guard e) # gs) (Aborts Excluded)"
   by (auto simp: sound_quals_def bind_sum_def dest!: bool_operand split: sum.splits)
-
-lemma range_lookup: "fmlookup \<Sigma> range_class = fmlookup predefined_classes range_class"
-  using predefined by (auto simp: fmsubset.rep_eq map_le_def predefined_classes_def)
-
-lemma range_fields:
-  "field_names \<Sigma> range_class = [var ''start'', var ''stop'']"
-  "field_types \<Sigma> range_class \<tau>s = [TyPrim int, TyPrim int]"
-proof -
-  have "range_class |\<in>| fmdom \<Sigma>" using range_lookup by (simp add: predefined_classes_def fmlookup_dom_iff)
-  from wf_class_table_inherits[OF wf_class_table this] obtain n where n: "fcard (fmdom \<Sigma>) = Suc n"
-    by (cases "fcard (fmdom \<Sigma>)") simp_all
-  have "fields \<Sigma> range_class = FieldScheme [] [(var ''start'', TyPrim int), (var ''stop'', TyPrim int)]"
-    using range_lookup n
-    by (simp add: fields_def instantiated_ancestors_def Let_def type_params_def base_def declared_fields_def
-        predefined_classes_def resolve_type_def check_type_head_def check_predefined_def ensure_def
-        type_context_def \<P>_def fmlookup_of_list fmconst_def)
-  then show "field_names \<Sigma> range_class = [var ''start'', var ''stop'']"
-    and "field_types \<Sigma> range_class \<tau>s = [TyPrim int, TyPrim int]"
-    by (simp_all add: field_names_def field_types_def)
-qed
-
-(* Class below range, which has no subclasses *)
-lemma subty_range:
-  "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> \<sigma> = TyClass C \<sigma>s \<Longrightarrow> \<tau> = TyClass range_class \<tau>s \<Longrightarrow> C |\<in>| fmdom \<Sigma> \<Longrightarrow> C = range_class"
-  and "\<Sigma> \<turnstile> \<sigma>s' [<:] \<tau>s' \<Longrightarrow> True"
-proof (induction arbitrary: C \<sigma>s rule: subty_subtys.inducts)
-  case (SubtyClassExtend C' D \<rho>s \<tau>s' \<tau>)
-  then have "D \<noteq> range_class" and "D |\<in>| fmdom \<Sigma>" using wf_class_table_baseD[OF wf_class_table] by auto
-  with SubtyClassExtend show ?case by auto
-qed auto
-
-lemma iter_range:
-  assumes "\<turnstile> VObject C xvs : Ty (TyClass range_class \<tau>s)"
-  shows "iter (VObject C xvs) \<noteq> None"
-proof -
-  from assms obtain \<tau>s' where C: "C |\<in>| fmdom \<Sigma>" and names: "map fst xvs = field_names \<Sigma> C"
-    and fields: "list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) (map snd xvs) (field_types \<Sigma> C \<tau>s')"
-    and sub: "\<Sigma> \<turnstile> TyClass C \<tau>s' <: TyClass range_class \<tau>s"
-    by (rule wf_object)
-  from subty_range(1)[OF sub refl refl C] have range: "C = range_class" .
-  with names have "map fst xvs = [var ''start'', var ''stop'']" by (simp add: range_fields)
-  then obtain u u' where xvs: "xvs = [(var ''start'', u), (var ''stop'', u')]" by (auto simp: map_eq_Cons_conv)
-  with fields range have "\<turnstile> u : Ty (TyPrim int)" and "\<turnstile> u' : Ty (TyPrim int)" by (simp_all add: range_fields)
-  then obtain m n where "u = VLit (LitInt m)" and "u' = VLit (LitInt n)" by (blast dest: wf_int[OF _ SubtyRefl])
-  with xvs range show ?thesis by simp
-qed
 
 (* Elements drawn by a generator from a value, typed by the element type of a type of the value *)
 lemma iter_typed:
