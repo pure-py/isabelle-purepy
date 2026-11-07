@@ -156,6 +156,36 @@ qed (simp_all cong: map_cong, blast+)
 lemma subst_base_type_lit [simp]: "subst \<tau>s \<alpha>s (base_type_lit l) = base_type_lit l"
   by (cases l) simp_all
 
+lemma subst_TyVar [simp]: "subst (map TyVar \<alpha>s) \<alpha>s = id"
+proof
+  fix \<sigma>
+  show "subst (map TyVar \<alpha>s) \<alpha>s \<sigma> = id \<sigma>" by (induction \<sigma>) (auto simp: map_of_zip_map intro: map_idI)
+qed
+
+lemma fv_subst: "\<lbrakk> fv \<sigma> \<subseteq> set \<alpha>s ; length \<tau>s = length \<alpha>s \<rbrakk> \<Longrightarrow> fv (subst \<tau>s \<alpha>s \<sigma>) \<subseteq> \<Union> (fv ` set \<tau>s)"
+proof (induction \<sigma>)
+  case (TyVar \<alpha>)
+  then obtain \<tau> where "map_of (zip \<alpha>s \<tau>s) \<alpha> = Some \<tau>" using map_of_zip_is_Some by fastforce
+  then show ?case by (auto dest: map_of_SomeD set_zip_rightD)
+next
+  case (TyTuple \<sigma>s)
+  then show ?case by (fastforce simp: UN_subset_iff)
+next
+  case (TyCallable \<sigma>s \<sigma>)
+  then show ?case by (fastforce simp: UN_subset_iff)
+next
+  case (TyClass C \<sigma>s)
+  then show ?case by (fastforce simp: UN_subset_iff)
+qed auto
+
+(* Composition of two substitutions, applied to the types of a list of pairs, each type with free type variables
+   among those of the first *)
+lemma map_subst_subst:
+  "\<lbrakk> \<forall>(x, \<sigma>) \<in> set x\<sigma>s. fv \<sigma> \<subseteq> set \<alpha>s ; length \<sigma>s = length \<alpha>s \<rbrakk>
+  \<Longrightarrow> map (\<lambda>(x, \<sigma>). (x, subst \<tau>s \<alpha>s' \<sigma>)) (map (\<lambda>(x, \<sigma>). (x, subst \<sigma>s \<alpha>s \<sigma>)) x\<sigma>s) =
+      map (\<lambda>(x, \<sigma>). (x, subst (map (subst \<tau>s \<alpha>s') \<sigma>s) \<alpha>s \<sigma>)) x\<sigma>s"
+  by (induction x\<sigma>s) (auto simp: subst_subst)
+
 lemma sized_subst: "\<nexists>\<alpha>. \<sigma> = TyVar \<alpha> \<Longrightarrow> sized (subst \<tau>s \<alpha>s \<sigma>) = sized \<sigma>"
   by (cases \<sigma>) (auto elim: sized.elims)
 
@@ -228,17 +258,56 @@ definition field_names :: "class_table \<Rightarrow> name \<Rightarrow> var list
 where
 "field_names \<Sigma> C = (case fields \<Sigma> C of FieldScheme _ x\<sigma>s \<Rightarrow> map fst x\<sigma>s)"
 
-(* Class table with each base class a well-formed type over the type parameters of its class *)
+(* Class C with at most n classes in its chain of base classes, itself included *)
+fun inherits_within :: "nat \<Rightarrow> class_table \<Rightarrow> name \<Rightarrow> bool"
+where
+"inherits_within 0 \<Sigma> C = False" |
+"inherits_within (Suc n) \<Sigma> C = (case base \<Sigma> C of None \<Rightarrow> True | Some (D, _) \<Rightarrow> inherits_within n \<Sigma> D)"
+
+(* Class table of dataclasses, each with fewer classes in its chain of base classes than the table has, a base
+   class which is a well-formed type over its type parameters, and declared fields with types over them *)
 definition wf_class_table :: "class_table \<Rightarrow> bool"
 where
 "wf_class_table \<Sigma> =
-  (\<forall>C D \<sigma>s. C |\<in>| fmdom \<Sigma> \<longrightarrow> base \<Sigma> C = Some (D, \<sigma>s)
-     \<longrightarrow> wf_ty \<Sigma> (TyClass D \<sigma>s) \<and> (\<forall>\<sigma> \<in> set \<sigma>s. fv \<sigma> \<subseteq> set (type_params \<Sigma> C)))"
+  (\<forall>C. C |\<in>| fmdom \<Sigma> \<longrightarrow>
+     (\<exists>\<Gamma> q \<chi>s i c \<alpha>s b \<phi>. fmlookup \<Sigma> C = Some (ClassDef \<Gamma> q \<chi>s i) \<and> node (\<chi>s ! i) = Dataclass c \<alpha>s b \<phi>)
+     \<and> inherits_within (fcard (fmdom \<Sigma>)) \<Sigma> C
+     \<and> (\<forall>D \<sigma>s. base \<Sigma> C = Some (D, \<sigma>s)
+          \<longrightarrow> wf_ty \<Sigma> (TyClass D \<sigma>s) \<and> (\<forall>\<sigma> \<in> set \<sigma>s. fv \<sigma> \<subseteq> set (type_params \<Sigma> C)))
+     \<and> (\<forall>(x, \<sigma>) \<in> set (declared_fields \<Sigma> C (map TyVar (type_params \<Sigma> C))). fv \<sigma> \<subseteq> set (type_params \<Sigma> C)))"
+
+lemma wf_class_table_dataclass:
+  assumes "wf_class_table \<Sigma>" and "C |\<in>| fmdom \<Sigma>"
+  obtains \<Gamma> q \<chi>s i c b \<phi> where "fmlookup \<Sigma> C = Some (ClassDef \<Gamma> q \<chi>s i)"
+    and "node (\<chi>s ! i) = Dataclass c (type_params \<Sigma> C) b \<phi>"
+proof -
+  have "\<exists>\<Gamma> q \<chi>s i c \<alpha>s b \<phi>. fmlookup \<Sigma> C = Some (ClassDef \<Gamma> q \<chi>s i) \<and> node (\<chi>s ! i) = Dataclass c \<alpha>s b \<phi>"
+    using assms unfolding wf_class_table_def by blast
+  then obtain \<Gamma> q \<chi>s i c \<alpha>s b \<phi> where "fmlookup \<Sigma> C = Some (ClassDef \<Gamma> q \<chi>s i)"
+    and "node (\<chi>s ! i) = Dataclass c \<alpha>s b \<phi>"
+    by blast
+  moreover from this have "type_params \<Sigma> C = \<alpha>s" by (simp add: type_params_def)
+  ultimately show thesis using that[of \<Gamma> q \<chi>s i c b \<phi>] by simp
+qed
+
+lemma wf_class_table_inherits:
+  "\<lbrakk> wf_class_table \<Sigma> ; C |\<in>| fmdom \<Sigma> \<rbrakk> \<Longrightarrow> inherits_within (fcard (fmdom \<Sigma>)) \<Sigma> C"
+  unfolding wf_class_table_def by blast
+
+lemma wf_class_table_baseD:
+  "\<lbrakk> wf_class_table \<Sigma> ; C |\<in>| fmdom \<Sigma> ; base \<Sigma> C = Some (D, \<sigma>s) \<rbrakk>
+  \<Longrightarrow> wf_ty \<Sigma> (TyClass D \<sigma>s) \<and> (\<forall>\<sigma> \<in> set \<sigma>s. fv \<sigma> \<subseteq> set (type_params \<Sigma> C))"
+  unfolding wf_class_table_def by blast
+
+lemma wf_class_table_declared_fields:
+  "\<lbrakk> wf_class_table \<Sigma> ; C |\<in>| fmdom \<Sigma> ; (x, \<sigma>) \<in> set (declared_fields \<Sigma> C (map TyVar (type_params \<Sigma> C))) \<rbrakk>
+  \<Longrightarrow> fv \<sigma> \<subseteq> set (type_params \<Sigma> C)"
+  unfolding wf_class_table_def by fast
 
 lemma wf_class_table_base:
   "\<lbrakk> wf_class_table \<Sigma> ; wf_ty \<Sigma> (TyClass C \<tau>s) ; base \<Sigma> C = Some (D, \<sigma>s) \<rbrakk>
   \<Longrightarrow> wf_ty \<Sigma> (TyClass D (map (subst \<tau>s (type_params \<Sigma> C)) \<sigma>s))"
-  unfolding wf_class_table_def by (auto intro: wf_ty_subst)
+  using wf_class_table_baseD[of \<Sigma> C D \<sigma>s] by (auto intro: wf_ty_subst)
 
 (* Base class at substituted type arguments, as the substitution applied to the base class at the type
    arguments *)
@@ -246,7 +315,137 @@ lemma base_subst:
   "\<lbrakk> wf_class_table \<Sigma> ; wf_ty \<Sigma> (TyClass C \<tau>s) ; base \<Sigma> C = Some (D, \<sigma>s) \<rbrakk>
   \<Longrightarrow> TyClass D (map (subst (map (subst \<tau>s' \<alpha>s) \<tau>s) (type_params \<Sigma> C)) \<sigma>s) =
       subst \<tau>s' \<alpha>s (TyClass D (map (subst \<tau>s (type_params \<Sigma> C)) \<sigma>s))"
-  unfolding wf_class_table_def by (auto simp: subst_subst cong: map_cong)
+  using wf_class_table_baseD[of \<Sigma> C D \<sigma>s] by (auto simp: subst_subst cong: map_cong)
+
+(* Declared fields at type arguments \<tau>s, as the substitution of \<tau>s into the declared fields at the type
+   parameters *)
+lemma declared_fields_subst:
+  assumes "wf_class_table \<Sigma>" and "C |\<in>| fmdom \<Sigma>"
+  shows "declared_fields \<Sigma> C \<tau>s =
+         map (\<lambda>(x, \<sigma>). (x, subst \<tau>s (type_params \<Sigma> C) \<sigma>)) (declared_fields \<Sigma> C (map TyVar (type_params \<Sigma> C)))"
+proof -
+  from assms obtain \<Gamma> q \<chi>s i c b \<phi> where "fmlookup \<Sigma> C = Some (ClassDef \<Gamma> q \<chi>s i)"
+    and "node (\<chi>s ! i) = Dataclass c (type_params \<Sigma> C) b \<phi>"
+    by (rule wf_class_table_dataclass)
+  then show ?thesis by (simp add: declared_fields_def case_prod_beta)
+qed
+
+lemma instantiated_ancestors_upto_mono:
+  "\<lbrakk> inherits_within n \<Sigma> C ; n \<le> m \<rbrakk>
+  \<Longrightarrow> instantiated_ancestors_upto m \<Sigma> C \<tau>s = instantiated_ancestors_upto n \<Sigma> C \<tau>s"
+proof (induction n arbitrary: m C \<tau>s)
+  case (Suc n)
+  then obtain m' where "m = Suc m'" and "n \<le> m'" by (cases m) auto
+  with Suc show ?case by (auto split: option.splits)
+qed simp
+
+(* Fields declared by the ancestors of class C at type arguments \<tau>s, through at most n base classes, from the
+   furthest ancestor *)
+abbreviation ancestor_fields :: "nat \<Rightarrow> class_table \<Rightarrow> name \<Rightarrow> ty list \<Rightarrow> (var \<times> ty) list"
+where
+"ancestor_fields n \<Sigma> C \<tau>s \<equiv>
+  concat (rev (map (\<lambda>(D, \<sigma>s). declared_fields \<Sigma> D \<sigma>s) (instantiated_ancestors_upto n \<Sigma> C \<tau>s)))"
+
+(* Fields of the ancestors of class C at type arguments \<tau>s, as the substitution of \<tau>s into the fields at the
+   type parameters, whose types are over the type parameters *)
+lemma ancestor_fields_subst:
+  assumes "wf_class_table \<Sigma>"
+  shows "\<lbrakk> C |\<in>| fmdom \<Sigma> ; inherits_within n \<Sigma> C \<rbrakk> \<Longrightarrow>
+    ancestor_fields n \<Sigma> C \<tau>s =
+      map (\<lambda>(x, \<sigma>). (x, subst \<tau>s (type_params \<Sigma> C) \<sigma>)) (ancestor_fields n \<Sigma> C (map TyVar (type_params \<Sigma> C)))
+    \<and> (\<forall>(x, \<sigma>) \<in> set (ancestor_fields n \<Sigma> C (map TyVar (type_params \<Sigma> C))). fv \<sigma> \<subseteq> set (type_params \<Sigma> C))"
+proof (induction n arbitrary: C \<tau>s)
+  case 0
+  then show ?case by simp
+next
+  case (Suc n)
+  let ?\<alpha>s = "type_params \<Sigma> C"
+  show ?case
+  proof (cases "base \<Sigma> C")
+    case None
+    with assms Suc(2) show ?thesis
+      by (auto simp: declared_fields_subst[OF assms Suc(2), of \<tau>s] dest: wf_class_table_declared_fields)
+  next
+    case (Some D\<sigma>s)
+    then obtain D \<sigma>s where base: "base \<Sigma> C = Some (D, \<sigma>s)" by (cases D\<sigma>s) simp
+    with wf_class_table_baseD[OF assms Suc(2)] have D: "D |\<in>| fmdom \<Sigma>"
+      and len: "length \<sigma>s = length (type_params \<Sigma> D)" and fv: "\<forall>\<sigma> \<in> set \<sigma>s. fv \<sigma> \<subseteq> set ?\<alpha>s" by auto
+    from Suc(3) base have "inherits_within n \<Sigma> D" by simp
+    note IH = Suc.IH[OF D this]
+    let ?\<phi> = "ancestor_fields n \<Sigma> D (map TyVar (type_params \<Sigma> D))"
+    have fv_D: "\<forall>(x, \<sigma>) \<in> set ?\<phi>. fv \<sigma> \<subseteq> set (type_params \<Sigma> D)" using IH by blast
+    have subst_D: "ancestor_fields n \<Sigma> D (map (subst \<tau>s ?\<alpha>s) \<sigma>s) =
+          map (\<lambda>(x, \<sigma>). (x, subst \<tau>s ?\<alpha>s \<sigma>)) (ancestor_fields n \<Sigma> D \<sigma>s)"
+      using map_subst_subst[OF fv_D len]
+      by (simp only: IH[of "map (subst \<tau>s ?\<alpha>s) \<sigma>s", THEN conjunct1] IH[of \<sigma>s, THEN conjunct1])
+    have fv_anc: "fv \<sigma> \<subseteq> set ?\<alpha>s" if "(x, \<sigma>) \<in> set (ancestor_fields n \<Sigma> D \<sigma>s)" for x \<sigma>
+    proof -
+      from that obtain \<sigma>' where "(x, \<sigma>') \<in> set ?\<phi>" and \<sigma>: "\<sigma> = subst \<sigma>s (type_params \<Sigma> D) \<sigma>'"
+        unfolding IH[of \<sigma>s, THEN conjunct1] by auto
+      with fv_D have "fv \<sigma>' \<subseteq> set (type_params \<Sigma> D)" by blast
+      from fv_subst[OF this len] fv show ?thesis unfolding \<sigma> by blast
+    qed
+    have C: "ancestor_fields (Suc n) \<Sigma> C \<delta>s =
+             ancestor_fields n \<Sigma> D (map (subst \<delta>s ?\<alpha>s) \<sigma>s) @ declared_fields \<Sigma> C \<delta>s" for \<delta>s
+      using base by simp
+    have TyVar: "ancestor_fields (Suc n) \<Sigma> C (map TyVar ?\<alpha>s) =
+                 ancestor_fields n \<Sigma> D \<sigma>s @ declared_fields \<Sigma> C (map TyVar ?\<alpha>s)"
+      unfolding C by simp
+    show ?thesis
+    proof
+      show "ancestor_fields (Suc n) \<Sigma> C \<tau>s =
+            map (\<lambda>(x, \<sigma>). (x, subst \<tau>s ?\<alpha>s \<sigma>)) (ancestor_fields (Suc n) \<Sigma> C (map TyVar ?\<alpha>s))"
+        unfolding C[of \<tau>s] TyVar subst_D by (simp add: declared_fields_subst[OF assms Suc(2), of \<tau>s])
+      show "\<forall>(x, \<sigma>) \<in> set (ancestor_fields (Suc n) \<Sigma> C (map TyVar ?\<alpha>s)). fv \<sigma> \<subseteq> set ?\<alpha>s"
+        unfolding TyVar set_append using fv_anc wf_class_table_declared_fields[OF assms Suc(2)] by blast
+    qed
+  qed
+qed
+
+lemma fields_ancestor_fields:
+  "fields \<Sigma> C =
+   FieldScheme (type_params \<Sigma> C) (ancestor_fields (fcard (fmdom \<Sigma>)) \<Sigma> C (map TyVar (type_params \<Sigma> C)))"
+  by (simp add: fields_def instantiated_ancestors_def Let_def)
+
+lemma instantiate_fields:
+  assumes "wf_class_table \<Sigma>" and "C |\<in>| fmdom \<Sigma>"
+  shows "instantiate (fields \<Sigma> C) \<tau>s = ancestor_fields (fcard (fmdom \<Sigma>)) \<Sigma> C \<tau>s"
+  using ancestor_fields_subst[OF assms(1, 2) wf_class_table_inherits[OF assms], of \<tau>s]
+  by (simp add: fields_ancestor_fields)
+
+lemma fields_fv:
+  assumes "wf_class_table \<Sigma>" and "C |\<in>| fmdom \<Sigma>"
+  shows "\<forall>(x, \<sigma>) \<in> set (instantiate (fields \<Sigma> C) (map TyVar (type_params \<Sigma> C))). fv \<sigma> \<subseteq> set (type_params \<Sigma> C)"
+  unfolding instantiate_fields[OF assms]
+  using ancestor_fields_subst[OF assms(1, 2) wf_class_table_inherits[OF assms]] by (rule conjunct2)
+
+lemma instantiate_fields_subst:
+  assumes "wf_class_table \<Sigma>" and "C |\<in>| fmdom \<Sigma>" and "length \<sigma>s = length (type_params \<Sigma> C)"
+  shows "instantiate (fields \<Sigma> C) (map (subst \<tau>s \<alpha>s) \<sigma>s) =
+         map (\<lambda>(x, \<sigma>). (x, subst \<tau>s \<alpha>s \<sigma>)) (instantiate (fields \<Sigma> C) \<sigma>s)"
+proof -
+  obtain x\<sigma>s where fields: "fields \<Sigma> C = FieldScheme (type_params \<Sigma> C) x\<sigma>s"
+    by (simp add: fields_ancestor_fields)
+  with fields_fv[OF assms(1, 2)] have "\<forall>(x, \<sigma>) \<in> set x\<sigma>s. fv \<sigma> \<subseteq> set (type_params \<Sigma> C)" by simp
+  from map_subst_subst[OF this assms(3)] fields show ?thesis by simp
+qed
+
+(* Fields of class C at type arguments \<tau>s, as those of its base class at the substituted base class arguments
+   followed by those declared by C *)
+lemma instantiate_fields_base:
+  assumes "wf_class_table \<Sigma>" and "C |\<in>| fmdom \<Sigma>" and "base \<Sigma> C = Some (D, \<sigma>s)"
+  shows "instantiate (fields \<Sigma> C) \<tau>s =
+         instantiate (fields \<Sigma> D) (map (subst \<tau>s (type_params \<Sigma> C)) \<sigma>s) @ declared_fields \<Sigma> C \<tau>s"
+proof -
+  have within: "inherits_within (fcard (fmdom \<Sigma>)) \<Sigma> C" using assms(1, 2) by (rule wf_class_table_inherits)
+  then obtain n where n: "fcard (fmdom \<Sigma>) = Suc n" by (cases "fcard (fmdom \<Sigma>)") simp_all
+  with within assms(3) have within_D: "inherits_within n \<Sigma> D" by simp
+  have D: "D |\<in>| fmdom \<Sigma>" using wf_class_table_baseD[OF assms] by simp
+  have "instantiate (fields \<Sigma> D) \<gamma>s = ancestor_fields n \<Sigma> D \<gamma>s" for \<gamma>s
+    by (simp only: instantiate_fields[OF assms(1) D] n
+        instantiated_ancestors_upto_mono[OF within_D le_SucI[OF le_refl]])
+  with assms(3) show ?thesis by (simp add: instantiate_fields[OF assms(1, 2)] n)
+qed
 
 definition class_table :: "cxt \<Rightarrow> name \<Rightarrow> type_def located list \<Rightarrow> nat \<Rightarrow> class_table"
 where

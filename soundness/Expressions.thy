@@ -151,12 +151,17 @@ lemma sound_entriesD:
 
 subsection \<open>Subtyping\<close>
 
-(* Transitivity and substitution without the well-formedness of the types they need; delete once the types
-   produced by checking are shown well-formed and the hypotheses supplied *)
+(* Transitivity, substitution and instantiation of fields without the well-formedness of the types they need;
+   delete once the types produced by checking are shown well-formed and the hypotheses supplied *)
 lemma subty_trans': "\<lbrakk> \<Sigma> \<turnstile> \<sigma> <: \<tau> ; \<Sigma> \<turnstile> \<tau> <: \<tau>' \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: \<tau>'"
   sorry
 
 lemma subst_subty': "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> \<Sigma> \<turnstile> subst \<tau>s \<alpha>s \<sigma> <: subst \<tau>s \<alpha>s \<tau>"
+  sorry
+
+lemma instantiate_fields_subst':
+  "map_of (instantiate (fields \<Sigma> C) \<sigma>s) x = Some \<sigma>
+  \<Longrightarrow> map_of (instantiate (fields \<Sigma> C) (map (subst \<tau>s \<alpha>s) \<sigma>s)) x = Some (subst \<tau>s \<alpha>s \<sigma>)"
   sorry
 
 lemma joins_upper: "\<tau> \<in> set \<tau>s \<Longrightarrow> \<Sigma> \<turnstile> \<tau> <: joins \<Sigma> \<tau>s"
@@ -305,6 +310,36 @@ next
   case ValPrim
   then show ?case by (auto dest!: prim_entry_callable)
 qed auto
+
+(* Object of class C, typed at a type above the class at type arguments typing its fields *)
+lemma wf_object:
+  "\<turnstile> v : \<theta> \<Longrightarrow> v = VObject C xvs \<Longrightarrow>
+    (\<forall>\<tau>. \<theta> = Ty \<tau> \<longrightarrow> (\<exists>\<tau>s. C |\<in>| fmdom \<Sigma> \<and> map fst xvs = field_names \<Sigma> C
+       \<and> list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) (map snd xvs) (field_types \<Sigma> C \<tau>s) \<and> \<Sigma> \<turnstile> TyClass C \<tau>s <: \<tau>))
+    \<and> (\<forall>\<pi>. \<theta> \<noteq> Scheme \<pi>)"
+  "\<eta> \<turnstile> \<rho> : \<Gamma> \<Longrightarrow> True"
+proof (induction rule: wf_val_wf_env.inducts)
+  case (ValObj C' xvs' \<tau>s)
+  from ValObj(3) have "list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) (map snd xvs') (field_types \<Sigma> C' \<tau>s)"
+    by (rule list_all2_mono) simp
+  with ValObj(1, 2, 4) show ?case by (auto intro: SubtyRefl)
+next
+  case ValSub
+  then show ?case by (blast intro: subty_trans')
+qed auto
+
+(* Field of an object of class C, typed by the field of the class at type arguments typing the fields *)
+lemma object_field:
+  assumes "map fst xvs = field_names \<Sigma> C" and "list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) (map snd xvs) (field_types \<Sigma> C \<tau>s)"
+    and "map_of (instantiate (fields \<Sigma> C) \<tau>s) x = Some \<tau>"
+  obtains v where "map_of xvs x = Some v" and "\<turnstile> v : Ty \<tau>"
+proof -
+  let ?x\<tau>s = "instantiate (fields \<Sigma> C) \<tau>s"
+  have "map fst xvs = map fst ?x\<tau>s" using assms(1) by (cases "fields \<Sigma> C") (simp add: field_names_def split_def)
+  then have "zip (map fst xvs) (field_types \<Sigma> C \<tau>s) = ?x\<tau>s" by (simp add: field_types_def zip_map_fst_snd)
+  from rel_option_map_of_zip[OF assms(2), of "map fst xvs" x, unfolded zip_map_fst_snd this] assms(3) that
+  show thesis by (cases "map_of xvs x") auto
+qed
 
 lemma wf_bool: "\<lbrakk> \<turnstile> v : Ty \<tau> ; \<Sigma> \<turnstile> \<tau> <: TyPrim bool \<rbrakk> \<Longrightarrow> v = true \<or> v = false"
   by (erule wf_prim_lit) (auto elim: base_type_lit.elims)
@@ -842,6 +877,29 @@ proof (rule sound_expr_typedI)
   from sound_entriesD[OF assms(2) this key e'] show "result_typed (Aborts \<kappa>) (inst \<eta> \<tau>)" by simp
 qed simp_all
 
+(* Field of class C at type arguments \<tau>s, a subtype of the attribute type of a type above the class *)
+lemma attribute_field:
+  "\<lbrakk> \<Sigma> \<turnstile> TyClass C \<tau>s <: inst \<eta> \<sigma> ; attribute_type \<Sigma> \<sigma> x = Ok \<tau> ; C |\<in>| fmdom \<Sigma> \<rbrakk>
+  \<Longrightarrow> \<exists>\<sigma>'. map_of (instantiate (fields \<Sigma> C) \<tau>s) x = Some \<sigma>' \<and> \<Sigma> \<turnstile> \<sigma>' <: inst \<eta> \<tau>"
+proof (induction \<sigma> arbitrary: \<tau>)
+  case (TyUnion \<sigma> \<sigma>'')
+  from TyUnion(4) obtain \<tau>' \<tau>'' where \<tau>': "attribute_type \<Sigma> \<sigma> x = Ok \<tau>'"
+    and \<tau>'': "attribute_type \<Sigma> \<sigma>'' x = Ok \<tau>''" and \<tau>: "\<tau> = \<tau>' \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>''"
+    by (auto simp: bind_sum_def split: sum.splits)
+  have "\<Sigma> \<turnstile> inst \<eta> \<tau>' <: inst \<eta> \<tau>" and "\<Sigma> \<turnstile> inst \<eta> \<tau>'' <: inst \<eta> \<tau>"
+    unfolding \<tau> by (rule subst_subty', rule join_upper)+
+  moreover note class_subty_union(1)[OF TyUnion(3)[simplified] refl refl]
+  ultimately show ?case using TyUnion(1)[OF _ \<tau>' TyUnion(5)] TyUnion(2)[OF _ \<tau>'' TyUnion(5)]
+    by (blast intro: subty_trans')
+next
+  case (TyClass D \<sigma>s)
+  then have "map_of (instantiate (fields \<Sigma> D) \<sigma>s) x = Some \<tau>" by (simp add: or_else_def split: option.splits)
+  then have "map_of (instantiate (fields \<Sigma> D) (map (inst \<eta>) \<sigma>s)) x = Some (inst \<eta> \<tau>)"
+    by (rule instantiate_fields_subst')
+  moreover from TyClass(2) have "\<Sigma> \<turnstile> TyClass C \<tau>s <: TyClass D (map (inst \<eta>) \<sigma>s)" by simp
+  ultimately show ?case using subty_class_fields(1)[OF wf_class_table _ refl refl TyClass(4)] by blast
+qed simp_all
+
 (* Attribute typed through a checked module, at a member type, member scheme or type variable, or through the
    type synthesised by the object *)
 lemma attr_typed:
@@ -888,15 +946,92 @@ lemma sound_expr_module_env:
   shows "\<exists>\<rho>'. v = VModLoaded q' \<rho>' \<and> [] \<turnstile> \<rho>' : \<Gamma>'"
   using sound_expr_module[OF assms, unfolded wf_result.simps(1)] by (rule wf_mod_checked)
 
+(* Attribute of an expression with a value which is not a loaded module, typed through the type synthesised by
+   the expression *)
+lemma attr_typed_object:
+  assumes "sound_expr \<rho> (node e) (Val v)" and "\<not> is_loaded_module v" and "\<eta> \<turnstile> \<rho> : \<Gamma>"
+    and "has_type \<Sigma> \<eta> \<Gamma> (ExprAttribute e x) \<tau>"
+  obtains \<sigma> \<sigma>' where "synth_expr_at \<Sigma> \<Gamma> e = Ok \<sigma>" and "attribute_type \<Sigma> \<sigma> x = Ok \<sigma>'" and "\<Sigma> \<turnstile> \<sigma>' <: \<tau>"
+  using assms(4)
+proof (cases rule: attr_typed)
+  case (module_ty q q' \<Gamma>' \<sigma>)
+  from sound_expr_module_env[OF assms(1, 3) module_ty(1, 2)] assms(2) show thesis by auto
+next
+  case (module_scheme q q' \<Gamma>' \<alpha>s \<sigma> \<tau>s)
+  from sound_expr_module_env[OF assms(1, 3) module_scheme(1, 2)] assms(2) show thesis by auto
+next
+  case (module_tyvar q q' \<Gamma>')
+  from sound_expr_module_env[OF assms(1, 3) module_tyvar(1, 2)] assms(2) show thesis by auto
+next
+  case (object \<sigma> \<sigma>')
+  then show thesis by (rule that)
+qed
+
+(* Module clause for an attribute of an expression with a value which is not a loaded module *)
+lemma sound_module_attr:
+  assumes "sound_expr \<rho> (node e) (Val v)" and "\<not> is_loaded_module v"
+  shows "sound_module \<rho> (ExprAttribute e x) r"
+  unfolding sound_module_def
+proof (intro allI impI)
+  fix \<eta> \<Gamma> q q' \<Gamma>'
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "dotted_name (ExprAttribute e x) = Some q"
+    and "lookup \<Gamma> q = Some (ModChecked q' \<Gamma>')"
+  then obtain q0 q1 \<Gamma>1 where "dotted_name (node e) = Some q0" and "lookup \<Gamma> q0 = Some (ModChecked q1 \<Gamma>1)"
+    by (auto split: option.splits cxt_entry.splits)
+  from sound_expr_module_env[OF assms(1) env this] assms(2)
+  show "wf_result (\<lambda>v. \<turnstile> v : ModChecked q' \<Gamma>') r" by auto
+qed
+
+(* Field x of an object, typed by the attribute type of x at a type of the object *)
+lemma object_attribute:
+  assumes "\<turnstile> VObject C xvs : Ty (inst \<eta> \<sigma>)" and "attribute_type \<Sigma> \<sigma> x = Ok \<tau>"
+  obtains v where "map_of xvs x = Some v" and "\<turnstile> v : Ty (inst \<eta> \<tau>)"
+proof -
+  from wf_object(1)[OF assms(1) refl] obtain \<tau>s where C: "C |\<in>| fmdom \<Sigma>"
+    and names: "map fst xvs = field_names \<Sigma> C"
+    and fields: "list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) (map snd xvs) (field_types \<Sigma> C \<tau>s)"
+    and sub: "\<Sigma> \<turnstile> TyClass C \<tau>s <: inst \<eta> \<sigma>"
+    by blast
+  from attribute_field[OF sub assms(2) C] obtain \<sigma>'
+    where field: "map_of (instantiate (fields \<Sigma> C) \<tau>s) x = Some \<sigma>'"
+    and sub': "\<Sigma> \<turnstile> \<sigma>' <: inst \<eta> \<tau>"
+    by blast
+  obtain v where "map_of xvs x = Some v" and "\<turnstile> v : Ty \<sigma>'" by (rule object_field[OF names fields field])
+  from that[OF this(1) ValSub[OF this(2) sub']] show thesis .
+qed
+
 lemma attr_object_sound:
-  "\<lbrakk> sound_expr \<rho> (node e) (Val (VObject C xvs)) ; map_of xvs x = Some v \<rbrakk>
-  \<Longrightarrow> sound_expr \<rho> (ExprAttribute e x) (Val v)"
-  sorry
+  assumes "sound_expr \<rho> (node e) (Val (VObject C xvs))" and "map_of xvs x = Some v"
+  shows "sound_expr \<rho> (ExprAttribute e x) (Val v)"
+  unfolding sound_expr_def
+proof (intro conjI allI impI)
+  fix \<eta> \<Gamma> \<tau>
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and typed: "has_type \<Sigma> \<eta> \<Gamma> (ExprAttribute e x) \<tau>"
+  obtain \<sigma> \<sigma>' where synth: "synth_expr_at \<Sigma> \<Gamma> e = Ok \<sigma>" and attr: "attribute_type \<Sigma> \<sigma> x = Ok \<sigma>'"
+    and sub: "\<Sigma> \<turnstile> \<sigma>' <: \<tau>"
+    by (rule attr_typed_object[OF assms(1) _ env typed]) simp
+  from sound_expr_synth_at[OF assms(1) env synth] have "\<turnstile> VObject C xvs : Ty (inst \<eta> \<sigma>)" by simp
+  from object_attribute[OF this attr] assms(2) have "\<turnstile> v : Ty (inst \<eta> \<sigma>')" by auto
+  with sub show "result_typed (Val v) (inst \<eta> \<tau>)" by (auto intro: wf_val_inst_sub)
+next
+  show "sound_module \<rho> (ExprAttribute e x) (Val v)" using assms(1) by (rule sound_module_attr) simp
+qed
 
 lemma attr_object_missing_sound:
-  "\<lbrakk> sound_expr \<rho> (node e) (Val (VObject C xvs)) ; map_of xvs x = None \<rbrakk>
-  \<Longrightarrow> sound_expr \<rho> (ExprAttribute e x) (Aborts AttributeError)"
-  sorry
+  assumes "sound_expr \<rho> (node e) (Val (VObject C xvs))" and "map_of xvs x = None"
+  shows "sound_expr \<rho> (ExprAttribute e x) (Aborts AttributeError)"
+  unfolding sound_expr_def
+proof (intro conjI allI impI)
+  fix \<eta> \<Gamma> \<tau>
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and typed: "has_type \<Sigma> \<eta> \<Gamma> (ExprAttribute e x) \<tau>"
+  obtain \<sigma> \<sigma>' where synth: "synth_expr_at \<Sigma> \<Gamma> e = Ok \<sigma>" and attr: "attribute_type \<Sigma> \<sigma> x = Ok \<sigma>'"
+    by (rule attr_typed_object[OF assms(1) _ env typed]) simp
+  from sound_expr_synth_at[OF assms(1) env synth] have "\<turnstile> VObject C xvs : Ty (inst \<eta> \<sigma>)" by simp
+  from object_attribute[OF this attr] assms(2) show "result_typed (Aborts AttributeError) (inst \<eta> \<tau>)" by auto
+next
+  show "sound_module \<rho> (ExprAttribute e x) (Aborts AttributeError)"
+    using assms(1) by (rule sound_module_attr) simp
+qed
 
 lemma attr_module_sound:
   assumes "sound_expr \<rho> (node e) (Val (VModLoaded q' \<rho>'))" and "fmlookup \<rho>' x = Some v"
@@ -981,35 +1116,18 @@ qed
 lemma attr_nonobject_sound:
   assumes "sound_expr \<rho> (node e) (Val v)" and "\<not> is_object v" and "\<not> is_loaded_module v"
   shows "sound_expr \<rho> (ExprAttribute e x) (Aborts Excluded)"
-  unfolding sound_expr_def sound_module_def
+  unfolding sound_expr_def
 proof (intro conjI allI impI)
   fix \<eta> \<Gamma> \<tau>
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and typed: "has_type \<Sigma> \<eta> \<Gamma> (ExprAttribute e x) \<tau>"
-  from typed show "result_typed (Aborts Excluded) (inst \<eta> \<tau>)"
-  proof (cases rule: attr_typed)
-    case (module_ty q q'' \<Gamma>' \<sigma>)
-    from sound_expr_module_env[OF assms(1) env module_ty(1, 2)] assms(3) show ?thesis by auto
-  next
-    case (module_scheme q q'' \<Gamma>' \<alpha>s \<sigma> \<tau>s)
-    from sound_expr_module_env[OF assms(1) env module_scheme(1, 2)] assms(3) show ?thesis by auto
-  next
-    case (module_tyvar q q'' \<Gamma>')
-    from sound_expr_module_env[OF assms(1) env module_tyvar(1, 2)] assms(3) show ?thesis by auto
-  next
-    case (object \<sigma> \<sigma>')
-    from sound_expr_synth_at[OF assms(1) env object(1)] have "\<turnstile> v : Ty (inst \<eta> \<sigma>)" by simp
-    moreover from object(2) have "object_type (inst \<eta> \<sigma>)"
-      by (blast intro: object_type_subst attribute_type_object_type)
-    ultimately show ?thesis using assms(2) wf_object_type(1) by blast
-  qed
+  obtain \<sigma> \<sigma>' where synth: "synth_expr_at \<Sigma> \<Gamma> e = Ok \<sigma>" and attr: "attribute_type \<Sigma> \<sigma> x = Ok \<sigma>'"
+    by (rule attr_typed_object[OF assms(1, 3) env typed])
+  from sound_expr_synth_at[OF assms(1) env synth] have "\<turnstile> v : Ty (inst \<eta> \<sigma>)" by simp
+  moreover from attr have "object_type (inst \<eta> \<sigma>)"
+    by (blast intro: object_type_subst attribute_type_object_type)
+  ultimately show "result_typed (Aborts Excluded) (inst \<eta> \<tau>)" using assms(2) wf_object_type(1) by blast
 next
-  fix \<eta> \<Gamma> q q' \<Gamma>'
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "dotted_name (ExprAttribute e x) = Some q"
-    and "lookup \<Gamma> q = Some (ModChecked q' \<Gamma>')"
-  then obtain q0 q1 \<Gamma>1 where "dotted_name (node e) = Some q0" and "lookup \<Gamma> q0 = Some (ModChecked q1 \<Gamma>1)"
-    by (auto split: option.splits cxt_entry.splits)
-  from sound_expr_module_env[OF assms(1) env this] assms(3)
-  show "wf_result (\<lambda>v. \<turnstile> v : ModChecked q' \<Gamma>') (Aborts Excluded)" by auto
+  show "sound_module \<rho> (ExprAttribute e x) (Aborts Excluded)" using assms(1, 3) by (rule sound_module_attr)
 qed
 
 lemma attr_fail_sound:

@@ -31,6 +31,9 @@ lemma map_of_zip_map_snd:
 lemma map_of_filter_key: "map_of (filter (\<lambda>(k, _). P k) xs) k = (if P k then map_of xs k else None)"
   by (induction xs) auto
 
+lemma map_of_zip_map: "map_of (zip xs (map f xs)) x = (if x \<in> set xs then Some (f x) else None)"
+  by (induction xs) auto
+
 lemma list_all2_interleave:
   "list_all2 (\<lambda>(x, x') y. P x z \<and> P x' y) xxs ys
   \<Longrightarrow> list_all2 P (concat (map (\<lambda>(x, x'). [x, x']) xxs)) (concat (map (\<lambda>y. [z, y]) ys))"

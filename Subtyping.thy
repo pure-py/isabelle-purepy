@@ -243,6 +243,42 @@ proof (induction \<sigma>)
 qed (auto intro!: SubtyTuple SubtyCallable SubtyClass list.rel_refl_strong intro: subty_subtys.intros
       simp: subtys_list_all2 list_all2_map1 list_all2_map2)
 
+lemma class_subty_union:
+  "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> \<sigma> = TyClass C \<tau>s \<Longrightarrow> \<tau> = TyUnion \<tau>' \<tau>'' \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: \<tau>' \<or> \<Sigma> \<turnstile> \<sigma> <: \<tau>''"
+  and "\<Sigma> \<turnstile> \<sigma>s [<:] \<tau>s' \<Longrightarrow> True"
+proof (induction arbitrary: C \<tau>s rule: subty_subtys.inducts)
+  case (SubtyClassExtend C D \<sigma>s \<tau>s \<tau>)
+  then show ?case by (blast intro: subty_subtys.SubtyClassExtend)
+qed auto
+
+(* Field of class C at type arguments \<tau>s, equivalent to the field of a class above it *)
+lemma subty_class_fields:
+  assumes wf: "wf_class_table \<Sigma>"
+  shows "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> \<sigma> = TyClass C \<tau>s \<Longrightarrow> \<tau> = TyClass D \<sigma>s \<Longrightarrow> C |\<in>| fmdom \<Sigma>
+    \<Longrightarrow> map_of (instantiate (fields \<Sigma> D) \<sigma>s) x = Some \<sigma>'
+    \<Longrightarrow> \<exists>\<tau>'. map_of (instantiate (fields \<Sigma> C) \<tau>s) x = Some \<tau>' \<and> \<Sigma> \<turnstile> \<tau>' \<approx> \<sigma>'"
+  and "\<Sigma> \<turnstile> \<sigma>s' [<:] \<tau>s' \<Longrightarrow> True"
+proof (induction arbitrary: C \<tau>s rule: subty_subtys.inducts)
+  case (SubtyRefl \<tau>)
+  then show ?case by (auto intro: subty_subtys.SubtyRefl)
+next
+  case (SubtyClassExtend C' D' \<rho>s \<tau>s' \<tau>)
+  from SubtyClassExtend(4) have C': "C' = C" and \<tau>s': "\<tau>s' = \<tau>s" by simp_all
+  note base = SubtyClassExtend(1)[unfolded C']
+  have D': "D' |\<in>| fmdom \<Sigma>" using wf_class_table_baseD[OF wf SubtyClassExtend(6) base] by simp
+  from SubtyClassExtend(3)[OF refl SubtyClassExtend(5) D' SubtyClassExtend(7)] obtain \<tau>' where
+    "map_of (instantiate (fields \<Sigma> D') (map (subst \<tau>s' (type_params \<Sigma> C')) \<rho>s)) x = Some \<tau>'"
+    and "\<Sigma> \<turnstile> \<tau>' \<approx> \<sigma>'" by blast
+  with instantiate_fields_base[OF wf SubtyClassExtend(6) base] show ?case unfolding C' \<tau>s' by auto
+next
+  case (SubtyClass \<sigma>s' \<tau>s' C')
+  from SubtyClass(5, 6) have "\<sigma>s' = \<tau>s" and "\<tau>s' = \<sigma>s" and D: "D = C" by simp_all
+  with SubtyClass(1, 3) have equiv: "list_all2 (\<lambda>\<sigma> \<tau>. \<Sigma> \<turnstile> \<sigma> \<approx> \<tau>) \<tau>s \<sigma>s"
+    by (auto simp: subtys_list_all2 list_all2_conv_all_nth)
+  obtain \<alpha>s x\<sigma>s where fields: "fields \<Sigma> C = FieldScheme \<alpha>s x\<sigma>s" by (cases "fields \<Sigma> C")
+  from subst_equiv[OF equiv] SubtyClass(8) fields D show ?case by (auto simp: map_of_map)
+qed auto
+
 (* Pair of types \<sigma> and \<tau> with each upper bound of \<tau> an upper bound of \<sigma>, and each lower bound of \<sigma> a lower
    bound of \<tau> *)
 definition composable :: "class_table \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> bool"
