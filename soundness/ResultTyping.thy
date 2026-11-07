@@ -1,5 +1,5 @@
-(* Soundness of the result of evaluating an expression, and canonical forms of values *)
-theory SoundExpr
+(* Typing of evaluation results; canonical forms of values *)
+theory ResultTyping
   imports ValueTyping
 begin
 

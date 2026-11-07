@@ -1,6 +1,6 @@
 (* Soundness of evaluation of expressions other than calls *)
 theory Expressions
-  imports SoundExpr
+  imports ResultTyping
 begin
 
 context evaluation
