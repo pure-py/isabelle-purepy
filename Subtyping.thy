@@ -1046,7 +1046,6 @@ next
   then show ?case by (cases l) (auto intro: Subtyping.SubtyLiteral)
 qed (auto intro: subty_subtys.intros)
 
-
 (* Types built by union from the primitive type p and the primitive and literal types below it; for p neither
    object nor Sized, the subtypes of p *)
 fun prim_subtype :: "prim_ty \<Rightarrow> ty \<Rightarrow> bool"

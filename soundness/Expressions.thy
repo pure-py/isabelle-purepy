@@ -59,14 +59,6 @@ where
 lemma var_scheme_None: "dotted_name e = None \<Longrightarrow> var_scheme \<Sigma> \<Gamma> e \<tau> = None"
   by (simp add: var_scheme_def scheme_of_name_def entry_of_def)
 
-lemma def_signature_callable: "def_signature \<Sigma> \<Gamma> d = Ok (TyScheme \<alpha>s \<tau>) \<Longrightarrow> \<exists>\<sigma>s \<tau>'. \<tau> = TyCallable \<sigma>s \<tau>'"
-  by (cases d) (auto simp: bind_sum_def Let_def split: sum.splits option.splits)
-
-lemma prim_entry_callable:
-  "\<lbrakk> fmlookup (\<E> \<A>) q = Some \<rho> ; fmlookup \<rho> x = Some (VPrim f) ; fmlookup \<P> q = Some \<Gamma> ; fmlookup \<Gamma> x = Some \<theta> \<rbrakk>
-  \<Longrightarrow> \<exists>\<sigma>s \<tau>. \<theta> = Ty (TyCallable \<sigma>s \<tau>)"
-  by (auto simp: \<E>_def \<P>_def builtins_def name_of_def fmlookup_of_list split: if_splits)
-
 context evaluation
 begin
 
@@ -116,6 +108,16 @@ where
   (\<forall>\<eta> \<Gamma> \<tau>. (\<forall>\<rho> \<in> set \<rho>s. \<eta> \<turnstile> \<rho> : \<Gamma>) \<longrightarrow> check_expr_at \<Sigma> \<Gamma> e (TyPrim str) = Ok ()
      \<longrightarrow> has_type_at \<Sigma> \<eta> \<Gamma> e' \<tau> \<longrightarrow> wf_entries r (inst \<eta> \<tau>))"
 
+lemma sound_compD:
+  "\<lbrakk> sound_comp \<rho>s e r ; \<forall>\<rho> \<in> set \<rho>s. \<eta> \<turnstile> \<rho> : \<Gamma> ; has_type_at \<Sigma> \<eta> \<Gamma> e \<tau> \<rbrakk> \<Longrightarrow> wf_elems r (inst \<eta> \<tau>)"
+  unfolding sound_comp_def by blast
+
+lemma sound_entriesD:
+  "\<lbrakk> sound_entries \<rho>s e e' r ; \<forall>\<rho> \<in> set \<rho>s. \<eta> \<turnstile> \<rho> : \<Gamma> ; check_expr_at \<Sigma> \<Gamma> e (TyPrim str) = Ok ()
+   ; has_type_at \<Sigma> \<eta> \<Gamma> e' \<tau> \<rbrakk>
+  \<Longrightarrow> wf_entries r (inst \<eta> \<tau>)"
+  unfolding sound_entries_def by blast
+
 subsection \<open>Subtyping\<close>
 
 (* Transitivity and substitution without the well-formedness of the types they need; delete once the types
@@ -129,8 +131,11 @@ lemma subst_subty': "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> 
 lemma joins_upper: "\<tau> \<in> set \<tau>s \<Longrightarrow> \<Sigma> \<turnstile> \<tau> <: joins \<Sigma> \<tau>s"
   by (induction \<tau>s) (auto simp: joins_def intro: join_upper subty_trans')
 
+lemma wf_val_inst_sub: "\<lbrakk> \<turnstile> v : Ty (inst \<eta> \<sigma>) ; \<Sigma> \<turnstile> \<sigma> <: \<tau> \<rbrakk> \<Longrightarrow> \<turnstile> v : Ty (inst \<eta> \<tau>)"
+  by (erule ValSub) (erule subst_subty')
+
 lemma result_typed_sub: "\<lbrakk> result_typed r (inst \<eta> \<sigma>) ; \<Sigma> \<turnstile> \<sigma> <: \<tau> \<rbrakk> \<Longrightarrow> result_typed r (inst \<eta> \<tau>)"
-  by (cases r) (auto intro: ValSub subst_subty')
+  by (cases r) (auto intro: wf_val_inst_sub)
 
 lemma wf_lit_bool: "\<turnstile> VLit (LitBool b) : Ty (TyPrim bool)"
   by (rule ValSub[OF ValLit], rule SubtyLiteral) (simp add: SubtyRefl)
@@ -214,10 +219,8 @@ lemma wf_scheme_callable:
   "\<turnstile> v : \<theta> \<Longrightarrow> \<theta> = Scheme \<pi> \<longrightarrow> (\<exists>\<alpha>s \<sigma>s \<tau>. \<pi> = TyScheme \<alpha>s (TyCallable \<sigma>s \<tau>))"
   "\<eta> \<turnstile> \<rho> : \<Gamma> \<Longrightarrow> True"
 proof (induction rule: wf_val_wf_env.inducts)
-  case (ValDef \<eta> \<rho> \<Gamma> ds \<pi>s \<Delta> i \<alpha>s \<tau>)
-  then have "def_signature \<Sigma> \<Gamma> (node (ds ! i)) = Ok (TyScheme \<alpha>s \<tau>)"
-    by (auto dest!: those_sum_map_Ok simp: list_all2_conv_all_nth)
-  then show ?case by (auto dest!: def_signature_callable simp: inst_entry_signature_entry)
+  case ValDef
+  then show ?case by (auto dest!: def_signatures_callable simp: inst_entry_signature_entry)
 next
   case ValPrim
   then show ?case by (auto dest!: prim_entry_callable)
@@ -229,15 +232,13 @@ lemma wf_prim_subtype:
   shows "\<turnstile> v : \<theta> \<Longrightarrow> \<theta> = Ty \<tau> \<longrightarrow> prim_subtype p \<tau> \<longrightarrow> (\<exists>l. v = VLit l \<and> prim_subtype p (TyLiteral l))"
     and "\<eta> \<turnstile> \<rho> : \<Gamma> \<Longrightarrow> True"
 proof (induction arbitrary: \<tau> rule: wf_val_wf_env.inducts)
-  case (ValDef \<eta> \<rho> \<Gamma> ds \<pi>s \<Delta> i \<alpha>s \<sigma>)
-  then have "def_signature \<Sigma> \<Gamma> (node (ds ! i)) = Ok (TyScheme \<alpha>s \<sigma>)"
-    by (auto dest!: those_sum_map_Ok simp: list_all2_conv_all_nth)
-  then show ?case by (auto dest!: def_signature_callable simp: inst_entry_signature_entry)
+  case ValDef
+  then show ?case by (auto dest!: def_signatures_callable simp: inst_entry_signature_entry)
 next
-  case (ValInst v \<alpha>s \<sigma> \<tau>s)
+  case ValInst
   then show ?case by (auto dest!: wf_scheme_callable(1))
 next
-  case (ValSub v \<sigma> \<tau>)
+  case ValSub
   then show ?case using prim_subtype_subty(1)[OF assms] by blast
 next
   case ValPrim
@@ -299,7 +300,7 @@ next
   have "length (map (inst \<eta>) \<tau>s) = length \<alpha>s" by (simp add: len)
   from v this closed have "\<turnstile> v : Ty (subst (map (inst \<eta>) \<tau>s) \<alpha>s (inst ?\<eta>' \<sigma>))" by (rule ValInst)
   then have "\<turnstile> v : Ty (inst \<eta> (subst \<tau>s \<alpha>s \<sigma>))" by (simp only: inst_subst[OF wf_env_closed[OF env] len])
-  then show "result_typed (Val v) (inst \<eta> \<tau>)" using sub by (auto intro: ValSub subst_subty')
+  then show "result_typed (Val v) (inst \<eta> \<tau>)" using sub by (auto intro: wf_val_inst_sub)
 qed simp
 
 lemma var_unknown_sound: "fmlookup \<rho> x = None \<Longrightarrow> sound_expr \<rho> (ExprVar x) (Aborts NameError)"
@@ -441,23 +442,21 @@ proof -
     then have "\<Union> (fv ` set (map (base_type \<circ> projr) (filter (Not \<circ> isl) ?\<sigma>s))) \<subseteq> fst ` set \<eta>" by auto
     then show ?thesis unfolding \<tau> by (rule subset_trans[OF fv_joins])
   qed
-  let ?\<tau>s = "map (\<lambda>e. case synth_expr_at \<Sigma> \<Gamma> e of Ok \<sigma> \<Rightarrow> \<sigma> | Fail _ \<Rightarrow> \<tau>) es"
-  have "has_type_at \<Sigma> \<eta> \<Gamma> e \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>"
-    if "e \<in> set es" and "\<sigma> = (case synth_expr_at \<Sigma> \<Gamma> e of Ok \<sigma> \<Rightarrow> \<sigma> | Fail _ \<Rightarrow> \<tau>)" for e \<sigma>
+  let ?\<tau> = "\<lambda>e. case synth_expr_at \<Sigma> \<Gamma> e of Ok \<sigma> \<Rightarrow> \<sigma> | Fail _ \<Rightarrow> \<tau>"
+  have "has_type_at \<Sigma> \<eta> \<Gamma> e (?\<tau> e) \<and> \<Sigma> \<turnstile> ?\<tau> e <: \<tau>" if "e \<in> set es" for e
   proof (cases "synth_expr_at \<Sigma> \<Gamma> e")
     case (Inl r)
     have "(e, Fail r) \<in> set (filter (isl \<circ> snd) (zip es ?\<sigma>s))"
-      using that(1) Inl by (auto simp: zip_map2 zip_same_conv_map)
+      using that Inl by (auto simp: zip_map2 zip_same_conv_map)
     with chk have "check_expr_at \<Sigma> \<Gamma> e \<tau> = Ok ()" by (fastforce dest: all_sum_map_Ok)
-    with Inl that(2) fv show ?thesis by (auto intro: has_type_check_at SubtyRefl)
+    with Inl fv show ?thesis by (auto intro: has_type_check_at SubtyRefl)
   next
-    case (Inr \<sigma>')
-    then have "base_type \<sigma>' \<in> set (map (base_type \<circ> projr) (filter (Not \<circ> isl) ?\<sigma>s))"
-      using that(1) by force
-    then have "\<Sigma> \<turnstile> \<sigma>' <: \<tau>" unfolding \<tau> by (blast intro: base_type_upper joins_upper subty_trans')
-    with Inr that(2) show ?thesis by (auto intro: has_type_synth_at)
+    case (Inr \<sigma>)
+    then have "base_type \<sigma> \<in> set (map (base_type \<circ> projr) (filter (Not \<circ> isl) ?\<sigma>s))" using that by force
+    then have "\<Sigma> \<turnstile> \<sigma> <: \<tau>" unfolding \<tau> by (blast intro: base_type_upper joins_upper subty_trans')
+    with Inr show ?thesis by (auto intro: has_type_synth_at)
   qed
-  then have "list_all2 (\<lambda>e \<sigma>. has_type_at \<Sigma> \<eta> \<Gamma> e \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>) es ?\<tau>s"
+  then have "list_all2 (\<lambda>e \<sigma>. has_type_at \<Sigma> \<eta> \<Gamma> e \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>) es (map ?\<tau> es)"
     by (auto simp: list_all2_map2 intro: list.rel_refl_strong)
   then show ?thesis by blast
 qed
@@ -496,7 +495,7 @@ proof -
   proof -
     from that obtain i where "i < length vs" and "v = vs ! i" by (auto simp: in_set_conv_nth)
     with vs have "\<turnstile> v : Ty (inst \<eta> (\<tau>s ! i))" and "\<tau>s ! i \<in> set \<tau>s" by (auto simp: list_all2_conv_all_nth)
-    with sub show ?thesis by (blast intro: ValSub subst_subty')
+    with sub show ?thesis by (blast intro: wf_val_inst_sub)
   qed
   then show ?thesis by (auto intro!: ValList)
 qed
@@ -598,10 +597,33 @@ next
   with \<tau> show ?thesis by blast
 qed
 
+(* Values of a typed dictionary display: string keys interleaved with values at subtypes of the value type *)
+lemma dict_values_typed:
+  assumes "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprDict kes) \<tau>" and "sound_exprs \<rho> (concat (map (\<lambda>(e, e'). [e, e']) kes)) r"
+    and "\<eta> \<turnstile> \<rho> : \<Gamma>"
+  obtains \<tau>' \<sigma>s where "\<tau> = TyDict \<tau>'" and "\<forall>\<sigma> \<in> set \<sigma>s. \<Sigma> \<turnstile> \<sigma> <: \<tau>'"
+    and "results_typed r (concat (map (\<lambda>\<sigma>. [TyPrim str, \<sigma>]) (map (inst \<eta>) \<sigma>s)))"
+proof -
+  from dict_typed[OF assms(1) wf_env_tyvars[OF assms(3)]] obtain \<tau>' \<sigma>s where \<tau>: "\<tau> = TyDict \<tau>'"
+    and kes: "list_all2 (\<lambda>(e, e') \<sigma>. has_type_at \<Sigma> \<eta> \<Gamma> e (TyPrim str) \<and> has_type_at \<Sigma> \<eta> \<Gamma> e' \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>')
+                kes \<sigma>s"
+    by blast
+  from kes have "\<forall>\<sigma> \<in> set \<sigma>s. \<Sigma> \<turnstile> \<sigma> <: \<tau>'" by (induction rule: list_all2_induct) auto
+  moreover from kes have "list_all2 (has_type_at \<Sigma> \<eta> \<Gamma>) (concat (map (\<lambda>(e, e'). [e, e']) kes))
+                            (concat (map (\<lambda>\<sigma>. [TyPrim str, \<sigma>]) \<sigma>s))"
+    by (intro list_all2_interleave) (auto elim: list_all2_mono)
+  with assms(2, 3) have "results_typed r (map (inst \<eta>) (concat (map (\<lambda>\<sigma>. [TyPrim str, \<sigma>]) \<sigma>s)))"
+    by (simp add: sound_exprs_def)
+  moreover have "map (inst \<eta>) (concat (map (\<lambda>\<sigma>. [TyPrim str, \<sigma>]) \<sigma>s))
+                  = concat (map (\<lambda>\<sigma>. [TyPrim str, \<sigma>]) (map (inst \<eta>) \<sigma>s))"
+    by (induction \<sigma>s) simp_all
+  ultimately show ?thesis using that \<tau> by metis
+qed
+
 (* Entries of the values of a dictionary display, from values at str for the keys *)
 lemma dict_entries_typed:
   "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty \<sigma>) vs (concat (map (\<lambda>\<sigma>. [TyPrim str, \<sigma>]) \<sigma>s))
-  \<Longrightarrow> \<exists>\<delta>. dict_entries vs = Some \<delta> \<and> list_all2 (\<lambda>(w, v) \<sigma>. \<turnstile> v : Ty \<sigma>) \<delta> \<sigma>s"
+  \<Longrightarrow> \<exists>\<delta>. dict_entries vs = Some \<delta> \<and> (\<forall>w v. (w, v) \<in> set \<delta> \<longrightarrow> (\<exists>\<sigma> \<in> set \<sigma>s. \<turnstile> v : Ty \<sigma>))"
 proof (induction \<sigma>s arbitrary: vs)
   case (Cons \<sigma> \<sigma>s)
   then obtain u v vs' where vs: "vs = u # v # vs'" and "\<turnstile> u : Ty (TyPrim str)" and "\<turnstile> v : Ty \<sigma>"
@@ -611,79 +633,37 @@ proof (induction \<sigma>s arbitrary: vs)
   ultimately show ?case using Cons.IH by fastforce
 qed simp
 
-(* Values of a dictionary display with its keys and values typed *)
-lemma dict_values_typed:
-  assumes "list_all2 (\<lambda>(e, e') \<sigma>. has_type_at \<Sigma> \<eta> \<Gamma> e (TyPrim str) \<and> has_type_at \<Sigma> \<eta> \<Gamma> e' \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>')
-      kes \<sigma>s"
-    and "sound_exprs \<rho> (concat (map (\<lambda>(e, e'). [e, e']) kes)) r" and "\<eta> \<turnstile> \<rho> : \<Gamma>"
-  shows "results_typed r (concat (map (\<lambda>\<sigma>. [TyPrim str, inst \<eta> \<sigma>]) \<sigma>s))"
-proof -
-  from assms(1) have "list_all2 (has_type_at \<Sigma> \<eta> \<Gamma>) (concat (map (\<lambda>(e, e'). [e, e']) kes))
-                        (concat (map (\<lambda>\<sigma>. [TyPrim str, \<sigma>]) \<sigma>s))"
-    by (intro list_all2_interleave) (auto elim: list_all2_mono)
-  moreover have "map (inst \<eta>) (concat (map (\<lambda>\<sigma>. [TyPrim str, \<sigma>]) \<sigma>s))
-                  = concat (map (\<lambda>\<sigma>. [TyPrim str, inst \<eta> \<sigma>]) \<sigma>s)"
-    by (induction \<sigma>s) simp_all
-  ultimately show ?thesis using assms(2, 3) unfolding sound_exprs_def by metis
-qed
-
 lemma dict_sound:
   assumes "sound_exprs \<rho> (concat (map (\<lambda>(e, e'). [e, e']) kes)) (Val vs)" and "dict_entries vs = Some \<delta>"
   shows "sound_expr \<rho> (ExprDict kes) (Val (VDict (update [] \<delta>)))"
 proof (rule sound_expr_typedI)
   fix \<eta> \<Gamma> \<tau>
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprDict kes) \<tau>"
-  from dict_typed[OF this(2) wf_env_tyvars[OF env]] obtain \<tau>' \<sigma>s where \<tau>: "\<tau> = TyDict \<tau>'"
-    and kes: "list_all2 (\<lambda>(e, e') \<sigma>. has_type_at \<Sigma> \<eta> \<Gamma> e (TyPrim str) \<and> has_type_at \<Sigma> \<eta> \<Gamma> e' \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>')
-                kes \<sigma>s"
-    by blast
-  from dict_values_typed[OF kes assms(1) env]
-  have "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty \<sigma>) vs (concat (map (\<lambda>\<sigma>. [TyPrim str, \<sigma>]) (map (inst \<eta>) \<sigma>s)))"
-    by (simp add: comp_def)
-  from dict_entries_typed[OF this] assms(2)
-  have \<delta>: "list_all2 (\<lambda>(w, v) \<sigma>. \<turnstile> v : Ty (inst \<eta> \<sigma>)) \<delta> \<sigma>s"
-    by (auto simp: list_all2_map2 elim!: list_all2_mono split: prod.splits)
-  have "\<turnstile> v : Ty (inst \<eta> \<tau>')" if "(w, v) \<in> set \<delta>" for w v
-  proof -
-    from that \<delta> obtain i where "i < length \<sigma>s" and "\<delta> ! i = (w, v)" and "\<turnstile> v : Ty (inst \<eta> (\<sigma>s ! i))"
-      by (fastforce simp: list_all2_conv_all_nth in_set_conv_nth)
-    moreover from this(1) kes have "\<Sigma> \<turnstile> \<sigma>s ! i <: \<tau>'"
-      by (cases "kes ! i") (auto simp: list_all2_conv_all_nth)
-    ultimately show ?thesis by (blast intro: ValSub subst_subty')
-  qed
-  then have "\<forall>w v. (w, v) \<in> set (update [] \<delta>) \<longrightarrow> \<turnstile> v : Ty (inst \<eta> \<tau>')"
-    using set_update[of "[]" \<delta>] by auto
-  then show "result_typed (Val (VDict (update [] \<delta>))) (inst \<eta> \<tau>)"
-    by (auto simp: \<tau> intro!: ValDict distinct_update)
+  then obtain \<tau>' \<sigma>s where \<tau>: "\<tau> = TyDict \<tau>'" and sub: "\<forall>\<sigma> \<in> set \<sigma>s. \<Sigma> \<turnstile> \<sigma> <: \<tau>'"
+    and "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty \<sigma>) vs (concat (map (\<lambda>\<sigma>. [TyPrim str, \<sigma>]) (map (inst \<eta>) \<sigma>s)))"
+    using assms(1) by (auto elim: dict_values_typed)
+  from dict_entries_typed[OF this(3)] assms(2) sub
+  have "\<forall>w v. (w, v) \<in> set \<delta> \<longrightarrow> \<turnstile> v : Ty (inst \<eta> \<tau>')" by (fastforce intro: wf_val_inst_sub)
+  then show "result_typed (Val (VDict (update [] \<delta>))) (inst \<eta> \<tau>)" by (simp add: \<tau> wf_dict_update)
 qed simp
 
 lemma dict_fail_sound:
-  assumes "sound_exprs \<rho> (concat (map (\<lambda>(e, e'). [e, e']) kes)) (Aborts \<kappa>)"
-  shows "sound_expr \<rho> (ExprDict kes) (Aborts \<kappa>)"
-proof (rule sound_expr_typedI)
-  fix \<eta> \<Gamma> \<tau>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprDict kes) \<tau>"
-  from dict_typed[OF this(2) wf_env_tyvars[OF env]] obtain \<tau>' \<sigma>s
-    where "list_all2 (\<lambda>(e, e') \<sigma>. has_type_at \<Sigma> \<eta> \<Gamma> e (TyPrim str) \<and> has_type_at \<Sigma> \<eta> \<Gamma> e' \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>')
-             kes \<sigma>s"
-    by blast
-  from dict_values_typed[OF this assms env] show "result_typed (Aborts \<kappa>) (inst \<eta> \<tau>)" by simp
-qed simp
+  "sound_exprs \<rho> (concat (map (\<lambda>(e, e'). [e, e']) kes)) (Aborts \<kappa>) \<Longrightarrow> sound_expr \<rho> (ExprDict kes) (Aborts \<kappa>)"
+  by (rule sound_expr_typedI) (auto elim: dict_values_typed)
 
 lemma dict_nonstr_sound:
   assumes "sound_exprs \<rho> (concat (map (\<lambda>(e, e'). [e, e']) kes)) (Val vs)" and "dict_entries vs = None"
   shows "sound_expr \<rho> (ExprDict kes) (Aborts Excluded)"
 proof (rule sound_expr_typedI)
   fix \<eta> \<Gamma> \<tau>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprDict kes) \<tau>"
-  from dict_typed[OF this(2) wf_env_tyvars[OF env]] obtain \<tau>' \<sigma>s
-    where "list_all2 (\<lambda>(e, e') \<sigma>. has_type_at \<Sigma> \<eta> \<Gamma> e (TyPrim str) \<and> has_type_at \<Sigma> \<eta> \<Gamma> e' \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>')
-             kes \<sigma>s"
-    by blast
-  from dict_values_typed[OF this assms(1) env]
-  have "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty \<sigma>) vs (concat (map (\<lambda>\<sigma>. [TyPrim str, \<sigma>]) (map (inst \<eta>) \<sigma>s)))"
-    by (simp add: comp_def)
-  from dict_entries_typed[OF this] assms(2) show "result_typed (Aborts Excluded) (inst \<eta> \<tau>)" by simp
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and typed: "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprDict kes) \<tau>"
+  show "result_typed (Aborts Excluded) (inst \<eta> \<tau>)"
+  proof (rule dict_values_typed[OF typed assms(1) env])
+    fix \<tau>' \<sigma>s
+    assume "\<tau> = TyDict \<tau>'" and "\<forall>\<sigma> \<in> set \<sigma>s. \<Sigma> \<turnstile> \<sigma> <: \<tau>'"
+      and "results_typed (Val vs) (concat (map (\<lambda>\<sigma>. [TyPrim str, \<sigma>]) (map (inst \<eta>) \<sigma>s)))"
+    from dict_entries_typed[OF this(3)[unfolded wf_result.simps(1)]] assms(2) show ?thesis by simp
+  qed
 qed simp
 
 lemma subscript_sound:
@@ -724,11 +704,9 @@ proof (rule sound_expr_typedI)
   from list_comp_typed[OF this(2)] obtain \<Delta> \<tau>' \<sigma> where \<tau>: "\<tau> = TyList \<tau>'" and "quals \<Sigma> \<Gamma> gs = Ok \<Delta>"
     and e: "has_type_at \<Sigma> \<eta> (\<Gamma> \<otimes> \<Delta>) e \<sigma>" and sub: "\<Sigma> \<turnstile> \<sigma> <: \<tau>'"
     by blast
-  with assms(1) env have envs: "\<forall>\<rho>' \<in> set \<rho>s. \<eta> \<turnstile> \<rho>' : \<Gamma> \<otimes> \<Delta>" by (simp add: sound_quals_def)
-  from assms(2)[unfolded sound_comp_def, rule_format, OF envs[rule_format] e]
-  have "\<forall>v \<in> set vs. \<turnstile> v : Ty (inst \<eta> \<sigma>)" by simp
-  then have "\<forall>v \<in> set vs. \<turnstile> v : Ty (inst \<eta> \<tau>')" by (blast intro: ValSub[OF _ subst_subty'[OF sub]])
-  then show "result_typed (Val (VList vs)) (inst \<eta> \<tau>)" by (auto simp: \<tau> intro: ValList)
+  with assms(1) env have "\<forall>\<rho>' \<in> set \<rho>s. \<eta> \<turnstile> \<rho>' : \<Gamma> \<otimes> \<Delta>" by (simp add: sound_quals_def)
+  from sound_compD[OF assms(2) this e] sub show "result_typed (Val (VList vs)) (inst \<eta> \<tau>)"
+    by (auto simp: \<tau> intro: ValList wf_val_inst_sub)
 qed simp
 
 lemma list_comp_fail_quals_sound:
@@ -750,9 +728,8 @@ proof (rule sound_expr_typedI)
   from list_comp_typed[OF this(2)] obtain \<Delta> \<sigma> where "quals \<Sigma> \<Gamma> gs = Ok \<Delta>"
     and e: "has_type_at \<Sigma> \<eta> (\<Gamma> \<otimes> \<Delta>) e \<sigma>"
     by blast
-  with assms(1) env have envs: "\<forall>\<rho>' \<in> set \<rho>s. \<eta> \<turnstile> \<rho>' : \<Gamma> \<otimes> \<Delta>" by (simp add: sound_quals_def)
-  from assms(2)[unfolded sound_comp_def, rule_format, OF envs[rule_format] e]
-  show "result_typed (Aborts \<kappa>) (inst \<eta> \<tau>)" by simp
+  with assms(1) env have "\<forall>\<rho>' \<in> set \<rho>s. \<eta> \<turnstile> \<rho>' : \<Gamma> \<otimes> \<Delta>" by (simp add: sound_quals_def)
+  from sound_compD[OF assms(2) this e] show "result_typed (Aborts \<kappa>) (inst \<eta> \<tau>)" by simp
 qed simp
 
 (* Key of a dictionary comprehension checked against str, and its value typed at a subtype of the value type,
@@ -781,14 +758,10 @@ proof (rule sound_expr_typedI)
     and key: "check_expr_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e (TyPrim str) = Ok ()" and e': "has_type_at \<Sigma> \<eta> (\<Gamma> \<otimes> \<Delta>) e' \<sigma>"
     and sub: "\<Sigma> \<turnstile> \<sigma> <: \<tau>'"
     by blast
-  with assms(1) env have envs: "\<forall>\<rho>' \<in> set \<rho>s. \<eta> \<turnstile> \<rho>' : \<Gamma> \<otimes> \<Delta>" by (simp add: sound_quals_def)
-  from assms(2)[unfolded sound_entries_def, rule_format, OF envs[rule_format] key e']
-  have "\<forall>w v. (w, v) \<in> set \<delta> \<longrightarrow> \<turnstile> v : Ty (inst \<eta> \<sigma>)" by simp
-  then have "\<forall>w v. (w, v) \<in> set \<delta> \<longrightarrow> \<turnstile> v : Ty (inst \<eta> \<tau>')" by (blast intro: ValSub[OF _ subst_subty'[OF sub]])
-  then have "\<forall>w v. (w, v) \<in> set (update [] \<delta>) \<longrightarrow> \<turnstile> v : Ty (inst \<eta> \<tau>')"
-    using set_update[of "[]" \<delta>] by auto
-  then show "result_typed (Val (VDict (update [] \<delta>))) (inst \<eta> \<tau>)"
-    by (auto simp: \<tau> intro!: ValDict distinct_update)
+  with assms(1) env have "\<forall>\<rho>' \<in> set \<rho>s. \<eta> \<turnstile> \<rho>' : \<Gamma> \<otimes> \<Delta>" by (simp add: sound_quals_def)
+  from sound_entriesD[OF assms(2) this key e'] sub
+  have "\<forall>w v. (w, v) \<in> set \<delta> \<longrightarrow> \<turnstile> v : Ty (inst \<eta> \<tau>')" by (auto intro: wf_val_inst_sub)
+  then show "result_typed (Val (VDict (update [] \<delta>))) (inst \<eta> \<tau>)" by (simp add: \<tau> wf_dict_update)
 qed simp
 
 lemma dict_comp_fail_quals_sound:
@@ -810,9 +783,8 @@ proof (rule sound_expr_typedI)
   from dict_comp_typed[OF this(2)] obtain \<Delta> \<sigma> where "quals \<Sigma> \<Gamma> gs = Ok \<Delta>"
     and key: "check_expr_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e (TyPrim str) = Ok ()" and e': "has_type_at \<Sigma> \<eta> (\<Gamma> \<otimes> \<Delta>) e' \<sigma>"
     by blast
-  with assms(1) env have envs: "\<forall>\<rho>' \<in> set \<rho>s. \<eta> \<turnstile> \<rho>' : \<Gamma> \<otimes> \<Delta>" by (simp add: sound_quals_def)
-  from assms(2)[unfolded sound_entries_def, rule_format, OF envs[rule_format] key e']
-  show "result_typed (Aborts \<kappa>) (inst \<eta> \<tau>)" by simp
+  with assms(1) env have "\<forall>\<rho>' \<in> set \<rho>s. \<eta> \<turnstile> \<rho>' : \<Gamma> \<otimes> \<Delta>" by (simp add: sound_quals_def)
+  from sound_entriesD[OF assms(2) this key e'] show "result_typed (Aborts \<kappa>) (inst \<eta> \<tau>)" by simp
 qed simp
 
 lemma attr_object_sound:
@@ -994,7 +966,7 @@ proof (intro allI impI)
   assume envs: "\<forall>\<rho> \<in> set (\<rho> # \<rho>s). \<eta> \<turnstile> \<rho> : \<Gamma>" and e: "has_type_at \<Sigma> \<eta> \<Gamma> e \<tau>"
   from assms(1) envs e have "\<turnstile> v : Ty (inst \<eta> \<tau>)" by (auto dest: sound_expr_has_type_at)
   moreover from envs have "\<forall>\<rho> \<in> set \<rho>s. \<eta> \<turnstile> \<rho> : \<Gamma>" by simp
-  with assms(2) e have "wf_elems r (inst \<eta> \<tau>)" unfolding sound_comp_def by blast
+  with assms(2) e have "wf_elems r (inst \<eta> \<tau>)" by (blast intro: sound_compD)
   ultimately show "wf_elems (mlet r (\<lambda>vs. Val (v # vs))) (inst \<eta> \<tau>)" by (cases r) simp_all
 qed
 
@@ -1015,7 +987,7 @@ proof (intro allI impI)
     and e': "has_type_at \<Sigma> \<eta> \<Gamma> e' \<tau>"
   from assms(2) envs e' have "\<turnstile> v : Ty (inst \<eta> \<tau>)" by (auto dest: sound_expr_has_type_at)
   moreover from envs have "\<forall>\<rho> \<in> set \<rho>s. \<eta> \<turnstile> \<rho> : \<Gamma>" by simp
-  with assms(3) key e' have "wf_entries r (inst \<eta> \<tau>)" unfolding sound_entries_def by blast
+  with assms(3) key e' have "wf_entries r (inst \<eta> \<tau>)" by (blast intro: sound_entriesD)
   ultimately show "wf_entries (mlet r (\<lambda>\<delta>. Val ((w, v) # \<delta>))) (inst \<eta> \<tau>)" by (cases r) auto
 qed
 

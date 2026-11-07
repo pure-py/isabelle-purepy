@@ -427,6 +427,14 @@ where
       Ok (TyScheme \<alpha>s (TyCallable \<sigma>s \<tau>))
     }))"
 
+lemma def_signatures_callable:
+  "\<lbrakk> those_sum (map (\<lambda>d. locate (pos_of d) (def_signature \<Sigma> \<Gamma> (node d))) ds) = Ok \<pi>s ; i < length ds
+   ; \<pi>s ! i = TyScheme \<alpha>s \<tau> \<rbrakk>
+  \<Longrightarrow> \<exists>\<sigma>s \<tau>'. \<tau> = TyCallable \<sigma>s \<tau>'"
+  by (cases "node (ds ! i)")
+     (fastforce dest!: those_sum_map_Ok simp: list_all2_conv_all_nth bind_sum_def Let_def
+      split: sum.splits option.splits)
+
 (* Check a call statement with callee type \<sigma>, where a result of None is allowed *)
 fun check_call_stmt ::
   "class_table \<Rightarrow> cxt \<Rightarrow> expr located \<Rightarrow> ty \<Rightarrow> (var \<times> expr located) list \<Rightarrow> expr located list

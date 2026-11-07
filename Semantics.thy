@@ -371,6 +371,11 @@ where
      (name_of [''dataclasses''], fmap_of_list
        [name ''dataclasses'', (var ''dataclass'', VPredef (name_of [''dataclasses'', ''dataclass'']))])])"
 
+lemma prim_entry_callable:
+  "\<lbrakk> fmlookup (\<E> \<A>) q = Some \<rho> ; fmlookup \<rho> x = Some (VPrim f) ; fmlookup \<P> q = Some \<Gamma> ; fmlookup \<Gamma> x = Some \<theta> \<rbrakk>
+  \<Longrightarrow> \<exists>\<sigma>s \<tau>. \<theta> = Ty (TyCallable \<sigma>s \<tau>)"
+  by (auto simp: \<E>_def \<P>_def builtins_def name_of_def fmlookup_of_list split: if_splits)
+
 function (sequential) extend_val :: "val \<Rightarrow> val \<Rightarrow> val"
 and extend_env :: "env \<Rightarrow> env \<Rightarrow> env"
 where
