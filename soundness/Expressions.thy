@@ -88,11 +88,27 @@ where "result_typed r \<tau> \<equiv> wf_result (\<lambda>v. \<turnstile> v : Ty
 abbreviation results_typed :: "val list result \<Rightarrow> ty list \<Rightarrow> bool"
 where "results_typed rs \<tau>s \<equiv> wf_result (\<lambda>vs. list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) vs \<tau>s) rs"
 
-(* Result of a dotted name, typed by the context entry to which the name resolves *)
+(* Context entry named by an expression: the entry to which a dotted name resolves, or the class of a class
+   applied to type arguments *)
+definition expr_entry :: "cxt \<Rightarrow> expr \<Rightarrow> cxt_entry option"
+where
+"expr_entry \<Gamma> e =
+  (case e of ExprSubscript e' _ \<Rightarrow> map_option Type (class_of_name \<Gamma> (node e')) | _ \<Rightarrow> entry_of \<Gamma> e)"
+
+lemma expr_entry_simps [simp]:
+  "expr_entry \<Gamma> (ExprVar x) = entry_of \<Gamma> (ExprVar x)"
+  "expr_entry \<Gamma> (ExprAttribute e x) = entry_of \<Gamma> (ExprAttribute e x)"
+  "expr_entry \<Gamma> (ExprSubscript e e') = map_option Type (class_of_name \<Gamma> (node e))"
+  by (simp_all add: expr_entry_def)
+
+lemma class_of_name_entry: "class_of_name \<Gamma> e = Some C \<Longrightarrow> expr_entry \<Gamma> e = Some (Type C)"
+  by (cases e) (auto simp: class_of_name_def entry_of_def split: option.splits cxt_entry.splits)
+
+(* Result of an expression naming a context entry, typed by the entry *)
 definition sound_name :: "env \<Rightarrow> expr \<Rightarrow> val result \<Rightarrow> bool"
 where
 "sound_name \<rho> e r =
-  (\<forall>\<eta> \<Gamma> \<theta>. \<eta> \<turnstile> \<rho> : \<Gamma> \<longrightarrow> entry_of \<Gamma> e = Some \<theta> \<longrightarrow> wf_result (\<lambda>v. \<turnstile> v : inst_entry \<eta> \<theta>) r)"
+  (\<forall>\<eta> \<Gamma> \<theta>. \<eta> \<turnstile> \<rho> : \<Gamma> \<longrightarrow> expr_entry \<Gamma> e = Some \<theta> \<longrightarrow> wf_result (\<lambda>v. \<turnstile> v : inst_entry \<eta> \<theta>) r)"
 
 definition sound_expr :: "env \<Rightarrow> expr \<Rightarrow> val result \<Rightarrow> bool"
 where
@@ -135,8 +151,9 @@ where
   (\<forall>\<eta> \<Gamma> \<tau>. (\<forall>\<rho> \<in> set \<rho>s. \<eta> \<turnstile> \<rho> : \<Gamma>) \<longrightarrow> check_expr_at \<Sigma> \<Gamma> e (TyPrim str) = Ok ()
      \<longrightarrow> has_type_at \<Sigma> \<eta> \<Gamma> e' \<tau> \<longrightarrow> wf_entries r (inst \<eta> \<tau>))"
 
-lemma sound_name_None [simp]: "dotted_name e = None \<Longrightarrow> sound_name \<rho> e r"
-  by (simp add: sound_name_def entry_of_def)
+lemma sound_name_None [simp]:
+  "\<lbrakk> dotted_name e = None ; \<forall>e' e''. e \<noteq> ExprSubscript e' e'' \<rbrakk> \<Longrightarrow> sound_name \<rho> e r"
+  by (cases e) (simp_all add: sound_name_def expr_entry_def entry_of_def)
 
 lemma sound_compD:
   "\<lbrakk> sound_comp \<rho>s e r ; \<forall>\<rho> \<in> set \<rho>s. \<eta> \<turnstile> \<rho> : \<Gamma> ; has_type_at \<Sigma> \<eta> \<Gamma> e \<tau> \<rbrakk> \<Longrightarrow> wf_elems r (inst \<eta> \<tau>)"
@@ -225,19 +242,20 @@ lemma sound_exprI:
 lemma sound_expr_synthI:
   assumes "\<And>\<eta> \<Gamma> \<tau>. \<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; synth_expr \<Sigma> \<Gamma> e = Ok \<tau> \<rbrakk> \<Longrightarrow> result_typed r (inst \<eta> \<tau>)"
     and "\<And>\<Gamma> \<tau>. check_expr' \<Sigma> \<Gamma> e \<tau> = None" and "\<And>\<Gamma>. \<not> call_stmt \<Sigma> \<Gamma> e" and "dotted_name e = None"
+    and "\<forall>e' e''. e \<noteq> ExprSubscript e' e''"
   shows "sound_expr \<rho> e r"
 proof (rule sound_exprI)
   fix \<eta> \<Gamma> \<tau>
   assume "\<eta> \<turnstile> \<rho> : \<Gamma>" and "synth_expr \<Sigma> \<Gamma> e = Ok \<tau>"
   then show "result_typed r (inst \<eta> \<tau>)" by (rule assms(1))
-qed (simp_all add: assms(2, 3, 4))
+qed (simp_all add: assms(2-5))
 
 (* Expression without a call statement rule *)
 lemma sound_expr_typedI:
   assumes "\<And>\<eta> \<Gamma> \<tau>. \<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; typed_by_rule \<Sigma> \<eta> \<Gamma> e \<tau> \<rbrakk> \<Longrightarrow> result_typed r (inst \<eta> \<tau>)"
-    and "\<And>\<Gamma>. \<not> call_stmt \<Sigma> \<Gamma> e" and "dotted_name e = None"
+    and "\<And>\<Gamma>. \<not> call_stmt \<Sigma> \<Gamma> e" and "dotted_name e = None" and "\<forall>e' e''. e \<noteq> ExprSubscript e' e''"
   shows "sound_expr \<rho> e r"
-  by (rule sound_exprI) (auto intro: assms(1) simp: typed_by_rule_def assms(2, 3))
+  by (rule sound_exprI) (auto intro: assms(1) simp: typed_by_rule_def assms(2-4))
 
 lemma sound_expr_synth_at:
   "\<lbrakk> sound_expr \<rho> (node e) r ; \<eta> \<turnstile> \<rho> : \<Gamma> ; synth_expr_at \<Sigma> \<Gamma> e = Ok \<tau> \<rbrakk> \<Longrightarrow> result_typed r (inst \<eta> \<tau>)"
@@ -253,13 +271,23 @@ lemma sound_expr_has_type_at:
   by (cases e) (auto simp: sound_expr_def)
 
 lemma sound_expr_name:
-  "\<lbrakk> sound_expr \<rho> e r ; \<eta> \<turnstile> \<rho> : \<Gamma> ; entry_of \<Gamma> e = Some \<theta> \<rbrakk> \<Longrightarrow> wf_result (\<lambda>v. \<turnstile> v : inst_entry \<eta> \<theta>) r"
+  "\<lbrakk> sound_expr \<rho> e r ; \<eta> \<turnstile> \<rho> : \<Gamma> ; expr_entry \<Gamma> e = Some \<theta> \<rbrakk> \<Longrightarrow> wf_result (\<lambda>v. \<turnstile> v : inst_entry \<eta> \<theta>) r"
   by (simp add: sound_expr_def sound_name_def)
+
+lemma expr_entry_dotted: "dotted_name e = Some q \<Longrightarrow> expr_entry \<Gamma> e = entry_of \<Gamma> e"
+  by (cases e) simp_all
 
 lemma sound_expr_module:
   "\<lbrakk> sound_expr \<rho> e r ; \<eta> \<turnstile> \<rho> : \<Gamma> ; dotted_name e = Some q ; lookup \<Gamma> q = Some (ModChecked q' \<Gamma>') \<rbrakk>
   \<Longrightarrow> wf_result (\<lambda>v. \<turnstile> v : ModChecked q' \<Gamma>') r"
-  using sound_expr_name[of \<rho> e r \<eta> \<Gamma> "ModChecked q' \<Gamma>'"] by (simp add: entry_of_def resolve_name_def)
+  using sound_expr_name[of \<rho> e r \<eta> \<Gamma> "ModChecked q' \<Gamma>'"]
+  by (simp add: expr_entry_dotted entry_of_def resolve_name_def)
+
+(* Class named by an expression, as the value of the expression *)
+lemma sound_expr_class:
+  assumes "sound_expr \<rho> e (Val v)" and "\<eta> \<turnstile> \<rho> : \<Gamma>" and "expr_entry \<Gamma> e = Some (Type C)"
+  shows "v = VClass C"
+  using sound_expr_name[OF assms] by (auto dest: wf_type_entry)
 
 lemma sound_exprs_abort:
   "\<lbrakk> sound_exprs \<rho> es (Aborts \<kappa>) ; \<eta> \<turnstile> \<rho> : \<Gamma> ; list_all2 (has_type_at \<Sigma> \<eta> \<Gamma>) es \<tau>s \<rbrakk> \<Longrightarrow> \<not> prevented \<kappa>"
@@ -998,14 +1026,21 @@ lemma subscript_sound:
   sorry
 
 lemma class_type_args_sound:
-  "\<lbrakk> sound_expr \<rho> (node e) (Val (VClass C)) ; type_args_of e' = Some \<psi>s \<rbrakk>
-  \<Longrightarrow> sound_expr \<rho> (ExprSubscript e e') (Val (VClass C))"
-  sorry
+  assumes "sound_expr \<rho> (node e) (Val (VClass C))" and "type_args_of e' = Some \<psi>s"
+  shows "sound_expr \<rho> (ExprSubscript e e') (Val (VClass C))"
+proof (rule sound_exprI)
+  show "sound_name \<rho> (ExprSubscript e e') (Val (VClass C))"
+    using assms(1) by (auto simp: sound_name_def dest!: class_of_name_entry dest: sound_expr_name)
+qed (auto simp: bind_sum_def var_scheme_None dest!: sound_expr_synth_at[OF assms(1)] wf_class_ty
+    split: sum.splits)
 
 lemma subscript_fail_sound:
-  "sound_expr \<rho> (node e) (Aborts \<kappa>) \<Longrightarrow> sound_expr \<rho> (ExprSubscript e e') (Aborts \<kappa>)"
-  by (rule sound_expr_synthI)
-     (auto simp: bind_sum_def var_scheme_None dest: sound_expr_synth_at split: sum.splits)
+  assumes "sound_expr \<rho> (node e) (Aborts \<kappa>)"
+  shows "sound_expr \<rho> (ExprSubscript e e') (Aborts \<kappa>)"
+proof (rule sound_exprI)
+  show "sound_name \<rho> (ExprSubscript e e') (Aborts \<kappa>)"
+    using assms by (auto simp: sound_name_def dest!: class_of_name_entry dest: sound_expr_name)
+qed (auto simp: bind_sum_def var_scheme_None dest: sound_expr_synth_at[OF assms] split: sum.splits)
 
 (* Element of a list comprehension typed under its qualifiers at a subtype of the element type *)
 lemma list_comp_typed:
@@ -1210,10 +1245,10 @@ lemma sound_name_attr:
   unfolding sound_name_def
 proof (intro allI impI)
   fix \<eta> \<Gamma> \<theta>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and entry: "entry_of \<Gamma> (ExprAttribute e x) = Some \<theta>"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and entry: "expr_entry \<Gamma> (ExprAttribute e x) = Some \<theta>"
   from entry obtain q q' \<Gamma>' where "dotted_name (node e) = Some q" and "lookup \<Gamma> q = Some (ModChecked q' \<Gamma>')"
     and "fmlookup \<Gamma>' x = Some \<theta>"
-    by (rule entry_of_attribute)
+    unfolding expr_entry_simps by (rule entry_of_attribute)
   from sound_expr_module_env[OF assms(1) env this(1, 2)] assms(2)
   show "wf_result (\<lambda>v. \<turnstile> v : inst_entry \<eta> \<theta>) r" by auto
 qed
@@ -1305,10 +1340,10 @@ proof (intro conjI allI impI)
   qed
 next
   fix \<eta> \<Gamma> \<theta>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and entry: "entry_of \<Gamma> (ExprAttribute e x) = Some \<theta>"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and entry: "expr_entry \<Gamma> (ExprAttribute e x) = Some \<theta>"
   from entry obtain q q'' \<Gamma>' where "dotted_name (node e) = Some q" and "lookup \<Gamma> q = Some (ModChecked q'' \<Gamma>')"
     and x: "fmlookup \<Gamma>' x = Some \<theta>"
-    by (rule entry_of_attribute)
+    unfolding expr_entry_simps by (rule entry_of_attribute)
   from sound_expr_module_env[OF assms(1) env this(1, 2)] have "[] \<turnstile> \<rho>' : \<Gamma>'" by auto
   moreover from this x have "\<theta> \<noteq> TypeVar" by (auto dest: module_member_TypeVar)
   ultimately show "wf_result (\<lambda>v. \<turnstile> v : inst_entry \<eta> \<theta>) (Val v)"
@@ -1341,10 +1376,10 @@ proof (intro conjI allI impI)
   qed
 next
   fix \<eta> \<Gamma> \<theta>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and entry: "entry_of \<Gamma> (ExprAttribute e x) = Some \<theta>"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and entry: "expr_entry \<Gamma> (ExprAttribute e x) = Some \<theta>"
   from entry obtain q q'' \<Gamma>' where "dotted_name (node e) = Some q" and "lookup \<Gamma> q = Some (ModChecked q'' \<Gamma>')"
     and x: "fmlookup \<Gamma>' x = Some \<theta>"
-    by (rule entry_of_attribute)
+    unfolding expr_entry_simps by (rule entry_of_attribute)
   from sound_expr_module_env[OF assms(1) env this(1, 2)] have "[] \<turnstile> \<rho>' : \<Gamma>'" by auto
   moreover from this x have "\<theta> \<noteq> TypeVar" by (auto dest: module_member_TypeVar)
   ultimately show "wf_result (\<lambda>v. \<turnstile> v : inst_entry \<eta> \<theta>) (Aborts AttributeError)"
@@ -1379,10 +1414,10 @@ proof (intro conjI allI impI)
     by (cases rule: attr_typed) (auto dest: sound_expr_module[OF assms env] sound_expr_synth_at[OF assms env])
 next
   fix \<eta> \<Gamma> \<theta>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and entry: "entry_of \<Gamma> (ExprAttribute e x) = Some \<theta>"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and entry: "expr_entry \<Gamma> (ExprAttribute e x) = Some \<theta>"
   from entry obtain q q' \<Gamma>' where "dotted_name (node e) = Some q" and "lookup \<Gamma> q = Some (ModChecked q' \<Gamma>')"
     and "fmlookup \<Gamma>' x = Some \<theta>"
-    by (rule entry_of_attribute)
+    unfolding expr_entry_simps by (rule entry_of_attribute)
   from sound_expr_module[OF assms env this(1, 2)]
   show "wf_result (\<lambda>v. \<turnstile> v : inst_entry \<eta> \<theta>) (Aborts \<kappa>)" by simp
 qed

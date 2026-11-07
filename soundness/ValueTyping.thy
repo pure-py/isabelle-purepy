@@ -251,6 +251,17 @@ lemma module_member:
   \<Longrightarrow> \<exists>v. fmlookup \<rho> x = Some v \<and> \<turnstile> v : \<theta> \<and> fv_entry \<theta> = {}"
   using wf_env_lookup[of "[]" \<rho> \<Gamma> x \<theta>] wf_env_tyvars[of "[]" \<rho> \<Gamma>] tyvars_entry[of \<Gamma> x \<theta>] by auto
 
+lemma wf_class_value: "\<turnstile> v : \<theta> \<Longrightarrow> v = VClass C \<Longrightarrow> \<theta> = Type C" "\<eta> \<turnstile> \<rho> : \<Gamma> \<Longrightarrow> True"
+  by (induction rule: wf_val_wf_env.inducts) auto
+
+lemma wf_class_ty: "\<turnstile> VClass C : Ty \<tau> \<Longrightarrow> False"
+  by (drule wf_class_value(1)) simp_all
+
+inductive_cases WfTypeE: "\<turnstile> v : Type C"
+
+lemma wf_type_entry: "\<turnstile> v : Type C \<Longrightarrow> v = VClass C"
+  by (erule WfTypeE) (auto dest: prim_entry_callable simp: inst_entry_signature_entry split: if_splits)
+
 lemma module_member_TypeVar: "[] \<turnstile> \<rho> : \<Gamma> \<Longrightarrow> fmlookup \<Gamma> x \<noteq> Some TypeVar"
   using wf_env_tyvars[of "[]" \<rho> \<Gamma>] by (force simp: tyvars_def fmlookup_dom'_iff)
 
