@@ -174,26 +174,6 @@ where
 lemma wf_ty_subst: "\<lbrakk> wf_ty \<Sigma> \<sigma> ; \<forall>\<tau> \<in> set \<tau>s. wf_ty \<Sigma> \<tau> \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> (subst \<tau>s \<alpha>s \<sigma>)"
   by (induction \<sigma>) (auto split: option.splits dest!: map_of_SomeD set_zip_rightD)
 
-(* Class table with each base class a well-formed type over the type parameters of its class *)
-definition wf_class_table :: "class_table \<Rightarrow> bool"
-where
-"wf_class_table \<Sigma> =
-  (\<forall>C D \<sigma>s. C |\<in>| fmdom \<Sigma> \<longrightarrow> base \<Sigma> C = Some (D, \<sigma>s)
-     \<longrightarrow> wf_ty \<Sigma> (TyClass D \<sigma>s) \<and> (\<forall>\<sigma> \<in> set \<sigma>s. fv \<sigma> \<subseteq> set (type_params \<Sigma> C)))"
-
-lemma wf_class_table_base:
-  "\<lbrakk> wf_class_table \<Sigma> ; wf_ty \<Sigma> (TyClass C \<tau>s) ; base \<Sigma> C = Some (D, \<sigma>s) \<rbrakk>
-  \<Longrightarrow> wf_ty \<Sigma> (TyClass D (map (subst \<tau>s (type_params \<Sigma> C)) \<sigma>s))"
-  unfolding wf_class_table_def by (auto intro: wf_ty_subst)
-
-(* Base class at substituted type arguments, as the substitution applied to the base class at the type
-   arguments *)
-lemma base_subst:
-  "\<lbrakk> wf_class_table \<Sigma> ; wf_ty \<Sigma> (TyClass C \<tau>s) ; base \<Sigma> C = Some (D, \<sigma>s) \<rbrakk>
-  \<Longrightarrow> TyClass D (map (subst (map (subst \<tau>s' \<alpha>s) \<tau>s) (type_params \<Sigma> C)) \<sigma>s) =
-      subst \<tau>s' \<alpha>s (TyClass D (map (subst \<tau>s (type_params \<Sigma> C)) \<sigma>s))"
-  unfolding wf_class_table_def by (auto simp: subst_subst cong: map_cong)
-
 fun instantiate :: "field_scheme \<Rightarrow> ty list \<Rightarrow> (var \<times> ty) list"
 where
 "instantiate (FieldScheme \<alpha>s x\<sigma>s) \<tau>s = map (\<lambda>(x, \<sigma>). (x, subst \<tau>s \<alpha>s \<sigma>)) x\<sigma>s"
@@ -247,6 +227,26 @@ where
 definition field_names :: "class_table \<Rightarrow> name \<Rightarrow> var list"
 where
 "field_names \<Sigma> C = (case fields \<Sigma> C of FieldScheme _ x\<sigma>s \<Rightarrow> map fst x\<sigma>s)"
+
+(* Class table with each base class a well-formed type over the type parameters of its class *)
+definition wf_class_table :: "class_table \<Rightarrow> bool"
+where
+"wf_class_table \<Sigma> =
+  (\<forall>C D \<sigma>s. C |\<in>| fmdom \<Sigma> \<longrightarrow> base \<Sigma> C = Some (D, \<sigma>s)
+     \<longrightarrow> wf_ty \<Sigma> (TyClass D \<sigma>s) \<and> (\<forall>\<sigma> \<in> set \<sigma>s. fv \<sigma> \<subseteq> set (type_params \<Sigma> C)))"
+
+lemma wf_class_table_base:
+  "\<lbrakk> wf_class_table \<Sigma> ; wf_ty \<Sigma> (TyClass C \<tau>s) ; base \<Sigma> C = Some (D, \<sigma>s) \<rbrakk>
+  \<Longrightarrow> wf_ty \<Sigma> (TyClass D (map (subst \<tau>s (type_params \<Sigma> C)) \<sigma>s))"
+  unfolding wf_class_table_def by (auto intro: wf_ty_subst)
+
+(* Base class at substituted type arguments, as the substitution applied to the base class at the type
+   arguments *)
+lemma base_subst:
+  "\<lbrakk> wf_class_table \<Sigma> ; wf_ty \<Sigma> (TyClass C \<tau>s) ; base \<Sigma> C = Some (D, \<sigma>s) \<rbrakk>
+  \<Longrightarrow> TyClass D (map (subst (map (subst \<tau>s' \<alpha>s) \<tau>s) (type_params \<Sigma> C)) \<sigma>s) =
+      subst \<tau>s' \<alpha>s (TyClass D (map (subst \<tau>s (type_params \<Sigma> C)) \<sigma>s))"
+  unfolding wf_class_table_def by (auto simp: subst_subst cong: map_cong)
 
 definition class_table :: "cxt \<Rightarrow> name \<Rightarrow> type_def located list \<Rightarrow> nat \<Rightarrow> class_table"
 where
