@@ -2221,27 +2221,441 @@ proof (intro conjI allI impI)
   qed
 qed simp
 
+(* Class of a constructor callee, as the class of the callee or the class to which the callee applies type
+   arguments, which are resolved at the class *)
+lemma constructor_class_Ok:
+  assumes "constructor_class \<Sigma> \<Gamma> e = Some (Ok (C, explicit))"
+  shows "explicit = None \<and> class_of_name \<Gamma> (node e) = Some C
+    \<or> (\<exists>e' e'' \<psi> \<tau>s. node e = ExprSubscript e' e'' \<and> class_of_name \<Gamma> (node e') = Some C \<and> explicit = Some \<tau>s
+         \<and> resolve_type \<Sigma> \<Gamma> \<psi> = Ok (TyClass C \<tau>s) \<and> length \<tau>s = length (type_params \<Sigma> C))"
+proof (cases "class_of_name \<Gamma> (node e)")
+  case (Some C')
+  with assms show ?thesis by (simp add: constructor_class_def)
+next
+  case None
+  obtain p e0 where e: "e = At p e0" by (cases e)
+  have "\<exists>e' e''. e0 = ExprSubscript e' e''" using assms None by (cases e0) (simp_all add: constructor_class_def e)
+  then obtain e' e'' where e0: "e0 = ExprSubscript e' e''" by blast
+  have "\<exists>C' \<psi>. class_of_name \<Gamma> (node e') = Some C' \<and> type_expr_of e = Some \<psi>"
+    using assms None by (auto simp: constructor_class_def e e0 Let_def split: option.splits if_splits)
+  then obtain C' \<psi> where C': "class_of_name \<Gamma> (node e') = Some C'" and \<psi>: "type_expr_of e = Some \<psi>" by blast
+  obtain \<tau> where \<tau>: "resolve_type \<Sigma> \<Gamma> \<psi> = Ok \<tau>"
+    using assms None C' \<psi> by (cases "resolve_type \<Sigma> \<Gamma> \<psi>") (auto simp: constructor_class_def e e0 bind_sum_def)
+  from resolve_type_subscript_class[OF C' \<psi>[unfolded e e0] \<tau>] obtain \<tau>s
+    where \<tau>': "\<tau> = TyClass C' \<tau>s" and len: "length \<tau>s = length (type_params \<Sigma> C')"
+    by blast
+  have "C' = C \<and> explicit = Some \<tau>s"
+    using assms None C' \<psi> \<tau> \<tau>' by (simp add: constructor_class_def e e0 bind_sum_def)
+  with e e0 C' \<tau> \<tau>' len show ?thesis by auto
+qed
+
+lemma constructor_class_Ok_entry:
+  "constructor_class \<Sigma> \<Gamma> e = Some (Ok (C, explicit)) \<Longrightarrow> expr_entry \<Gamma> (node e) = Some (Type C)"
+  by (drule constructor_class_Ok) (auto intro: class_of_name_entry)
+
+lemma constructor_args_Ok:
+  assumes "constructor_args C (FieldScheme \<alpha>s x\<sigma>s) es kws = Ok \<sigma>es"
+  shows "length es + length kws = length x\<sigma>s" and "set (map fst kws) = set (drop (length es) (map fst x\<sigma>s))"
+    and "\<sigma>es = zip (map snd (take (length es) x\<sigma>s)) es @ map (\<lambda>(y, e). (the (map_of x\<sigma>s y), e)) kws"
+  using assms by (auto simp: constructor_args_def check_field_map_def bind_sum_def split: sum.splits if_splits)
+
+lemma constructor_args_exprs:
+  assumes "constructor_args C (FieldScheme \<alpha>s x\<sigma>s) es kws = Ok \<sigma>es"
+  shows "map snd \<sigma>es = es @ map snd kws"
+    and "map fst \<sigma>es = map snd (take (length es) x\<sigma>s) @ map (\<lambda>(y, _). the (map_of x\<sigma>s y)) kws"
+  using constructor_args_Ok(1, 3)[OF assms] by (simp_all add: split_def min_def)
+
+(* Type of the field supplied by each constructor argument, as a field type *)
+lemma constructor_args_field:
+  assumes "constructor_args C (FieldScheme \<alpha>s x\<sigma>s) es kws = Ok \<sigma>es" and "(\<sigma>, e') \<in> set \<sigma>es"
+  shows "\<sigma> \<in> snd ` set x\<sigma>s"
+proof -
+  note kws = constructor_args_Ok(2)[OF assms(1)]
+  from assms(2) constructor_args_Ok(3)[OF assms(1)]
+  consider "\<sigma> \<in> set (map snd (take (length es) x\<sigma>s))" | y where "(y, e') \<in> set kws" and "\<sigma> = the (map_of x\<sigma>s y)"
+    by (auto dest: set_zip_leftD)
+  then show ?thesis
+  proof cases
+    case 1
+    then show ?thesis by (auto dest: in_set_takeD)
+  next
+    case 2
+    then have "y \<in> set (map fst kws)" by force
+    with kws have "y \<in> set (map fst x\<sigma>s)" by (auto dest: in_set_dropD)
+    then obtain \<sigma>' where "map_of x\<sigma>s y = Some \<sigma>'" by (cases "map_of x\<sigma>s y") (auto simp: map_of_eq_None_iff)
+    with 2 show ?thesis by (force dest: map_of_SomeD)
+  qed
+qed
+
+(* Values of the fields filled by positional and keyword values, related by R to the field types when the
+   positional values are related to the types of the first fields and each keyword value to the type of its
+   field *)
+lemma field_values_rel:
+  assumes "distinct (map fst x\<sigma>s)" and "n + length kws = length x\<sigma>s"
+    and "set (map fst kws) = set (drop n (map fst x\<sigma>s))"
+    and "list_all2 R us (map snd (take n x\<sigma>s) @ map (\<lambda>(y, _). the (map_of x\<sigma>s y)) kws)"
+  shows "list_all2 R (take n us @ map (\<lambda>y. the (map_of (zip (map fst kws) (drop n us)) y)) (drop n (map fst x\<sigma>s)))
+           (map snd x\<sigma>s)"
+proof -
+  have n: "n \<le> length x\<sigma>s" using assms(2) by simp
+  from assms(4) obtain us1 us2 where us: "us = us1 @ us2" and rel1: "list_all2 R us1 (map snd (take n x\<sigma>s))"
+    and rel2: "list_all2 R us2 (map (\<lambda>(y, _). the (map_of x\<sigma>s y)) kws)"
+    by (auto simp: list_all2_append2)
+  have len1: "length us1 = n" using rel1 n by (auto dest: list_all2_lengthD)
+  have len2: "length us2 = length kws" using rel2 by (auto dest: list_all2_lengthD)
+  have distinct_kws: "distinct (map fst kws)"
+  proof (rule card_distinct)
+    show "card (set (map fst kws)) = length (map fst kws)"
+      using assms(2, 3) distinct_card[OF distinct_drop[OF assms(1)]] by simp
+  qed
+  have rest: "list_all2 R (map (\<lambda>y. the (map_of (zip (map fst kws) us2) y)) (drop n (map fst x\<sigma>s)))
+    (map snd (drop n x\<sigma>s))"
+  proof (rule list_all2_all_nthI)
+    fix i
+    assume "i < length (map (\<lambda>y. the (map_of (zip (map fst kws) us2) y)) (drop n (map fst x\<sigma>s)))"
+    then have i: "i < length (drop n x\<sigma>s)" by simp
+    let ?x\<sigma> = "drop n x\<sigma>s ! i"
+    have "?x\<sigma> \<in> set (drop n x\<sigma>s)" using i by (rule nth_mem)
+    then have "fst ?x\<sigma> \<in> set (map fst kws)" using assms(3) by (force simp: drop_map)
+    then obtain j where j: "j < length kws" and y: "map fst kws ! j = fst ?x\<sigma>" by (auto simp: in_set_conv_nth)
+    have "map_of (zip (map fst kws) us2) (fst ?x\<sigma>) = Some (us2 ! j)"
+      using map_of_zip_nth[of "map fst kws" us2 j] distinct_kws len2 j y by simp
+    moreover have "the (map_of x\<sigma>s (fst ?x\<sigma>)) = snd ?x\<sigma>"
+      using map_of_is_SomeI[OF assms(1), of "fst ?x\<sigma>" "snd ?x\<sigma>"] i by (simp add: in_set_dropD)
+    moreover have "R (us2 ! j) (the (map_of x\<sigma>s (fst (kws ! j))))"
+      using list_all2_nthD[OF rel2, of j] j len2 by (simp add: split_def)
+    ultimately show "R (map (\<lambda>y. the (map_of (zip (map fst kws) us2) y)) (drop n (map fst x\<sigma>s)) ! i)
+      (map snd (drop n x\<sigma>s) ! i)"
+      using i y j by (simp add: drop_map)
+  qed simp
+  from list_all2_appendI[OF rel1 rest]
+  have "list_all2 R (us1 @ map (\<lambda>y. the (map_of (zip (map fst kws) us2) y)) (drop n (map fst x\<sigma>s)))
+    (map snd (take n x\<sigma>s @ drop n x\<sigma>s))"
+    by (simp only: map_append)
+  with us len1 show ?thesis by simp
+qed
+
+lemma wf_class_dom: "\<turnstile> v : Type C \<Longrightarrow> C |\<in>| fmdom \<Sigma>"
+  by (erule WfTypeE) (auto dest: prim_entry_callable simp: inst_entry_signature_entry split: if_splits)
+
+(* Callee of a call, a class, which is not typed by synthesis or at a scheme *)
+lemma class_callee: "\<lbrakk> sound_expr \<rho> (node e) (Val (VClass C)) ; \<eta> \<turnstile> \<rho> : \<Gamma> ; callee \<Sigma> \<Gamma> e es = Ok \<sigma> \<rbrakk> \<Longrightarrow> False"
+  using callee_value(1) wf_class_ty by blast
+
+(* Typing of a call by synthesis, or as a call statement *)
+lemma call_typed:
+  assumes "has_type \<Sigma> \<eta> \<Gamma> (ExprCall e (es, kws)) \<tau>" and "lambda_of (node e) = None"
+  obtains (synth) \<tau>' where "synth_expr \<Sigma> \<Gamma> (ExprCall e (es, kws)) = Ok \<tau>'" and "\<Sigma> \<turnstile> \<tau>' <: \<tau>"
+    | (stmt) \<sigma> where "callee \<Sigma> \<Gamma> e es = Ok \<sigma>" and "check_call_stmt \<Sigma> \<Gamma> e \<sigma> kws es = Ok ()"
+proof -
+  from assms(2) have check': "check_expr' \<Sigma> \<Gamma> (ExprCall e (es, kws)) \<tau> = None" by simp
+  have "\<exists>\<tau>'. synth_expr \<Sigma> \<Gamma> (ExprCall e (es, kws)) = Ok \<tau>' \<and> \<Sigma> \<turnstile> \<tau>' <: \<tau>"
+    if "check_expr \<Sigma> \<Gamma> (ExprCall e (es, kws)) \<tau> = Ok ()"
+    using that check'
+    by (auto simp del: synth_expr.simps simp: check_expr.simps[of \<Sigma> \<Gamma> "ExprCall e (es, kws)" \<tau>] ensure_def
+        bind_sum_def split: sum.splits if_splits)
+  with assms(1) consider (s) \<tau>' where "synth_expr \<Sigma> \<Gamma> (ExprCall e (es, kws)) = Ok \<tau>'" and "\<Sigma> \<turnstile> \<tau>' <: \<tau>"
+    | (c) "call_stmt \<Sigma> \<Gamma> (ExprCall e (es, kws))"
+    unfolding has_type_def by (blast intro: SubtyRefl)
+  then show thesis
+  proof cases
+    case s
+    then show thesis by (rule that(1))
+  next
+    case c
+    then show thesis by (auto intro: that(2))
+  qed
+qed
+
+(* Synthesis of a constructor call, by checking each argument against the type of its field at the type
+   arguments of the class *)
+lemma constr_synth:
+  assumes "synth_expr \<Sigma> \<Gamma> (ExprCall e (es, kws)) = Ok \<tau>" and "lambda_of (node e) = None"
+    and "constructor_class \<Sigma> \<Gamma> e = Some m"
+  obtains C explicit x\<sigma>s \<sigma>es \<tau>s where "m = Ok (C, explicit)" and "fields \<Sigma> C = FieldScheme (type_params \<Sigma> C) x\<sigma>s"
+    and "constructor_args C (FieldScheme (type_params \<Sigma> C) x\<sigma>s) es kws = Ok \<sigma>es"
+    and "\<forall>(\<sigma>, e') \<in> set \<sigma>es. check_expr_at \<Sigma> \<Gamma> e' (subst \<tau>s (type_params \<Sigma> C) \<sigma>) = Ok ()"
+    and "\<tau> = TyClass C \<tau>s"
+    and "explicit = Some \<tau>s \<or> explicit = None
+      \<and> inferred_type_args \<Sigma> (type_params \<Sigma> C) (map fst \<sigma>es) (map (synth_expr_at \<Sigma> \<Gamma> \<circ> snd) \<sigma>es) = Ok \<tau>s"
+proof -
+  obtain C explicit where m: "m = Ok (C, explicit)"
+  proof (cases m)
+    case (Inl r)
+    with assms show ?thesis by (simp add: bind_sum_def)
+  next
+    case (Inr p)
+    then show ?thesis using that by (cases p) simp
+  qed
+  obtain x\<sigma>s where fields: "fields \<Sigma> C = FieldScheme (type_params \<Sigma> C) x\<sigma>s" by (simp add: fields_ancestor_fields)
+  have "\<exists>\<sigma>es \<tau>s \<rho>s. constructor_args C (FieldScheme (type_params \<Sigma> C) x\<sigma>s) es kws = Ok \<sigma>es
+      \<and> those_sum (map (\<lambda>(\<sigma>, e'). check_expr_at \<Sigma> \<Gamma> e' (subst \<tau>s (type_params \<Sigma> C) \<sigma>)) \<sigma>es) = Ok \<rho>s
+      \<and> \<tau> = TyClass C \<tau>s
+      \<and> (explicit = Some \<tau>s \<or> explicit = None
+         \<and> inferred_type_args \<Sigma> (type_params \<Sigma> C) (map fst \<sigma>es) (map (synth_expr_at \<Sigma> \<Gamma> \<circ> snd) \<sigma>es) = Ok \<tau>s)"
+    using assms m fields by (auto simp: bind_sum_def split: sum.splits option.splits)
+  then obtain \<sigma>es \<tau>s \<rho>s where args: "constructor_args C (FieldScheme (type_params \<Sigma> C) x\<sigma>s) es kws = Ok \<sigma>es"
+    and checked: "those_sum (map (\<lambda>(\<sigma>, e'). check_expr_at \<Sigma> \<Gamma> e' (subst \<tau>s (type_params \<Sigma> C) \<sigma>)) \<sigma>es) = Ok \<rho>s"
+    and "\<tau> = TyClass C \<tau>s"
+    and "explicit = Some \<tau>s \<or> explicit = None
+      \<and> inferred_type_args \<Sigma> (type_params \<Sigma> C) (map fst \<sigma>es) (map (synth_expr_at \<Sigma> \<Gamma> \<circ> snd) \<sigma>es) = Ok \<tau>s"
+    by blast
+  moreover have "\<forall>(\<sigma>, e') \<in> set \<sigma>es. check_expr_at \<Sigma> \<Gamma> e' (subst \<tau>s (type_params \<Sigma> C) \<sigma>) = Ok ()"
+    using those_sum_map_Ok[OF checked] by (fastforce simp: list_all2_conv_all_nth in_set_conv_nth)
+  ultimately show thesis using that m fields by blast
+qed
+
+(* Type arguments of a constructor call, supplied by the callee or inferred from the arguments, over the type
+   variables bound by \<eta> *)
+lemma constr_type_args:
+  assumes env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and cc: "constructor_class \<Sigma> \<Gamma> e = Some (Ok (C, explicit))"
+    and "explicit = Some \<tau>s \<or> explicit = None
+      \<and> inferred_type_args \<Sigma> (type_params \<Sigma> C) \<sigma>s (map (synth_expr_at \<Sigma> \<Gamma> \<circ> snd) \<sigma>es) = Ok \<tau>s"
+  shows "length \<tau>s = length (type_params \<Sigma> C) \<and> (\<forall>\<tau> \<in> set \<tau>s. fv \<tau> \<subseteq> fst ` set \<eta>)"
+  using assms(3)
+proof
+  assume "explicit = Some \<tau>s"
+  with constructor_class_Ok[OF cc] obtain \<psi> where "resolve_type \<Sigma> \<Gamma> \<psi> = Ok (TyClass C \<tau>s)"
+    and len: "length \<tau>s = length (type_params \<Sigma> C)"
+    by auto
+  from resolve_type_tyvars[OF this(1)] have "\<forall>\<tau> \<in> set \<tau>s. fv \<tau> \<subseteq> tyvars \<Gamma>" by auto
+  with wf_env_tyvars[OF env] len show ?thesis by blast
+next
+  assume "explicit = None \<and> inferred_type_args \<Sigma> (type_params \<Sigma> C) \<sigma>s (map (synth_expr_at \<Sigma> \<Gamma> \<circ> snd) \<sigma>es) = Ok \<tau>s"
+  then have inferred: "inferred_type_args \<Sigma> (type_params \<Sigma> C) \<sigma>s (map (synth_expr_at \<Sigma> \<Gamma> \<circ> snd) \<sigma>es) = Ok \<tau>s"
+    by blast
+  have "fv \<tau>' \<subseteq> fst ` set \<eta>" if "Ok \<tau>' \<in> set (map (synth_expr_at \<Sigma> \<Gamma> \<circ> snd) \<sigma>es)" for \<tau>'
+    using that wf_env_tyvars[OF env] by (fastforce dest!: synth_at_tyvars[OF sym])
+  with inferred_type_args_length[OF inferred] inferred_type_args_fv[OF inferred] show ?thesis by blast
+qed
+
+(* Typing by synthesis of a call of the constructor of class C, at C and type arguments over the type variables
+   bound by \<eta>, with each argument typed at the type of its field *)
+lemma constr_call_typed:
+  assumes callee: "sound_expr \<rho> (node e) (Val (VClass C))" and env: "\<eta> \<turnstile> \<rho> : \<Gamma>"
+    and synth: "synth_expr \<Sigma> \<Gamma> (ExprCall e (es, kws)) = Ok \<tau>" and nolam: "lambda_of (node e) = None"
+  obtains x\<sigma>s \<sigma>es \<tau>s where "C |\<in>| fmdom \<Sigma>" and "fields \<Sigma> C = FieldScheme (type_params \<Sigma> C) x\<sigma>s"
+    and "constructor_args C (FieldScheme (type_params \<Sigma> C) x\<sigma>s) es kws = Ok \<sigma>es"
+    and "list_all2 (has_type_at \<Sigma> \<eta> \<Gamma>) (map snd \<sigma>es) (map (subst \<tau>s (type_params \<Sigma> C) \<circ> fst) \<sigma>es)"
+    and "\<tau> = TyClass C \<tau>s" and "length \<tau>s = length (type_params \<Sigma> C)" and "\<forall>\<tau>' \<in> set \<tau>s. fv \<tau>' \<subseteq> fst ` set \<eta>"
+proof (cases "constructor_class \<Sigma> \<Gamma> e")
+  case None
+  with synth nolam obtain \<sigma> where "callee \<Sigma> \<Gamma> e es = Ok \<sigma>" by (auto simp: bind_sum_def split: sum.splits)
+  from class_callee[OF callee env this] show thesis ..
+next
+  case (Some m)
+  from synth nolam this obtain C' explicit x\<sigma>s \<sigma>es \<tau>s where m: "m = Ok (C', explicit)"
+    and fields: "fields \<Sigma> C' = FieldScheme (type_params \<Sigma> C') x\<sigma>s"
+    and args: "constructor_args C' (FieldScheme (type_params \<Sigma> C') x\<sigma>s) es kws = Ok \<sigma>es"
+    and checked: "\<forall>(\<sigma>, e') \<in> set \<sigma>es. check_expr_at \<Sigma> \<Gamma> e' (subst \<tau>s (type_params \<Sigma> C') \<sigma>) = Ok ()"
+    and \<tau>: "\<tau> = TyClass C' \<tau>s"
+    and \<tau>s: "explicit = Some \<tau>s \<or> explicit = None
+      \<and> inferred_type_args \<Sigma> (type_params \<Sigma> C') (map fst \<sigma>es) (map (synth_expr_at \<Sigma> \<Gamma> \<circ> snd) \<sigma>es) = Ok \<tau>s"
+    by (rule constr_synth)
+  from Some m have cc: "constructor_class \<Sigma> \<Gamma> e = Some (Ok (C', explicit))" by simp
+  from sound_expr_class[OF callee env constructor_class_Ok_entry[OF cc]] have C': "C' = C" by simp
+  from sound_expr_name[OF callee env constructor_class_Ok_entry[OF cc]] have "\<turnstile> VClass C : Type C'" by simp
+  then have dom: "C |\<in>| fmdom \<Sigma>" using C' by (auto dest: wf_class_dom)
+  from constr_type_args[OF env cc \<tau>s] C' have len: "length \<tau>s = length (type_params \<Sigma> C)"
+    and fv: "\<forall>\<tau>' \<in> set \<tau>s. fv \<tau>' \<subseteq> fst ` set \<eta>"
+    by simp_all
+  note fields = fields[unfolded C'] and args = args[unfolded C'] and checked = checked[unfolded C']
+    and \<tau> = \<tau>[unfolded C']
+  have fv_field: "fv \<sigma> \<subseteq> set (type_params \<Sigma> C)" if "\<sigma> \<in> snd ` set x\<sigma>s" for \<sigma>
+  proof -
+    from that obtain x where x: "(x, \<sigma>) \<in> set x\<sigma>s" by auto
+    have "\<forall>(x, \<sigma>) \<in> set x\<sigma>s. fv \<sigma> \<subseteq> set (type_params \<Sigma> C)" using fields_fv[OF wf_class_table dom] fields by simp
+    from bspec[OF this x] show ?thesis by simp
+  qed
+  have "list_all2 (has_type_at \<Sigma> \<eta> \<Gamma>) (map snd \<sigma>es) (map (subst \<tau>s (type_params \<Sigma> C) \<circ> fst) \<sigma>es)"
+    unfolding list_all2_map1 list_all2_map2
+  proof (rule list.rel_refl_strong)
+    fix z
+    assume z: "z \<in> set \<sigma>es"
+    obtain \<sigma> e' where z': "z = (\<sigma>, e')" by (cases z)
+    from constructor_args_field[OF args z[unfolded z']] have "\<sigma> \<in> snd ` set x\<sigma>s" .
+    with fv_field fv_subst[OF _ len] fv have "fv (subst \<tau>s (type_params \<Sigma> C) \<sigma>) \<subseteq> fst ` set \<eta>" by blast
+    with checked z z' show "has_type_at \<Sigma> \<eta> \<Gamma> (snd z) ((subst \<tau>s (type_params \<Sigma> C) \<circ> fst) z)"
+      by (auto intro: has_type_check_at)
+  qed
+  then show thesis by (rule that[OF dom fields args _ \<tau> len fv])
+qed
+
 lemma call_fail_args_sound:
-  "\<lbrakk> sound_expr \<rho> (node e) (Val v) ; sound_exprs \<rho> es (Aborts \<kappa>) \<rbrakk>
-  \<Longrightarrow> sound_expr \<rho> (ExprCall e (es, [])) (Aborts \<kappa>)"
-  sorry
+  assumes callee: "sound_expr \<rho> (node e) (Val v)" and args: "sound_exprs \<rho> es (Aborts \<kappa>)"
+  shows "sound_expr \<rho> (ExprCall e (es, [])) (Aborts \<kappa>)"
+  unfolding sound_expr_def
+proof (intro conjI allI impI)
+  fix \<eta> \<Gamma> \<tau>
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and typed: "has_type \<Sigma> \<eta> \<Gamma> (ExprCall e (es, [])) \<tau>"
+  have "\<exists>\<tau>s. list_all2 (has_type_at \<Sigma> \<eta> \<Gamma>) es \<tau>s"
+  proof (cases "lambda_of (node e)")
+    case (Some xe)
+    then obtain xs e' where "lambda_of (node e) = Some (xs, e')" by (cases xe) simp
+    with typed obtain \<tau>s where "those_sum (map (synth_expr_at \<Sigma> \<Gamma>) es) = Ok \<tau>s" by (rule call_lambda_typed)
+    from those_sum_map_Ok[OF this] show ?thesis by (blast intro: list.rel_mono_strong has_type_synth_at)
+  next
+    case None
+    from typed None show ?thesis
+    proof (cases rule: call_typed)
+      case (synth \<tau>')
+      show ?thesis
+      proof (cases "constructor_class \<Sigma> \<Gamma> e")
+        case (Some m)
+        from constructor_class_entry[OF this] obtain C where "expr_entry \<Gamma> (node e) = Some (Type C)" by blast
+        from sound_expr_class[OF callee env this] callee have cls: "sound_expr \<rho> (node e) (Val (VClass C))"
+          by simp
+        obtain x\<sigma>s \<sigma>es \<tau>s where "C |\<in>| fmdom \<Sigma>"
+          and "fields \<Sigma> C = FieldScheme (type_params \<Sigma> C) x\<sigma>s"
+          and args: "constructor_args C (FieldScheme (type_params \<Sigma> C) x\<sigma>s) es [] = Ok \<sigma>es"
+          and "list_all2 (has_type_at \<Sigma> \<eta> \<Gamma>) (map snd \<sigma>es) (map (subst \<tau>s (type_params \<Sigma> C) \<circ> fst) \<sigma>es)"
+          and "\<tau>' = TyClass C \<tau>s" and "length \<tau>s = length (type_params \<Sigma> C)"
+          and "\<forall>\<tau>'' \<in> set \<tau>s. fv \<tau>'' \<subseteq> fst ` set \<eta>"
+          by (rule constr_call_typed[OF cls env synth(1) None])
+        with constructor_args_exprs(1)[OF args] show ?thesis by auto
+      next
+        case c: None
+        with synth(1) None obtain \<sigma> \<tau>'' where "callee \<Sigma> \<Gamma> e es = Ok \<sigma>" and "synth_call \<Sigma> \<Gamma> e \<sigma> [] es = Ok \<tau>''"
+          by (auto simp: bind_sum_def split: sum.splits)
+        from callee_call[OF callee env this] show ?thesis by blast
+      qed
+    next
+      case (stmt \<sigma>)
+      from callee_call_stmt[OF callee env stmt] show ?thesis by blast
+    qed
+  qed
+  then obtain \<tau>s where "list_all2 (has_type_at \<Sigma> \<eta> \<Gamma>) es \<tau>s" by blast
+  from sound_exprs_abort[OF args env this] show "result_typed (Aborts \<kappa>) (inst \<eta> \<tau>)" by simp
+qed simp
+
+(* Callee of a call, a class and not a lambda *)
+lemma class_callee_lambda: "\<rho>, node e \<Rightarrow>\<^sub>e Val (VClass C) \<Longrightarrow> lambda_of (node e) = None"
+proof (cases "lambda_of (node e)")
+  case (Some xe)
+  then obtain xs e' where "node e = ExprLambda xs e'" by (cases "node e") auto
+  then show "\<rho>, node e \<Rightarrow>\<^sub>e Val (VClass C) \<Longrightarrow> lambda_of (node e) = None" by (auto elim: LambdaE)
+qed
 
 lemma constr_sound:
-  "\<lbrakk> sound_expr \<rho> (node e) (Val (VClass C)) ; sound_exprs \<rho> (es @ map snd kws) (Val us)
-   ; field_map C (take (length es) us) (zip (map fst kws) (drop (length es) us)) = Some xus \<rbrakk>
-  \<Longrightarrow> sound_expr \<rho> (ExprCall e (es, kws)) (Val (VObject C xus))"
-  sorry
+  assumes eval: "\<rho>, node e \<Rightarrow>\<^sub>e Val (VClass C)" and callee: "sound_expr \<rho> (node e) (Val (VClass C))"
+    and args: "sound_exprs \<rho> (es @ map snd kws) (Val us)"
+    and xus: "field_map C (take (length es) us) (zip (map fst kws) (drop (length es) us)) = Some xus"
+  shows "sound_expr \<rho> (ExprCall e (es, kws)) (Val (VObject C xus))"
+proof (rule sound_exprI)
+  fix \<eta> \<Gamma> \<tau>
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and synth: "synth_expr \<Sigma> \<Gamma> (ExprCall e (es, kws)) = Ok \<tau>"
+  obtain x\<sigma>s \<sigma>es \<tau>s where dom: "C |\<in>| fmdom \<Sigma>"
+    and fields: "fields \<Sigma> C = FieldScheme (type_params \<Sigma> C) x\<sigma>s"
+    and cargs: "constructor_args C (FieldScheme (type_params \<Sigma> C) x\<sigma>s) es kws = Ok \<sigma>es"
+    and typed: "list_all2 (has_type_at \<Sigma> \<eta> \<Gamma>) (map snd \<sigma>es) (map (subst \<tau>s (type_params \<Sigma> C) \<circ> fst) \<sigma>es)"
+    and \<tau>: "\<tau> = TyClass C \<tau>s" and len: "length \<tau>s = length (type_params \<Sigma> C)"
+    and fv: "\<forall>\<tau>' \<in> set \<tau>s. fv \<tau>' \<subseteq> fst ` set \<eta>"
+    by (rule constr_call_typed[OF callee env synth class_callee_lambda[OF eval]])
+  let ?\<alpha>s = "type_params \<Sigma> C" and ?n = "length es" and ?xs = "map fst x\<sigma>s"
+  let ?R = "\<lambda>v \<sigma>. \<turnstile> v : Ty (inst \<eta> (subst \<tau>s ?\<alpha>s \<sigma>))"
+  have names: "field_names \<Sigma> C = ?xs" using fields by (simp add: field_names_def)
+  note n_kws = constructor_args_Ok(1, 2)[OF cargs]
+  from sound_exprs_typed[OF args env typed[unfolded constructor_args_exprs(1)[OF cargs]]]
+  have "list_all2 ?R us (map fst \<sigma>es)" by (simp add: list_all2_map2)
+  then have rel: "list_all2 ?R us (map snd (take ?n x\<sigma>s) @ map (\<lambda>(y, _). the (map_of x\<sigma>s y)) kws)"
+    by (simp only: constructor_args_exprs(2)[OF cargs])
+  have dist: "distinct ?xs" using wf_class_table_distinct[OF wf_class_table dom] names by simp
+  have len_us: "length us = ?n + length kws" using rel n_kws(1) by (auto dest: list_all2_lengthD)
+  have xus': "xus = zip (take ?n ?xs) (take ?n us)
+    @ map (\<lambda>y. (y, the (map_of (zip (map fst kws) (drop ?n us)) y))) (drop ?n ?xs)"
+    using xus names len_us by (simp add: field_map_def Let_def min_def split: if_splits)
+  from field_values_rel[OF dist n_kws rel] len_us n_kws(1)
+  have rel': "list_all2 ?R (map snd xus) (map snd x\<sigma>s)" by (simp add: xus' comp_def min_def)
+  have eq: "inst \<eta> (subst \<tau>s ?\<alpha>s \<sigma>) = subst (map (inst \<eta>) \<tau>s) ?\<alpha>s \<sigma>" if "\<sigma> \<in> set (map snd x\<sigma>s)" for \<sigma>
+  proof -
+    from that obtain x where x: "(x, \<sigma>) \<in> set x\<sigma>s" by auto
+    have "\<forall>(x, \<sigma>) \<in> set x\<sigma>s. fv \<sigma> \<subseteq> set ?\<alpha>s" using fields_fv[OF wf_class_table dom] fields by simp
+    from bspec[OF this x] have "fv \<sigma> \<subseteq> set ?\<alpha>s" by simp
+    then have "fv \<sigma> \<inter> set (map fst (filter (\<lambda>(\<alpha>, _). \<alpha> \<notin> set ?\<alpha>s) \<eta>)) = {}" by auto
+    then have "inst (filter (\<lambda>(\<alpha>, _). \<alpha> \<notin> set ?\<alpha>s) \<eta>) \<sigma> = \<sigma>" by (rule subst_fresh)
+    with inst_subst[OF wf_env_closed[OF env] len] show ?thesis by simp
+  qed
+  have "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty (subst (map (inst \<eta>) \<tau>s) ?\<alpha>s \<sigma>)) (map snd xus) (map snd x\<sigma>s)"
+  proof (rule list.rel_mono_strong[OF rel'])
+    fix v \<sigma>
+    assume "v \<in> set (map snd xus)" and "\<sigma> \<in> set (map snd x\<sigma>s)" and "?R v \<sigma>"
+    with eq show "\<turnstile> v : Ty (subst (map (inst \<eta>) \<tau>s) ?\<alpha>s \<sigma>)" by simp
+  qed
+  then have "list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) (map snd xus) (field_types \<Sigma> C (map (inst \<eta>) \<tau>s))"
+    by (simp add: field_types_def fields split_def list_all2_map2)
+  moreover have "map fst xus = field_names \<Sigma> C" using len_us n_kws(1) by (simp add: xus' names min_def comp_def)
+  ultimately have "\<turnstile> VObject C xus : Ty (TyClass C (map (inst \<eta>) \<tau>s))" using dom by (blast intro: ValObj)
+  with \<tau> show "result_typed (Val (VObject C xus)) (inst \<eta> \<tau>)" by simp
+next
+  fix \<eta> \<Gamma> \<tau>
+  assume "check_expr' \<Sigma> \<Gamma> (ExprCall e (es, kws)) \<tau> = Some (Ok ())"
+  with class_callee_lambda[OF eval] show "result_typed (Val (VObject C xus)) (inst \<eta> \<tau>)" by simp
+next
+  fix \<eta> \<Gamma>
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "call_stmt \<Sigma> \<Gamma> (ExprCall e (es, kws))"
+  then obtain \<sigma> where "callee \<Sigma> \<Gamma> e es = Ok \<sigma>" by auto
+  from class_callee[OF callee env this] show "result_typed (Val (VObject C xus)) (inst \<eta> (TyPrim object))" ..
+qed simp
 
 lemma constr_arity_sound:
-  "\<lbrakk> sound_expr \<rho> (node e) (Val (VClass C)) ; sound_exprs \<rho> (es @ map snd kws) (Val us)
-   ; field_map C (take (length es) us) (zip (map fst kws) (drop (length es) us)) = None \<rbrakk>
-  \<Longrightarrow> sound_expr \<rho> (ExprCall e (es, kws)) (Aborts TypeError)"
-  sorry
+  assumes eval: "\<rho>, node e \<Rightarrow>\<^sub>e Val (VClass C)" and callee: "sound_expr \<rho> (node e) (Val (VClass C))"
+    and args: "sound_exprs \<rho> (es @ map snd kws) (Val us)"
+    and none: "field_map C (take (length es) us) (zip (map fst kws) (drop (length es) us)) = None"
+  shows "sound_expr \<rho> (ExprCall e (es, kws)) (Aborts TypeError)"
+proof (rule sound_exprI)
+  fix \<eta> \<Gamma> \<tau>
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and synth: "synth_expr \<Sigma> \<Gamma> (ExprCall e (es, kws)) = Ok \<tau>"
+  obtain x\<sigma>s \<sigma>es \<tau>s where dom: "C |\<in>| fmdom \<Sigma>"
+    and fields: "fields \<Sigma> C = FieldScheme (type_params \<Sigma> C) x\<sigma>s"
+    and cargs: "constructor_args C (FieldScheme (type_params \<Sigma> C) x\<sigma>s) es kws = Ok \<sigma>es"
+    and typed: "list_all2 (has_type_at \<Sigma> \<eta> \<Gamma>) (map snd \<sigma>es) (map (subst \<tau>s (type_params \<Sigma> C) \<circ> fst) \<sigma>es)"
+    and \<tau>: "\<tau> = TyClass C \<tau>s" and len: "length \<tau>s = length (type_params \<Sigma> C)"
+    and fv: "\<forall>\<tau>' \<in> set \<tau>s. fv \<tau>' \<subseteq> fst ` set \<eta>"
+    by (rule constr_call_typed[OF callee env synth class_callee_lambda[OF eval]])
+  have names: "field_names \<Sigma> C = map fst x\<sigma>s" using fields by (simp add: field_names_def)
+  note n_kws = constructor_args_Ok(1, 2)[OF cargs]
+  have "length \<sigma>es = length es + length kws" using arg_cong[OF constructor_args_exprs(1)[OF cargs], of length] by simp
+  with sound_exprs_typed[OF args env typed[unfolded constructor_args_exprs(1)[OF cargs]]]
+  have "length us = length es + length kws" by (auto dest: list_all2_lengthD)
+  with none n_kws names show "result_typed (Aborts TypeError) (inst \<eta> \<tau>)"
+    by (simp add: field_map_def Let_def min_def split: if_splits)
+next
+  fix \<eta> \<Gamma> \<tau>
+  assume "check_expr' \<Sigma> \<Gamma> (ExprCall e (es, kws)) \<tau> = Some (Ok ())"
+  with class_callee_lambda[OF eval] show "result_typed (Aborts TypeError) (inst \<eta> \<tau>)" by simp
+next
+  fix \<eta> \<Gamma>
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "call_stmt \<Sigma> \<Gamma> (ExprCall e (es, kws))"
+  then obtain \<sigma> where "callee \<Sigma> \<Gamma> e es = Ok \<sigma>" by auto
+  from class_callee[OF callee env this] show "result_typed (Aborts TypeError) (inst \<eta> (TyPrim object))" ..
+qed simp
 
 lemma constr_fail_sound:
-  "\<lbrakk> sound_expr \<rho> (node e) (Val (VClass C)) ; sound_exprs \<rho> (es @ map snd kws) (Aborts \<kappa>) \<rbrakk>
-  \<Longrightarrow> sound_expr \<rho> (ExprCall e (es, kws)) (Aborts \<kappa>)"
-  sorry
+  assumes eval: "\<rho>, node e \<Rightarrow>\<^sub>e Val (VClass C)" and callee: "sound_expr \<rho> (node e) (Val (VClass C))"
+    and args: "sound_exprs \<rho> (es @ map snd kws) (Aborts \<kappa>)"
+  shows "sound_expr \<rho> (ExprCall e (es, kws)) (Aborts \<kappa>)"
+proof (rule sound_exprI)
+  fix \<eta> \<Gamma> \<tau>
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and synth: "synth_expr \<Sigma> \<Gamma> (ExprCall e (es, kws)) = Ok \<tau>"
+  obtain x\<sigma>s \<sigma>es \<tau>s where dom: "C |\<in>| fmdom \<Sigma>"
+    and fields: "fields \<Sigma> C = FieldScheme (type_params \<Sigma> C) x\<sigma>s"
+    and cargs: "constructor_args C (FieldScheme (type_params \<Sigma> C) x\<sigma>s) es kws = Ok \<sigma>es"
+    and typed: "list_all2 (has_type_at \<Sigma> \<eta> \<Gamma>) (map snd \<sigma>es) (map (subst \<tau>s (type_params \<Sigma> C) \<circ> fst) \<sigma>es)"
+    and \<tau>: "\<tau> = TyClass C \<tau>s" and len: "length \<tau>s = length (type_params \<Sigma> C)"
+    and fv: "\<forall>\<tau>' \<in> set \<tau>s. fv \<tau>' \<subseteq> fst ` set \<eta>"
+    by (rule constr_call_typed[OF callee env synth class_callee_lambda[OF eval]])
+  from sound_exprs_abort[OF args env typed[unfolded constructor_args_exprs(1)[OF cargs]]]
+  show "result_typed (Aborts \<kappa>) (inst \<eta> \<tau>)" by simp
+next
+  fix \<eta> \<Gamma> \<tau>
+  assume "check_expr' \<Sigma> \<Gamma> (ExprCall e (es, kws)) \<tau> = Some (Ok ())"
+  with class_callee_lambda[OF eval] show "result_typed (Aborts \<kappa>) (inst \<eta> \<tau>)" by simp
+next
+  fix \<eta> \<Gamma>
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "call_stmt \<Sigma> \<Gamma> (ExprCall e (es, kws))"
+  then obtain \<sigma> where "callee \<Sigma> \<Gamma> e es = Ok \<sigma>" by auto
+  from class_callee[OF callee env this] show "result_typed (Aborts \<kappa>) (inst \<eta> (TyPrim object))" ..
+qed simp
 
 lemma exprs_nil_sound: "sound_exprs \<rho> [] (Val [])"
   by (simp add: sound_exprs_def)
