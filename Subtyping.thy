@@ -243,13 +243,17 @@ proof (induction \<sigma>)
 qed (auto intro!: SubtyTuple SubtyCallable SubtyClass list.rel_refl_strong intro: subty_subtys.intros
       simp: subtys_list_all2 list_all2_map1 list_all2_map2)
 
-lemma class_subty_union:
-  "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> \<sigma> = TyClass C \<tau>s \<Longrightarrow> \<tau> = TyUnion \<tau>' \<tau>'' \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: \<tau>' \<or> \<Sigma> \<turnstile> \<sigma> <: \<tau>''"
+(* Subtyping of a type other than a union by a union, as subtyping by one of its components *)
+lemma nonunion_subty_union:
+  "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> \<tau> = TyUnion \<tau>' \<tau>'' \<Longrightarrow> \<not> is_union \<sigma> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: \<tau>' \<or> \<Sigma> \<turnstile> \<sigma> <: \<tau>''"
   and "\<Sigma> \<turnstile> \<sigma>s [<:] \<tau>s' \<Longrightarrow> True"
-proof (induction arbitrary: C \<tau>s rule: subty_subtys.inducts)
+proof (induction rule: subty_subtys.inducts)
   case (SubtyClassExtend C D \<sigma>s \<tau>s \<tau>)
-  then show ?case by (blast intro: subty_subtys.SubtyClassExtend)
-qed auto
+  then show ?case by (auto intro: subty_subtys.SubtyClassExtend)
+next
+  case (SubtyLiteral l \<tau>)
+  then show ?case by (cases l) (auto intro: subty_subtys.SubtyLiteral)
+qed (auto intro: subty_subtys.SubtyNever)
 
 (* Field of class C at type arguments \<tau>s, equivalent to the field of a class above it *)
 lemma subty_class_fields:

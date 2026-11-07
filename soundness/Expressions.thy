@@ -331,6 +331,77 @@ next
   then show ?case by (blast intro: subty_trans')
 qed auto
 
+lemma nonunion_witness: "\<lbrakk> \<turnstile> v : Ty \<tau> ; \<not> is_union \<tau> \<rbrakk> \<Longrightarrow> \<exists>\<sigma>. \<not> is_union \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau> \<and> \<turnstile> v : Ty \<sigma>"
+  by (blast intro: SubtyRefl)
+
+(* Value typed at a type other than a union, below any type at which it is typed *)
+lemma wf_val_nonunion:
+  "\<turnstile> v : \<theta> \<Longrightarrow> \<forall>\<tau>. \<theta> = Ty \<tau> \<longrightarrow> (\<exists>\<sigma>. \<not> is_union \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau> \<and> \<turnstile> v : Ty \<sigma>)"
+  "\<eta> \<turnstile> \<rho> : \<Gamma> \<Longrightarrow> True"
+proof (induction rule: wf_val_wf_env.inducts)
+  case (ValLit l)
+  have "\<turnstile> VLit l : Ty (TyLiteral l)" by (rule wf_val_wf_env.ValLit)
+  then show ?case by (auto intro: nonunion_witness)
+next
+  case (ValLitFloat x)
+  have "\<turnstile> VLit (LitFloat x) : Ty (TyPrim float)" by (rule wf_val_wf_env.ValLitFloat)
+  then show ?case by (auto intro: nonunion_witness)
+next
+  case (ValList vs \<tau>)
+  then have "\<turnstile> VList vs : Ty (TyList \<tau>)" by (blast intro: wf_val_wf_env.ValList)
+  then show ?case by (auto intro: nonunion_witness)
+next
+  case (ValTuple vs \<tau>s)
+  then have "list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) vs \<tau>s" by (rule list_all2_mono) simp
+  then have "\<turnstile> VTuple vs : Ty (TyTuple \<tau>s)" by (rule wf_val_wf_env.ValTuple)
+  then show ?case by (auto intro: nonunion_witness)
+next
+  case (ValDict \<delta> \<tau>)
+  then have "\<turnstile> VDict \<delta> : Ty (TyDict \<tau>)" by (blast intro: wf_val_wf_env.ValDict)
+  then show ?case by (auto intro: nonunion_witness)
+next
+  case (ValLambda \<eta> \<rho> \<Gamma> xs \<sigma>s \<Delta> e \<tau>)
+  then have "\<turnstile> Lam(\<rho>, xs, e) : Ty (inst \<eta> (TyCallable \<sigma>s \<tau>))" by (blast intro: wf_val_wf_env.ValLambda)
+  then show ?case by (auto intro: nonunion_witness)
+next
+  case (ValDef \<eta> \<rho> \<Gamma> ds \<pi>s \<Delta> i \<alpha>s \<tau>)
+  then have "\<turnstile> Def(\<rho>, ds, i) : inst_entry \<eta> (signature_entry (TyScheme \<alpha>s \<tau>))"
+    by (blast intro: wf_val_wf_env.ValDef)
+  with ValDef show ?case
+    by (auto dest!: def_signatures_callable simp: inst_entry_signature_entry intro: nonunion_witness
+        split: if_splits)
+next
+  case (ValInst v \<alpha>s \<sigma> \<tau>s)
+  then have v: "\<turnstile> v : Ty (subst \<tau>s \<alpha>s \<sigma>)" by (blast intro: wf_val_wf_env.ValInst)
+  from wf_scheme_callable(1)[OF ValInst(1), rule_format, OF refl] obtain \<sigma>s' \<tau>' where "\<sigma> = TyCallable \<sigma>s' \<tau>'"
+    by auto
+  with v show ?case by (auto intro: nonunion_witness)
+next
+  case (ValObj C xvs \<tau>s)
+  from ValObj(3) have "list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) (map snd xvs) (field_types \<Sigma> C \<tau>s)"
+    by (rule list_all2_mono) simp
+  with ValObj(1, 2) have "\<turnstile> VObject C xvs : Ty (TyClass C \<tau>s)" by (rule wf_val_wf_env.ValObj)
+  then show ?case by (auto intro: nonunion_witness)
+next
+  case (ValSub v \<sigma> \<tau>)
+  then show ?case by (blast intro: subty_trans')
+next
+  case ValPrim
+  from prim_entry_callable[OF ValPrim] wf_val_wf_env.ValPrim[OF ValPrim] show ?case
+    by (auto intro: nonunion_witness)
+qed auto
+
+lemma wf_val_union:
+  assumes "\<turnstile> v : Ty (TyUnion \<sigma> \<sigma>')"
+  shows "\<turnstile> v : Ty \<sigma> \<or> \<turnstile> v : Ty \<sigma>'"
+proof -
+  from wf_val_nonunion(1)[OF assms] obtain \<tau> where "\<not> is_union \<tau>" and sub: "\<Sigma> \<turnstile> \<tau> <: TyUnion \<sigma> \<sigma>'"
+    and v: "\<turnstile> v : Ty \<tau>"
+    by blast
+  from nonunion_subty_union(1)[OF sub refl this(1)] show ?thesis
+    by (auto intro: ValSub[OF v])
+qed
+
 (* Field of an object of class C, typed by the field of the class at type arguments typing the fields *)
 lemma object_field:
   assumes "map fst xvs = field_names \<Sigma> C" and "list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) (map snd xvs) (field_types \<Sigma> C \<tau>s)"
@@ -894,7 +965,7 @@ proof (induction \<sigma> arbitrary: \<tau>)
     by (auto simp: bind_sum_def split: sum.splits)
   have "\<Sigma> \<turnstile> inst \<eta> \<tau>' <: inst \<eta> \<tau>" and "\<Sigma> \<turnstile> inst \<eta> \<tau>'' <: inst \<eta> \<tau>"
     unfolding \<tau> by (rule subst_subty', rule join_upper)+
-  moreover note class_subty_union(1)[OF TyUnion(3)[simplified] refl refl]
+  moreover note nonunion_subty_union(1)[OF TyUnion(3)[simplified] refl, simplified]
   ultimately show ?case using TyUnion(1)[OF _ \<tau>' TyUnion(5)] TyUnion(2)[OF _ \<tau>'' TyUnion(5)]
     by (blast intro: subty_trans')
 next

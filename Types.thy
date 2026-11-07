@@ -36,6 +36,11 @@ where
 "sized (TyClass C []) = (C = range_class)" |
 "sized _ = False"
 
+fun is_union :: "ty \<Rightarrow> bool"
+where
+"is_union (TyUnion _ _) = True" |
+"is_union _ = False"
+
 fun subst :: "ty list \<Rightarrow> var list \<Rightarrow> ty \<Rightarrow> ty"
 where
 "subst \<tau>s \<alpha>s (TyVar \<alpha>) = (case map_of (zip \<alpha>s \<tau>s) \<alpha> of Some \<tau> \<Rightarrow> \<tau> | None \<Rightarrow> TyVar \<alpha>)" |
