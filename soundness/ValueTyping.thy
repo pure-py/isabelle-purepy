@@ -42,8 +42,15 @@ lemma inst_entry_signature_entry:
    (if \<alpha>s = [] then Ty (inst \<eta> \<tau>) else Scheme (TyScheme \<alpha>s (inst (filter (\<lambda>(\<alpha>, _). \<alpha> \<notin> set \<alpha>s) \<eta>) \<tau>)))"
   by (cases \<alpha>s) simp_all
 
+lemma subst_fresh: "fv \<tau> \<inter> set \<alpha>s = {} \<Longrightarrow> subst \<tau>s \<alpha>s \<tau> = \<tau>"
+proof (induction \<tau>)
+  case (TyVar \<alpha>)
+  then have "map_of (zip \<alpha>s \<tau>s) \<alpha> = None" by (auto simp: map_of_eq_None_iff dest: set_zip_leftD)
+  then show ?case by simp
+qed (auto intro: map_idI)
+
 lemma subst_closed: "fv \<tau> = {} \<Longrightarrow> subst \<tau>s \<alpha>s \<tau> = \<tau>"
-  by (induction \<tau>) (auto intro: map_idI)
+  by (simp add: subst_fresh)
 
 lemma subst_Nil [simp]: "subst [] \<alpha>s \<tau> = \<tau>"
   by (induction \<tau>) (auto intro: map_idI)
@@ -53,6 +60,12 @@ lemma inst_scheme_Nil [simp]: "inst_scheme [] \<pi> = \<pi>"
 
 lemma inst_entry_Nil [simp]: "inst_entry [] \<theta> = \<theta>"
   by (cases \<theta>) simp_all
+
+lemma inst_scheme_closed: "fv_scheme \<pi> = {} \<Longrightarrow> inst_scheme \<eta> \<pi> = \<pi>"
+  by (cases \<pi>) (force intro!: subst_fresh)
+
+lemma inst_entry_closed: "fv_entry \<theta> = {} \<Longrightarrow> inst_entry \<eta> \<theta> = \<theta>"
+  by (cases \<theta>) (simp_all add: subst_closed inst_scheme_closed)
 
 lemma inst_closed: "\<lbrakk> closed_inst \<eta> ; fv \<tau> \<subseteq> fst ` set \<eta> \<rbrakk> \<Longrightarrow> fv (inst \<eta> \<tau>) = {}"
   by (induction \<tau>)
