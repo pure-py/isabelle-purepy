@@ -106,7 +106,7 @@ ValTuple: "list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) vs \<tau>s 
 ValDict:
   "\<lbrakk> \<forall>w v. (w, v) \<in> set \<delta> \<longrightarrow> \<turnstile> v : Ty \<tau> ; distinct (map fst \<delta>) \<rbrakk> \<Longrightarrow> \<turnstile> VDict \<delta> : Ty (TyDict \<tau>)" |
 ValLambda:
-  "\<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; params_cxt xs \<sigma>s = Ok \<Delta> ; check_expr_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e \<tau> = Ok ()
+  "\<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; length xs = length \<sigma>s ; params_cxt xs \<sigma>s = Ok \<Delta> ; check_expr_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e \<tau> = Ok ()
    ; fv (TyCallable \<sigma>s \<tau>) \<subseteq> fst ` set \<eta> \<rbrakk>
   \<Longrightarrow> \<turnstile> Lam(\<rho>, xs, e) : Ty (inst \<eta> (TyCallable \<sigma>s \<tau>))" |
 ValDef:

@@ -359,12 +359,64 @@ where
 "intro_typed (VObject C xvs) \<sigma> =
   (\<exists>\<tau>s. \<sigma> = TyClass C \<tau>s \<and> C |\<in>| fmdom \<Sigma> \<and> map fst xvs = field_names \<Sigma> C
      \<and> list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) (map snd xvs) (field_types \<Sigma> C \<tau>s))" |
-"intro_typed v \<sigma> = ((\<exists>\<sigma>s \<tau>. \<sigma> = TyCallable \<sigma>s \<tau>) \<and> \<turnstile> v : Ty \<sigma>)"
+"intro_typed Lam(\<rho>, xs, e) \<sigma> =
+  (\<exists>\<eta> \<Gamma> \<sigma>s \<tau> \<Delta>. \<eta> \<turnstile> \<rho> : \<Gamma> \<and> length xs = length \<sigma>s \<and> params_cxt xs \<sigma>s = Ok \<Delta>
+     \<and> check_expr_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e \<tau> = Ok () \<and> fv (TyCallable \<sigma>s \<tau>) \<subseteq> fst ` set \<eta>
+     \<and> \<sigma> = inst \<eta> (TyCallable \<sigma>s \<tau>))" |
+"intro_typed Def(\<rho>, ds, i) \<sigma> =
+  (\<exists>\<eta> \<Gamma> \<pi>s \<alpha>s \<sigma>s \<tau> \<tau>s. \<eta> \<turnstile> \<rho> : \<Gamma>
+     \<and> those_sum (map (\<lambda>d. locate (pos_of d) (def_signature \<Sigma> \<Gamma> (node d))) ds) = Ok \<pi>s
+     \<and> all_sum
+         (map2 (check_def_at \<Sigma> (\<Gamma> \<otimes> fmap_of_list (zip (map (def_name \<circ> node) ds) (map signature_entry \<pi>s))))
+           ds \<pi>s) = Ok ()
+     \<and> (\<forall>\<pi> \<in> set \<pi>s. fv_scheme \<pi> \<subseteq> fst ` set \<eta>)
+     \<and> (\<forall>d \<in> set ds. case node d of Def _ \<alpha>s _ _ _ \<Rightarrow> set \<alpha>s \<inter> tyvars \<Gamma> = {})
+     \<and> i < length ds \<and> \<pi>s ! i = TyScheme \<alpha>s (TyCallable \<sigma>s \<tau>)
+     \<and> length \<tau>s = length \<alpha>s \<and> (\<forall>\<tau>' \<in> set \<tau>s. fv \<tau>' = {})
+     \<and> \<sigma> = subst \<tau>s \<alpha>s (inst (filter (\<lambda>(\<alpha>, _). \<alpha> \<notin> set \<alpha>s) \<eta>) (TyCallable \<sigma>s \<tau>)))" |
+"intro_typed (VPrim f) \<sigma> =
+  ((\<exists>\<A> q \<rho> x \<Gamma>. fmlookup (\<E> \<A>) q = Some \<rho> \<and> fmlookup \<rho> x = Some (VPrim f) \<and> fmlookup \<P> q = Some \<Gamma>
+      \<and> fmlookup \<Gamma> x = Some (Ty \<sigma>))
+   \<and> (\<exists>\<sigma>s \<tau>. \<sigma> = TyCallable \<sigma>s \<tau>))" |
+"intro_typed v \<sigma> = False"
+
+lemma intro_def_wf:
+  assumes "\<eta> \<turnstile> \<rho> : \<Gamma>" and "those_sum (map (\<lambda>d. locate (pos_of d) (def_signature \<Sigma> \<Gamma> (node d))) ds) = Ok \<pi>s"
+    and "all_sum
+           (map2 (check_def_at \<Sigma> (\<Gamma> \<otimes> fmap_of_list (zip (map (def_name \<circ> node) ds) (map signature_entry \<pi>s))))
+             ds \<pi>s) = Ok ()"
+    and "\<forall>\<pi> \<in> set \<pi>s. fv_scheme \<pi> \<subseteq> fst ` set \<eta>"
+    and "\<forall>d \<in> set ds. case node d of Def _ \<alpha>s _ _ _ \<Rightarrow> set \<alpha>s \<inter> tyvars \<Gamma> = {}"
+    and "i < length ds" and "\<pi>s ! i = TyScheme \<alpha>s \<tau>" and "length \<tau>s = length \<alpha>s" and "\<forall>\<tau>' \<in> set \<tau>s. fv \<tau>' = {}"
+  shows "\<turnstile> Def(\<rho>, ds, i) : Ty (subst \<tau>s \<alpha>s (inst (filter (\<lambda>(\<alpha>, _). \<alpha> \<notin> set \<alpha>s) \<eta>) \<tau>))"
+proof -
+  have def: "\<turnstile> Def(\<rho>, ds, i) : inst_entry \<eta> (signature_entry (TyScheme \<alpha>s \<tau>))"
+    by (rule wf_val_wf_env.ValDef[OF assms(1, 2) refl assms(3-7)])
+  show ?thesis
+  proof (cases "\<alpha>s = []")
+    case True
+    with def assms(8) show ?thesis by simp
+  next
+    case False
+    with def have "\<turnstile> Def(\<rho>, ds, i) : Scheme (TyScheme \<alpha>s (inst (filter (\<lambda>(\<alpha>, _). \<alpha> \<notin> set \<alpha>s) \<eta>) \<tau>))"
+      by (simp add: inst_entry_signature_entry)
+    from wf_val_wf_env.ValInst[OF this assms(8, 9)] show ?thesis .
+  qed
+qed
 
 lemma intro_typed_wf: "intro_typed v \<sigma> \<Longrightarrow> \<turnstile> v : Ty \<sigma>"
-  by (cases v)
-     (auto intro: wf_val_wf_env.ValLit wf_val_wf_env.ValLitFloat wf_val_wf_env.ValList wf_val_wf_env.ValTuple
-      wf_val_wf_env.ValDict wf_val_wf_env.ValObj)
+proof (cases v)
+  case (VLamClosure \<rho> xs e)
+  then show "intro_typed v \<sigma> \<Longrightarrow> \<turnstile> v : Ty \<sigma>" by (auto intro: wf_val_wf_env.ValLambda[simplified])
+next
+  case (VDefClosure \<rho> ds i)
+  then show "intro_typed v \<sigma> \<Longrightarrow> \<turnstile> v : Ty \<sigma>"
+    by (clarsimp simp only: intro_typed.simps) (rule intro_def_wf, assumption+)
+next
+  case (VPrim f)
+  then show "intro_typed v \<sigma> \<Longrightarrow> \<turnstile> v : Ty \<sigma>" by (auto intro: wf_val_wf_env.ValPrim)
+qed (auto intro: wf_val_wf_env.ValLit wf_val_wf_env.ValLitFloat wf_val_wf_env.ValList wf_val_wf_env.ValTuple
+     wf_val_wf_env.ValDict wf_val_wf_env.ValObj)
 
 lemma intro_typed_nonunion: "intro_typed v \<sigma> \<Longrightarrow> \<not> is_union \<sigma> \<and> \<sigma> \<noteq> TyPrim Never"
   by (cases v) auto
@@ -376,10 +428,22 @@ lemma intro_witness_ty:
   "intro_typed v \<sigma> \<Longrightarrow> \<forall>\<tau>. Ty \<sigma> = Ty \<tau> \<longrightarrow> (\<exists>\<sigma>'. intro_typed v \<sigma>' \<and> \<Sigma> \<turnstile> \<sigma>' <: \<tau>)"
   by (auto intro: SubtyRefl)
 
-lemma wf_scheme_value:
-  "\<turnstile> v : \<theta> \<Longrightarrow> \<theta> = Scheme \<pi> \<longrightarrow> (\<exists>\<rho> ds i. v = Def(\<rho>, ds, i)) \<or> (\<exists>f. v = VPrim f)"
+(* Value typed at a scheme, typed by the typing rule for its form at any instance of the scheme *)
+lemma wf_scheme_intro:
+  "\<turnstile> v : \<theta> \<Longrightarrow> \<theta> = Scheme (TyScheme \<alpha>s \<sigma>) \<Longrightarrow> length \<tau>s = length \<alpha>s \<Longrightarrow> \<forall>\<tau> \<in> set \<tau>s. fv \<tau> = {}
+    \<Longrightarrow> intro_typed v (subst \<tau>s \<alpha>s \<sigma>)"
   "\<eta> \<turnstile> \<rho> : \<Gamma> \<Longrightarrow> True"
-  by (induction rule: wf_val_wf_env.inducts) auto
+proof (induction arbitrary: \<alpha>s \<sigma> \<tau>s rule: wf_val_wf_env.inducts)
+  case (ValDef \<eta> \<rho> \<Gamma> ds \<pi>s \<Delta> i \<alpha>s' \<tau>)
+  have "\<exists>\<sigma>s \<tau>'. \<tau> = TyCallable \<sigma>s \<tau>'" using ValDef by (blast intro: def_signatures_callable)
+  then obtain \<sigma>s \<tau>' where \<tau>: "\<tau> = TyCallable \<sigma>s \<tau>'" by blast
+  from ValDef(10) have "\<alpha>s' = \<alpha>s" and "\<sigma> = inst (filter (\<lambda>(\<alpha>, _). \<alpha> \<notin> set \<alpha>s) \<eta>) \<tau>"
+    by (auto simp: inst_entry_signature_entry split: if_splits)
+  with ValDef \<tau> show ?case by simp blast
+next
+  case ValPrim
+  then show ?case by (auto dest: prim_entry_callable)
+qed auto
 
 (* Value typed by the typing rule for its form at a type below any type at which it is typed *)
 lemma wf_val_intro:
@@ -406,30 +470,26 @@ next
   then show ?case by (rule intro_witness_ty)
 next
   case (ValLambda \<eta> \<rho> \<Gamma> xs \<sigma>s \<Delta> e \<tau>)
-  then have "\<turnstile> Lam(\<rho>, xs, e) : Ty (inst \<eta> (TyCallable \<sigma>s \<tau>))" by (blast intro: wf_val_wf_env.ValLambda)
-  then have "intro_typed Lam(\<rho>, xs, e) (inst \<eta> (TyCallable \<sigma>s \<tau>))" by simp
+  then have "intro_typed Lam(\<rho>, xs, e) (inst \<eta> (TyCallable \<sigma>s \<tau>))" by (simp only: intro_typed.simps) blast
   then show ?case by (rule intro_witness_ty)
 next
   case (ValDef \<eta> \<rho> \<Gamma> ds \<pi>s \<Delta> i \<alpha>s \<tau>)
-  then have v: "\<turnstile> Def(\<rho>, ds, i) : inst_entry \<eta> (signature_entry (TyScheme \<alpha>s \<tau>))"
-    by (blast intro: wf_val_wf_env.ValDef)
   have "\<exists>\<sigma>s \<tau>'. \<tau> = TyCallable \<sigma>s \<tau>'" using ValDef by (blast intro: def_signatures_callable)
   then obtain \<sigma>s \<tau>' where \<tau>: "\<tau> = TyCallable \<sigma>s \<tau>'" by blast
   show ?case
   proof (intro allI impI)
     fix \<tau>''
     assume "inst_entry \<eta> (signature_entry (TyScheme \<alpha>s \<tau>)) = Ty \<tau>''"
-    then have "\<alpha>s = []" and "\<tau>'' = inst \<eta> \<tau>" by (auto simp: inst_entry_signature_entry split: if_splits)
-    with v \<tau> have "intro_typed Def(\<rho>, ds, i) \<tau>''" by simp
+    then have \<alpha>s: "\<alpha>s = []" and "\<tau>'' = inst \<eta> \<tau>" by (auto simp: inst_entry_signature_entry split: if_splits)
+    with ValDef \<tau> have "intro_typed Def(\<rho>, ds, i) \<tau>''"
+      by (simp only: intro_typed.simps)
+         (rule exI[of _ \<eta>], rule exI[of _ \<Gamma>], rule exI[of _ \<pi>s], rule exI[of _ "[]"], rule exI[of _ \<sigma>s],
+          rule exI[of _ \<tau>'], rule exI[of _ "[]"], simp)
     then show "\<exists>\<sigma>. intro_typed Def(\<rho>, ds, i) \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>''" by (rule intro_witness)
   qed
 next
   case (ValInst v \<alpha>s \<sigma> \<tau>s)
-  then have v: "\<turnstile> v : Ty (subst \<tau>s \<alpha>s \<sigma>)" by (blast intro: wf_val_wf_env.ValInst)
-  from wf_scheme_callable(1)[OF ValInst(1), rule_format, OF refl] obtain \<sigma>s' \<tau>' where "\<sigma> = TyCallable \<sigma>s' \<tau>'"
-    by auto
-  moreover note wf_scheme_value(1)[OF ValInst(1), rule_format, OF refl]
-  ultimately have "intro_typed v (subst \<tau>s \<alpha>s \<sigma>)" using v by auto
+  from wf_scheme_intro(1)[OF ValInst(1) refl ValInst(3, 4)] have "intro_typed v (subst \<tau>s \<alpha>s \<sigma>)" .
   then show ?case by (rule intro_witness_ty)
 next
   case (ValObj C xvs \<tau>s)
@@ -442,8 +502,7 @@ next
   then show ?case by (blast intro: subty_trans')
 next
   case ValPrim
-  from prim_entry_callable[OF ValPrim] wf_val_wf_env.ValPrim[OF ValPrim] show ?case
-    by auto (blast intro: SubtyRefl)
+  from prim_entry_callable[OF ValPrim] ValPrim show ?case by auto (blast intro: SubtyRefl)
 qed auto
 
 (* Object of class C, typed at a type above the class at type arguments typing its fields *)
