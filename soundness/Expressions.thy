@@ -494,6 +494,9 @@ lemma wf_bool: "\<lbrakk> \<turnstile> v : Ty \<tau> ; \<Sigma> \<turnstile> \<t
 lemma wf_str: "\<lbrakk> \<turnstile> v : Ty \<tau> ; \<Sigma> \<turnstile> \<tau> <: TyPrim str \<rbrakk> \<Longrightarrow> \<exists>w. v = VLit (LitString w)"
   by (erule wf_prim_lit) (auto elim: base_type_lit.elims)
 
+lemma wf_int: "\<lbrakk> \<turnstile> v : Ty \<tau> ; \<Sigma> \<turnstile> \<tau> <: TyPrim int \<rbrakk> \<Longrightarrow> \<exists>n. v = VLit (LitInt n)"
+  by (erule wf_prim_lit) (auto elim: base_type_lit.elims)
+
 (* Operand checked at a primitive type *)
 lemma prim_operand:
   "\<lbrakk> sound_expr \<rho> (node e) r ; \<eta> \<turnstile> \<rho> : \<Gamma> ; check_expr_at \<Sigma> \<Gamma> e (TyPrim p) = Ok () \<rbrakk> \<Longrightarrow> result_typed r (TyPrim p)"
@@ -579,7 +582,8 @@ proof -
   let ?M = "Set.filter (\<lambda>(\<tau>, _). \<forall>(\<tau>', _) \<in> unop_overloads \<Sigma> op \<sigma>. \<Sigma> \<turnstile> \<tau> <: \<tau>') (unop_overloads \<Sigma> op \<sigma>)"
   from assms have "is_singleton ?M" and \<tau>': "\<tau>' = snd (the_elem ?M)"
     by (auto simp: resolve_unop_def Let_def split: if_splits)
-  then have "the_elem ?M \<in> unop_overloads \<Sigma> op \<sigma>" by (metis (no_types, lifting) Set.filter_eq mem_Collect_eq insertI1 is_singleton_the_elem)
+  then have "the_elem ?M \<in> unop_overloads \<Sigma> op \<sigma>"
+    by (metis (no_types, lifting) Set.filter_eq mem_Collect_eq insertI1 is_singleton_the_elem)
   with \<tau>' that show thesis by (cases "the_elem ?M") (auto simp: unop_overloads_def)
 qed
 
@@ -1477,6 +1481,52 @@ lemma qual_guard_nonbool_sound:
   \<Longrightarrow> sound_quals \<rho> (At p (Guard e) # gs) (Aborts Excluded)"
   by (auto simp: sound_quals_def bind_sum_def dest!: bool_operand split: sum.splits)
 
+lemma range_lookup: "fmlookup \<Sigma> range_class = fmlookup predefined_classes range_class"
+  using predefined by (auto simp: fmsubset.rep_eq map_le_def predefined_classes_def)
+
+lemma range_fields:
+  "field_names \<Sigma> range_class = [var ''start'', var ''stop'']"
+  "field_types \<Sigma> range_class \<tau>s = [TyPrim int, TyPrim int]"
+proof -
+  have "range_class |\<in>| fmdom \<Sigma>" using range_lookup by (simp add: predefined_classes_def fmlookup_dom_iff)
+  from wf_class_table_inherits[OF wf_class_table this] obtain n where n: "fcard (fmdom \<Sigma>) = Suc n"
+    by (cases "fcard (fmdom \<Sigma>)") simp_all
+  have "fields \<Sigma> range_class = FieldScheme [] [(var ''start'', TyPrim int), (var ''stop'', TyPrim int)]"
+    using range_lookup n
+    by (simp add: fields_def instantiated_ancestors_def Let_def type_params_def base_def declared_fields_def
+        predefined_classes_def resolve_type_def check_type_head_def check_predefined_def ensure_def
+        type_context_def \<P>_def fmlookup_of_list fmconst_def)
+  then show "field_names \<Sigma> range_class = [var ''start'', var ''stop'']"
+    and "field_types \<Sigma> range_class \<tau>s = [TyPrim int, TyPrim int]"
+    by (simp_all add: field_names_def field_types_def)
+qed
+
+(* Class below range, which has no subclasses *)
+lemma subty_range:
+  "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> \<sigma> = TyClass C \<sigma>s \<Longrightarrow> \<tau> = TyClass range_class \<tau>s \<Longrightarrow> C |\<in>| fmdom \<Sigma> \<Longrightarrow> C = range_class"
+  and "\<Sigma> \<turnstile> \<sigma>s' [<:] \<tau>s' \<Longrightarrow> True"
+proof (induction arbitrary: C \<sigma>s rule: subty_subtys.inducts)
+  case (SubtyClassExtend C' D \<rho>s \<tau>s' \<tau>)
+  then have "D \<noteq> range_class" and "D |\<in>| fmdom \<Sigma>" using wf_class_table_baseD[OF wf_class_table] by auto
+  with SubtyClassExtend show ?case by auto
+qed auto
+
+lemma iter_range:
+  assumes "\<turnstile> VObject C xvs : Ty (TyClass range_class \<tau>s)"
+  shows "iter (VObject C xvs) \<noteq> None"
+proof -
+  from assms obtain \<tau>s' where C: "C |\<in>| fmdom \<Sigma>" and names: "map fst xvs = field_names \<Sigma> C"
+    and fields: "list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) (map snd xvs) (field_types \<Sigma> C \<tau>s')"
+    and sub: "\<Sigma> \<turnstile> TyClass C \<tau>s' <: TyClass range_class \<tau>s"
+    by (rule wf_object)
+  from subty_range(1)[OF sub refl refl C] have range: "C = range_class" .
+  with names have "map fst xvs = [var ''start'', var ''stop'']" by (simp add: range_fields)
+  then obtain u u' where xvs: "xvs = [(var ''start'', u), (var ''stop'', u')]" by (auto simp: map_eq_Cons_conv)
+  with fields range have "\<turnstile> u : Ty (TyPrim int)" and "\<turnstile> u' : Ty (TyPrim int)" by (simp_all add: range_fields)
+  then obtain m n where "u = VLit (LitInt m)" and "u' = VLit (LitInt n)" by (blast dest: wf_int[OF _ SubtyRefl])
+  with xvs range show ?thesis by simp
+qed
+
 (* Elements drawn by a generator from a value, typed by the element type of a type of the value *)
 lemma iter_typed:
   "\<lbrakk> \<turnstile> v : Ty (inst \<eta> \<sigma>) ; elem_type \<Sigma> \<sigma> = Some \<tau> ; iter v = Some us \<rbrakk> \<Longrightarrow> \<forall>u \<in> set us. \<turnstile> u : Ty (inst \<eta> \<tau>)"
@@ -1565,10 +1615,56 @@ lemma qual_generator_fail_sound:
   "sound_expr \<rho> (node e) (Aborts \<kappa>) \<Longrightarrow> sound_quals \<rho> (At p (Generator x e) # gs) (Aborts \<kappa>)"
   by (auto simp: sound_quals_def bind_sum_def dest: sound_expr_synth_at split: sum.splits)
 
+(* Value of a type with an element type, from which a generator draws elements *)
+lemma iter_defined: "\<lbrakk> \<turnstile> v : Ty (inst \<eta> \<sigma>) ; elem_type \<Sigma> \<sigma> = Some \<tau> \<rbrakk> \<Longrightarrow> iter v \<noteq> None"
+proof (induction \<sigma> arbitrary: v \<tau>)
+  case (TyList \<sigma>)
+  from TyList(2) show ?case by (auto elim: wf_list)
+next
+  case (TyPrim p)
+  then have "p = str" by (cases p) simp_all
+  with TyPrim(1) show ?case by (auto dest: wf_str intro: SubtyRefl)
+next
+  case (TyLiteral l)
+  then obtain w where l: "l = LitString w" by (cases l) simp_all
+  have "\<Sigma> \<turnstile> TyLiteral l <: TyPrim str" unfolding l by (rule SubtyLiteral) (simp add: SubtyRefl)
+  with TyLiteral(1) show ?case by (auto dest: wf_str)
+next
+  case (TyDict \<sigma>)
+  from TyDict(2) show ?case by (auto elim: wf_dict)
+next
+  case (TyClass C \<sigma>s)
+  then have C: "C = range_class" and "\<sigma>s = []" by (auto split: if_splits elim: elem_type.elims)
+  with TyClass(2) have v: "\<turnstile> v : Ty (TyClass range_class [])" by simp
+  from wf_val_intro(1)[OF v] obtain \<sigma> where intro: "intro_typed v \<sigma>" and sub: "\<Sigma> \<turnstile> \<sigma> <: TyClass range_class []"
+    by blast
+  from subty_class_inv(1)[OF sub refl] intro_typed_nonunion[OF intro] obtain D \<sigma>s' where "\<sigma> = TyClass D \<sigma>s'"
+    by auto
+  with intro obtain xvs where v': "v = VObject D xvs" by (cases v) auto
+  with v have "\<turnstile> VObject D xvs : Ty (TyClass range_class [])" by simp
+  from iter_range[OF this] v' show ?case by simp
+next
+  case (TyTuple \<sigma>s)
+  from TyTuple(2) show ?case by (auto elim: wf_tuple)
+next
+  case (TyUnion \<sigma> \<sigma>')
+  from TyUnion(4) obtain \<tau>' \<tau>'' where "elem_type \<Sigma> \<sigma> = Some \<tau>'" and "elem_type \<Sigma> \<sigma>' = Some \<tau>''"
+    by (auto split: option.splits)
+  with TyUnion(1, 2) wf_val_union[of v "inst \<eta> \<sigma>" "inst \<eta> \<sigma>'"] TyUnion(3) show ?case by auto
+qed simp_all
+
 lemma qual_generator_nonseq_sound:
-  "\<lbrakk> sound_expr \<rho> (node e) (Val v) ; iter v = None \<rbrakk>
-  \<Longrightarrow> sound_quals \<rho> (At p (Generator x e) # gs) (Aborts TypeError)"
-  sorry
+  assumes "sound_expr \<rho> (node e) (Val v)" and "iter v = None"
+  shows "sound_quals \<rho> (At p (Generator x e) # gs) (Aborts TypeError)"
+  unfolding sound_quals_def
+proof (intro allI impI)
+  fix \<eta> \<Gamma> \<Delta>
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "quals \<Sigma> \<Gamma> (At p (Generator x e) # gs) = Ok \<Delta>"
+  then obtain \<sigma> \<tau> where synth: "synth_expr_at \<Sigma> \<Gamma> e = Ok \<sigma>" and elem: "elem_type \<Sigma> \<sigma> = Some \<tau>"
+    by (auto simp: bind_sum_def or_else_def ensure_def split: sum.splits option.splits if_splits)
+  from sound_expr_synth_at[OF assms(1) env synth] have "\<turnstile> v : Ty (inst \<eta> \<sigma>)" by simp
+  from iter_defined[OF this elem] assms(2) show "wf_envs \<eta> (Aborts TypeError) (\<Gamma> \<otimes> \<Delta>)" by simp
+qed
 
 lemma gen_nil_sound: "sound_gen \<rho> x [] gs (Val [])"
   by (simp add: sound_gen_def)

@@ -420,6 +420,7 @@ where
 locale evaluation =
   fixes \<Sigma> :: class_table
   assumes wf_class_table: "wf_class_table \<Sigma>"
+    and predefined: "predefined_classes \<subseteq>\<^sub>f \<Sigma>"
 begin
 
 type_synonym overload = "(val \<Rightarrow> val \<Rightarrow> bool) \<times> (val \<Rightarrow> val \<Rightarrow> val result)"
