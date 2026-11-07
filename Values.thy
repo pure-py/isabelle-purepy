@@ -233,6 +233,12 @@ where
 fun iter :: "val \<Rightarrow> val list option"
 where
 "iter (VDict \<delta>) = Some (map (\<lambda>(w, _). VLit (LitString w)) \<delta>)" |
+"iter (VObject C xvs) =
+  (if C = range_class then
+     (case (map_of xvs (var ''start''), map_of xvs (var ''stop'')) of
+        (Some (VLit (LitInt m)), Some (VLit (LitInt n))) \<Rightarrow> Some (map (\<lambda>k. VLit (LitInt k)) [m..n - 1])
+      | _ \<Rightarrow> None)
+   else None)" |
 "iter v = elems v"
 
 fun getitem :: "val \<Rightarrow> val \<Rightarrow> val result"

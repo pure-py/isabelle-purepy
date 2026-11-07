@@ -255,6 +255,55 @@ next
   then show ?case by (cases l) (auto intro: subty_subtys.SubtyLiteral)
 qed (auto intro: subty_subtys.SubtyNever)
 
+(* Subtyping by a list type of a type other than a union or Never, as a list type with an equivalent element
+   type *)
+lemma subty_list_inv:
+  "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> \<tau> = TyList \<tau>' \<Longrightarrow> \<not> is_union \<sigma> \<Longrightarrow> \<sigma> \<noteq> TyPrim Never
+    \<Longrightarrow> \<exists>\<sigma>'. \<sigma> = TyList \<sigma>' \<and> \<Sigma> \<turnstile> \<sigma>' <: \<tau>' \<and> \<Sigma> \<turnstile> \<tau>' <: \<sigma>'"
+  and "\<Sigma> \<turnstile> \<sigma>s [<:] \<tau>s \<Longrightarrow> True"
+proof (induction rule: subty_subtys.inducts)
+  case (SubtyLiteral l \<tau>)
+  then show ?case by (cases l) auto
+qed (auto intro: subty_subtys.SubtyRefl)
+
+lemma subty_dict_inv:
+  "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> \<tau> = TyDict \<tau>' \<Longrightarrow> \<not> is_union \<sigma> \<Longrightarrow> \<sigma> \<noteq> TyPrim Never
+    \<Longrightarrow> \<exists>\<sigma>'. \<sigma> = TyDict \<sigma>' \<and> \<Sigma> \<turnstile> \<sigma>' <: \<tau>' \<and> \<Sigma> \<turnstile> \<tau>' <: \<sigma>'"
+  and "\<Sigma> \<turnstile> \<sigma>s [<:] \<tau>s \<Longrightarrow> True"
+proof (induction rule: subty_subtys.inducts)
+  case (SubtyLiteral l \<tau>)
+  then show ?case by (cases l) auto
+qed (auto intro: subty_subtys.SubtyRefl)
+
+lemma subty_tuple_inv:
+  "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> \<tau> = TyTuple \<tau>s \<Longrightarrow> \<not> is_union \<sigma> \<Longrightarrow> \<sigma> \<noteq> TyPrim Never
+    \<Longrightarrow> \<exists>\<sigma>s. \<sigma> = TyTuple \<sigma>s \<and> \<Sigma> \<turnstile> \<sigma>s [<:] \<tau>s"
+  and "\<Sigma> \<turnstile> \<sigma>s' [<:] \<tau>s' \<Longrightarrow> True"
+proof (induction rule: subty_subtys.inducts)
+  case (SubtyRefl \<tau>)
+  then show ?case by (auto simp: subtys_list_all2 intro: list.rel_refl subty_subtys.SubtyRefl)
+next
+  case (SubtyLiteral l \<tau>)
+  then show ?case by (cases l) auto
+qed auto
+
+lemma subty_class_inv:
+  "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> \<tau> = TyClass C \<tau>s \<Longrightarrow> \<not> is_union \<sigma> \<Longrightarrow> \<sigma> \<noteq> TyPrim Never \<Longrightarrow> \<exists>D \<sigma>s. \<sigma> = TyClass D \<sigma>s"
+  and "\<Sigma> \<turnstile> \<sigma>s' [<:] \<tau>s' \<Longrightarrow> True"
+proof (induction rule: subty_subtys.inducts)
+  case (SubtyLiteral l \<tau>)
+  then show ?case by (cases l) auto
+qed auto
+
+lemma elem_type_fv: "elem_type \<Sigma> \<sigma> = Some \<tau> \<Longrightarrow> fv \<tau> \<subseteq> fv \<sigma>"
+proof (induction \<sigma> arbitrary: \<tau>)
+  case (TyTuple \<sigma>s)
+  then show ?case using fv_joins[of \<Sigma> "map base_type \<sigma>s"] by auto
+next
+  case (TyUnion \<sigma> \<sigma>')
+  then show ?case by (auto simp: join_def split: option.splits if_splits)
+qed (auto elim: elem_type.elims split: if_splits)
+
 (* Field of class C at type arguments \<tau>s, equivalent to the field of a class above it *)
 lemma subty_class_fields:
   assumes wf: "wf_class_table \<Sigma>"
