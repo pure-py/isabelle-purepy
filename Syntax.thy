@@ -122,6 +122,8 @@ datatype stmt =
   | StmtMutualRegion "func located list"
 and func = Def var "var list" "(var \<times> ty_expr) list" ty_expr "stmt located"
 
+type_synonym elif_block = "(expr located \<times> stmt located) list \<times> stmt located option"
+
 type_synonym fields = "(var \<times> ty_expr) list"
 
 datatype type_def =
@@ -191,6 +193,9 @@ where
   \<Union> (set (map (binds_pat \<circ> node) ps)) \<union> \<Union> (set (map (binds_pat \<circ> node \<circ> snd) kps))" |
 "binds_pat (PatDict kps) = \<Union> (set (map (binds_pat \<circ> node \<circ> snd) kps))" |
 "binds_pat _ = {}"
+
+lemma finite_binds_pat: "finite (binds_pat p)"
+  by (induction p rule: binds_pat.induct) auto
 
 (* Variables bound by the patterns of the match statements in s, each at the position of its match statement,
    in order and with repeats *)

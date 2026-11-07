@@ -113,8 +113,6 @@ definition type_args_of :: "expr located \<Rightarrow> ty_expr list option"
 where
 "type_args_of e' = those (map type_expr_of (subscript_args e'))"
 
-type_synonym elif_block = "(expr located \<times> stmt located) list \<times> stmt located option"
-
 inductive
   eval_expr  :: "env \<Rightarrow> expr \<Rightarrow> val result \<Rightarrow> bool"            ("_, _ \<Rightarrow>\<^sub>e _" [60,0,60] 60) and
   eval_exprs :: "env \<Rightarrow> expr located list \<Rightarrow> val list result \<Rightarrow> bool"  ("_, _ \<Rightarrow>\<^sub>e\<^sub>s _" [60,0,60] 60) and

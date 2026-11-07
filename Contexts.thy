@@ -50,6 +50,9 @@ lemma tyvars_add: "tyvars (\<Gamma> \<otimes> \<Delta>) \<subseteq> tyvars \<Gam
 lemma tyvars_single: "\<theta> \<noteq> TypeVar \<Longrightarrow> tyvars (fmupd x \<theta> fmempty) = fv_entry \<theta>"
   by (auto simp: tyvars_def fmlookup_dom'_iff fmlookup_ran'_iff split: if_splits)
 
+lemma tyvars_fmconst: "tyvars (fmconst (set \<alpha>s) TypeVar) \<subseteq> set \<alpha>s"
+  by (auto simp: tyvars_def fmlookup_dom'_iff fmlookup_ran'_iff fmlookup_fmconst split: if_splits)
+
 fun lookup :: "cxt \<Rightarrow> name \<Rightarrow> cxt_entry option"
 where
 "lookup \<Gamma> (Simple x) = fmlookup \<Gamma> x" |

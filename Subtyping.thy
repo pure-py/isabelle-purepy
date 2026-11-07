@@ -44,6 +44,9 @@ definition joins :: "class_table \<Rightarrow> ty list \<Rightarrow> ty"
 where
 "joins \<Sigma> \<tau>s = foldr (\<lambda>\<sigma> \<tau>. \<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>) \<tau>s (TyPrim Never)"
 
+lemma fv_join: "fv (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>) \<subseteq> fv \<sigma> \<union> fv \<tau>"
+  by (auto simp: join_def)
+
 lemma fv_joins: "fv (joins \<Sigma> \<tau>s) \<subseteq> \<Union> (fv ` set \<tau>s)"
   by (induction \<tau>s) (auto simp: joins_def join_def)
 

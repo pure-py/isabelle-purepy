@@ -11,12 +11,18 @@ where
 "var_ty (PU \<tau> _) = Some \<tau>" |
 "var_ty _ = None"
 
+lemma var_ty_Some: "var_ty \<theta> = Some \<sigma> \<Longrightarrow> \<theta> = Ty \<sigma> \<or> \<theta> = DU \<sigma> \<or> (\<exists>b. \<theta> = PU \<sigma> b)"
+  by (cases \<theta>) simp_all
+
 (* Type scheme at which a variable is bound or declared *)
 fun scheme_of :: "cxt_entry \<Rightarrow> ty_scheme option"
 where
 "scheme_of (Scheme \<pi>) = Some \<pi>" |
 "scheme_of (PUScheme \<pi> _) = Some \<pi>" |
 "scheme_of _ = None"
+
+lemma scheme_of_Some: "scheme_of \<theta> = Some \<pi> \<Longrightarrow> \<theta> = Scheme \<pi> \<or> (\<exists>b. \<theta> = PUScheme \<pi> b)"
+  by (cases \<theta>) simp_all
 
 (* Merge of the entry of a variable with undefined, recording whether the variable is declared in a branch;
    no merge for other entries *)
@@ -42,6 +48,14 @@ where
 "merge_cxt_entry \<Sigma> b None (Some \<theta>) = possibly_unassigned b \<theta>" |
 "merge_cxt_entry \<Sigma> b None None = None"
 
+(* Merge of two entries, by its cases *)
+lemma merge_cxt_entry_cases:
+  assumes "merge_cxt_entry \<Sigma> b (Some \<theta>) (Some \<theta>') = Some \<theta>''"
+  shows "(\<exists>\<sigma> \<tau>. \<theta> = Ty \<sigma> \<and> \<theta>' = Ty \<tau> \<and> \<theta>'' = Ty (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>)) \<or> \<theta>'' = \<theta> \<and> \<theta>' = \<theta>
+    \<or> (\<exists>\<pi>. scheme_of \<theta> = Some \<pi> \<and> scheme_of \<theta>' = Some \<pi> \<and> \<theta>'' = PUScheme \<pi> b)
+    \<or> (\<exists>\<sigma> \<tau>. var_ty \<theta> = Some \<sigma> \<and> var_ty \<theta>' = Some \<tau> \<and> \<theta>'' = PU (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>) b)"
+  using assms by (cases \<theta>; cases \<theta>'; simp split: if_splits option.splits)
+
 (* Merge of the contexts of two branches of a statement, where X holds the variables declared in any of the
    branches; failure at the first variable with incompatible entries *)
 definition merge :: "class_table \<Rightarrow> var set \<Rightarrow> cxt \<Rightarrow> cxt \<Rightarrow> cxt may_fail"
@@ -51,10 +65,31 @@ where
        Y = ffilter (\<lambda>x. entry x = None) (fmdom (\<Gamma> \<otimes> \<Gamma>')) in
    if Y = {||} then Ok (fmmap_keys (\<lambda>x _. the (entry x)) (\<Gamma> \<otimes> \<Gamma>')) else Fail (Redeclaration (Min (fset Y))))"
 
+lemma merge_dom: "merge \<Sigma> X \<Gamma> \<Gamma>' = Ok \<Gamma>'' \<Longrightarrow> fmdom \<Gamma>'' = fmdom (\<Gamma> \<otimes> \<Gamma>')"
+  by (auto simp: merge_def Let_def split: if_splits)
+
+lemma merge_lookup:
+  assumes "merge \<Sigma> X \<Gamma> \<Gamma>' = Ok \<Gamma>''" and "x |\<in>| fmdom (\<Gamma> \<otimes> \<Gamma>')"
+  shows "fmlookup \<Gamma>'' x = merge_cxt_entry \<Sigma> (x \<in> X) (fmlookup \<Gamma> x) (fmlookup \<Gamma>' x)"
+proof -
+  let ?entry = "\<lambda>x. merge_cxt_entry \<Sigma> (x \<in> X) (fmlookup \<Gamma> x) (fmlookup \<Gamma>' x)"
+  from assms(1) have Y: "ffilter (\<lambda>x. ?entry x = None) (fmdom (\<Gamma> \<otimes> \<Gamma>')) = {||}"
+    and \<Gamma>'': "\<Gamma>'' = fmmap_keys (\<lambda>x _. the (?entry x)) (\<Gamma> \<otimes> \<Gamma>')"
+    by (auto simp: merge_def Let_def split: if_splits)
+  have "x |\<notin>| ffilter (\<lambda>x. ?entry x = None) (fmdom (\<Gamma> \<otimes> \<Gamma>'))" unfolding Y by simp
+  with assms(2) have "?entry x \<noteq> None" by (simp only: ffmember_filter) simp
+  with assms(2) \<Gamma>'' show ?thesis by (auto simp: fmlookup_dom_iff)
+qed
+
 (* Assigns\<^sub>R \<Delta> r: the statement can complete normally, adding bindings \<Delta>. If present, r is the error reported
    when a function body ends with a statement which PurePy determines to return or raise but which mypy treats
    as completing normally. *)
 datatype static_outcome = Assigns\<^sub>R cxt "reason option" | Returns\<^sub>R
+
+fun bindings_of :: "static_outcome \<Rightarrow> cxt option"
+where
+"bindings_of (Assigns\<^sub>R \<Delta> _) = Some \<Delta>" |
+"bindings_of Returns\<^sub>R = None"
 
 fun merge_outcome ::
   "class_table \<Rightarrow> var set \<Rightarrow> static_outcome \<Rightarrow> static_outcome \<Rightarrow> static_outcome may_fail"
@@ -64,6 +99,11 @@ where
 "merge_outcome \<Sigma> X R Returns\<^sub>R = Ok R" |
 "merge_outcome \<Sigma> X Returns\<^sub>R R = Ok R"
 
+lemma merge_outcome_dom:
+  assumes "merge_outcome \<Sigma> X R R' = Ok (Assigns\<^sub>R \<Delta> r)" and "x |\<in>| fmdom \<Delta>"
+  shows "(\<exists>\<Delta>' r'. R = Assigns\<^sub>R \<Delta>' r' \<and> x |\<in>| fmdom \<Delta>') \<or> (\<exists>\<Delta>' r'. R' = Assigns\<^sub>R \<Delta>' r' \<and> x |\<in>| fmdom \<Delta>')"
+  using assms by (cases "(\<Sigma>, X, R, R')" rule: merge_outcome.cases) (auto simp: bind_sum_Ok dest: merge_dom)
+
 definition merges :: "class_table \<Rightarrow> var set \<Rightarrow> static_outcome may_fail list \<Rightarrow> static_outcome may_fail"
 where
 "merges \<Sigma> X ms =
@@ -71,6 +111,32 @@ where
 
 lemma merges_Ok: "merges \<Sigma> X ms = Ok R \<Longrightarrow> \<exists>Rs. those_sum ms = Ok Rs"
   by (auto simp: merges_def bind_sum_def split: sum.splits)
+
+(* Variable bound by a merge of static outcomes, bound by one of them *)
+lemma merges_dom:
+  assumes "merges \<Sigma> X ms = Ok (Assigns\<^sub>R \<Delta> r)" and "x |\<in>| fmdom \<Delta>"
+  obtains \<Delta>' r' where "Ok (Assigns\<^sub>R \<Delta>' r') \<in> set ms" and "x |\<in>| fmdom \<Delta>'"
+proof -
+  let ?f = "\<lambda>R m. do { R' \<leftarrow> m; merge_outcome \<Sigma> X R R' }"
+  from assms(1) obtain Rs where Rs: "those_sum ms = Ok Rs" and fold: "foldr ?f Rs (Ok Returns\<^sub>R) = Ok (Assigns\<^sub>R \<Delta> r)"
+    by (auto simp: merges_def bind_sum_Ok)
+  have "\<exists>\<Delta>' r'. Assigns\<^sub>R \<Delta>' r' \<in> set Rs \<and> x |\<in>| fmdom \<Delta>'"
+    if "foldr ?f Rs (Ok Returns\<^sub>R) = Ok (Assigns\<^sub>R \<Delta> r)" and "x |\<in>| fmdom \<Delta>" for Rs \<Delta> r
+    using that
+  proof (induction Rs arbitrary: \<Delta> r)
+    case (Cons R Rs)
+    from Cons.prems(1) obtain R' where R': "foldr ?f Rs (Ok Returns\<^sub>R) = Ok R'"
+      and m: "merge_outcome \<Sigma> X R R' = Ok (Assigns\<^sub>R \<Delta> r)"
+      by (auto simp: bind_sum_Ok)
+    from merge_outcome_dom[OF m Cons.prems(2)] Cons.IH R' show ?case by (cases R') auto
+  qed simp
+  from this[OF fold assms(2)] obtain \<Delta>' r' where "Assigns\<^sub>R \<Delta>' r' \<in> set Rs" and x: "x |\<in>| fmdom \<Delta>'" by blast
+  then obtain i where i: "i < length Rs" and "Rs ! i = Assigns\<^sub>R \<Delta>' r'" by (auto simp: in_set_conv_nth)
+  with those_sum_Ok[OF Rs] have "ms ! i = Ok (Assigns\<^sub>R \<Delta>' r')" and "i < length ms"
+    by (auto simp: list_all2_conv_all_nth)
+  then have "Ok (Assigns\<^sub>R \<Delta>' r') \<in> set ms" by (metis nth_mem)
+  with x that show thesis by blast
+qed
 
 fun override_outcome :: "static_outcome \<Rightarrow> static_outcome \<Rightarrow> static_outcome"
 where
@@ -447,6 +513,10 @@ where
       Ok (TyScheme \<alpha>s (TyCallable \<sigma>s \<tau>))
     }))"
 
+lemma def_signature_disjoint:
+  "def_signature \<Sigma> \<Gamma> d = Ok \<pi> \<Longrightarrow> case d of Def _ \<alpha>s _ _ _ \<Rightarrow> set \<alpha>s \<inter> tyvars \<Gamma> = {}"
+  by (cases d) (auto simp: Let_def bind_sum_def find_None_iff split: sum.splits option.splits)
+
 lemma def_signatures_callable:
   "\<lbrakk> those_sum (map (\<lambda>d. locate (pos_of d) (def_signature \<Sigma> \<Gamma> (node d))) ds) = Ok \<pi>s ; i < length ds
    ; \<pi>s ! i = TyScheme \<alpha>s \<tau> \<rbrakk>
@@ -489,6 +559,25 @@ where
    (\<Delta>s, \<tau>', L'') \<leftarrow> match_cases \<Sigma> \<Gamma> (remaining \<Sigma> \<Gamma> \<tau> (node p)) L' ps;
    Ok (fmmap Ty \<Delta> # \<Delta>s, \<tau>', L'')
  }"
+
+lemma match_cases_unbound:
+  "\<lbrakk> match_cases \<Sigma> \<Gamma> \<tau> L ps = Ok (\<Delta>s, \<tau>', L') ; \<Delta> \<in> set \<Delta>s ; x |\<in>| fmdom \<Delta> \<rbrakk> \<Longrightarrow> fmlookup \<Gamma> x = Some Unbound"
+proof (induction ps arbitrary: \<tau> L \<Delta>s)
+  case (Cons p ps)
+  from Cons.prems(1) obtain \<Delta>\<^sub>p \<Delta>s' L\<^sub>1 where p: "check_pat_at \<Sigma> \<Gamma> p \<tau> = Ok \<Delta>\<^sub>p"
+    and \<Delta>s: "\<Delta>s = fmmap Ty \<Delta>\<^sub>p # \<Delta>s'"
+    and ps: "match_cases \<Sigma> \<Gamma> (remaining \<Sigma> \<Gamma> \<tau> (node p)) L\<^sub>1 ps = Ok (\<Delta>s', \<tau>', L')"
+    by (auto simp: bind_sum_Ok split: prod.splits)
+  from Cons.prems(2) \<Delta>s consider (head) "\<Delta> = fmmap Ty \<Delta>\<^sub>p" | (tail) "\<Delta> \<in> set \<Delta>s'" by auto
+  then show ?case
+  proof cases
+    case head
+    with Cons.prems(3) check_pat_unbound(2)[OF p] show ?thesis by simp
+  next
+    case tail
+    from Cons.IH[OF ps this Cons.prems(3)] show ?thesis .
+  qed
+qed simp
 
 function (sequential) check_stmt :: "class_table \<Rightarrow> cxt \<Rightarrow> ty option \<Rightarrow> stmt \<Rightarrow> static_outcome may_fail"
 and check_stmt_at :: "class_table \<Rightarrow> cxt \<Rightarrow> ty option \<Rightarrow> stmt located \<Rightarrow> static_outcome may_fail"
@@ -742,5 +831,157 @@ proof -
     using those_sum_map_Ok[OF checked] by (fastforce simp: list_all2_conv_all_nth in_set_conv_nth)
   ultimately show thesis using that m fields by blast
 qed
+
+lemma check_stmt_at_Ok:
+  assumes "check_stmt_at \<Sigma> \<Gamma> \<zeta> s = Ok R"
+  shows "\<exists>R'. check_stmt \<Sigma> \<Gamma> \<zeta> (node s) = Ok R' \<and> bindings_of R' = bindings_of R"
+proof (cases s)
+  case (At p s')
+  then show ?thesis using assms by (cases "check_stmt \<Sigma> \<Gamma> \<zeta> s'") (auto split: static_outcome.splits)
+qed
+
+(* Static outcomes of the branches of an elif block, as listed by the if rule *)
+fun check_elif :: "class_table \<Rightarrow> cxt \<Rightarrow> ty option \<Rightarrow> elif_block \<Rightarrow> static_outcome may_fail list"
+where
+"check_elif \<Sigma> \<Gamma> \<zeta> (elifs, else') =
+  map (\<lambda>(e', s'). do { check_expr_at \<Sigma> \<Gamma> e' (TyPrim bool); check_stmt_at \<Sigma> \<Gamma> \<zeta> s' }) elifs
+  @ [case else' of Some s' \<Rightarrow> check_stmt_at \<Sigma> \<Gamma> \<zeta> s' | None \<Rightarrow> Ok (Assigns\<^sub>R fmempty None)]"
+
+lemma check_stmt_if:
+  "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtIf e s elifs else') = by_rule (if else' = None then RuleIf else RuleIfElse) (do {
+     check_expr_at \<Sigma> \<Gamma> e (TyPrim bool);
+     merges \<Sigma> (set (declares (StmtIf e s elifs else')))
+       (check_stmt_at \<Sigma> \<Gamma> \<zeta> s # check_elif \<Sigma> \<Gamma> \<zeta> (elifs, else'))
+   })"
+  by simp
+
+lemma check_if:
+  assumes "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtIf e s elifs else') = Ok R"
+  shows "\<exists>Rs. those_sum (check_stmt_at \<Sigma> \<Gamma> \<zeta> s # check_elif \<Sigma> \<Gamma> \<zeta> (elifs, else')) = Ok Rs
+     \<and> merges \<Sigma> (set (declares (StmtIf e s elifs else')))
+         (check_stmt_at \<Sigma> \<Gamma> \<zeta> s # check_elif \<Sigma> \<Gamma> \<zeta> (elifs, else')) = Ok R"
+  using assms by (auto simp: check_stmt_if bind_sum_def split: sum.splits dest: merges_Ok)
+
+(* Branches of a match statement, each with the bindings of its pattern *)
+definition match_branches ::
+  "class_table \<Rightarrow> cxt \<Rightarrow> ty option \<Rightarrow> cxt list \<Rightarrow> (pat located \<times> stmt located) list \<Rightarrow> ty \<Rightarrow> shape list
+   \<Rightarrow> static_outcome may_fail list"
+where
+"match_branches \<Sigma> \<Gamma> \<zeta> \<Delta>s bs \<tau> L =
+  map2 (\<lambda>\<Delta> (_, s). do { R \<leftarrow> check_stmt_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) \<zeta> s; Ok (Assigns\<^sub>R \<Delta> None \<otimes> R) }) \<Delta>s bs
+  @ (if \<tau> = TyPrim Never then []
+     else [Ok (Assigns\<^sub>R fmempty
+             (if L = [] then Some (MypyCompatibility (Violates RuleMatchPartial (MissingReturnMatchPartial \<tau>)))
+              else None))])"
+
+lemma check_match:
+  assumes "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtMatch e bs) = Ok R"
+  obtains \<sigma> \<Delta>s \<tau> L where "synth_expr_at \<Sigma> \<Gamma> e = Ok \<sigma>"
+    and "match_cases \<Sigma> \<Gamma> \<sigma> (shapes \<Sigma> \<sigma> {}) (map fst bs) = Ok (\<Delta>s, \<tau>, L)"
+    and "merges \<Sigma> (set (declares (StmtMatch e bs))) (match_branches \<Sigma> \<Gamma> \<zeta> \<Delta>s bs \<tau> L) = Ok R"
+  using assms by (auto simp: bind_sum_Ok match_branches_def split: prod.splits)
+
+(* Variable bound by a statement, unbound or declared but unassigned beforehand *)
+lemma check_stmt_bound:
+  "check_stmt \<Sigma> \<Gamma> \<zeta> s = Ok (Assigns\<^sub>R \<Delta> r) \<Longrightarrow> x |\<in>| fmdom \<Delta>
+    \<Longrightarrow> fmlookup \<Gamma> x = Some Unbound \<or> (\<exists>\<tau>. fmlookup \<Gamma> x = Some (DU \<tau>))"
+  "check_stmt_at \<Sigma> \<Gamma> \<zeta> s' = Ok (Assigns\<^sub>R \<Delta> r) \<Longrightarrow> x |\<in>| fmdom \<Delta>
+    \<Longrightarrow> fmlookup \<Gamma> x = Some Unbound \<or> (\<exists>\<tau>. fmlookup \<Gamma> x = Some (DU \<tau>))"
+  "check_def \<Sigma> \<Gamma> d \<pi> = m \<Longrightarrow> True"
+  "check_def_at \<Sigma> \<Gamma> d' \<pi> = m \<Longrightarrow> True"
+proof (induction \<Sigma> \<Gamma> \<zeta> s and \<Sigma> \<Gamma> \<zeta> s' and \<Sigma> \<Gamma> d \<pi> and \<Sigma> \<Gamma> d' \<pi> arbitrary: \<Delta> r and \<Delta> r
+    rule: check_stmt_check_stmt_at_check_def_check_def_at.induct)
+  case (10 \<Sigma> \<Gamma> \<zeta> e s elifs else')
+  from "10.prems"(1) obtain z where e: "check_expr_at \<Sigma> \<Gamma> e (TyPrim bool) = Ok z"
+    and m: "merges \<Sigma> (set (declares (StmtIf e s elifs else')))
+              (check_stmt_at \<Sigma> \<Gamma> \<zeta> s # check_elif \<Sigma> \<Gamma> \<zeta> (elifs, else')) = Ok (Assigns\<^sub>R \<Delta> r)"
+    unfolding check_stmt_if by (auto simp: bind_sum_Ok)
+  from merges_dom[OF m "10.prems"(2)] obtain \<Delta>' r'
+    where mem: "Ok (Assigns\<^sub>R \<Delta>' r') \<in> set (check_stmt_at \<Sigma> \<Gamma> \<zeta> s # check_elif \<Sigma> \<Gamma> \<zeta> (elifs, else'))"
+    and x: "x |\<in>| fmdom \<Delta>'"
+    by blast
+  from mem consider (s) "check_stmt_at \<Sigma> \<Gamma> \<zeta> s = Ok (Assigns\<^sub>R \<Delta>' r')"
+    | (elif) e' s' z' where "(e', s') \<in> set elifs" and "check_expr_at \<Sigma> \<Gamma> e' (TyPrim bool) = Ok z'"
+        and "check_stmt_at \<Sigma> \<Gamma> \<zeta> s' = Ok (Assigns\<^sub>R \<Delta>' r')"
+    | (else) s' where "else' = Some s'" and "check_stmt_at \<Sigma> \<Gamma> \<zeta> s' = Ok (Assigns\<^sub>R \<Delta>' r')"
+    | (none) "\<Delta>' = fmempty"
+    by (auto simp: Ok_bind_sum split: option.splits)
+  then show ?case
+  proof cases
+    case s
+    from "10.IH"(1)[OF e s x] show ?thesis .
+  next
+    case elif
+    from "10.IH"(2)[OF e elif(1) refl elif(2, 3) x] show ?thesis .
+  next
+    case else
+    from "10.IH"(3)[OF e else x] show ?thesis .
+  next
+    case none
+    with x show ?thesis by simp
+  qed
+next
+  case (11 \<Sigma> \<Gamma> \<zeta> s s')
+  from check_seq[OF "11.prems"(1)] obtain \<Delta>\<^sub>1 r\<^sub>1 R\<^sub>2 where s: "check_stmt_at \<Sigma> \<Gamma> \<zeta> s = Ok (Assigns\<^sub>R \<Delta>\<^sub>1 r\<^sub>1)"
+    and s': "check_stmt_at \<Sigma> (\<Gamma> \<otimes> \<Delta>\<^sub>1) \<zeta> s' = Ok R\<^sub>2" and R: "Assigns\<^sub>R \<Delta> r = Assigns\<^sub>R \<Delta>\<^sub>1 r\<^sub>1 \<otimes> R\<^sub>2"
+    by blast
+  from R obtain \<Delta>\<^sub>2 r\<^sub>2 where R\<^sub>2: "R\<^sub>2 = Assigns\<^sub>R \<Delta>\<^sub>2 r\<^sub>2" and \<Delta>: "\<Delta> = \<Delta>\<^sub>1 \<otimes> \<Delta>\<^sub>2" by (cases R\<^sub>2) auto
+  show ?case
+  proof (cases "x |\<in>| fmdom \<Delta>\<^sub>1")
+    case True
+    from "11.IH"(1)[OF s True] show ?thesis .
+  next
+    case False
+    with "11.prems"(2) \<Delta> have "x |\<in>| fmdom \<Delta>\<^sub>2" by simp
+    from "11.IH"(2)[OF s refl s'[unfolded R\<^sub>2] this] False show ?thesis by simp
+  qed
+next
+  case (12 \<Sigma> \<Gamma> \<zeta> ds)
+  from "12.prems"(1) obtain \<pi>s
+    where unb: "all_sum (map (\<lambda>d. locate (pos_of d) (check_unbound \<Gamma> (def_name (node d)))) ds) = Ok ()"
+    and \<Delta>: "\<Delta> = fmap_of_list (zip (map (def_name \<circ> node) ds) (map signature_entry \<pi>s))"
+    by (auto simp: bind_sum_Ok Let_def)
+  from "12.prems"(2) \<Delta> obtain d where "d \<in> set ds" and "def_name (node d) = x"
+    by (auto simp: fset_of_list_elem dest!: set_zip_leftD)
+  with all_sum_Ok[OF unb, of "locate (pos_of d) (check_unbound \<Gamma> x)"] have "check_unbound \<Gamma> x = Ok ()"
+    by auto
+  then show ?case by (auto dest: check_unbound_Ok)
+next
+  case (13 \<Sigma> \<Gamma> \<zeta> e bs)
+  from "13.prems"(1) obtain \<sigma> \<Delta>s \<tau> L where \<sigma>: "synth_expr_at \<Sigma> \<Gamma> e = Ok \<sigma>"
+    and mc: "match_cases \<Sigma> \<Gamma> \<sigma> (shapes \<Sigma> \<sigma> {}) (map fst bs) = Ok (\<Delta>s, \<tau>, L)"
+    and m: "merges \<Sigma> (set (declares (StmtMatch e bs))) (match_branches \<Sigma> \<Gamma> \<zeta> \<Delta>s bs \<tau> L) = Ok (Assigns\<^sub>R \<Delta> r)"
+    by (rule check_match)
+  from merges_dom[OF m "13.prems"(2)] obtain \<Delta>' r'
+    where mem: "Ok (Assigns\<^sub>R \<Delta>' r') \<in> set (match_branches \<Sigma> \<Gamma> \<zeta> \<Delta>s bs \<tau> L)" and x: "x |\<in>| fmdom \<Delta>'"
+    by blast
+  show ?case
+  proof (cases "Ok (Assigns\<^sub>R \<Delta>' r') \<in> set (map2 (\<lambda>\<Delta> (_, s). do {
+                  R \<leftarrow> check_stmt_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) \<zeta> s; Ok (Assigns\<^sub>R \<Delta> None \<otimes> R) }) \<Delta>s bs)")
+    case True
+    from Ok_in_set_map2[OF True] obtain \<Delta>\<^sub>p p s R where b: "(\<Delta>\<^sub>p, (p, s)) \<in> set (zip \<Delta>s bs)"
+      and R: "check_stmt_at \<Sigma> (\<Gamma> \<otimes> \<Delta>\<^sub>p) \<zeta> s = Ok R" and \<Delta>': "Assigns\<^sub>R \<Delta>\<^sub>p None \<otimes> R = Assigns\<^sub>R \<Delta>' r'"
+      by (auto simp: bind_sum_Ok split: prod.splits)
+    from \<Delta>' obtain \<Delta>\<^sub>2 r\<^sub>2 where R\<^sub>2: "R = Assigns\<^sub>R \<Delta>\<^sub>2 r\<^sub>2" and \<Delta>'': "\<Delta>' = \<Delta>\<^sub>p \<otimes> \<Delta>\<^sub>2" by (cases R) auto
+    have p: "fmlookup \<Gamma> x = Some Unbound" if "x |\<in>| fmdom \<Delta>\<^sub>p"
+      using match_cases_unbound[OF mc set_zip_leftD[OF b] that] .
+    show ?thesis
+    proof (cases "x |\<in>| fmdom \<Delta>\<^sub>p")
+      case True
+      with p show ?thesis by simp
+    next
+      case False
+      with x \<Delta>'' have "x |\<in>| fmdom \<Delta>\<^sub>2" by simp
+      from "13.IH"[OF \<sigma> mc refl refl b refl refl R[unfolded R\<^sub>2] this] False
+      show ?thesis by simp
+    qed
+  next
+    case False
+    with mem x show ?thesis by (auto simp: match_branches_def split: if_splits)
+  qed
+next
+  case (14 \<Sigma> \<Gamma> \<zeta> p s)
+  then show ?case by (cases "check_stmt \<Sigma> \<Gamma> \<zeta> s") (auto split: static_outcome.splits)
+qed (auto simp: bind_sum_Ok check_unbound_def ensure_def Let_def split: option.splits cxt_entry.splits if_splits)
 
 end

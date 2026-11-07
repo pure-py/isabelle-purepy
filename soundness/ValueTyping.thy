@@ -216,6 +216,14 @@ lemma wf_val_unbound: "\<turnstile> v : Unbound \<Longrightarrow> v = VUnbound"
   and wf_val_du: "\<turnstile> v : DU \<tau> \<Longrightarrow> v = VUnbound"
   by (auto elim!: WfUnboundE WfDUE simp: inst_entry_signature_entry \<E>_def \<P>_def split: if_splits)
 
+inductive_cases WfPUE: "\<turnstile> v : PU \<tau> b"
+
+inductive_cases WfPUSchemeE: "\<turnstile> v : PUScheme \<pi> b"
+
+lemma wf_val_pu: "\<turnstile> v : PU \<tau> b \<Longrightarrow> v = VUnbound \<or> \<turnstile> v : Ty \<tau>"
+  and wf_val_puscheme: "\<turnstile> v : PUScheme \<pi> b \<Longrightarrow> v = VUnbound \<or> \<turnstile> v : Scheme \<pi>"
+  by (auto elim!: WfPUE WfPUSchemeE simp: inst_entry_signature_entry \<E>_def \<P>_def split: if_splits)
+
 lemma wf_dict_update: "\<forall>w v. (w, v) \<in> set \<delta> \<longrightarrow> \<turnstile> v : Ty \<tau> \<Longrightarrow> \<turnstile> VDict (update [] \<delta>) : Ty (TyDict \<tau>)"
   using set_update[of "[]" \<delta>] by (auto intro!: ValDict distinct_update)
 

@@ -29,6 +29,9 @@ where
 "disjuncts (TyUnion \<sigma> \<tau>) = disjuncts \<sigma> @ disjuncts \<tau>" |
 "disjuncts \<tau> = [\<tau>]"
 
+lemma disjuncts_nonempty: "disjuncts \<tau> \<noteq> []"
+  by (induction \<tau> rule: disjuncts.induct) simp_all
+
 fun has_values :: "class_table \<Rightarrow> sequence_kind \<Rightarrow> ty \<Rightarrow> bool"
 where
 "has_values \<Sigma> k (TyUnion \<sigma> \<tau>) = (has_values \<Sigma> k \<sigma> \<or> has_values \<Sigma> k \<tau>)" |
@@ -102,6 +105,9 @@ definition check_unbound :: "cxt \<Rightarrow> var \<Rightarrow> unit may_fail"
 where
 "check_unbound \<Gamma> x = ensure (fmlookup \<Gamma> x = Some Unbound) (Redeclaration x)"
 
+lemma check_unbound_Ok: "check_unbound \<Gamma> x = Ok () \<Longrightarrow> fmlookup \<Gamma> x = Some Unbound"
+  by (simp add: check_unbound_def ensure_def split: if_splits)
+
 (* Bindings of pattern p at a type, joined from ms, the bindings at each disjunct. An entry None in ms means
    that p can't match that disjunct, and binds each variable of p at Never, failing at the first variable which
    is not unbound in \<Gamma>. *)
@@ -119,10 +125,80 @@ where
    Ok (fmmap_keys (\<lambda>x _. joins \<Sigma> (map (\<lambda>\<Delta>. the (fmlookup \<Delta> x)) \<Delta>s)) (hd \<Delta>s))
  }"
 
+(* Variable bound by the bindings of a pattern at the disjuncts of a type, unbound in \<Gamma> if unbound when bound
+   at a disjunct *)
+lemma bindings_at_unbound:
+  assumes "bindings_at \<Sigma> \<Gamma> p (map f (disjuncts \<tau>)) = Ok \<Delta>" and "x |\<in>| fmdom \<Delta>"
+    and "\<And>\<sigma> \<Delta>'. \<lbrakk> \<sigma> \<in> set (disjuncts \<tau>) ; f \<sigma> = Some (Ok \<Delta>') ; x |\<in>| fmdom \<Delta>' \<rbrakk> \<Longrightarrow> fmlookup \<Gamma> x = Some Unbound"
+  shows "fmlookup \<Gamma> x = Some Unbound"
+proof -
+  let ?g = "\<lambda>m. case m of
+                  Some m' \<Rightarrow> m'
+                | None \<Rightarrow> do {
+                    all_sum (map (check_unbound \<Gamma>) (sorted_list_of_set (binds p)));
+                    Ok (fmconst (binds p) (TyPrim Never))
+                  }"
+  from assms(1) obtain \<Delta>s where \<Delta>s: "those_sum (map ?g (map f (disjuncts \<tau>))) = Ok \<Delta>s"
+    and \<Delta>: "\<Delta> = fmmap_keys (\<lambda>x _. joins \<Sigma> (map (\<lambda>\<Delta>. the (fmlookup \<Delta> x)) \<Delta>s)) (hd \<Delta>s)"
+    unfolding bindings_at_def bind_sum_Ok by auto
+  from assms(2) \<Delta> have x: "x |\<in>| fmdom (hd \<Delta>s)" by simp
+  obtain \<sigma> \<sigma>s where ds: "disjuncts \<tau> = \<sigma> # \<sigma>s" using disjuncts_nonempty by (cases "disjuncts \<tau>") auto
+  with those_sum_map_Ok[OF \<Delta>s] obtain \<Delta>' \<Delta>s' where "\<Delta>s = \<Delta>' # \<Delta>s'" and g: "?g (f \<sigma>) = Ok \<Delta>'"
+    by (auto simp: list_all2_Cons1)
+  with x have x': "x |\<in>| fmdom \<Delta>'" by simp
+  show ?thesis
+  proof (cases "f \<sigma>")
+    case None
+    with g have "all_sum (map (check_unbound \<Gamma>) (sorted_list_of_set (binds p))) = Ok ()"
+      and "\<Delta>' = fmconst (binds p) (TyPrim Never)"
+      by (auto simp: bind_sum_Ok)
+    with x' finite_binds_pat[of p] show ?thesis
+      by (auto simp: fmlookup_dom_iff fmlookup_fmconst dest: all_sum_Ok[where m = "check_unbound \<Gamma> x"]
+          intro: check_unbound_Ok split: if_splits)
+  next
+    case (Some m)
+    with g ds x' show ?thesis by (auto intro: assms(3))
+  qed
+qed
+
 (* Disjoint union of the bindings of sub-patterns *)
 definition pattern_bindings :: "(var, ty) fmap may_fail list \<Rightarrow> (var, ty) fmap may_fail"
 where
 "pattern_bindings ms = do { \<Delta>s \<leftarrow> those_sum ms; Ok (fold (\<otimes>) \<Delta>s fmempty) }"
+
+(* Variable bound by a disjoint union of bindings, bound by one of them *)
+lemma pattern_bindings_dom:
+  assumes "pattern_bindings ms = Ok \<Delta>" and "x |\<in>| fmdom \<Delta>"
+  obtains \<Delta>' where "Ok \<Delta>' \<in> set ms" and "x |\<in>| fmdom \<Delta>'"
+proof -
+  from assms(1) obtain \<Delta>s where \<Delta>s: "those_sum ms = Ok \<Delta>s" and \<Delta>: "\<Delta> = fold fmadd \<Delta>s fmempty"
+    by (auto simp: pattern_bindings_def bind_sum_Ok)
+  from fold_fmadd_dom[of x \<Delta>s fmempty] assms(2) \<Delta> obtain \<Delta>' where "\<Delta>' \<in> set \<Delta>s" and x: "x |\<in>| fmdom \<Delta>'"
+    by auto
+  then obtain i where i: "i < length \<Delta>s" and "\<Delta>' = \<Delta>s ! i" by (auto simp: in_set_conv_nth)
+  with those_sum_Ok[OF \<Delta>s] have "ms ! i = Ok \<Delta>'" and "i < length ms" by (auto simp: list_all2_conv_all_nth)
+  then have "Ok \<Delta>' \<in> set ms" by (metis nth_mem)
+  with x that show thesis by blast
+qed
+
+lemma pattern_bindings_map2_dom:
+  assumes "pattern_bindings (map2 f ps \<sigma>s) = Ok \<Delta>" and "x |\<in>| fmdom \<Delta>"
+  obtains p \<sigma> \<Delta>' where "(p, \<sigma>) \<in> set (zip ps \<sigma>s)" and "f p \<sigma> = Ok \<Delta>'" and "x |\<in>| fmdom \<Delta>'"
+proof -
+  from pattern_bindings_dom[OF assms] obtain \<Delta>' where "Ok \<Delta>' \<in> set (map2 f ps \<sigma>s)" and "x |\<in>| fmdom \<Delta>'"
+    by blast
+  with that show thesis by (auto simp: set_zip in_set_conv_nth) (metis nth_mem nth_zip set_zip_leftD)
+qed
+
+lemma pattern_bindings_map_dom:
+  assumes "pattern_bindings (map f ps) = Ok \<Delta>" and "x |\<in>| fmdom \<Delta>"
+  obtains p \<Delta>' where "p \<in> set ps" and "f p = Ok \<Delta>'" and "x |\<in>| fmdom \<Delta>'"
+proof -
+  from pattern_bindings_dom[OF assms] obtain \<Delta>' where "Ok \<Delta>' \<in> set (map f ps)" and x: "x |\<in>| fmdom \<Delta>'"
+    by blast
+  then obtain p where p: "p \<in> set ps" and "Ok \<Delta>' = f p" by auto
+  from that[OF p this(2)[symmetric] x] show thesis .
+qed
 
 function
   check_pat :: "class_table \<Rightarrow> cxt \<Rightarrow> pat \<Rightarrow> ty \<Rightarrow> (var, ty) fmap may_fail" and
@@ -191,5 +267,56 @@ by (relation "measure (\<lambda>x. case x of Inl (_, _, p, _) \<Rightarrow> size
    (auto elim!: in_set_zipE dest!: field_patterns_elem
      dest: size_node_elem size_node_snd_elem size_node_snd_elem'
      simp del: field_patterns.simps)
+
+lemma check_pat_unbound:
+  "check_pat \<Sigma> \<Gamma> p \<tau> = Ok \<Delta> \<Longrightarrow> x |\<in>| fmdom \<Delta> \<Longrightarrow> fmlookup \<Gamma> x = Some Unbound"
+  "check_pat_at \<Sigma> \<Gamma> p' \<tau>' = Ok \<Delta>' \<Longrightarrow> x |\<in>| fmdom \<Delta>' \<Longrightarrow> fmlookup \<Gamma> x = Some Unbound"
+proof (induction \<Sigma> \<Gamma> p \<tau> and \<Sigma> \<Gamma> p' \<tau>' arbitrary: \<Delta> and \<Delta>' rule: check_pat_check_pat_at.induct)
+  case (2 \<Sigma> \<Gamma> y \<tau>)
+  then show ?case by (auto simp: bind_sum_Ok dest: check_unbound_Ok split: if_splits)
+next
+  case (3 \<Sigma> \<Gamma> p y \<tau>)
+  then show ?case by (auto simp: bind_sum_Ok dest: check_unbound_Ok)
+next
+  case (5 \<Sigma> \<Gamma> ps \<tau>)
+  from "5.prems"(1) obtain z where z: "by_rule RuleCheckTupleNone
+      (ensure (\<not> has_values \<Sigma> ListKind \<tau>) (SequenceKindMismatch TupleKind \<tau> ListKind) \<bind>
+       (\<lambda>_. ensure (\<not> has_values \<Sigma> RangeKind \<tau>) (SequenceKindMismatch TupleKind \<tau> RangeKind))) = Ok z"
+    by (auto simp: bind_sum_Ok)
+  from "5.prems" show ?case
+    apply (clarsimp simp: bind_sum_Ok)
+    apply (erule bindings_at_unbound, assumption)
+    apply (auto split: ty.splits if_splits elim!: pattern_bindings_map2_dom intro: "5.IH"[OF z])
+    done
+next
+  case (6 \<Sigma> \<Gamma> ps \<tau>)
+  from "6.prems" show ?case
+    apply (clarsimp simp: bind_sum_Ok)
+    apply (erule bindings_at_unbound, assumption)
+    apply (auto split: ty.splits if_splits elim!: pattern_bindings_map_dom intro: "6.IH")
+    done
+next
+  case (7 \<Sigma> \<Gamma> kps \<tau>)
+  have IH: "fmlookup \<Gamma> x = Some Unbound"
+    if "TyDict \<sigma> \<in> set (disjuncts \<tau>)" and "(w, p) \<in> set kps" and "check_pat_at \<Sigma> \<Gamma> p \<sigma> = Ok \<Delta>'"
+      and "x |\<in>| fmdom \<Delta>'"
+    for \<sigma> w p \<Delta>'
+  proof -
+    from that(2) have "p \<in> set (map snd kps)" by (auto intro: rev_image_eqI)
+    from "7.IH"[OF that(1) refl this that(3, 4)] show ?thesis .
+  qed
+  from "7.prems" show ?case
+    apply (clarsimp simp: bind_sum_Ok)
+    apply (erule bindings_at_unbound, assumption)
+    apply (auto split: ty.splits if_splits elim!: pattern_bindings_map_dom intro: IH)
+    done
+next
+  case (8 \<Sigma> \<Gamma> q ps kps \<tau>)
+  from "8.prems" show ?case
+    apply (clarsimp simp: bind_sum_Ok)
+    apply (erule bindings_at_unbound, assumption)
+    apply (auto split: instances.splits if_splits elim!: pattern_bindings_map2_dom intro: "8.IH")
+    done
+qed auto
 
 end

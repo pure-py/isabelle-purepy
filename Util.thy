@@ -24,6 +24,21 @@ lemma comp_fun_idem_fmupd: "comp_fun_idem_on UNIV (\<lambda>x. fmupd x u)"
 lemma fmconst_code [code]: "fmconst (set xs) u = fold (\<lambda>x. fmupd x u) xs fmempty"
   unfolding fmconst_def by (rule comp_fun_idem_on.fold_set_fold[OF comp_fun_idem_fmupd subset_UNIV])
 
+lemma fmlookup_fmconst: "finite A \<Longrightarrow> fmlookup (fmconst A u) x = (if x \<in> A then Some u else None)"
+proof -
+  assume "finite A"
+  then obtain xs where A: "A = set xs" using finite_list by blast
+  have "fmlookup (fold (\<lambda>x. fmupd x u) xs m) x = (if x \<in> set xs then Some u else fmlookup m x)" for m
+    by (induction xs arbitrary: m) auto
+  then show ?thesis by (simp add: A fmconst_code)
+qed
+
+lemma fold_fmadd_dom: "x |\<in>| fmdom (fold fmadd \<Delta>s \<Delta>) \<Longrightarrow> x |\<in>| fmdom \<Delta> \<or> (\<exists>\<Delta>' \<in> set \<Delta>s. x |\<in>| fmdom \<Delta>')"
+proof (induction \<Delta>s arbitrary: \<Delta>)
+  case (Cons \<Delta>' \<Delta>s)
+  from Cons.IH[of "\<Delta>' \<otimes> \<Delta>"] Cons.prems show ?case by auto
+qed simp
+
 lemma map_of_zip_map_snd:
   "length xs = length ys \<Longrightarrow> map_of (zip xs (map f ys)) k = map_option f (map_of (zip xs ys) k)"
   by (induction xs ys rule: list_induct2) auto
@@ -103,6 +118,12 @@ adhoc_overloading Monad_Syntax.bind \<rightleftharpoons> bind_sum
 lemma bind_sum_simps [simp]: "bind_sum (Fail e) f = Fail e" "bind_sum (Ok x) f = f x"
   by (simp_all add: bind_sum_def)
 
+lemma bind_sum_Ok: "bind_sum m f = Ok y \<longleftrightarrow> (\<exists>x. m = Ok x \<and> f x = Ok y)"
+  by (cases m) simp_all
+
+lemma Ok_bind_sum: "Ok y = bind_sum m f \<longleftrightarrow> (\<exists>x. m = Ok x \<and> f x = Ok y)"
+  by (cases m) auto
+
 lemma bind_sum_cong [fundef_cong]:
   "\<lbrakk> m = m' ; \<And>x. m' = Ok x \<Longrightarrow> f x = f' x \<rbrakk> \<Longrightarrow> bind_sum m f = bind_sum m' f'"
   by (cases m') simp_all
@@ -154,6 +175,9 @@ proof -
   qed
   with assms(2) show ?thesis by (simp add: list_all2_conv_all_nth)
 qed
+
+lemma Ok_in_set_map2: "Ok y \<in> set (map2 f xs zs) \<Longrightarrow> \<exists>x z. (x, z) \<in> set (zip xs zs) \<and> f x z = Ok y"
+  by (auto simp: set_zip in_set_conv_nth) (metis)
 
 (* Values of the fields filled by positional and keyword values, related by R to the field types when the
    positional values are related to the types of the first fields and each keyword value to the type of its
