@@ -68,9 +68,17 @@ where "result_typed r \<tau> \<equiv> wf_result (\<lambda>v. \<turnstile> v : Ty
 abbreviation results_typed :: "val list result \<Rightarrow> ty list \<Rightarrow> bool"
 where "results_typed rs \<tau>s \<equiv> wf_result (\<lambda>vs. list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) vs \<tau>s) rs"
 
+(* Result of a dotted name bound to a checked module, at the entry of the module *)
+definition sound_module :: "env \<Rightarrow> expr \<Rightarrow> val result \<Rightarrow> bool"
+where
+"sound_module \<rho> e r =
+  (\<forall>\<eta> \<Gamma> q q' \<Gamma>'. \<eta> \<turnstile> \<rho> : \<Gamma> \<longrightarrow> dotted_name e = Some q \<longrightarrow> lookup \<Gamma> q = Some (ModChecked q' \<Gamma>')
+     \<longrightarrow> wf_result (\<lambda>v. \<turnstile> v : ModChecked q' \<Gamma>') r)"
+
 definition sound_expr :: "env \<Rightarrow> expr \<Rightarrow> val result \<Rightarrow> bool"
 where
-"sound_expr \<rho> e r = (\<forall>\<eta> \<Gamma> \<tau>. \<eta> \<turnstile> \<rho> : \<Gamma> \<longrightarrow> has_type \<Sigma> \<eta> \<Gamma> e \<tau> \<longrightarrow> result_typed r (inst \<eta> \<tau>))"
+"sound_expr \<rho> e r =
+  ((\<forall>\<eta> \<Gamma> \<tau>. \<eta> \<turnstile> \<rho> : \<Gamma> \<longrightarrow> has_type \<Sigma> \<eta> \<Gamma> e \<tau> \<longrightarrow> result_typed r (inst \<eta> \<tau>)) \<and> sound_module \<rho> e r)"
 
 definition sound_exprs :: "env \<Rightarrow> expr located list \<Rightarrow> val list result \<Rightarrow> bool"
 where
@@ -107,6 +115,9 @@ where
 "sound_entries \<rho>s e e' r =
   (\<forall>\<eta> \<Gamma> \<tau>. (\<forall>\<rho> \<in> set \<rho>s. \<eta> \<turnstile> \<rho> : \<Gamma>) \<longrightarrow> check_expr_at \<Sigma> \<Gamma> e (TyPrim str) = Ok ()
      \<longrightarrow> has_type_at \<Sigma> \<eta> \<Gamma> e' \<tau> \<longrightarrow> wf_entries r (inst \<eta> \<tau>))"
+
+lemma sound_module_None [simp]: "dotted_name e = None \<Longrightarrow> sound_module \<rho> e r"
+  by (simp add: sound_module_def)
 
 lemma sound_compD:
   "\<lbrakk> sound_comp \<rho>s e r ; \<forall>\<rho> \<in> set \<rho>s. \<eta> \<turnstile> \<rho> : \<Gamma> ; has_type_at \<Sigma> \<eta> \<Gamma> e \<tau> \<rbrakk> \<Longrightarrow> wf_elems r (inst \<eta> \<tau>)"
@@ -175,26 +186,28 @@ lemma sound_exprI:
     "\<And>\<eta> \<Gamma> \<tau>. \<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; check_expr' \<Sigma> \<Gamma> e \<tau> = Some (Ok ()) ; fv \<tau> \<subseteq> fst ` set \<eta> \<rbrakk>
       \<Longrightarrow> result_typed r (inst \<eta> \<tau>)"
   and call: "\<And>\<eta> \<Gamma>. \<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; call_stmt \<Sigma> \<Gamma> e \<rbrakk> \<Longrightarrow> result_typed r (inst \<eta> (TyPrim object))"
+  and module: "sound_module \<rho> e r"
   shows "sound_expr \<rho> e r"
-  unfolding sound_expr_def has_type_def by (blast dest: check_expr_cases synth check call result_typed_sub)
+  unfolding sound_expr_def has_type_def using module
+  by (blast dest: check_expr_cases synth check call result_typed_sub)
 
 (* Expression with a synthesis rule only *)
 lemma sound_expr_synthI:
   assumes "\<And>\<eta> \<Gamma> \<tau>. \<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; synth_expr \<Sigma> \<Gamma> e = Ok \<tau> \<rbrakk> \<Longrightarrow> result_typed r (inst \<eta> \<tau>)"
-    and "\<And>\<Gamma> \<tau>. check_expr' \<Sigma> \<Gamma> e \<tau> = None" and "\<And>\<Gamma>. \<not> call_stmt \<Sigma> \<Gamma> e"
+    and "\<And>\<Gamma> \<tau>. check_expr' \<Sigma> \<Gamma> e \<tau> = None" and "\<And>\<Gamma>. \<not> call_stmt \<Sigma> \<Gamma> e" and "dotted_name e = None"
   shows "sound_expr \<rho> e r"
 proof (rule sound_exprI)
   fix \<eta> \<Gamma> \<tau>
   assume "\<eta> \<turnstile> \<rho> : \<Gamma>" and "synth_expr \<Sigma> \<Gamma> e = Ok \<tau>"
   then show "result_typed r (inst \<eta> \<tau>)" by (rule assms(1))
-qed (simp_all add: assms(2, 3))
+qed (simp_all add: assms(2, 3, 4))
 
 (* Expression without a call statement rule *)
 lemma sound_expr_typedI:
   assumes "\<And>\<eta> \<Gamma> \<tau>. \<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; typed_by_rule \<Sigma> \<eta> \<Gamma> e \<tau> \<rbrakk> \<Longrightarrow> result_typed r (inst \<eta> \<tau>)"
-    and "\<And>\<Gamma>. \<not> call_stmt \<Sigma> \<Gamma> e"
+    and "\<And>\<Gamma>. \<not> call_stmt \<Sigma> \<Gamma> e" and "dotted_name e = None"
   shows "sound_expr \<rho> e r"
-  by (rule sound_exprI) (auto intro: assms(1) simp: typed_by_rule_def assms(2))
+  by (rule sound_exprI) (auto intro: assms(1) simp: typed_by_rule_def assms(2, 3))
 
 lemma sound_expr_synth_at:
   "\<lbrakk> sound_expr \<rho> (node e) r ; \<eta> \<turnstile> \<rho> : \<Gamma> ; synth_expr_at \<Sigma> \<Gamma> e = Ok \<tau> \<rbrakk> \<Longrightarrow> result_typed r (inst \<eta> \<tau>)"
@@ -208,6 +221,11 @@ lemma sound_expr_check_at:
 lemma sound_expr_has_type_at:
   "\<lbrakk> sound_expr \<rho> (node e) r ; \<eta> \<turnstile> \<rho> : \<Gamma> ; has_type_at \<Sigma> \<eta> \<Gamma> e \<tau> \<rbrakk> \<Longrightarrow> result_typed r (inst \<eta> \<tau>)"
   by (cases e) (auto simp: sound_expr_def)
+
+lemma sound_expr_module:
+  "\<lbrakk> sound_expr \<rho> e r ; \<eta> \<turnstile> \<rho> : \<Gamma> ; dotted_name e = Some q ; lookup \<Gamma> q = Some (ModChecked q' \<Gamma>') \<rbrakk>
+  \<Longrightarrow> wf_result (\<lambda>v. \<turnstile> v : ModChecked q' \<Gamma>') r"
+  by (simp add: sound_expr_def sound_module_def)
 
 lemma sound_exprs_abort:
   "\<lbrakk> sound_exprs \<rho> es (Aborts \<kappa>) ; \<eta> \<turnstile> \<rho> : \<Gamma> ; list_all2 (has_type_at \<Sigma> \<eta> \<Gamma>) es \<tau>s \<rbrakk> \<Longrightarrow> \<not> prevented \<kappa>"
@@ -301,17 +319,19 @@ next
   from v this closed have "\<turnstile> v : Ty (subst (map (inst \<eta>) \<tau>s) \<alpha>s (inst ?\<eta>' \<sigma>))" by (rule ValInst)
   then have "\<turnstile> v : Ty (inst \<eta> (subst \<tau>s \<alpha>s \<sigma>))" by (simp only: inst_subst[OF wf_env_closed[OF env] len])
   then show "result_typed (Val v) (inst \<eta> \<tau>)" using sub by (auto intro: wf_val_inst_sub)
-qed simp
+next
+  show "sound_module \<rho> (ExprVar x) (Val v)" using assms(1) by (auto simp: sound_module_def dest!: wf_env_lookup)
+qed simp_all
 
 lemma var_unknown_sound: "fmlookup \<rho> x = None \<Longrightarrow> sound_expr \<rho> (ExprVar x) (Aborts NameError)"
   by (rule sound_exprI)
-     (auto simp: var_scheme_def scheme_of_name_def entry_of_def resolve_name_def
+     (auto simp: var_scheme_def scheme_of_name_def entry_of_def resolve_name_def sound_module_def
       split: option.splits cxt_entry.splits dest!: wf_env_lookup)
 
 lemma var_unbound_sound: "fmlookup \<rho> x = Some VUnbound \<Longrightarrow> sound_expr \<rho> (ExprVar x) (Aborts NameError)"
   by (rule sound_exprI)
-     (auto simp: var_scheme_def scheme_of_name_def entry_of_def resolve_name_def
-      split: option.splits cxt_entry.splits dest!: wf_env_lookup wf_unbound_ty wf_unbound_scheme)
+     (auto simp: var_scheme_def scheme_of_name_def entry_of_def resolve_name_def sound_module_def
+      split: option.splits cxt_entry.splits dest!: wf_env_lookup wf_unbound_ty wf_unbound_scheme wf_unbound(1))
 
 lemma literal_sound: "sound_expr \<rho> (ExprLiteral l) (Val (VLit l))"
   by (rule sound_expr_synthI) (auto simp: var_scheme_None intro: ValLit ValLitFloat split: lit.splits)
@@ -403,7 +423,7 @@ proof (rule sound_expr_typedI)
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprCond e1 e e2) \<tau>"
   from cond_typed[OF this(2) wf_env_tyvars[OF env]] show "result_typed r (inst \<eta> \<tau>)"
     by (blast intro: result_typed_sub sound_expr_has_type_at[OF assms(2) env])
-qed simp
+qed simp_all
 
 lemma cond_false_sound:
   assumes "sound_expr \<rho> (node e) (Val false)" and "sound_expr \<rho> (node e2) r"
@@ -413,7 +433,7 @@ proof (rule sound_expr_typedI)
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprCond e1 e e2) \<tau>"
   from cond_typed[OF this(2) wf_env_tyvars[OF env]] show "result_typed r (inst \<eta> \<tau>)"
     by (blast intro: result_typed_sub sound_expr_has_type_at[OF assms(2) env])
-qed simp
+qed simp_all
 
 lemma cond_fail_sound: "sound_expr \<rho> (node e) (Aborts \<kappa>) \<Longrightarrow> sound_expr \<rho> (ExprCond e1 e e2) (Aborts \<kappa>)"
   by (rule sound_exprI) (auto simp: bind_sum_def dest: prim_operand split: sum.splits)
@@ -508,7 +528,7 @@ proof (rule sound_expr_typedI)
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprList es) \<tau>"
   with list_typed[OF this(2) wf_env_tyvars[OF env]] assms show "result_typed (Val (VList vs)) (inst \<eta> \<tau>)"
     by (auto intro: list_elems)
-qed simp
+qed simp_all
 
 lemma list_fail_sound:
   assumes "sound_exprs \<rho> es (Aborts \<kappa>)"
@@ -520,7 +540,7 @@ proof (rule sound_expr_typedI)
     where "list_all2 (\<lambda>e \<sigma>. has_type_at \<Sigma> \<eta> \<Gamma> e \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>') es \<tau>s" by blast
   then have "list_all2 (has_type_at \<Sigma> \<eta> \<Gamma>) es \<tau>s" by (auto simp: list_all2_conv_all_nth)
   with assms env show "result_typed (Aborts \<kappa>) (inst \<eta> \<tau>)" by (auto dest: sound_exprs_abort)
-qed simp
+qed simp_all
 
 (* Elements of a tuple synthesise or check against the components of its type *)
 lemma tuple_typed:
@@ -549,7 +569,7 @@ proof (rule sound_expr_typedI)
   assume "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprTuple es) \<tau>"
   with tuple_typed[OF this(2)] assms show "result_typed (Val (VTuple vs)) (inst \<eta> \<tau>)"
     by (auto simp: sound_exprs_def ValTuple)
-qed simp
+qed simp_all
 
 lemma tuple_fail_sound:
   assumes "sound_exprs \<rho> es (Aborts \<kappa>)"
@@ -558,7 +578,7 @@ proof (rule sound_expr_typedI)
   fix \<eta> \<Gamma> \<tau>
   assume "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprTuple es) \<tau>"
   with tuple_typed[OF this(2)] assms show "result_typed (Aborts \<kappa>) (inst \<eta> \<tau>)" by (auto dest: sound_exprs_abort)
-qed simp
+qed simp_all
 
 (* Keys of a dictionary display check against str, and values synthesise subtypes of the value type, or check
    against it *)
@@ -631,7 +651,7 @@ proof (induction \<sigma>s arbitrary: vs)
     by (auto simp: list_all2_Cons2)
   moreover from this(2) obtain w where "u = VLit (LitString w)" using wf_str[OF _ SubtyRefl] by blast
   ultimately show ?case using Cons.IH by fastforce
-qed simp
+qed simp_all
 
 lemma dict_sound:
   assumes "sound_exprs \<rho> (concat (map (\<lambda>(e, e'). [e, e']) kes)) (Val vs)" and "dict_entries vs = Some \<delta>"
@@ -645,7 +665,7 @@ proof (rule sound_expr_typedI)
   from dict_entries_typed[OF this(3)] assms(2) sub
   have "\<forall>w v. (w, v) \<in> set \<delta> \<longrightarrow> \<turnstile> v : Ty (inst \<eta> \<tau>')" by (fastforce intro: wf_val_inst_sub)
   then show "result_typed (Val (VDict (update [] \<delta>))) (inst \<eta> \<tau>)" by (simp add: \<tau> wf_dict_update)
-qed simp
+qed simp_all
 
 lemma dict_fail_sound:
   "sound_exprs \<rho> (concat (map (\<lambda>(e, e'). [e, e']) kes)) (Aborts \<kappa>) \<Longrightarrow> sound_expr \<rho> (ExprDict kes) (Aborts \<kappa>)"
@@ -664,7 +684,7 @@ proof (rule sound_expr_typedI)
       and "results_typed (Val vs) (concat (map (\<lambda>\<sigma>. [TyPrim str, \<sigma>]) (map (inst \<eta>) \<sigma>s)))"
     from dict_entries_typed[OF this(3)[unfolded wf_result.simps(1)]] assms(2) show ?thesis by simp
   qed
-qed simp
+qed simp_all
 
 lemma subscript_sound:
   "\<lbrakk> sound_expr \<rho> (node e) (Val v) ; \<not> is_class v ; sound_expr \<rho> (node e') r \<rbrakk>
@@ -707,7 +727,7 @@ proof (rule sound_expr_typedI)
   with assms(1) env have "\<forall>\<rho>' \<in> set \<rho>s. \<eta> \<turnstile> \<rho>' : \<Gamma> \<otimes> \<Delta>" by (simp add: sound_quals_def)
   from sound_compD[OF assms(2) this e] sub show "result_typed (Val (VList vs)) (inst \<eta> \<tau>)"
     by (auto simp: \<tau> intro: ValList wf_val_inst_sub)
-qed simp
+qed simp_all
 
 lemma list_comp_fail_quals_sound:
   assumes "sound_quals \<rho> gs (Aborts \<kappa>)"
@@ -717,7 +737,7 @@ proof (rule sound_expr_typedI)
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprListComp e gs) \<tau>"
   from list_comp_typed[OF this(2)] assms env show "result_typed (Aborts \<kappa>) (inst \<eta> \<tau>)"
     by (auto simp: sound_quals_def)
-qed simp
+qed simp_all
 
 lemma list_comp_fail_sound:
   assumes "sound_quals \<rho> gs (Val \<rho>s)" and "sound_comp \<rho>s e (Aborts \<kappa>)"
@@ -730,7 +750,7 @@ proof (rule sound_expr_typedI)
     by blast
   with assms(1) env have "\<forall>\<rho>' \<in> set \<rho>s. \<eta> \<turnstile> \<rho>' : \<Gamma> \<otimes> \<Delta>" by (simp add: sound_quals_def)
   from sound_compD[OF assms(2) this e] show "result_typed (Aborts \<kappa>) (inst \<eta> \<tau>)" by simp
-qed simp
+qed simp_all
 
 (* Key of a dictionary comprehension checked against str, and its value typed at a subtype of the value type,
    under its qualifiers *)
@@ -762,7 +782,7 @@ proof (rule sound_expr_typedI)
   from sound_entriesD[OF assms(2) this key e'] sub
   have "\<forall>w v. (w, v) \<in> set \<delta> \<longrightarrow> \<turnstile> v : Ty (inst \<eta> \<tau>')" by (auto intro: wf_val_inst_sub)
   then show "result_typed (Val (VDict (update [] \<delta>))) (inst \<eta> \<tau>)" by (simp add: \<tau> wf_dict_update)
-qed simp
+qed simp_all
 
 lemma dict_comp_fail_quals_sound:
   assumes "sound_quals \<rho> gs (Aborts \<kappa>)"
@@ -772,7 +792,7 @@ proof (rule sound_expr_typedI)
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprDictComp e e' gs) \<tau>"
   from dict_comp_typed[OF this(2)] assms env show "result_typed (Aborts \<kappa>) (inst \<eta> \<tau>)"
     by (auto simp: sound_quals_def)
-qed simp
+qed simp_all
 
 lemma dict_comp_fail_sound:
   assumes "sound_quals \<rho> gs (Val \<rho>s)" and "sound_entries \<rho>s e e' (Aborts \<kappa>)"
@@ -785,7 +805,7 @@ proof (rule sound_expr_typedI)
     by blast
   with assms(1) env have "\<forall>\<rho>' \<in> set \<rho>s. \<eta> \<turnstile> \<rho>' : \<Gamma> \<otimes> \<Delta>" by (simp add: sound_quals_def)
   from sound_entriesD[OF assms(2) this key e'] show "result_typed (Aborts \<kappa>) (inst \<eta> \<tau>)" by simp
-qed simp
+qed simp_all
 
 lemma attr_object_sound:
   "\<lbrakk> sound_expr \<rho> (node e) (Val (VObject C xvs)) ; map_of xvs x = Some v \<rbrakk>

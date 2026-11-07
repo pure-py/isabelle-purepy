@@ -45,6 +45,9 @@ lemma inst_entry_signature_entry:
 lemma subst_closed: "fv \<tau> = {} \<Longrightarrow> subst \<tau>s \<alpha>s \<tau> = \<tau>"
   by (induction \<tau>) (auto intro: map_idI)
 
+lemma subst_Nil [simp]: "subst [] \<alpha>s \<tau> = \<tau>"
+  by (induction \<tau>) (auto intro: map_idI)
+
 lemma inst_closed: "\<lbrakk> closed_inst \<eta> ; fv \<tau> \<subseteq> fst ` set \<eta> \<rbrakk> \<Longrightarrow> fv (inst \<eta> \<tau>) = {}"
   by (induction \<tau>)
      (auto simp: closed_inst_def zip_map_fst_snd map_of_eq_None_iff UN_subset_iff split: option.splits
@@ -203,6 +206,24 @@ lemma wf_val_unbound: "\<turnstile> v : Unbound \<Longrightarrow> v = VUnbound"
 
 lemma wf_dict_update: "\<forall>w v. (w, v) \<in> set \<delta> \<longrightarrow> \<turnstile> v : Ty \<tau> \<Longrightarrow> \<turnstile> VDict (update [] \<delta>) : Ty (TyDict \<tau>)"
   using set_update[of "[]" \<delta>] by (auto intro!: ValDict distinct_update)
+
+
+lemma wf_mod_checked: "\<turnstile> v : ModChecked q \<Gamma> \<Longrightarrow> \<exists>\<rho>. v = VModLoaded q \<rho> \<and> [] \<turnstile> \<rho> : \<Gamma>"
+proof -
+  have "\<turnstile> v : \<theta> \<Longrightarrow> \<theta> = ModChecked q \<Gamma> \<longrightarrow> (\<exists>\<rho>. v = VModLoaded q \<rho> \<and> [] \<turnstile> \<rho> : \<Gamma>)"
+    and "\<eta> \<turnstile> \<rho> : \<Gamma>' \<Longrightarrow> True" for \<theta> \<eta> \<rho> \<Gamma>'
+    by (induction rule: wf_val_wf_env.inducts)
+       (auto simp: inst_entry_signature_entry split: if_splits dest: prim_entry_callable)
+  then show "\<turnstile> v : ModChecked q \<Gamma> \<Longrightarrow> ?thesis" by blast
+qed
+
+lemma wf_mod_loaded: "\<turnstile> VModLoaded q \<rho> : \<theta> \<Longrightarrow> \<exists>\<Gamma>. \<theta> = ModChecked q \<Gamma>"
+proof -
+  have "\<turnstile> v : \<theta> \<Longrightarrow> v = VModLoaded q \<rho> \<longrightarrow> (\<exists>\<Gamma>. \<theta> = ModChecked q \<Gamma>)" and "\<eta> \<turnstile> \<rho>' : \<Gamma>' \<Longrightarrow> True"
+    for v \<theta> \<eta> \<rho>' \<Gamma>'
+    by (induction rule: wf_val_wf_env.inducts) auto
+  then show "\<turnstile> VModLoaded q \<rho> : \<theta> \<Longrightarrow> ?thesis" by blast
+qed
 
 end
 
