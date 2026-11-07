@@ -103,11 +103,19 @@ where
 "check_unbound \<Gamma> x = ensure (fmlookup \<Gamma> x = Some Unbound) (Redeclaration x)"
 
 (* Bindings of pattern p at a type, joined from ms, the bindings at each disjunct. An entry None in ms means
-   that p can't match that disjunct, and binds each variable of p at Never. *)
-definition bindings_at :: "class_table \<Rightarrow> pat \<Rightarrow> (var, ty) fmap may_fail option list \<Rightarrow> (var, ty) fmap may_fail"
+   that p can't match that disjunct, and binds each variable of p at Never, failing at the first variable which
+   is not unbound in \<Gamma>. *)
+definition bindings_at ::
+  "class_table \<Rightarrow> cxt \<Rightarrow> pat \<Rightarrow> (var, ty) fmap may_fail option list \<Rightarrow> (var, ty) fmap may_fail"
 where
-"bindings_at \<Sigma> p ms = do {
-   \<Delta>s \<leftarrow> those_sum (map (\<lambda>m. case m of Some m' \<Rightarrow> m' | None \<Rightarrow> Ok (fmconst (binds p) (TyPrim Never))) ms);
+"bindings_at \<Sigma> \<Gamma> p ms = do {
+   \<Delta>s \<leftarrow> those_sum (map (\<lambda>m. case m of
+                             Some m' \<Rightarrow> m'
+                           | None \<Rightarrow> do {
+                               all_sum (map (check_unbound \<Gamma>) (sorted_list_of_set (binds p)));
+                               Ok (fmconst (binds p) (TyPrim Never))
+                             })
+                    ms);
    Ok (fmmap_keys (\<lambda>x _. joins \<Sigma> (map (\<lambda>\<Delta>. the (fmlookup \<Delta> x)) \<Delta>s)) (hd \<Delta>s))
  }"
 
@@ -133,7 +141,7 @@ where
      ensure (\<not> has_values \<Sigma> ListKind \<tau>) (SequenceKindMismatch TupleKind \<tau> ListKind);
      ensure (\<not> has_values \<Sigma> RangeKind \<tau>) (SequenceKindMismatch TupleKind \<tau> RangeKind)
    });
-   bindings_at \<Sigma> (PatTuple ps)
+   bindings_at \<Sigma> \<Gamma> (PatTuple ps)
      (map (\<lambda>\<sigma>. case \<sigma> of
                  TyTuple \<sigma>s \<Rightarrow>
                    if length \<sigma>s = length ps then Some (pattern_bindings (map2 (check_pat_at \<Sigma> \<Gamma>) ps \<sigma>s))
@@ -146,14 +154,14 @@ where
      ensure (\<not> has_values \<Sigma> TupleKind \<tau>) (SequenceKindMismatch ListKind \<tau> TupleKind);
      ensure (\<not> has_values \<Sigma> RangeKind \<tau>) (SequenceKindMismatch ListKind \<tau> RangeKind)
    });
-   bindings_at \<Sigma> (PatList ps)
+   bindings_at \<Sigma> \<Gamma> (PatList ps)
      (map (\<lambda>\<sigma>. case \<sigma> of
                  TyList \<sigma>' \<Rightarrow> Some (pattern_bindings (map (\<lambda>p. check_pat_at \<Sigma> \<Gamma> p \<sigma>') ps))
                | _ \<Rightarrow> None)
        (disjuncts \<tau>))
  }" |
 "check_pat \<Sigma> \<Gamma> (PatDict kps) \<tau> =
-  bindings_at \<Sigma> (PatDict kps)
+  bindings_at \<Sigma> \<Gamma> (PatDict kps)
     (map (\<lambda>\<sigma>. case \<sigma> of
                 TyDict \<sigma>' \<Rightarrow> Some (pattern_bindings (map (\<lambda>p. check_pat_at \<Sigma> \<Gamma> p \<sigma>') (map snd kps)))
               | _ \<Rightarrow> None)
@@ -162,7 +170,7 @@ where
    C \<leftarrow> check_pattern_class \<Gamma> q;
    check_field_map (PatternArityMismatch (short_name C)) (UnknownFieldInPattern (short_name C))
      (field_names \<Sigma> C) (length ps) (map fst kps);
-   bindings_at \<Sigma> (PatConstr q (ps, kps))
+   bindings_at \<Sigma> \<Gamma> (PatConstr q (ps, kps))
      (map (\<lambda>\<sigma>. case instance_at \<Sigma> C \<sigma> of
                  Instance \<sigma>s \<Rightarrow>
                    Some (pattern_bindings
