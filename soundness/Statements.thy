@@ -380,7 +380,15 @@ lemma fv_join: "fv (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>) \<subset
 lemma merge_lookup:
   assumes "merge \<Sigma> X \<Gamma> \<Gamma>' = Ok \<Gamma>''" and "x |\<in>| fmdom (\<Gamma> \<otimes> \<Gamma>')"
   shows "fmlookup \<Gamma>'' x = merge_cxt_entry \<Sigma> (x \<in> X) (fmlookup \<Gamma> x) (fmlookup \<Gamma>' x)"
-  sorry
+proof -
+  let ?entry = "\<lambda>x. merge_cxt_entry \<Sigma> (x \<in> X) (fmlookup \<Gamma> x) (fmlookup \<Gamma>' x)"
+  from assms(1) have Y: "ffilter (\<lambda>x. ?entry x = None) (fmdom (\<Gamma> \<otimes> \<Gamma>')) = {||}"
+    and \<Gamma>'': "\<Gamma>'' = fmmap_keys (\<lambda>x _. the (?entry x)) (\<Gamma> \<otimes> \<Gamma>')"
+    by (auto simp: merge_def Let_def split: if_splits)
+  have "x |\<notin>| ffilter (\<lambda>x. ?entry x = None) (fmdom (\<Gamma> \<otimes> \<Gamma>'))" unfolding Y by simp
+  with assms(2) have "?entry x \<noteq> None" by (simp only: ffmember_filter) simp
+  with assms(2) \<Gamma>'' show ?thesis by (auto simp: fmlookup_dom_iff)
+qed
 
 context evaluation
 begin
@@ -719,7 +727,7 @@ inductive_cases WfPUSchemeE: "\<turnstile> v : PUScheme \<pi> b"
 
 lemma wf_val_pu: "\<turnstile> v : PU \<tau> b \<Longrightarrow> v = VUnbound \<or> \<turnstile> v : Ty \<tau>"
   and wf_val_puscheme: "\<turnstile> v : PUScheme \<pi> b \<Longrightarrow> v = VUnbound \<or> \<turnstile> v : Scheme \<pi>"
-  sorry
+  by (auto elim!: WfPUE WfPUSchemeE simp: inst_entry_signature_entry \<E>_def \<P>_def split: if_splits)
 
 (* Entry \<theta>' above \<theta>: the values of \<theta> are values of \<theta>', and \<theta>' is a type scheme or a type variable only if \<theta> is
    the same *)
@@ -736,7 +744,7 @@ lemma entry_above_trans: "\<lbrakk> entry_above \<eta> \<theta> \<theta>' ; entr
   by (simp add: entry_above_def)
 
 lemma possibly_unassigned_above: "possibly_unassigned b \<theta> = Some \<theta>' \<Longrightarrow> entry_above \<eta> \<theta> \<theta>'"
-  sorry
+  by (cases \<theta>) (auto simp: entry_above_def intro!: ValPU ValPUScheme dest!: wf_val_du wf_val_pu wf_val_puscheme)
 
 lemma possibly_unassigned_unbound: "possibly_unassigned b \<theta> = Some \<theta>' \<Longrightarrow> \<turnstile> VUnbound : inst_entry \<eta> \<theta>'"
   by (cases \<theta>) (auto intro: ValPU ValPUScheme)
@@ -747,7 +755,7 @@ lemma merge_cxt_entry_cases:
   shows "(\<exists>\<sigma> \<tau>. \<theta> = Ty \<sigma> \<and> \<theta>' = Ty \<tau> \<and> \<theta>'' = Ty (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>)) \<or> \<theta>'' = \<theta> \<and> \<theta>' = \<theta>
     \<or> (\<exists>\<pi>. scheme_of \<theta> = Some \<pi> \<and> scheme_of \<theta>' = Some \<pi> \<and> \<theta>'' = PUScheme \<pi> b)
     \<or> (\<exists>\<sigma> \<tau>. var_ty \<theta> = Some \<sigma> \<and> var_ty \<theta>' = Some \<tau> \<and> \<theta>'' = PU (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>) b)"
-  sorry
+  using assms by (cases \<theta>; cases \<theta>'; simp split: if_splits option.splits)
 
 lemma scheme_of_Some: "scheme_of \<theta> = Some \<pi> \<Longrightarrow> \<theta> = Scheme \<pi> \<or> (\<exists>b. \<theta> = PUScheme \<pi> b)"
   by (cases \<theta>) simp_all
@@ -758,12 +766,35 @@ lemma var_ty_Some: "var_ty \<theta> = Some \<sigma> \<Longrightarrow> \<theta> =
 lemma merge_entry_above:
   "merge_cxt_entry \<Sigma> b (Some \<theta>) e = Some \<theta>'' \<Longrightarrow> entry_above \<eta> \<theta> \<theta>''"
   "merge_cxt_entry \<Sigma> b e (Some \<theta>) = Some \<theta>'' \<Longrightarrow> entry_above \<eta> \<theta> \<theta>''"
-  sorry
+proof -
+  have ty: "entry_above \<eta> (Ty \<sigma>) (Ty \<tau>)" if "\<Sigma> \<turnstile> \<sigma> <: \<tau>" for \<sigma> \<tau>
+    using that by (auto simp: entry_above_def intro: wf_val_inst_sub)
+  have scheme: "entry_above \<eta> \<theta> (PUScheme \<pi> b)" if "scheme_of \<theta> = Some \<pi>" for \<theta> \<pi>
+    using scheme_of_Some[OF that]
+    by (auto simp: entry_above_def intro!: ValPUScheme dest!: wf_val_puscheme)
+  have var: "entry_above \<eta> \<theta> (PU \<tau> b)" if "var_ty \<theta> = Some \<sigma>" and "\<Sigma> \<turnstile> \<sigma> <: \<tau>" for \<theta> \<sigma> \<tau>
+    using var_ty_Some[OF that(1)] that(2)
+    by (auto simp: entry_above_def intro!: ValPU dest!: wf_val_du wf_val_pu intro: wf_val_inst_sub)
+  show "merge_cxt_entry \<Sigma> b (Some \<theta>) e = Some \<theta>'' \<Longrightarrow> entry_above \<eta> \<theta> \<theta>''"
+  proof (cases e)
+    case (Some \<theta>')
+    assume "merge_cxt_entry \<Sigma> b (Some \<theta>) e = Some \<theta>''"
+    with Some merge_cxt_entry_cases show ?thesis
+      by (blast intro: ty scheme var join_upper entry_above_refl)
+  qed (auto intro: possibly_unassigned_above)
+  show "merge_cxt_entry \<Sigma> b e (Some \<theta>) = Some \<theta>'' \<Longrightarrow> entry_above \<eta> \<theta> \<theta>''"
+  proof (cases e)
+    case (Some \<theta>')
+    assume "merge_cxt_entry \<Sigma> b e (Some \<theta>) = Some \<theta>''"
+    with Some merge_cxt_entry_cases[of b \<theta>' \<theta> \<theta>''] scheme_of_Some show ?thesis
+      by (auto intro: ty scheme var join_upper entry_above_refl)
+  qed (auto intro: possibly_unassigned_above)
+qed
 
 lemma merge_entry_unbound:
   "merge_cxt_entry \<Sigma> b None e = Some \<theta>'' \<Longrightarrow> \<turnstile> VUnbound : inst_entry \<eta> \<theta>''"
   "merge_cxt_entry \<Sigma> b e None = Some \<theta>'' \<Longrightarrow> \<turnstile> VUnbound : inst_entry \<eta> \<theta>''"
-  sorry
+  by (cases e; auto dest: possibly_unassigned_unbound)+
 
 (* Soundness at one branch of an if statement carries to the merge of the branches *)
 lemma wf_outcome_merge_if:
