@@ -1449,8 +1449,59 @@ lemma call_nonfun_sound:
   \<Longrightarrow> sound_expr \<rho> (ExprCall e (es, [])) (Aborts TypeError)"
   sorry
 
-lemma call_fail_sound: "sound_expr \<rho> (node e) (Aborts \<kappa>) \<Longrightarrow> sound_expr \<rho> (ExprCall e (es, kws)) (Aborts \<kappa>)"
-  sorry
+lemma entry_of_expr_entry: "entry_of \<Gamma> e = Some \<theta> \<Longrightarrow> expr_entry \<Gamma> e = Some \<theta>"
+  by (cases e) (simp_all add: entry_of_def)
+
+lemma constructor_class_entry: "constructor_class \<Sigma> \<Gamma> e = Some m \<Longrightarrow> \<exists>C. expr_entry \<Gamma> (node e) = Some (Type C)"
+  by (auto simp: constructor_class_def split: option.splits expr.splits if_splits dest: class_of_name_entry)
+
+lemma callee_entry:
+  "callee \<Sigma> \<Gamma> e es = Ok \<sigma> \<Longrightarrow> (\<exists>\<pi>. expr_entry \<Gamma> (node e) = Some (Scheme \<pi>)) \<or> synth_expr_at \<Sigma> \<Gamma> e = Ok \<sigma>"
+  by (auto simp: callee.simps scheme_of_name_def split: option.splits cxt_entry.splits
+      dest!: entry_of_expr_entry)
+
+(* Callee of a call, a lambda or typed as a class name, a name bound at a scheme or by synthesis *)
+lemma call_callee_typed:
+  assumes "has_type \<Sigma> \<eta> \<Gamma> (ExprCall e (es, kws)) \<tau>"
+  shows "(\<exists>xs e'. lambda_of (node e) = Some (xs, e')) \<or> (\<exists>C. expr_entry \<Gamma> (node e) = Some (Type C))
+    \<or> (\<exists>\<sigma>. callee \<Sigma> \<Gamma> e es = Ok \<sigma>)"
+proof (cases "lambda_of (node e)")
+  case None
+  show ?thesis
+  proof (cases "constructor_class \<Sigma> \<Gamma> e")
+    case (Some m)
+    then show ?thesis by (blast dest: constructor_class_entry)
+  next
+    case c: None
+    with None assms show ?thesis
+      by (auto simp: has_type_def check_expr.simps bind_sum_def ensure_def split: sum.splits)
+  qed
+qed auto
+
+lemma call_fail_sound:
+  assumes "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa>" and "sound_expr \<rho> (node e) (Aborts \<kappa>)"
+  shows "sound_expr \<rho> (ExprCall e (es, kws)) (Aborts \<kappa>)"
+  unfolding sound_expr_def
+proof (intro conjI allI impI)
+  fix \<eta> \<Gamma> \<tau>
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and typed: "has_type \<Sigma> \<eta> \<Gamma> (ExprCall e (es, kws)) \<tau>"
+  from call_callee_typed[OF typed] show "result_typed (Aborts \<kappa>) (inst \<eta> \<tau>)"
+  proof (elim disjE exE)
+    fix xs e'
+    assume "lambda_of (node e) = Some (xs, e')"
+    then have "node e = ExprLambda xs e'" by (cases "node e") simp_all
+    with assms(1) show ?thesis by (auto elim: LambdaE)
+  next
+    fix C
+    assume "expr_entry \<Gamma> (node e) = Some (Type C)"
+    from sound_expr_name[OF assms(2) env this] show ?thesis by simp
+  next
+    fix \<sigma>
+    assume "callee \<Sigma> \<Gamma> e es = Ok \<sigma>"
+    from callee_entry[OF this] show ?thesis
+      by (auto dest: sound_expr_name[OF assms(2) env] sound_expr_synth_at[OF assms(2) env])
+  qed
+qed simp
 
 lemma call_fail_args_sound:
   "\<lbrakk> sound_expr \<rho> (node e) (Val v) ; sound_exprs \<rho> es (Aborts \<kappa>) \<rbrakk>
