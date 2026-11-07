@@ -1,6 +1,6 @@
 (* Soundness of statement evaluation *)
 theory Statements
-  imports Expressions
+  imports SoundExpr
 begin
 
 type_synonym elif_block = "(expr located \<times> stmt located) list \<times> stmt located option"
