@@ -374,6 +374,14 @@ lemma tyvars_fmconst: "tyvars (fmconst (set \<alpha>s) TypeVar) \<subseteq> set 
 lemma redeclared_None: "redeclared f X xs = None \<Longrightarrow> distinct (map f xs) \<and> set (map f xs) \<inter> X = {}"
   by (induction xs arbitrary: X) (auto split: if_splits)
 
+lemma fv_join: "fv (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>) \<subseteq> fv \<sigma> \<union> fv \<tau>"
+  by (auto simp: join_def)
+
+lemma merge_lookup:
+  assumes "merge \<Sigma> X \<Gamma> \<Gamma>' = Ok \<Gamma>''" and "x |\<in>| fmdom (\<Gamma> \<otimes> \<Gamma>')"
+  shows "fmlookup \<Gamma>'' x = merge_cxt_entry \<Sigma> (x \<in> X) (fmlookup \<Gamma> x) (fmlookup \<Gamma>' x)"
+  sorry
+
 context evaluation
 begin
 
@@ -704,6 +712,58 @@ proof (intro allI impI)
   from check_assert_msg[OF chk] assms env show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (aborts\<^sub>o Excluded) R"
     by (auto dest!: str_operand)
 qed
+
+inductive_cases WfPUE: "\<turnstile> v : PU \<tau> b"
+
+inductive_cases WfPUSchemeE: "\<turnstile> v : PUScheme \<pi> b"
+
+lemma wf_val_pu: "\<turnstile> v : PU \<tau> b \<Longrightarrow> v = VUnbound \<or> \<turnstile> v : Ty \<tau>"
+  and wf_val_puscheme: "\<turnstile> v : PUScheme \<pi> b \<Longrightarrow> v = VUnbound \<or> \<turnstile> v : Scheme \<pi>"
+  sorry
+
+(* Entry \<theta>' above \<theta>: the values of \<theta> are values of \<theta>', and \<theta>' is a type scheme or a type variable only if \<theta> is
+   the same *)
+definition entry_above :: "(var \<times> ty) list \<Rightarrow> cxt_entry \<Rightarrow> cxt_entry \<Rightarrow> bool"
+where
+"entry_above \<eta> \<theta> \<theta>' =
+  ((\<forall>v. \<turnstile> v : inst_entry \<eta> \<theta> \<longrightarrow> \<turnstile> v : inst_entry \<eta> \<theta>') \<and> (\<forall>\<pi>. \<theta>' = Scheme \<pi> \<longrightarrow> \<theta> = Scheme \<pi>)
+   \<and> (\<theta>' = TypeVar \<longleftrightarrow> \<theta> = TypeVar))"
+
+lemma entry_above_refl: "entry_above \<eta> \<theta> \<theta>"
+  by (simp add: entry_above_def)
+
+lemma entry_above_trans: "\<lbrakk> entry_above \<eta> \<theta> \<theta>' ; entry_above \<eta> \<theta>' \<theta>'' \<rbrakk> \<Longrightarrow> entry_above \<eta> \<theta> \<theta>''"
+  by (simp add: entry_above_def)
+
+lemma possibly_unassigned_above: "possibly_unassigned b \<theta> = Some \<theta>' \<Longrightarrow> entry_above \<eta> \<theta> \<theta>'"
+  sorry
+
+lemma possibly_unassigned_unbound: "possibly_unassigned b \<theta> = Some \<theta>' \<Longrightarrow> \<turnstile> VUnbound : inst_entry \<eta> \<theta>'"
+  by (cases \<theta>) (auto intro: ValPU ValPUScheme)
+
+(* Merge of two entries, by its cases *)
+lemma merge_cxt_entry_cases:
+  assumes "merge_cxt_entry \<Sigma> b (Some \<theta>) (Some \<theta>') = Some \<theta>''"
+  shows "(\<exists>\<sigma> \<tau>. \<theta> = Ty \<sigma> \<and> \<theta>' = Ty \<tau> \<and> \<theta>'' = Ty (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>)) \<or> \<theta>'' = \<theta> \<and> \<theta>' = \<theta>
+    \<or> (\<exists>\<pi>. scheme_of \<theta> = Some \<pi> \<and> scheme_of \<theta>' = Some \<pi> \<and> \<theta>'' = PUScheme \<pi> b)
+    \<or> (\<exists>\<sigma> \<tau>. var_ty \<theta> = Some \<sigma> \<and> var_ty \<theta>' = Some \<tau> \<and> \<theta>'' = PU (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>) b)"
+  sorry
+
+lemma scheme_of_Some: "scheme_of \<theta> = Some \<pi> \<Longrightarrow> \<theta> = Scheme \<pi> \<or> (\<exists>b. \<theta> = PUScheme \<pi> b)"
+  by (cases \<theta>) simp_all
+
+lemma var_ty_Some: "var_ty \<theta> = Some \<sigma> \<Longrightarrow> \<theta> = Ty \<sigma> \<or> \<theta> = DU \<sigma> \<or> (\<exists>b. \<theta> = PU \<sigma> b)"
+  by (cases \<theta>) simp_all
+
+lemma merge_entry_above:
+  "merge_cxt_entry \<Sigma> b (Some \<theta>) e = Some \<theta>'' \<Longrightarrow> entry_above \<eta> \<theta> \<theta>''"
+  "merge_cxt_entry \<Sigma> b e (Some \<theta>) = Some \<theta>'' \<Longrightarrow> entry_above \<eta> \<theta> \<theta>''"
+  sorry
+
+lemma merge_entry_unbound:
+  "merge_cxt_entry \<Sigma> b None e = Some \<theta>'' \<Longrightarrow> \<turnstile> VUnbound : inst_entry \<eta> \<theta>''"
+  "merge_cxt_entry \<Sigma> b e None = Some \<theta>'' \<Longrightarrow> \<turnstile> VUnbound : inst_entry \<eta> \<theta>''"
+  sorry
 
 (* Soundness at one branch of an if statement carries to the merge of the branches *)
 lemma wf_outcome_merge_if:
