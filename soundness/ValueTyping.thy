@@ -48,6 +48,12 @@ lemma subst_closed: "fv \<tau> = {} \<Longrightarrow> subst \<tau>s \<alpha>s \<
 lemma subst_Nil [simp]: "subst [] \<alpha>s \<tau> = \<tau>"
   by (induction \<tau>) (auto intro: map_idI)
 
+lemma inst_scheme_Nil [simp]: "inst_scheme [] \<pi> = \<pi>"
+  by (cases \<pi>) simp
+
+lemma inst_entry_Nil [simp]: "inst_entry [] \<theta> = \<theta>"
+  by (cases \<theta>) simp_all
+
 lemma inst_closed: "\<lbrakk> closed_inst \<eta> ; fv \<tau> \<subseteq> fst ` set \<eta> \<rbrakk> \<Longrightarrow> fv (inst \<eta> \<tau>) = {}"
   by (induction \<tau>)
      (auto simp: closed_inst_def zip_map_fst_snd map_of_eq_None_iff UN_subset_iff split: option.splits
@@ -224,6 +230,15 @@ proof -
     by (induction rule: wf_val_wf_env.inducts) auto
   then show "\<turnstile> VModLoaded q \<rho> : \<theta> \<Longrightarrow> ?thesis" by blast
 qed
+
+(* Member of a module environment typed by the context of the module, which is closed *)
+lemma module_member:
+  "\<lbrakk> [] \<turnstile> \<rho> : \<Gamma> ; fmlookup \<Gamma> x = Some \<theta> ; \<theta> \<noteq> TypeVar \<rbrakk>
+  \<Longrightarrow> \<exists>v. fmlookup \<rho> x = Some v \<and> \<turnstile> v : \<theta> \<and> fv_entry \<theta> = {}"
+  using wf_env_lookup[of "[]" \<rho> \<Gamma> x \<theta>] wf_env_tyvars[of "[]" \<rho> \<Gamma>] tyvars_entry[of \<Gamma> x \<theta>] by auto
+
+lemma module_member_TypeVar: "[] \<turnstile> \<rho> : \<Gamma> \<Longrightarrow> fmlookup \<Gamma> x \<noteq> Some TypeVar"
+  using wf_env_tyvars[of "[]" \<rho> \<Gamma>] by (force simp: tyvars_def fmlookup_dom'_iff)
 
 end
 

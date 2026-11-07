@@ -59,6 +59,26 @@ where
 lemma var_scheme_None: "dotted_name e = None \<Longrightarrow> var_scheme \<Sigma> \<Gamma> e \<tau> = None"
   by (simp add: var_scheme_def scheme_of_name_def entry_of_def)
 
+(* Type built by union from class types and Never; closed downwards under subtyping *)
+fun object_type :: "ty \<Rightarrow> bool"
+where
+"object_type (TyClass _ _) = True" |
+"object_type (TyPrim Never) = True" |
+"object_type (TyUnion \<sigma> \<tau>) = (object_type \<sigma> \<and> object_type \<tau>)" |
+"object_type _ = False"
+
+lemma object_type_subty: "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> object_type \<tau> \<Longrightarrow> object_type \<sigma>" and "\<Sigma> \<turnstile> \<sigma>s [<:] \<tau>s \<Longrightarrow> True"
+proof (induction rule: subty_subtys.inducts)
+  case (SubtyLiteral l \<tau>)
+  then show ?case by (cases l) auto
+qed auto
+
+lemma object_type_subst: "object_type \<sigma> \<Longrightarrow> object_type (subst \<tau>s \<alpha>s \<sigma>)"
+  by (induction \<sigma>) auto
+
+lemma attribute_type_object_type: "attribute_type \<Sigma> \<sigma> x = Ok \<tau> \<Longrightarrow> object_type \<sigma>"
+  by (induction \<Sigma> \<sigma> x arbitrary: \<tau> rule: attribute_type.induct) (auto simp: bind_sum_def split: sum.splits)
+
 context evaluation
 begin
 
@@ -270,6 +290,21 @@ proof -
   have "prim_subtype p \<tau>" using prim_subtype_subty(1)[OF assms(3, 2)] by simp
   with wf_prim_subtype(1)[OF assms(3, 1)] that show ?thesis by blast
 qed
+
+lemma wf_object_type: "\<turnstile> v : \<theta> \<Longrightarrow> \<theta> = Ty \<tau> \<longrightarrow> object_type \<tau> \<longrightarrow> is_object v" "\<eta> \<turnstile> \<rho> : \<Gamma> \<Longrightarrow> True"
+proof (induction arbitrary: \<tau> rule: wf_val_wf_env.inducts)
+  case ValDef
+  then show ?case by (auto dest!: def_signatures_callable simp: inst_entry_signature_entry)
+next
+  case ValInst
+  then show ?case by (auto dest!: wf_scheme_callable(1))
+next
+  case ValSub
+  then show ?case by (blast dest: object_type_subty)
+next
+  case ValPrim
+  then show ?case by (auto dest!: prim_entry_callable)
+qed auto
 
 lemma wf_bool: "\<lbrakk> \<turnstile> v : Ty \<tau> ; \<Sigma> \<turnstile> \<tau> <: TyPrim bool \<rbrakk> \<Longrightarrow> v = true \<or> v = false"
   by (erule wf_prim_lit) (auto elim: base_type_lit.elims)
@@ -807,6 +842,52 @@ proof (rule sound_expr_typedI)
   from sound_entriesD[OF assms(2) this key e'] show "result_typed (Aborts \<kappa>) (inst \<eta> \<tau>)" by simp
 qed simp_all
 
+(* Attribute typed through a checked module, at a member type, member scheme or type variable, or through the
+   type synthesised by the object *)
+lemma attr_typed:
+  assumes "has_type \<Sigma> \<eta> \<Gamma> (ExprAttribute e x) \<tau>"
+  obtains (module_ty) q q' \<Gamma>' \<sigma> where "dotted_name (node e) = Some q" and "lookup \<Gamma> q = Some (ModChecked q' \<Gamma>')"
+      and "fmlookup \<Gamma>' x = Some (Ty \<sigma>)" and "\<Sigma> \<turnstile> \<sigma> <: \<tau>"
+    | (module_scheme) q q' \<Gamma>' \<alpha>s \<sigma> \<tau>s where "dotted_name (node e) = Some q"
+      and "lookup \<Gamma> q = Some (ModChecked q' \<Gamma>')" and "fmlookup \<Gamma>' x = Some (Scheme (TyScheme \<alpha>s \<sigma>))"
+      and "Subtyping.type_args_of (type_args \<Sigma> \<alpha>s \<sigma> \<tau>) \<alpha>s = Ok \<tau>s" and "\<Sigma> \<turnstile> subst \<tau>s \<alpha>s \<sigma> <: \<tau>"
+      and "fv \<tau> \<subseteq> fst ` set \<eta>"
+    | (module_tyvar) q q' \<Gamma>' where "dotted_name (node e) = Some q" and "lookup \<Gamma> q = Some (ModChecked q' \<Gamma>')"
+      and "fmlookup \<Gamma>' x = Some TypeVar"
+    | (object) \<sigma> \<sigma>' where "synth_expr_at \<Sigma> \<Gamma> e = Ok \<sigma>" and "attribute_type \<Sigma> \<sigma> x = Ok \<sigma>'" and "\<Sigma> \<turnstile> \<sigma>' <: \<tau>"
+proof -
+  have synth: thesis if "synth_expr \<Sigma> \<Gamma> (ExprAttribute e x) = Ok \<sigma>'" and "\<Sigma> \<turnstile> \<sigma>' <: \<tau>" for \<sigma>'
+  proof (cases "module_attribute \<Gamma> (node e) x")
+    case None
+    with that show ?thesis by (auto simp: bind_sum_def split: sum.splits intro: object)
+  next
+    case (Some m)
+    with that(1) obtain q q' \<Gamma>' where "dotted_name (node e) = Some q" and "lookup \<Gamma> q = Some (ModChecked q' \<Gamma>')"
+      and "fmlookup \<Gamma>' x = Some (Ty \<sigma>') \<or> fmlookup \<Gamma>' x = Some TypeVar"
+      by (auto simp: module_attribute_def attr_module_def bind_eq_Some_conv
+          split: option.splits cxt_entry.splits)
+    with that(2) show ?thesis by (blast intro: module_ty module_tyvar)
+  qed
+  have scheme: thesis if "var_scheme \<Sigma> \<Gamma> (ExprAttribute e x) \<tau> = Some (Ok ())" and "fv \<tau> \<subseteq> fst ` set \<eta>"
+  proof -
+    from that(1) obtain q q' \<Gamma>' \<alpha>s \<sigma> \<tau>s where "dotted_name (node e) = Some q"
+      and "lookup \<Gamma> q = Some (ModChecked q' \<Gamma>')" and "fmlookup \<Gamma>' x = Some (Scheme (TyScheme \<alpha>s \<sigma>))"
+      and "Subtyping.type_args_of (type_args \<Sigma> \<alpha>s \<sigma> \<tau>) \<alpha>s = Ok \<tau>s" and "\<Sigma> \<turnstile> subst \<tau>s \<alpha>s \<sigma> <: \<tau>"
+      by (auto simp: var_scheme_def scheme_of_name_def entry_of_def resolve_name_def bind_sum_def ensure_def
+          Let_def bind_eq_Some_conv split: option.splits cxt_entry.splits ty_scheme.splits if_splits sum.splits)
+    then show ?thesis using that(2) by (rule module_scheme)
+  qed
+  from assms show thesis unfolding has_type_def by (auto dest!: check_expr_cases intro: synth scheme SubtyRefl)
+qed
+
+(* Value of a dotted name bound to a checked module, as a loaded module with its environment typed by the
+   context of the module *)
+lemma sound_expr_module_env:
+  assumes "sound_expr \<rho> e (Val v)" and "\<eta> \<turnstile> \<rho> : \<Gamma>" and "dotted_name e = Some q"
+    and "lookup \<Gamma> q = Some (ModChecked q' \<Gamma>')"
+  shows "\<exists>\<rho>'. v = VModLoaded q' \<rho>' \<and> [] \<turnstile> \<rho>' : \<Gamma>'"
+  using sound_expr_module[OF assms, unfolded wf_result.simps(1)] by (rule wf_mod_checked)
+
 lemma attr_object_sound:
   "\<lbrakk> sound_expr \<rho> (node e) (Val (VObject C xvs)) ; map_of xvs x = Some v \<rbrakk>
   \<Longrightarrow> sound_expr \<rho> (ExprAttribute e x) (Val v)"
@@ -818,22 +899,136 @@ lemma attr_object_missing_sound:
   sorry
 
 lemma attr_module_sound:
-  "\<lbrakk> sound_expr \<rho> (node e) (Val (VModLoaded q' \<rho>')) ; fmlookup \<rho>' x = Some v \<rbrakk>
-  \<Longrightarrow> sound_expr \<rho> (ExprAttribute e x) (Val v)"
-  sorry
+  assumes "sound_expr \<rho> (node e) (Val (VModLoaded q' \<rho>'))" and "fmlookup \<rho>' x = Some v"
+  shows "sound_expr \<rho> (ExprAttribute e x) (Val v)"
+  unfolding sound_expr_def sound_module_def
+proof (intro conjI allI impI)
+  fix \<eta> \<Gamma> \<tau>
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and typed: "has_type \<Sigma> \<eta> \<Gamma> (ExprAttribute e x) \<tau>"
+  from typed show "result_typed (Val v) (inst \<eta> \<tau>)"
+  proof (cases rule: attr_typed)
+    case (module_ty q q'' \<Gamma>' \<sigma>)
+    from sound_expr_module_env[OF assms(1) env module_ty(1, 2)] have "[] \<turnstile> \<rho>' : \<Gamma>'" by auto
+    with module_ty(3) assms(2) have "\<turnstile> v : Ty (inst \<eta> \<sigma>)" by (auto dest!: module_member simp: subst_closed)
+    with module_ty(4) show ?thesis by (auto intro: wf_val_inst_sub)
+  next
+    case (module_scheme q q'' \<Gamma>' \<alpha>s \<sigma> \<tau>s)
+    from sound_expr_module_env[OF assms(1) env module_scheme(1, 2)] have "[] \<turnstile> \<rho>' : \<Gamma>'" by auto
+    with module_scheme(3) assms(2) have v: "\<turnstile> v : Scheme (TyScheme \<alpha>s \<sigma>)" and fv: "fv \<sigma> \<subseteq> set \<alpha>s"
+      by (auto dest!: module_member)
+    have len: "length \<tau>s = length \<alpha>s" using module_scheme(4) by (rule type_args_of_length)
+    have closed: "\<forall>\<tau>' \<in> set (map (inst \<eta>) \<tau>s). fv \<tau>' = {}"
+      using type_args_fv[OF module_scheme(4)] module_scheme(6) wf_env_closed[OF env]
+      by (auto intro!: inst_closed)
+    have "length (map (inst \<eta>) \<tau>s) = length \<alpha>s" by (simp add: len)
+    from v this closed have "\<turnstile> v : Ty (subst (map (inst \<eta>) \<tau>s) \<alpha>s \<sigma>)" by (rule ValInst)
+    then have "\<turnstile> v : Ty (inst \<eta> (subst \<tau>s \<alpha>s \<sigma>))" by (simp only: subst_subst[OF fv len])
+    with module_scheme(5) show ?thesis by (auto intro: wf_val_inst_sub)
+  next
+    case (module_tyvar q q'' \<Gamma>')
+    from sound_expr_module_env[OF assms(1) env module_tyvar(1, 2)] module_tyvar(3) show ?thesis
+      by (auto dest: module_member_TypeVar)
+  next
+    case (object \<sigma> \<sigma>')
+    from sound_expr_synth_at[OF assms(1) env object(1)] show ?thesis by (auto dest: wf_mod_loaded)
+  qed
+next
+  fix \<eta> \<Gamma> q q' \<Gamma>'
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "dotted_name (ExprAttribute e x) = Some q"
+    and "lookup \<Gamma> q = Some (ModChecked q' \<Gamma>')"
+  then obtain q0 q1 \<Gamma>1 where "dotted_name (node e) = Some q0" and "lookup \<Gamma> q0 = Some (ModChecked q1 \<Gamma>1)"
+    and x: "fmlookup \<Gamma>1 x = Some (ModChecked q' \<Gamma>')"
+    by (auto split: option.splits cxt_entry.splits)
+  from sound_expr_module_env[OF assms(1) env this(1, 2)] have "[] \<turnstile> \<rho>' : \<Gamma>1" by auto
+  with x assms(2) show "wf_result (\<lambda>v. \<turnstile> v : ModChecked q' \<Gamma>') (Val v)" by (auto dest!: module_member)
+qed
 
 lemma attr_module_missing_sound:
-  "\<lbrakk> sound_expr \<rho> (node e) (Val (VModLoaded q' \<rho>')) ; fmlookup \<rho>' x = None \<rbrakk>
-  \<Longrightarrow> sound_expr \<rho> (ExprAttribute e x) (Aborts AttributeError)"
-  sorry
+  assumes "sound_expr \<rho> (node e) (Val (VModLoaded q' \<rho>'))" and "fmlookup \<rho>' x = None"
+  shows "sound_expr \<rho> (ExprAttribute e x) (Aborts AttributeError)"
+  unfolding sound_expr_def sound_module_def
+proof (intro conjI allI impI)
+  fix \<eta> \<Gamma> \<tau>
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and typed: "has_type \<Sigma> \<eta> \<Gamma> (ExprAttribute e x) \<tau>"
+  from typed show "result_typed (Aborts AttributeError) (inst \<eta> \<tau>)"
+  proof (cases rule: attr_typed)
+    case (module_ty q q'' \<Gamma>' \<sigma>)
+    from sound_expr_module_env[OF assms(1) env module_ty(1, 2)] module_ty(3) assms(2) show ?thesis
+      by (auto dest!: module_member)
+  next
+    case (module_scheme q q'' \<Gamma>' \<alpha>s \<sigma> \<tau>s)
+    from sound_expr_module_env[OF assms(1) env module_scheme(1, 2)] module_scheme(3) assms(2) show ?thesis
+      by (auto dest!: module_member)
+  next
+    case (module_tyvar q q'' \<Gamma>')
+    from sound_expr_module_env[OF assms(1) env module_tyvar(1, 2)] module_tyvar(3) show ?thesis
+      by (auto dest: module_member_TypeVar)
+  next
+    case (object \<sigma> \<sigma>')
+    from sound_expr_synth_at[OF assms(1) env object(1)] show ?thesis by (auto dest: wf_mod_loaded)
+  qed
+next
+  fix \<eta> \<Gamma> q q' \<Gamma>'
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "dotted_name (ExprAttribute e x) = Some q"
+    and "lookup \<Gamma> q = Some (ModChecked q' \<Gamma>')"
+  then obtain q0 q1 \<Gamma>1 where "dotted_name (node e) = Some q0" and "lookup \<Gamma> q0 = Some (ModChecked q1 \<Gamma>1)"
+    and x: "fmlookup \<Gamma>1 x = Some (ModChecked q' \<Gamma>')"
+    by (auto split: option.splits cxt_entry.splits)
+  from sound_expr_module_env[OF assms(1) env this(1, 2)] x assms(2)
+  show "wf_result (\<lambda>v. \<turnstile> v : ModChecked q' \<Gamma>') (Aborts AttributeError)" by (auto dest!: module_member)
+qed
 
 lemma attr_nonobject_sound:
-  "\<lbrakk> sound_expr \<rho> (node e) (Val v) ; \<not> is_object v ; \<not> is_loaded_module v \<rbrakk>
-  \<Longrightarrow> sound_expr \<rho> (ExprAttribute e x) (Aborts Excluded)"
-  sorry
+  assumes "sound_expr \<rho> (node e) (Val v)" and "\<not> is_object v" and "\<not> is_loaded_module v"
+  shows "sound_expr \<rho> (ExprAttribute e x) (Aborts Excluded)"
+  unfolding sound_expr_def sound_module_def
+proof (intro conjI allI impI)
+  fix \<eta> \<Gamma> \<tau>
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and typed: "has_type \<Sigma> \<eta> \<Gamma> (ExprAttribute e x) \<tau>"
+  from typed show "result_typed (Aborts Excluded) (inst \<eta> \<tau>)"
+  proof (cases rule: attr_typed)
+    case (module_ty q q'' \<Gamma>' \<sigma>)
+    from sound_expr_module_env[OF assms(1) env module_ty(1, 2)] assms(3) show ?thesis by auto
+  next
+    case (module_scheme q q'' \<Gamma>' \<alpha>s \<sigma> \<tau>s)
+    from sound_expr_module_env[OF assms(1) env module_scheme(1, 2)] assms(3) show ?thesis by auto
+  next
+    case (module_tyvar q q'' \<Gamma>')
+    from sound_expr_module_env[OF assms(1) env module_tyvar(1, 2)] assms(3) show ?thesis by auto
+  next
+    case (object \<sigma> \<sigma>')
+    from sound_expr_synth_at[OF assms(1) env object(1)] have "\<turnstile> v : Ty (inst \<eta> \<sigma>)" by simp
+    moreover from object(2) have "object_type (inst \<eta> \<sigma>)"
+      by (blast intro: object_type_subst attribute_type_object_type)
+    ultimately show ?thesis using assms(2) wf_object_type(1) by blast
+  qed
+next
+  fix \<eta> \<Gamma> q q' \<Gamma>'
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "dotted_name (ExprAttribute e x) = Some q"
+    and "lookup \<Gamma> q = Some (ModChecked q' \<Gamma>')"
+  then obtain q0 q1 \<Gamma>1 where "dotted_name (node e) = Some q0" and "lookup \<Gamma> q0 = Some (ModChecked q1 \<Gamma>1)"
+    by (auto split: option.splits cxt_entry.splits)
+  from sound_expr_module_env[OF assms(1) env this] assms(3)
+  show "wf_result (\<lambda>v. \<turnstile> v : ModChecked q' \<Gamma>') (Aborts Excluded)" by auto
+qed
 
-lemma attr_fail_sound: "sound_expr \<rho> (node e) (Aborts \<kappa>) \<Longrightarrow> sound_expr \<rho> (ExprAttribute e x) (Aborts \<kappa>)"
-  sorry
+lemma attr_fail_sound:
+  assumes "sound_expr \<rho> (node e) (Aborts \<kappa>)"
+  shows "sound_expr \<rho> (ExprAttribute e x) (Aborts \<kappa>)"
+  unfolding sound_expr_def sound_module_def
+proof (intro conjI allI impI)
+  fix \<eta> \<Gamma> \<tau>
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and typed: "has_type \<Sigma> \<eta> \<Gamma> (ExprAttribute e x) \<tau>"
+  from typed show "result_typed (Aborts \<kappa>) (inst \<eta> \<tau>)"
+    by (cases rule: attr_typed) (auto dest: sound_expr_module[OF assms env] sound_expr_synth_at[OF assms env])
+next
+  fix \<eta> \<Gamma> q q' \<Gamma>'
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "dotted_name (ExprAttribute e x) = Some q"
+    and "lookup \<Gamma> q = Some (ModChecked q' \<Gamma>')"
+  then obtain q0 q1 \<Gamma>1 where "dotted_name (node e) = Some q0" and "lookup \<Gamma> q0 = Some (ModChecked q1 \<Gamma>1)"
+    by (auto split: option.splits cxt_entry.splits)
+  from sound_expr_module[OF assms env this] show "wf_result (\<lambda>v. \<turnstile> v : ModChecked q' \<Gamma>') (Aborts \<kappa>)" by simp
+qed
 
 lemma call_lambda_sound:
   "\<lbrakk> sound_expr \<rho> (node e) (Val Lam(\<rho>', xs, e')) ; sound_exprs \<rho> es (Val us) ; length xs = length us
