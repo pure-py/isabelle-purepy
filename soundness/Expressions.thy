@@ -56,29 +56,6 @@ where
 "typed_by_rule \<Sigma> \<eta> \<Gamma> e \<tau> =
   (synth_expr \<Sigma> \<Gamma> e = Ok \<tau> \<or> check_expr' \<Sigma> \<Gamma> e \<tau> = Some (Ok ()) \<and> fv \<tau> \<subseteq> fst ` set \<eta>)"
 
-lemma var_scheme_None: "dotted_name e = None \<Longrightarrow> var_scheme \<Sigma> \<Gamma> e \<tau> = None"
-  by (simp add: var_scheme_def scheme_of_name_def entry_of_def)
-
-(* Type built by union from class types and Never; closed downwards under subtyping *)
-fun object_type :: "ty \<Rightarrow> bool"
-where
-"object_type (TyClass _ _) = True" |
-"object_type (TyPrim Never) = True" |
-"object_type (TyUnion \<sigma> \<tau>) = (object_type \<sigma> \<and> object_type \<tau>)" |
-"object_type _ = False"
-
-lemma object_type_subty: "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> object_type \<tau> \<Longrightarrow> object_type \<sigma>" and "\<Sigma> \<turnstile> \<sigma>s [<:] \<tau>s \<Longrightarrow> True"
-proof (induction rule: subty_subtys.inducts)
-  case (SubtyLiteral l \<tau>)
-  then show ?case by (cases l) auto
-qed auto
-
-lemma object_type_subst: "object_type \<sigma> \<Longrightarrow> object_type (subst \<tau>s \<alpha>s \<sigma>)"
-  by (induction \<sigma>) auto
-
-lemma attribute_type_object_type: "attribute_type \<Sigma> \<sigma> x = Ok \<tau> \<Longrightarrow> object_type \<sigma>"
-  by (induction \<Sigma> \<sigma> x arbitrary: \<tau> rule: attribute_type.induct) (auto simp: bind_sum_def split: sum.splits)
-
 context evaluation
 begin
 
@@ -218,18 +195,7 @@ lemma inferred_type_args_fv:
   "inferred_type_args \<Sigma> \<alpha>s \<sigma>s ms = Ok \<tau>s \<Longrightarrow> \<forall>\<tau> \<in> set \<tau>s. fv \<tau> \<subseteq> \<Union> {fv \<tau>' | \<tau>'. Ok \<tau>' \<in> set ms}"
   sorry
 
-lemma type_args_of_length: "Subtyping.type_args_of \<gamma> \<alpha>s = Ok \<tau>s \<Longrightarrow> length \<tau>s = length \<alpha>s"
-  by (auto simp: Subtyping.type_args_of_def dest!: those_sum_Ok list_all2_lengthD)
-
 subsection \<open>Checking\<close>
-
-(* Checking succeeds by the checking rule of the expression or by synthesising a subtype *)
-lemma check_expr_cases:
-  assumes "check_expr \<Sigma> \<Gamma> e \<tau> = Ok ()"
-  shows "check_expr' \<Sigma> \<Gamma> e \<tau> = Some (Ok ()) \<or> (\<exists>\<sigma>. synth_expr \<Sigma> \<Gamma> e = Ok \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>)"
-  using assms
-  by (auto simp: check_expr.simps[of \<Sigma> \<Gamma> e \<tau>] ensure_def bind_sum_def
-      split: option.splits sum.splits if_splits)
 
 lemma sound_exprI:
   assumes synth: "\<And>\<eta> \<Gamma> \<tau>. \<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; synth_expr \<Sigma> \<Gamma> e = Ok \<tau> \<rbrakk> \<Longrightarrow> result_typed r (inst \<eta> \<tau>)"
@@ -660,27 +626,6 @@ proof (induction rule: unop_overload.induct)
   then show ?case using subty_trans'[OF base_type_upper] by simp
 qed simp_all
 
-lemma unop_overload_types:
-  "unop_overload \<Sigma> op \<sigma> \<omega> \<Longrightarrow>
-   op = UOpNot \<and> \<omega> = (TyPrim bool, TyPrim bool)
-   \<or> op \<in> {UOpPos, UOpNeg} \<and> (\<omega> = (TyPrim int, TyPrim int) \<or> \<omega> = (TyPrim float, TyPrim float))"
-  by (induction rule: unop_overload.induct) auto
-
-lemma resolve_unop_overload:
-  assumes "resolve_unop \<Sigma> op \<sigma> = Some \<tau>'"
-  obtains \<tau> where "unop_overload \<Sigma> op \<sigma> (\<tau>, \<tau>')"
-proof -
-  let ?M = "Set.filter (\<lambda>(\<tau>, _). \<forall>(\<tau>', _) \<in> unop_overloads \<Sigma> op \<sigma>. \<Sigma> \<turnstile> \<tau> <: \<tau>') (unop_overloads \<Sigma> op \<sigma>)"
-  from assms have "is_singleton ?M" and \<tau>': "\<tau>' = snd (the_elem ?M)"
-    by (auto simp: resolve_unop_def Let_def split: if_splits)
-  then have "the_elem ?M \<in> unop_overloads \<Sigma> op \<sigma>"
-    by (metis (no_types, lifting) Set.filter_eq mem_Collect_eq insertI1 is_singleton_the_elem)
-  with \<tau>' that show thesis by (cases "the_elem ?M") (auto simp: unop_overloads_def)
-qed
-
-lemma lit_subty_base: "\<Sigma> \<turnstile> TyLiteral l <: base_type_lit l"
-  by (rule SubtyLiteral) (rule SubtyRefl)
-
 (* Meaning of a unary operator at an operand typed by the operand type of an overload *)
 lemma unop_meaning_typed:
   assumes "\<turnstile> v : Ty \<tau>" and "unop_overload \<Sigma> op \<sigma> (\<tau>, \<tau>')"
@@ -694,7 +639,7 @@ proof -
     case not
     with assms(1) have "\<turnstile> v : Ty (TyPrim bool)" by simp
     then have "v = true \<or> v = false" by (rule wf_bool) (rule SubtyRefl)
-    with not lit_subty_base[of "LitBool True"] lit_subty_base[of "LitBool False"] show ?thesis
+    with not lit_subty_base[where l = "LitBool True"] lit_subty_base[where l = "LitBool False"] show ?thesis
       by (auto intro: wf_lit_bool)
   next
     case num
@@ -778,14 +723,6 @@ lemma or_fail_sound: "sound_expr \<rho> (node e) (Aborts \<kappa>) \<Longrightar
 lemma or_nonbool_sound:
   "\<lbrakk> sound_expr \<rho> (node e) (Val v) ; v \<notin> {true, false} \<rbrakk> \<Longrightarrow> sound_expr \<rho> (ExprOr e e') (Aborts Excluded)"
   by (rule sound_expr_synthI) (auto simp: bind_sum_def var_scheme_None dest!: bool_operand split: sum.splits)
-
-(* Synthesis of a conditional, from both branches or from one branch checked against the other *)
-lemma synth_cond:
-  assumes "synth_expr \<Sigma> \<Gamma> (ExprCond e1 e e2) = Ok \<tau>"
-  obtains \<sigma>1 \<sigma>2 where "synth_expr_at \<Sigma> \<Gamma> e1 = Ok \<sigma>1" and "synth_expr_at \<Sigma> \<Gamma> e2 = Ok \<sigma>2" and "\<tau> = \<sigma>1 \<squnion>\<^bsub>\<Sigma>\<^esub> \<sigma>2"
-    | "synth_expr_at \<Sigma> \<Gamma> e1 = Ok \<tau>" and "check_expr_at \<Sigma> \<Gamma> e2 \<tau> = Ok ()"
-    | "check_expr_at \<Sigma> \<Gamma> e1 \<tau> = Ok ()" and "synth_expr_at \<Sigma> \<Gamma> e2 = Ok \<tau>"
-  using assms by (auto simp: bind_sum_def split: sum.splits)
 
 (* Branches of a conditional typed at subtypes of its type *)
 lemma cond_typed:
@@ -1514,9 +1451,6 @@ proof (cases "lambda_of (node e)")
   qed
 qed auto
 
-lemma inferred_type_args_length: "inferred_type_args \<Sigma> \<alpha>s \<sigma>s ms = Ok \<tau>s \<Longrightarrow> length \<tau>s = length \<alpha>s"
-  by (auto simp: inferred_type_args_def Let_def dest!: type_args_of_length)
-
 (* Entry of a name in a typed environment, with free type variables bound by the instantiation *)
 lemma wf_env_resolve:
   "\<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; lookup \<Gamma> q = Some \<theta> ; \<theta> \<noteq> TypeVar \<rbrakk>
@@ -1536,9 +1470,6 @@ next
     by blast
   ultimately show ?case by (simp add: inst_entry_closed)
 qed
-
-lemma resolve_name_TypeVar: "resolve_name \<Gamma> q = Some \<theta> \<Longrightarrow> \<theta> \<noteq> TypeVar"
-  by (auto simp: resolve_name_def split: option.splits cxt_entry.splits)
 
 lemma expr_entry_fv:
   assumes "\<eta> \<turnstile> \<rho> : \<Gamma>" and "entry_of \<Gamma> e = Some \<theta>"
@@ -1649,11 +1580,6 @@ next
   case (TyCallable \<sigma>s \<tau>')
   then show ?case by (auto simp: bind_sum_def ensure_def split: sum.splits if_splits intro: SubtyRefl)
 qed simp_all
-
-lemma check_call_stmt_synth:
-  "\<tau> \<noteq> TyPrim NoneType
-  \<Longrightarrow> check_call_stmt \<Sigma> \<Gamma> e (TyCallable \<sigma>s \<tau>) kws es = do { synth_call \<Sigma> \<Gamma> e (TyCallable \<sigma>s \<tau>) kws es; Ok () }"
-  by (cases "(\<Sigma>, \<Gamma>, e, TyCallable \<sigma>s \<tau>, kws, es)" rule: check_call_stmt.cases) auto
 
 lemma check_call_stmt_callable:
   "\<lbrakk> check_call_stmt \<Sigma> \<Gamma> e \<sigma> kws es = Ok () ; \<turnstile> v : Ty (inst \<eta> \<sigma>) \<rbrakk>
@@ -1786,9 +1712,6 @@ proof (intro conjI allI impI)
     qed
   qed
 qed simp
-
-lemma by_rule_Ok [simp]: "by_rule n m = Ok x \<longleftrightarrow> m = Ok x" "Ok x = by_rule n m \<longleftrightarrow> m = Ok x"
-  by (cases m; auto)+
 
 lemma check_args_typed:
   assumes "check_args \<Sigma> \<Gamma> e kws es \<sigma>s = Ok ()" and "\<forall>\<sigma> \<in> set \<sigma>s. fv \<sigma> \<subseteq> fst ` set \<eta>"
@@ -2079,36 +2002,6 @@ proof (intro conjI allI impI)
   qed
 qed simp
 
-lemma range_lookup: "fmlookup \<Sigma> range_class = fmlookup predefined_classes range_class"
-  using predefined by (auto simp: fmsubset.rep_eq map_le_def predefined_classes_def)
-
-lemma range_fields:
-  "field_names \<Sigma> range_class = [var ''start'', var ''stop'']"
-  "field_types \<Sigma> range_class \<tau>s = [TyPrim int, TyPrim int]"
-proof -
-  have "range_class |\<in>| fmdom \<Sigma>" using range_lookup by (simp add: predefined_classes_def fmlookup_dom_iff)
-  from wf_class_table_inherits[OF wf_class_table this] obtain n where n: "fcard (fmdom \<Sigma>) = Suc n"
-    by (cases "fcard (fmdom \<Sigma>)") simp_all
-  have "fields \<Sigma> range_class = FieldScheme [] [(var ''start'', TyPrim int), (var ''stop'', TyPrim int)]"
-    using range_lookup n
-    by (simp add: fields_def instantiated_ancestors_def Let_def type_params_def base_def declared_fields_def
-        predefined_classes_def resolve_type_def check_type_head_def check_predefined_def ensure_def
-        type_context_def \<P>_def fmlookup_of_list fmconst_def)
-  then show "field_names \<Sigma> range_class = [var ''start'', var ''stop'']"
-    and "field_types \<Sigma> range_class \<tau>s = [TyPrim int, TyPrim int]"
-    by (simp_all add: field_names_def field_types_def)
-qed
-
-(* Class below range, which has no subclasses *)
-lemma subty_range:
-  "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> \<sigma> = TyClass C \<sigma>s \<Longrightarrow> \<tau> = TyClass range_class \<tau>s \<Longrightarrow> C |\<in>| fmdom \<Sigma> \<Longrightarrow> C = range_class"
-  and "\<Sigma> \<turnstile> \<sigma>s' [<:] \<tau>s' \<Longrightarrow> True"
-proof (induction arbitrary: C \<sigma>s rule: subty_subtys.inducts)
-  case (SubtyClassExtend C' D \<rho>s \<tau>s' \<tau>)
-  then have "D \<noteq> range_class" and "D |\<in>| fmdom \<Sigma>" using wf_class_table_baseD[OF wf_class_table] by auto
-  with SubtyClassExtend show ?case by auto
-qed auto
-
 lemma iter_range:
   assumes "\<turnstile> VObject C xvs : Ty (TyClass range_class \<tau>s)"
   shows "iter (VObject C xvs) \<noteq> None"
@@ -2117,44 +2010,13 @@ proof -
     and fields: "list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) (map snd xvs) (field_types \<Sigma> C \<tau>s')"
     and sub: "\<Sigma> \<turnstile> TyClass C \<tau>s' <: TyClass range_class \<tau>s"
     by (rule wf_object)
-  from subty_range(1)[OF sub refl refl C] have range: "C = range_class" .
+  from subty_range(1)[OF wf_class_table sub refl refl C] have range: "C = range_class" .
   with names have "map fst xvs = [var ''start'', var ''stop'']" by (simp add: range_fields)
   then obtain u u' where xvs: "xvs = [(var ''start'', u), (var ''stop'', u')]" by (auto simp: map_eq_Cons_conv)
   with fields range have "\<turnstile> u : Ty (TyPrim int)" and "\<turnstile> u' : Ty (TyPrim int)" by (simp_all add: range_fields)
   then obtain m n where "u = VLit (LitInt m)" and "u' = VLit (LitInt n)" by (blast dest: wf_int[OF _ SubtyRefl])
   with xvs range show ?thesis by simp
 qed
-
-lemma prim_entry_types:
-  "\<lbrakk> fmlookup (\<E> \<A>) q = Some \<rho> ; fmlookup \<rho> x = Some (VPrim f) ; fmlookup \<P> q = Some \<Gamma> ; fmlookup \<Gamma> x = Some \<theta> \<rbrakk>
-  \<Longrightarrow> f = PrimLen \<and> \<theta> = Ty (TyCallable [TyPrim Sized] (TyPrim int))
-    \<or> f = PrimRound \<and> \<theta> = Ty (TyCallable [TyPrim float] (TyPrim int))
-    \<or> f = PrimExit \<and> \<theta> = Ty (TyCallable [TyPrim int] (TyPrim Never))"
-  by (auto simp: \<E>_def \<P>_def builtins_def name_of_def fmlookup_of_list split: if_splits)
-
-(* Subtyping by Sized of a type other than a union or Never *)
-lemma subty_sized_inv:
-  "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> \<tau> = TyPrim Sized \<Longrightarrow> \<not> is_union \<sigma> \<Longrightarrow> \<sigma> \<noteq> TyPrim Never
-    \<Longrightarrow> sized \<sigma> \<or> \<sigma> = TyPrim Sized \<or> (\<exists>w. \<sigma> = TyLiteral (LitString w))
-      \<or> (\<exists>C \<sigma>s. \<sigma> = TyClass C \<sigma>s \<and> \<Sigma> \<turnstile> \<sigma> <: TyClass range_class [])"
-  and "\<Sigma> \<turnstile> \<sigma>s' [<:] \<tau>s' \<Longrightarrow> True"
-proof (induction rule: subty_subtys.inducts)
-  case (SubtyClassExtend C D \<sigma>s \<tau>s \<tau>)
-  let ?\<sigma> = "TyClass D (map (subst \<tau>s (type_params \<Sigma> C)) \<sigma>s)"
-  from SubtyClassExtend(3, 4) have "sized ?\<sigma> \<or> (\<exists>C' \<sigma>s'. ?\<sigma> = TyClass C' \<sigma>s' \<and> \<Sigma> \<turnstile> ?\<sigma> <: TyClass range_class [])"
-    by simp
-  then have "\<Sigma> \<turnstile> ?\<sigma> <: TyClass range_class []"
-  proof
-    assume "sized ?\<sigma>"
-    then have "D = range_class" and "map (subst \<tau>s (type_params \<Sigma> C)) \<sigma>s = []"
-      by (cases "map (subst \<tau>s (type_params \<Sigma> C)) \<sigma>s"; simp)+
-    then show ?thesis by (simp add: subty_subtys.SubtyRefl)
-  qed blast
-  with SubtyClassExtend(1) show ?case by (blast intro: subty_subtys.SubtyClassExtend)
-next
-  case (SubtyLiteral l \<tau>)
-  then show ?case by (cases l) auto
-qed auto
 
 lemma iter_sized:
   assumes "\<turnstile> v : Ty \<tau>" and "\<Sigma> \<turnstile> \<tau> <: TyPrim Sized"
@@ -2282,21 +2144,6 @@ proof (intro conjI allI impI)
     qed
   qed
 qed simp
-
-lemma def_signatures_arity:
-  assumes "those_sum (map (\<lambda>d. locate (pos_of d) (def_signature \<Sigma> \<Gamma> (node d))) ds) = Ok \<pi>s" and "i < length ds"
-    and "node (ds ! i) = Def f \<alpha>s xps \<psi> s" and "\<pi>s ! i = TyScheme \<alpha>s' (TyCallable \<sigma>s \<tau>)"
-  shows "length \<sigma>s = length xps"
-proof -
-  from those_sum_map_Ok[OF assms(1)] assms(2)
-  have "locate (pos_of (ds ! i)) (def_signature \<Sigma> \<Gamma> (node (ds ! i))) = Ok (\<pi>s ! i)"
-    by (simp add: list_all2_conv_all_nth)
-  with assms(3, 4) obtain \<sigma>s'
-    where "those_sum (map (resolve_type \<Sigma> (\<Gamma> \<otimes> fmconst (set \<alpha>s) TypeVar) \<circ> snd) xps) = Ok \<sigma>s'"
-    and "\<sigma>s = \<sigma>s'"
-    by (cases "pos_of (ds ! i)") (auto simp: Let_def bind_sum_def split: sum.splits option.splits)
-  then show ?thesis by (auto dest!: those_sum_map_Ok list_all2_lengthD)
-qed
 
 lemma call_def_arity_sound:
   assumes "\<rho>, node e \<Rightarrow>\<^sub>e Val Def(\<rho>', ds, j)" and "sound_expr \<rho> (node e) (Val Def(\<rho>', ds, j))"

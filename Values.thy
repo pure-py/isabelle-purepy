@@ -504,6 +504,26 @@ where
 "unop_meaning UOpPos v = (if \<Sigma> \<turnstile> type_of v <: TyPrim float then Val v else Aborts Excluded)" |
 "unop_meaning UOpNeg v = (if \<Sigma> \<turnstile> type_of v <: TyPrim float then Val (negate v) else Aborts Excluded)"
 
+lemma range_lookup: "fmlookup \<Sigma> range_class = fmlookup predefined_classes range_class"
+  using predefined by (auto simp: fmsubset.rep_eq map_le_def predefined_classes_def)
+
+lemma range_fields:
+  "field_names \<Sigma> range_class = [var ''start'', var ''stop'']"
+  "field_types \<Sigma> range_class \<tau>s = [TyPrim int, TyPrim int]"
+proof -
+  have "range_class |\<in>| fmdom \<Sigma>" using range_lookup by (simp add: predefined_classes_def fmlookup_dom_iff)
+  from wf_class_table_inherits[OF wf_class_table this] obtain n where n: "fcard (fmdom \<Sigma>) = Suc n"
+    by (cases "fcard (fmdom \<Sigma>)") simp_all
+  have "fields \<Sigma> range_class = FieldScheme [] [(var ''start'', TyPrim int), (var ''stop'', TyPrim int)]"
+    using range_lookup n
+    by (simp add: fields_def instantiated_ancestors_def Let_def type_params_def base_def declared_fields_def
+        predefined_classes_def resolve_type_def check_type_head_def check_predefined_def ensure_def
+        type_context_def \<P>_def fmlookup_of_list fmconst_def)
+  then show "field_names \<Sigma> range_class = [var ''start'', var ''stop'']"
+    and "field_types \<Sigma> range_class \<tau>s = [TyPrim int, TyPrim int]"
+    by (simp_all add: field_names_def field_types_def)
+qed
+
 end
 
 end

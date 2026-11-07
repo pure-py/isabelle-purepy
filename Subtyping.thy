@@ -186,6 +186,9 @@ where
 "type_args_of \<gamma> \<alpha>s =
   those_sum (map (\<lambda>\<alpha>. or_else (NoTypeArgument \<alpha>) (fmlookup \<gamma> \<alpha>)) \<alpha>s)"
 
+lemma type_args_of_length: "type_args_of \<gamma> \<alpha>s = Ok \<tau>s \<Longrightarrow> length \<tau>s = length \<alpha>s"
+  by (auto simp: type_args_of_def dest!: those_sum_Ok list_all2_lengthD)
+
 (* Type of attribute x of a value of type \<sigma>, which isn't a module *)
 fun attribute_type :: "class_table \<Rightarrow> ty \<Rightarrow> var \<Rightarrow> ty may_fail"
 where
@@ -315,6 +318,65 @@ next
   case (TyUnion \<sigma> \<sigma>')
   then show ?case by (auto simp: join_def split: option.splits if_splits)
 qed (auto elim: elem_type.elims split: if_splits)
+
+lemma lit_subty_base: "\<Sigma> \<turnstile> TyLiteral l <: base_type_lit l"
+  by (rule SubtyLiteral) (rule SubtyRefl)
+
+(* Class below range, which has no subclasses *)
+lemma subty_range:
+  assumes wf: "wf_class_table \<Sigma>"
+  shows "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> \<sigma> = TyClass C \<sigma>s \<Longrightarrow> \<tau> = TyClass range_class \<tau>s \<Longrightarrow> C |\<in>| fmdom \<Sigma>
+    \<Longrightarrow> C = range_class"
+    and "\<Sigma> \<turnstile> \<sigma>s' [<:] \<tau>s' \<Longrightarrow> True"
+proof (induction arbitrary: C \<sigma>s rule: subty_subtys.inducts)
+  case (SubtyClassExtend C' D \<rho>s \<tau>s' \<tau>)
+  then have "D \<noteq> range_class" and "D |\<in>| fmdom \<Sigma>" using wf_class_table_baseD[OF wf] by auto
+  with SubtyClassExtend show ?case by auto
+qed auto
+
+(* Subtyping by Sized of a type other than a union or Never *)
+lemma subty_sized_inv:
+  "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> \<tau> = TyPrim Sized \<Longrightarrow> \<not> is_union \<sigma> \<Longrightarrow> \<sigma> \<noteq> TyPrim Never
+    \<Longrightarrow> sized \<sigma> \<or> \<sigma> = TyPrim Sized \<or> (\<exists>w. \<sigma> = TyLiteral (LitString w))
+      \<or> (\<exists>C \<sigma>s. \<sigma> = TyClass C \<sigma>s \<and> \<Sigma> \<turnstile> \<sigma> <: TyClass range_class [])"
+  and "\<Sigma> \<turnstile> \<sigma>s' [<:] \<tau>s' \<Longrightarrow> True"
+proof (induction rule: subty_subtys.inducts)
+  case (SubtyClassExtend C D \<sigma>s \<tau>s \<tau>)
+  let ?\<sigma> = "TyClass D (map (subst \<tau>s (type_params \<Sigma> C)) \<sigma>s)"
+  from SubtyClassExtend(3, 4) have "sized ?\<sigma> \<or> (\<exists>C' \<sigma>s'. ?\<sigma> = TyClass C' \<sigma>s' \<and> \<Sigma> \<turnstile> ?\<sigma> <: TyClass range_class [])"
+    by simp
+  then have "\<Sigma> \<turnstile> ?\<sigma> <: TyClass range_class []"
+  proof
+    assume "sized ?\<sigma>"
+    then have "D = range_class" and "map (subst \<tau>s (type_params \<Sigma> C)) \<sigma>s = []"
+      by (cases "map (subst \<tau>s (type_params \<Sigma> C)) \<sigma>s"; simp)+
+    then show ?thesis by (simp add: subty_subtys.SubtyRefl)
+  qed blast
+  with SubtyClassExtend(1) show ?case by (blast intro: subty_subtys.SubtyClassExtend)
+next
+  case (SubtyLiteral l \<tau>)
+  then show ?case by (cases l) auto
+qed auto
+
+(* Type built by union from class types and Never; closed downwards under subtyping *)
+fun object_type :: "ty \<Rightarrow> bool"
+where
+"object_type (TyClass _ _) = True" |
+"object_type (TyPrim Never) = True" |
+"object_type (TyUnion \<sigma> \<tau>) = (object_type \<sigma> \<and> object_type \<tau>)" |
+"object_type _ = False"
+
+lemma object_type_subty: "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> object_type \<tau> \<Longrightarrow> object_type \<sigma>" and "\<Sigma> \<turnstile> \<sigma>s [<:] \<tau>s \<Longrightarrow> True"
+proof (induction rule: subty_subtys.inducts)
+  case (SubtyLiteral l \<tau>)
+  then show ?case by (cases l) auto
+qed auto
+
+lemma object_type_subst: "object_type \<sigma> \<Longrightarrow> object_type (subst \<tau>s \<alpha>s \<sigma>)"
+  by (induction \<sigma>) auto
+
+lemma attribute_type_object_type: "attribute_type \<Sigma> \<sigma> x = Ok \<tau> \<Longrightarrow> object_type \<sigma>"
+  by (induction \<Sigma> \<sigma> x arbitrary: \<tau> rule: attribute_type.induct) (auto simp: bind_sum_def split: sum.splits)
 
 (* Field of class C at type arguments \<tau>s, equivalent to the field of a class above it *)
 lemma subty_class_fields:

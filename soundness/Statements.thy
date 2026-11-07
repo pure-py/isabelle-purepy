@@ -12,9 +12,6 @@ where
   map (\<lambda>(e', s'). do { check_expr_at \<Sigma> \<Gamma> e' (TyPrim bool); check_stmt_at \<Sigma> \<Gamma> \<zeta> s' }) elifs
   @ [case else' of Some s' \<Rightarrow> check_stmt_at \<Sigma> \<Gamma> \<zeta> s' | None \<Rightarrow> Ok (Assigns\<^sub>R fmempty None)]"
 
-lemma merges_Ok: "merges \<Sigma> X ms = Ok R \<Longrightarrow> \<exists>Rs. those_sum ms = Ok Rs"
-  by (auto simp: merges_def bind_sum_def split: sum.splits)
-
 lemma check_stmt_if:
   "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtIf e s elifs else') = by_rule (if else' = None then RuleIf else RuleIfElse) (do {
      check_expr_at \<Sigma> \<Gamma> e (TyPrim bool);
@@ -41,12 +38,6 @@ proof (cases s)
   case (At p s')
   then show ?thesis using assms by (cases "check_stmt \<Sigma> \<Gamma> \<zeta> s'") (auto split: static_outcome.splits)
 qed
-
-lemma check_seq:
-  "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtSeq s s') = Ok R
-  \<Longrightarrow> \<exists>\<Delta> r R'. check_stmt_at \<Sigma> \<Gamma> \<zeta> s = Ok (Assigns\<^sub>R \<Delta> r) \<and> check_stmt_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) \<zeta> s' = Ok R'
-     \<and> R = Assigns\<^sub>R \<Delta> r \<otimes> R'"
-  by (auto simp: bind_sum_def split: sum.splits static_outcome.splits)
 
 context evaluation
 begin
@@ -209,19 +200,12 @@ lemma defs_sound:
   \<Longrightarrow> sound_stmt \<rho> (StmtMutualRegion ds) (assigns\<^sub>o (fmap_of_list (zip (map (def_name \<circ> node) ds) vs)))"
   sorry
 
-lemma literal_false: "\<rho>, ExprLiteral (LitBool False) \<Rightarrow>\<^sub>e r \<Longrightarrow> r = Val false"
-  by (auto elim!: LiteralE)
-
 (* Static outcome of an assertion whose condition does not evaluate to false: the condition checks as a Boolean
    and nothing is assigned *)
 lemma check_assert:
   assumes "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssert e e') = Ok R" and "\<rho>, node e \<Rightarrow>\<^sub>e r" and "r \<noteq> Val false"
   shows "check_expr_at \<Sigma> \<Gamma> e (TyPrim bool) = Ok () \<and> (\<exists>r'. R = Assigns\<^sub>R fmempty r')"
   using assms by (auto simp: Let_def bind_sum_def split: sum.splits option.splits if_splits dest: literal_false)
-
-lemma check_assert_msg:
-  "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssert e (Some e')) = Ok R \<Longrightarrow> check_expr_at \<Sigma> \<Gamma> e' (TyPrim str) = Ok ()"
-  by (auto simp: Let_def bind_sum_def split: sum.splits if_splits)
 
 lemma assert_sound:
   assumes "\<rho>, node e \<Rightarrow>\<^sub>e Val true"

@@ -163,4 +163,22 @@ where
        most_specific = Set.filter (\<lambda>(\<tau>, _). \<forall>(\<tau>', _) \<in> overloads. \<Sigma> \<turnstile> \<tau> <: \<tau>') overloads in
    if is_singleton most_specific then Some (snd (the_elem most_specific)) else None)"
 
+lemma unop_overload_types:
+  "unop_overload \<Sigma> op \<sigma> \<omega> \<Longrightarrow>
+   op = UOpNot \<and> \<omega> = (TyPrim bool, TyPrim bool)
+   \<or> op \<in> {UOpPos, UOpNeg} \<and> (\<omega> = (TyPrim int, TyPrim int) \<or> \<omega> = (TyPrim float, TyPrim float))"
+  by (induction rule: unop_overload.induct) auto
+
+lemma resolve_unop_overload:
+  assumes "resolve_unop \<Sigma> op \<sigma> = Some \<tau>'"
+  obtains \<tau> where "unop_overload \<Sigma> op \<sigma> (\<tau>, \<tau>')"
+proof -
+  let ?M = "Set.filter (\<lambda>(\<tau>, _). \<forall>(\<tau>', _) \<in> unop_overloads \<Sigma> op \<sigma>. \<Sigma> \<turnstile> \<tau> <: \<tau>') (unop_overloads \<Sigma> op \<sigma>)"
+  from assms have "is_singleton ?M" and \<tau>': "\<tau>' = snd (the_elem ?M)"
+    by (auto simp: resolve_unop_def Let_def split: if_splits)
+  then have "the_elem ?M \<in> unop_overloads \<Sigma> op \<sigma>"
+    by (metis (no_types, lifting) Set.filter_eq mem_Collect_eq insertI1 is_singleton_the_elem)
+  with \<tau>' that show thesis by (cases "the_elem ?M") (auto simp: unop_overloads_def)
+qed
+
 end

@@ -69,6 +69,9 @@ where
 "merges \<Sigma> X ms =
   do { Rs \<leftarrow> those_sum ms; foldr (\<lambda>R m. do { R' \<leftarrow> m; merge_outcome \<Sigma> X R R' }) Rs (Ok Returns\<^sub>R) }"
 
+lemma merges_Ok: "merges \<Sigma> X ms = Ok R \<Longrightarrow> \<exists>Rs. those_sum ms = Ok Rs"
+  by (auto simp: merges_def bind_sum_def split: sum.splits)
+
 fun override_outcome :: "static_outcome \<Rightarrow> static_outcome \<Rightarrow> static_outcome"
 where
 "override_outcome (Assigns\<^sub>R \<Delta> r) (Assigns\<^sub>R \<Delta>' r') = Assigns\<^sub>R (\<Delta> \<otimes> \<Delta>') (if r = None then r' else None)" |
@@ -138,6 +141,9 @@ where
      }))
    | None \<Rightarrow> None)"
 
+lemma var_scheme_None: "dotted_name e = None \<Longrightarrow> var_scheme \<Sigma> \<Gamma> e \<tau> = None"
+  by (simp add: var_scheme_def scheme_of_name_def entry_of_def)
+
 (* Type arguments for \<alpha>s inferred from the arguments that synthesise; failing that, the first failure
    of an argument with a synthesis rule *)
 definition inferred_type_args :: "class_table \<Rightarrow> var list \<Rightarrow> ty list \<Rightarrow> ty may_fail list \<Rightarrow> ty list may_fail"
@@ -146,6 +152,9 @@ where
   (let \<sigma>\<tau>s = filter (Not \<circ> isl \<circ> snd) (zip \<sigma>s ms) in
    map_sum (\<lambda>r. let r' = synth_failure ms in if unlocated (without_rule r') = NotSynthesised then r else r') id
      (type_args_of (type_args_seq \<Sigma> \<alpha>s (map fst \<sigma>\<tau>s) (map (projr \<circ> snd) \<sigma>\<tau>s)) \<alpha>s))"
+
+lemma inferred_type_args_length: "inferred_type_args \<Sigma> \<alpha>s \<sigma>s ms = Ok \<tau>s \<Longrightarrow> length \<tau>s = length \<alpha>s"
+  by (auto simp: inferred_type_args_def Let_def dest!: type_args_of_length)
 
 (* Operator resolution extended by elimination of a union among the operand types, left first *)
 fun resolve_binop_union :: "class_table \<Rightarrow> bop \<Rightarrow> ty \<Rightarrow> ty \<Rightarrow> ty option"
@@ -638,5 +647,51 @@ where
      those_sum (map (\<lambda>j. check_type_def \<Sigma>' (type_context \<Gamma> q \<chi>s j) (\<chi>s ! j)) js);
      Ok (Assigns\<^sub>R \<Delta> None, \<Sigma>')
    })"
+
+(* Checking succeeds by the checking rule of the expression or by synthesising a subtype *)
+lemma check_expr_cases:
+  assumes "check_expr \<Sigma> \<Gamma> e \<tau> = Ok ()"
+  shows "check_expr' \<Sigma> \<Gamma> e \<tau> = Some (Ok ()) \<or> (\<exists>\<sigma>. synth_expr \<Sigma> \<Gamma> e = Ok \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>)"
+  using assms
+  by (auto simp: check_expr.simps[of \<Sigma> \<Gamma> e \<tau>] ensure_def bind_sum_def
+      split: option.splits sum.splits if_splits)
+
+(* Synthesis of a conditional, from both branches or from one branch checked against the other *)
+lemma synth_cond:
+  assumes "synth_expr \<Sigma> \<Gamma> (ExprCond e1 e e2) = Ok \<tau>"
+  obtains \<sigma>1 \<sigma>2 where "synth_expr_at \<Sigma> \<Gamma> e1 = Ok \<sigma>1" and "synth_expr_at \<Sigma> \<Gamma> e2 = Ok \<sigma>2" and "\<tau> = \<sigma>1 \<squnion>\<^bsub>\<Sigma>\<^esub> \<sigma>2"
+    | "synth_expr_at \<Sigma> \<Gamma> e1 = Ok \<tau>" and "check_expr_at \<Sigma> \<Gamma> e2 \<tau> = Ok ()"
+    | "check_expr_at \<Sigma> \<Gamma> e1 \<tau> = Ok ()" and "synth_expr_at \<Sigma> \<Gamma> e2 = Ok \<tau>"
+  using assms by (auto simp: bind_sum_def split: sum.splits)
+
+lemma check_call_stmt_synth:
+  "\<tau> \<noteq> TyPrim NoneType
+  \<Longrightarrow> check_call_stmt \<Sigma> \<Gamma> e (TyCallable \<sigma>s \<tau>) kws es = do { synth_call \<Sigma> \<Gamma> e (TyCallable \<sigma>s \<tau>) kws es; Ok () }"
+  by (cases "(\<Sigma>, \<Gamma>, e, TyCallable \<sigma>s \<tau>, kws, es)" rule: check_call_stmt.cases) auto
+
+lemma def_signatures_arity:
+  assumes "those_sum (map (\<lambda>d. locate (pos_of d) (def_signature \<Sigma> \<Gamma> (node d))) ds) = Ok \<pi>s" and "i < length ds"
+    and "node (ds ! i) = Def f \<alpha>s xps \<psi> s" and "\<pi>s ! i = TyScheme \<alpha>s' (TyCallable \<sigma>s \<tau>)"
+  shows "length \<sigma>s = length xps"
+proof -
+  from those_sum_map_Ok[OF assms(1)] assms(2)
+  have "locate (pos_of (ds ! i)) (def_signature \<Sigma> \<Gamma> (node (ds ! i))) = Ok (\<pi>s ! i)"
+    by (simp add: list_all2_conv_all_nth)
+  with assms(3, 4) obtain \<sigma>s'
+    where "those_sum (map (resolve_type \<Sigma> (\<Gamma> \<otimes> fmconst (set \<alpha>s) TypeVar) \<circ> snd) xps) = Ok \<sigma>s'"
+    and "\<sigma>s = \<sigma>s'"
+    by (cases "pos_of (ds ! i)") (auto simp: Let_def bind_sum_def split: sum.splits option.splits)
+  then show ?thesis by (auto dest!: those_sum_map_Ok list_all2_lengthD)
+qed
+
+lemma check_seq:
+  "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtSeq s s') = Ok R
+  \<Longrightarrow> \<exists>\<Delta> r R'. check_stmt_at \<Sigma> \<Gamma> \<zeta> s = Ok (Assigns\<^sub>R \<Delta> r) \<and> check_stmt_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) \<zeta> s' = Ok R'
+     \<and> R = Assigns\<^sub>R \<Delta> r \<otimes> R'"
+  by (auto simp: bind_sum_def split: sum.splits static_outcome.splits)
+
+lemma check_assert_msg:
+  "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssert e (Some e')) = Ok R \<Longrightarrow> check_expr_at \<Sigma> \<Gamma> e' (TyPrim str) = Ok ()"
+  by (auto simp: Let_def bind_sum_def split: sum.splits if_splits)
 
 end

@@ -167,6 +167,19 @@ proof
   show "subst (map TyVar \<alpha>s) \<alpha>s \<sigma> = id \<sigma>" by (induction \<sigma>) (auto simp: map_of_zip_map intro: map_idI)
 qed
 
+lemma subst_fresh: "fv \<tau> \<inter> set \<alpha>s = {} \<Longrightarrow> subst \<tau>s \<alpha>s \<tau> = \<tau>"
+proof (induction \<tau>)
+  case (TyVar \<alpha>)
+  then have "map_of (zip \<alpha>s \<tau>s) \<alpha> = None" by (auto simp: map_of_eq_None_iff dest: set_zip_leftD)
+  then show ?case by simp
+qed (auto intro: map_idI)
+
+lemma subst_closed: "fv \<tau> = {} \<Longrightarrow> subst \<tau>s \<alpha>s \<tau> = \<tau>"
+  by (simp add: subst_fresh)
+
+lemma subst_Nil [simp]: "subst [] \<alpha>s \<tau> = \<tau>"
+  by (induction \<tau>) (auto intro: map_idI)
+
 lemma fv_subst: "\<lbrakk> fv \<sigma> \<subseteq> set \<alpha>s ; length \<tau>s = length \<alpha>s \<rbrakk> \<Longrightarrow> fv (subst \<tau>s \<alpha>s \<sigma>) \<subseteq> \<Union> (fv ` set \<tau>s)"
 proof (induction \<sigma>)
   case (TyVar \<alpha>)

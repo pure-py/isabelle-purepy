@@ -142,6 +142,9 @@ abbreviation by_rule :: "rule \<Rightarrow> 'a may_fail \<Rightarrow> 'a may_fai
 where
 "by_rule n \<equiv> map_sum (violates n) id"
 
+lemma by_rule_Ok [simp]: "by_rule n m = Ok x \<longleftrightarrow> m = Ok x" "Ok x = by_rule n m \<longleftrightarrow> m = Ok x"
+  by (cases m; auto)+
+
 (* Reason r without the rule it violates or the judgement which selects no rule *)
 fun without_rule :: "reason \<Rightarrow> reason"
 where

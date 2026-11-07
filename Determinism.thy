@@ -51,6 +51,9 @@ inductive_cases CompConsE: "\<rho> # \<rho>s, e \<Rightarrow>\<^sub>c\<^sub>o\<^
 inductive_cases EntriesNilE: "[], e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s r"
 inductive_cases EntriesConsE: "\<rho> # \<rho>s, e, e' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s r"
 
+lemma literal_false: "\<rho>, ExprLiteral (LitBool False) \<Rightarrow>\<^sub>e r \<Longrightarrow> r = Val false"
+  by (auto elim!: LiteralE)
+
 lemma determinism:
   shows
       expr_det: "\<rho>, e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, e \<Rightarrow>\<^sub>e r' \<Longrightarrow> r = r'"

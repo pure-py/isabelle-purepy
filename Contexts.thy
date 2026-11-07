@@ -41,6 +41,15 @@ definition tyvars :: "cxt \<Rightarrow> var set"
 where
 "tyvars \<Gamma> = Set.filter (\<lambda>x. fmlookup \<Gamma> x = Some TypeVar) (fmdom' \<Gamma>) \<union> \<Union> (fv_entry ` fmran' \<Gamma>)"
 
+lemma tyvars_entry: "fmlookup \<Gamma> x = Some \<theta> \<Longrightarrow> fv_entry \<theta> \<subseteq> tyvars \<Gamma>"
+  by (force simp: tyvars_def fmlookup_dom'_iff fmlookup_ran'_iff)
+
+lemma tyvars_add: "tyvars (\<Gamma> \<otimes> \<Delta>) \<subseteq> tyvars \<Gamma> \<union> tyvars \<Delta>"
+  by (fastforce simp: tyvars_def fmlookup_dom'_iff fmlookup_ran'_iff split: if_splits)
+
+lemma tyvars_single: "\<theta> \<noteq> TypeVar \<Longrightarrow> tyvars (fmupd x \<theta> fmempty) = fv_entry \<theta>"
+  by (auto simp: tyvars_def fmlookup_dom'_iff fmlookup_ran'_iff split: if_splits)
+
 fun lookup :: "cxt \<Rightarrow> name \<Rightarrow> cxt_entry option"
 where
 "lookup \<Gamma> (Simple x) = fmlookup \<Gamma> x" |
@@ -57,6 +66,9 @@ where
    | Some (Scheme \<pi>) \<Rightarrow> Some (Scheme \<pi>)
    | Some PredefName \<Rightarrow> Some PredefName
    | _ \<Rightarrow> None)"
+
+lemma resolve_name_TypeVar: "resolve_name \<Gamma> q = Some \<theta> \<Longrightarrow> \<theta> \<noteq> TypeVar"
+  by (auto simp: resolve_name_def split: option.splits cxt_entry.splits)
 
 definition range_class :: name where "range_class = name_of [''builtins'', ''range'']"
 

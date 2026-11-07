@@ -5,15 +5,6 @@ begin
 
 subsection \<open>Instantiation of type variables\<close>
 
-lemma tyvars_entry: "fmlookup \<Gamma> x = Some \<theta> \<Longrightarrow> fv_entry \<theta> \<subseteq> tyvars \<Gamma>"
-  by (force simp: tyvars_def fmlookup_dom'_iff fmlookup_ran'_iff)
-
-lemma tyvars_add: "tyvars (\<Gamma> \<otimes> \<Delta>) \<subseteq> tyvars \<Gamma> \<union> tyvars \<Delta>"
-  by (fastforce simp: tyvars_def fmlookup_dom'_iff fmlookup_ran'_iff split: if_splits)
-
-lemma tyvars_single: "\<theta> \<noteq> TypeVar \<Longrightarrow> tyvars (fmupd x \<theta> fmempty) = fv_entry \<theta>"
-  by (auto simp: tyvars_def fmlookup_dom'_iff fmlookup_ran'_iff split: if_splits)
-
 (* Application of a closing type substitution, given as a list of pairs *)
 abbreviation inst :: "(var \<times> ty) list \<Rightarrow> ty \<Rightarrow> ty"
 where
@@ -41,19 +32,6 @@ lemma inst_entry_signature_entry:
   "inst_entry \<eta> (signature_entry (TyScheme \<alpha>s \<tau>)) =
    (if \<alpha>s = [] then Ty (inst \<eta> \<tau>) else Scheme (TyScheme \<alpha>s (inst (filter (\<lambda>(\<alpha>, _). \<alpha> \<notin> set \<alpha>s) \<eta>) \<tau>)))"
   by (cases \<alpha>s) simp_all
-
-lemma subst_fresh: "fv \<tau> \<inter> set \<alpha>s = {} \<Longrightarrow> subst \<tau>s \<alpha>s \<tau> = \<tau>"
-proof (induction \<tau>)
-  case (TyVar \<alpha>)
-  then have "map_of (zip \<alpha>s \<tau>s) \<alpha> = None" by (auto simp: map_of_eq_None_iff dest: set_zip_leftD)
-  then show ?case by simp
-qed (auto intro: map_idI)
-
-lemma subst_closed: "fv \<tau> = {} \<Longrightarrow> subst \<tau>s \<alpha>s \<tau> = \<tau>"
-  by (simp add: subst_fresh)
-
-lemma subst_Nil [simp]: "subst [] \<alpha>s \<tau> = \<tau>"
-  by (induction \<tau>) (auto intro: map_idI)
 
 lemma inst_scheme_Nil [simp]: "inst_scheme [] \<pi> = \<pi>"
   by (cases \<pi>) simp

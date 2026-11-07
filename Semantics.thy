@@ -376,6 +376,13 @@ lemma prim_entry_callable:
   \<Longrightarrow> \<exists>\<sigma>s \<tau>. \<theta> = Ty (TyCallable \<sigma>s \<tau>)"
   by (auto simp: \<E>_def \<P>_def builtins_def name_of_def fmlookup_of_list split: if_splits)
 
+lemma prim_entry_types:
+  "\<lbrakk> fmlookup (\<E> \<A>) q = Some \<rho> ; fmlookup \<rho> x = Some (VPrim f) ; fmlookup \<P> q = Some \<Gamma> ; fmlookup \<Gamma> x = Some \<theta> \<rbrakk>
+  \<Longrightarrow> f = PrimLen \<and> \<theta> = Ty (TyCallable [TyPrim Sized] (TyPrim int))
+    \<or> f = PrimRound \<and> \<theta> = Ty (TyCallable [TyPrim float] (TyPrim int))
+    \<or> f = PrimExit \<and> \<theta> = Ty (TyCallable [TyPrim int] (TyPrim Never))"
+  by (auto simp: \<E>_def \<P>_def builtins_def name_of_def fmlookup_of_list split: if_splits)
+
 function (sequential) extend_val :: "val \<Rightarrow> val \<Rightarrow> val"
 and extend_env :: "env \<Rightarrow> env \<Rightarrow> env"
 where
