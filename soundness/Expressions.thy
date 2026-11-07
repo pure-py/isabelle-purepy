@@ -175,6 +175,12 @@ lemma result_typed_sub: "\<lbrakk> result_typed r (inst \<eta> \<sigma>) ; \<Sig
 lemma wf_lit_bool: "\<turnstile> VLit (LitBool b) : Ty (TyPrim bool)"
   by (rule ValSub[OF ValLit], rule SubtyLiteral) (simp add: SubtyRefl)
 
+lemma wf_str_char: "\<turnstile> VLit (LitString c) : Ty (TyPrim str)"
+  by (rule ValSub[OF wf_val_wf_env.ValLit SubtyLiteral]) (simp add: SubtyRefl)
+
+lemma wf_int_lit: "\<turnstile> VLit (LitInt k) : Ty (TyPrim int)"
+  by (rule ValSub[OF wf_val_wf_env.ValLit SubtyLiteral]) (simp add: SubtyRefl)
+
 subsection \<open>Well-scoped types\<close>
 
 (* Types produced by the checker are over the type variables in scope *)
@@ -554,8 +560,90 @@ lemma lambda_sound: "sound_expr \<rho> (ExprLambda xs e) (Val Lam(\<rho>, xs, e)
   by (rule sound_exprI)
      (auto simp: bind_sum_def intro!: ValLambda[simplified] split: ty.splits if_splits sum.splits)
 
-lemma unop_sound: "sound_expr \<rho> (node e) r \<Longrightarrow> sound_expr \<rho> (ExprUnOp op e) (mlet r (unop_meaning op))"
-  sorry
+lemma unop_overload_sub: "unop_overload \<Sigma> op \<sigma> \<omega> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: fst \<omega>"
+proof (induction rule: unop_overload.induct)
+  case (UnopOverloadBase \<sigma> op \<tau> \<tau>')
+  then show ?case using subty_trans'[OF base_type_upper] by simp
+qed simp_all
+
+lemma unop_overload_types:
+  "unop_overload \<Sigma> op \<sigma> \<omega> \<Longrightarrow>
+   op = UOpNot \<and> \<omega> = (TyPrim bool, TyPrim bool)
+   \<or> op \<in> {UOpPos, UOpNeg} \<and> (\<omega> = (TyPrim int, TyPrim int) \<or> \<omega> = (TyPrim float, TyPrim float))"
+  by (induction rule: unop_overload.induct) auto
+
+lemma resolve_unop_overload:
+  assumes "resolve_unop \<Sigma> op \<sigma> = Some \<tau>'"
+  obtains \<tau> where "unop_overload \<Sigma> op \<sigma> (\<tau>, \<tau>')"
+proof -
+  let ?M = "Set.filter (\<lambda>(\<tau>, _). \<forall>(\<tau>', _) \<in> unop_overloads \<Sigma> op \<sigma>. \<Sigma> \<turnstile> \<tau> <: \<tau>') (unop_overloads \<Sigma> op \<sigma>)"
+  from assms have "is_singleton ?M" and \<tau>': "\<tau>' = snd (the_elem ?M)"
+    by (auto simp: resolve_unop_def Let_def split: if_splits)
+  then have "the_elem ?M \<in> unop_overloads \<Sigma> op \<sigma>" by (metis (no_types, lifting) Set.filter_eq mem_Collect_eq insertI1 is_singleton_the_elem)
+  with \<tau>' that show thesis by (cases "the_elem ?M") (auto simp: unop_overloads_def)
+qed
+
+lemma lit_subty_base: "\<Sigma> \<turnstile> TyLiteral l <: base_type_lit l"
+  by (rule SubtyLiteral) (rule SubtyRefl)
+
+(* Meaning of a unary operator at an operand typed by the operand type of an overload *)
+lemma unop_meaning_typed:
+  assumes "\<turnstile> v : Ty \<tau>" and "unop_overload \<Sigma> op \<sigma> (\<tau>, \<tau>')"
+  shows "result_typed (unop_meaning op v) \<tau>'"
+proof -
+  from unop_overload_types[OF assms(2)] consider (not) "op = UOpNot" "\<tau> = TyPrim bool" "\<tau>' = TyPrim bool"
+    | (num) "op \<in> {UOpPos, UOpNeg}" "\<tau> = TyPrim int \<and> \<tau>' = TyPrim int \<or> \<tau> = TyPrim float \<and> \<tau>' = TyPrim float"
+    by auto
+  then show ?thesis
+  proof cases
+    case not
+    with assms(1) have "\<turnstile> v : Ty (TyPrim bool)" by simp
+    then have "v = true \<or> v = false" by (rule wf_bool) (rule SubtyRefl)
+    with not lit_subty_base[of "LitBool True"] lit_subty_base[of "LitBool False"] show ?thesis
+      by (auto intro: wf_lit_bool)
+  next
+    case num
+    then have p: "\<Sigma> \<turnstile> \<tau> <: TyPrim float" and "\<tau> = \<tau>'" by (auto intro: SubtyRefl SubtyIntFloat)
+    from assms(1) num obtain l where v: "v = VLit l" and l: "prim_subtype (case \<tau> of TyPrim p \<Rightarrow> p) (TyLiteral l)"
+      by (auto elim!: wf_prim_lit[OF _ SubtyRefl])
+    from l num obtain n x where "l = LitInt n \<or> \<tau> = TyPrim float \<and> l = LitFloat x"
+      by (cases l) auto
+    then show ?thesis
+    proof
+      assume "l = LitInt n"
+      moreover have "\<Sigma> \<turnstile> TyLiteral (LitInt n) <: TyPrim float"
+        by (rule SubtyLiteral) (simp add: SubtyIntFloat)
+      moreover have "\<turnstile> VLit (LitInt (- n)) : Ty \<tau>'" using num wf_int_lit by (auto intro: ValSub SubtyIntFloat)
+      ultimately show ?thesis using num assms(1) v \<open>\<tau> = \<tau>'\<close> by auto
+    next
+      assume "\<tau> = TyPrim float \<and> l = LitFloat x"
+      with num assms(1) v \<open>\<tau> = \<tau>'\<close> show ?thesis by (auto intro: ValLitFloat SubtyRefl)
+    qed
+  qed
+qed
+
+lemma unop_sound:
+  assumes "sound_expr \<rho> (node e) r"
+  shows "sound_expr \<rho> (ExprUnOp op e) (mlet r (unop_meaning op))"
+proof (rule sound_expr_synthI)
+  fix \<eta> \<Gamma> \<tau>
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "synth_expr \<Sigma> \<Gamma> (ExprUnOp op e) = Ok \<tau>"
+  then obtain \<sigma> where \<sigma>: "synth_expr_at \<Sigma> \<Gamma> e = Ok \<sigma>" and res: "resolve_unop \<Sigma> op \<sigma> = Some \<tau>"
+    by (auto simp: bind_sum_def or_else_def split: if_splits sum.splits option.splits)
+  from res obtain \<tau>'' where ov: "unop_overload \<Sigma> op \<sigma> (\<tau>'', \<tau>)" by (rule resolve_unop_overload)
+  from unop_overload_types[OF ov] have closed: "fv \<tau>'' = {}" "fv \<tau> = {}" by auto
+  from sound_expr_synth_at[OF assms env \<sigma>] have r: "result_typed r (inst \<eta> \<sigma>)" .
+  show "result_typed (mlet r (unop_meaning op)) (inst \<eta> \<tau>)"
+  proof (cases r)
+    case (Val v)
+    with r have "\<turnstile> v : Ty (inst \<eta> \<sigma>)" by simp
+    from wf_val_inst_sub[OF this unop_overload_sub[OF ov]] closed have "\<turnstile> v : Ty \<tau>''" by (simp add: subst_closed)
+    from unop_meaning_typed[OF this ov] Val closed show ?thesis by (simp add: subst_closed)
+  next
+    case (Aborts \<kappa>)
+    with r show ?thesis by simp
+  qed
+qed (simp_all add: var_scheme_None)
 
 lemma binop_sound:
   "\<lbrakk> sound_expr \<rho> (node e) (Val v) ; sound_expr \<rho> (node e') r \<rbrakk>
@@ -1388,12 +1476,6 @@ lemma qual_guard_nonbool_sound:
   "\<lbrakk> sound_expr \<rho> (node e) (Val v) ; v \<notin> {true, false} \<rbrakk>
   \<Longrightarrow> sound_quals \<rho> (At p (Guard e) # gs) (Aborts Excluded)"
   by (auto simp: sound_quals_def bind_sum_def dest!: bool_operand split: sum.splits)
-
-lemma wf_str_char: "\<turnstile> VLit (LitString c) : Ty (TyPrim str)"
-  by (rule ValSub[OF wf_val_wf_env.ValLit SubtyLiteral]) (simp add: SubtyRefl)
-
-lemma wf_int_lit: "\<turnstile> VLit (LitInt k) : Ty (TyPrim int)"
-  by (rule ValSub[OF wf_val_wf_env.ValLit SubtyLiteral]) (simp add: SubtyRefl)
 
 (* Elements drawn by a generator from a value, typed by the element type of a type of the value *)
 lemma iter_typed:
