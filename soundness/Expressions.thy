@@ -81,7 +81,8 @@ proof -
   next
     case num
     then have p: "\<Sigma> \<turnstile> \<tau> <: TyPrim float" and "\<tau> = \<tau>'" by (auto intro: SubtyRefl SubtyIntFloat)
-    from assms(1) num obtain l where v: "v = VLit l" and l: "prim_subtype (case \<tau> of TyPrim p \<Rightarrow> p) (TyLiteral l)"
+    from assms(1) num obtain l where v: "v = VLit l"
+      and l: "prim_subtype (case \<tau> of TyPrim p \<Rightarrow> p) (TyLiteral l)"
       by (auto elim!: wf_prim_lit[OF _ SubtyRefl])
     from l num obtain n x where "l = LitInt n \<or> \<tau> = TyPrim float \<and> l = LitFloat x"
       by (cases l) auto
@@ -114,7 +115,8 @@ proof (rule sound_expr_synthI)
   proof (cases r)
     case (Val v)
     with r have "\<turnstile> v : Ty (inst \<eta> \<sigma>)" by simp
-    from wf_val_inst_sub[OF this unop_overload_sub[OF ov]] closed have "\<turnstile> v : Ty \<tau>''" by (simp add: subst_closed)
+    from wf_val_inst_sub[OF this unop_overload_sub[OF ov]] closed have "\<turnstile> v : Ty \<tau>''"
+      by (simp add: subst_closed)
     from unop_meaning_typed[OF this ov] Val closed show ?thesis by (simp add: subst_closed)
   next
     case (Aborts \<kappa>)
@@ -130,9 +132,9 @@ qed (auto intro: SubtyRefl)
 
 lemmas binop_simps = binop_meaning_def overload_def tuple_overload_def subty_prim_iff subty_list_iff SubtyRefl
   SubtyObject compare_numbers_def compare_strings_def int_arith_def int_division_def int_quotient_def
-  float_arith_def float_division_def float_operands_def float_of_def float_power_def int_power_def concat_str_def
-  concat_list_def concat_tuple_def repeat_str_def repeat_list_def Let_def wf_int_lit wf_int_float ValLitFloat
-  wf_lit_bool wf_str_char
+  float_arith_def float_division_def float_operands_def float_of_def float_power_def int_power_def
+  concat_str_def concat_list_def concat_tuple_def repeat_str_def repeat_list_def Let_def wf_int_lit wf_int_float
+  ValLitFloat wf_lit_bool wf_str_char
 
 (* Meaning of a binary operator at operands typed by the operand types of an overload *)
 lemma binop_meaning_typed:
@@ -208,16 +210,20 @@ next
   then show ?case by (auto simp: binop_simps dest!: wf_str[OF _ SubtyRefl] wf_int[OF _ SubtyRefl])
 next
   case (OverloadMulListInt \<sigma>\<^sub>2 \<tau>)
-  from OverloadMulListInt.prems(1) obtain vs where v: "v = VList vs" and vs: "\<forall>v' \<in> set vs. \<turnstile> v' : Ty (inst \<eta> \<tau>)"
+  from OverloadMulListInt.prems(1) obtain vs where v: "v = VList vs"
+    and vs: "\<forall>v' \<in> set vs. \<turnstile> v' : Ty (inst \<eta> \<tau>)"
     by (auto elim: wf_list)
-  from OverloadMulListInt.prems(2) obtain n where u: "u = VLit (LitInt n)" by (auto dest!: wf_int[OF _ SubtyRefl])
+  from OverloadMulListInt.prems(2) obtain n where u: "u = VLit (LitInt n)"
+    by (auto dest!: wf_int[OF _ SubtyRefl])
   from vs have "\<turnstile> VList (concat (replicate (nat n) vs)) : Ty (TyList (inst \<eta> \<tau>))" by (auto intro!: ValList)
   with v u show ?case by (simp add: binop_simps)
 next
   case (OverloadMulIntList \<sigma>\<^sub>1 \<tau>)
-  from OverloadMulIntList.prems(2) obtain us where u: "u = VList us" and us: "\<forall>u' \<in> set us. \<turnstile> u' : Ty (inst \<eta> \<tau>)"
+  from OverloadMulIntList.prems(2) obtain us where u: "u = VList us"
+    and us: "\<forall>u' \<in> set us. \<turnstile> u' : Ty (inst \<eta> \<tau>)"
     by (auto elim: wf_list)
-  from OverloadMulIntList.prems(1) obtain n where v: "v = VLit (LitInt n)" by (auto dest!: wf_int[OF _ SubtyRefl])
+  from OverloadMulIntList.prems(1) obtain n where v: "v = VLit (LitInt n)"
+    by (auto dest!: wf_int[OF _ SubtyRefl])
   from us have "\<turnstile> VList (concat (replicate (nat n) us)) : Ty (TyList (inst \<eta> \<tau>))" by (auto intro!: ValList)
   with v u show ?case by (simp add: binop_simps)
 next
@@ -307,8 +313,7 @@ lemma binop_fail_sound: "sound_expr \<rho> (node e) (Aborts \<kappa>) \<Longrigh
 lemma and_false_sound: "sound_expr \<rho> (node e) (Val false) \<Longrightarrow> sound_expr \<rho> (ExprAnd e e') (Val false)"
   by (rule sound_expr_synthI) (auto simp: bind_sum_def var_scheme_None intro: wf_lit_bool split: sum.splits)
 
-lemma and_true_sound:
-  "\<lbrakk> sound_expr \<rho> (node e) (Val true) ; sound_expr \<rho> (node e') r \<rbrakk> \<Longrightarrow> sound_expr \<rho> (ExprAnd e e') r"
+lemma and_true_sound: "sound_expr \<rho> (node e') r \<Longrightarrow> sound_expr \<rho> (ExprAnd e e') r"
   by (rule sound_expr_synthI) (auto simp: bind_sum_def var_scheme_None dest: prim_operand split: sum.splits)
 
 lemma and_fail_sound: "sound_expr \<rho> (node e) (Aborts \<kappa>) \<Longrightarrow> sound_expr \<rho> (ExprAnd e e') (Aborts \<kappa>)"
@@ -322,8 +327,7 @@ lemma and_nonbool_sound:
 lemma or_true_sound: "sound_expr \<rho> (node e) (Val true) \<Longrightarrow> sound_expr \<rho> (ExprOr e e') (Val true)"
   by (rule sound_expr_synthI) (auto simp: bind_sum_def var_scheme_None intro: wf_lit_bool split: sum.splits)
 
-lemma or_false_sound:
-  "\<lbrakk> sound_expr \<rho> (node e) (Val false) ; sound_expr \<rho> (node e') r \<rbrakk> \<Longrightarrow> sound_expr \<rho> (ExprOr e e') r"
+lemma or_false_sound: "sound_expr \<rho> (node e') r \<Longrightarrow> sound_expr \<rho> (ExprOr e e') r"
   by (rule sound_expr_synthI) (auto simp: bind_sum_def var_scheme_None dest: prim_operand split: sum.splits)
 
 lemma or_fail_sound: "sound_expr \<rho> (node e) (Aborts \<kappa>) \<Longrightarrow> sound_expr \<rho> (ExprOr e e') (Aborts \<kappa>)"
@@ -360,23 +364,23 @@ next
 qed
 
 lemma cond_true_sound:
-  assumes "sound_expr \<rho> (node e) (Val true)" and "sound_expr \<rho> (node e1) r"
+  assumes "sound_expr \<rho> (node e1) r"
   shows "sound_expr \<rho> (ExprCond e1 e e2) r"
 proof (rule sound_expr_typedI)
   fix \<eta> \<Gamma> \<tau>
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprCond e1 e e2) \<tau>"
   from cond_typed[OF this(2) wf_env_tyvars[OF env]] show "result_typed r (inst \<eta> \<tau>)"
-    by (blast intro: result_typed_sub sound_expr_has_type_at[OF assms(2) env])
+    by (blast intro: result_typed_sub sound_expr_has_type_at[OF assms env])
 qed simp_all
 
 lemma cond_false_sound:
-  assumes "sound_expr \<rho> (node e) (Val false)" and "sound_expr \<rho> (node e2) r"
+  assumes "sound_expr \<rho> (node e2) r"
   shows "sound_expr \<rho> (ExprCond e1 e e2) r"
 proof (rule sound_expr_typedI)
   fix \<eta> \<Gamma> \<tau>
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprCond e1 e e2) \<tau>"
   from cond_typed[OF this(2) wf_env_tyvars[OF env]] show "result_typed r (inst \<eta> \<tau>)"
-    by (blast intro: result_typed_sub sound_expr_has_type_at[OF assms(2) env])
+    by (blast intro: result_typed_sub sound_expr_has_type_at[OF assms env])
 qed simp_all
 
 lemma cond_fail_sound: "sound_expr \<rho> (node e) (Aborts \<kappa>) \<Longrightarrow> sound_expr \<rho> (ExprCond e1 e e2) (Aborts \<kappa>)"
@@ -630,20 +634,6 @@ proof (rule sound_expr_typedI)
   qed
 qed simp_all
 
-lemma wf_dict_entries:
-  assumes "\<turnstile> v : Ty (TyDict \<tau>)"
-  obtains \<delta> where "v = VDict \<delta>" and "\<forall>w u. (w, u) \<in> set \<delta> \<longrightarrow> \<turnstile> u : Ty \<tau>"
-proof -
-  from wf_val_intro(1)[OF assms] obtain \<sigma> where intro: "intro_typed v \<sigma>" and sub: "\<Sigma> \<turnstile> \<sigma> <: TyDict \<tau>"
-    by blast
-  from subty_dict_inv(1)[OF sub refl] intro_typed_nonunion[OF intro] obtain \<sigma>' where \<sigma>: "\<sigma> = TyDict \<sigma>'"
-    and sub': "\<Sigma> \<turnstile> \<sigma>' <: \<tau>"
-    by blast
-  from intro \<sigma> obtain \<delta> where v: "v = VDict \<delta>" and "\<forall>w u. (w, u) \<in> set \<delta> \<longrightarrow> \<turnstile> u : Ty \<sigma>'"
-    by (cases v) auto
-  with sub' that show thesis by (blast intro: ValSub)
-qed
-
 (* Element at an integer index of a sequence with elements satisfying P, or an index error *)
 lemma getitem_elems:
   assumes "elems v = Some vs" and "\<forall>u \<in> set vs. P u"
@@ -713,7 +703,7 @@ next
   with str have r: "wf_result (\<lambda>u. \<exists>w. u = VLit (LitString w)) r" by blast
   from TyDict.prems(2) obtain \<delta> where v: "v = VDict \<delta>"
     and \<delta>: "\<forall>w u. (w, u) \<in> set \<delta> \<longrightarrow> \<turnstile> u : Ty (inst \<eta> \<sigma>')"
-    by (auto elim: wf_dict_entries)
+    by (auto elim: wf_dict)
   have get: "wf_result (\<lambda>u. \<turnstile> u : Ty (inst \<eta> \<sigma>')) (getitem v (VLit (LitString w)))" for w
     using \<delta> by (auto simp: v split: option.splits dest!: map_of_SomeD)
   with r \<tau> show ?case by (cases r) auto
@@ -1089,86 +1079,91 @@ next
     using assms(1) by (rule sound_name_attr) simp
 qed
 
+(* Member of a loaded module named by an entry of the context of the module, typed by the entry *)
+lemma module_attr_entry:
+  assumes "sound_expr \<rho> (node e) (Val (VModLoaded q' \<rho>'))" and "\<eta> \<turnstile> \<rho> : \<Gamma>" and "dotted_name (node e) = Some q"
+    and "lookup \<Gamma> q = Some (ModChecked q'' \<Gamma>')" and "fmlookup \<Gamma>' x = Some \<theta>"
+  obtains v where "fmlookup \<rho>' x = Some v" and "\<turnstile> v : \<theta>" and "fv_entry \<theta> = {}"
+proof -
+  from sound_expr_module_env[OF assms(1-4)] have env': "[] \<turnstile> \<rho>' : \<Gamma>'" by auto
+  with assms(5) have "\<theta> \<noteq> TypeVar" by (auto dest: module_member_TypeVar)
+  from module_member[OF env' assms(5) this] that show thesis by blast
+qed
+
+(* Attribute of a loaded module typed at \<tau>, as a member of the module typed at \<tau> *)
+lemma attr_module_typed:
+  assumes "sound_expr \<rho> (node e) (Val (VModLoaded q' \<rho>'))" and env: "\<eta> \<turnstile> \<rho> : \<Gamma>"
+    and "has_type \<Sigma> \<eta> \<Gamma> (ExprAttribute e x) \<tau>"
+  obtains v where "fmlookup \<rho>' x = Some v" and "\<turnstile> v : Ty (inst \<eta> \<tau>)"
+  using assms(3)
+proof (cases rule: attr_typed)
+  case (module_ty q q'' \<Gamma>' \<sigma>)
+  from module_attr_entry[OF assms(1, 2) module_ty(1-3)] obtain v where lookup: "fmlookup \<rho>' x = Some v"
+    and "\<turnstile> v : Ty \<sigma>" and "fv \<sigma> = {}"
+    by auto
+  then have "\<turnstile> v : Ty (inst \<eta> \<sigma>)" by (simp add: subst_closed)
+  from that[OF lookup wf_val_inst_sub[OF this module_ty(4)]] show thesis .
+next
+  case (module_scheme q q'' \<Gamma>' \<alpha>s \<sigma> \<tau>s)
+  from module_attr_entry[OF assms(1, 2) module_scheme(1-3)] obtain v where lookup: "fmlookup \<rho>' x = Some v"
+    and v: "\<turnstile> v : Scheme (TyScheme \<alpha>s \<sigma>)" and fv: "fv \<sigma> \<subseteq> set \<alpha>s"
+    by auto
+  have len: "length \<tau>s = length \<alpha>s" using module_scheme(4) by (rule type_args_of_length)
+  have closed: "\<forall>\<tau>' \<in> set (map (inst \<eta>) \<tau>s). fv \<tau>' = {}"
+    using type_args_fv[OF module_scheme(4)] module_scheme(6) wf_env_closed[OF env] by (auto intro!: inst_closed)
+  have "length (map (inst \<eta>) \<tau>s) = length \<alpha>s" by (simp add: len)
+  from v this closed have "\<turnstile> v : Ty (subst (map (inst \<eta>) \<tau>s) \<alpha>s \<sigma>)" by (rule ValInst)
+  then have "\<turnstile> v : Ty (inst \<eta> (subst \<tau>s \<alpha>s \<sigma>))" by (simp only: subst_subst[OF fv len])
+  from that[OF lookup wf_val_inst_sub[OF this module_scheme(5)]] show thesis .
+next
+  case (module_tyvar q q'' \<Gamma>')
+  from sound_expr_module_env[OF assms(1, 2) module_tyvar(1, 2)] module_tyvar(3) show thesis
+    by (auto dest: module_member_TypeVar)
+next
+  case (object \<sigma> \<sigma>')
+  from sound_expr_synth_at[OF assms(1, 2) object(1)] show thesis by (auto dest: wf_mod_loaded)
+qed
+
+(* Name clause for an attribute of a loaded module, whose result is the member of the module when it has one *)
+lemma sound_name_module:
+  assumes "sound_expr \<rho> (node e) (Val (VModLoaded q' \<rho>'))" and "\<And>v. fmlookup \<rho>' x = Some v \<Longrightarrow> r = Val v"
+  shows "sound_name \<rho> (ExprAttribute e x) r"
+  unfolding sound_name_def
+proof (intro allI impI)
+  fix \<eta> \<Gamma> \<theta>
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and entry: "expr_entry \<Gamma> (ExprAttribute e x) = Some \<theta>"
+  from entry obtain q q'' \<Gamma>' where q: "dotted_name (node e) = Some q"
+    and mod: "lookup \<Gamma> q = Some (ModChecked q'' \<Gamma>')" and x: "fmlookup \<Gamma>' x = Some \<theta>"
+    unfolding expr_entry_simps by (rule entry_of_attribute)
+  obtain v where "fmlookup \<rho>' x = Some v" and "\<turnstile> v : \<theta>" and "fv_entry \<theta> = {}"
+    by (rule module_attr_entry[OF assms(1) env q mod x])
+  with assms(2)[OF this(1)] show "wf_result (\<lambda>v. \<turnstile> v : inst_entry \<eta> \<theta>) r" by (simp add: inst_entry_closed)
+qed
+
 lemma attr_module_sound:
   assumes "sound_expr \<rho> (node e) (Val (VModLoaded q' \<rho>'))" and "fmlookup \<rho>' x = Some v"
   shows "sound_expr \<rho> (ExprAttribute e x) (Val v)"
-  unfolding sound_expr_def sound_name_def
+  unfolding sound_expr_def
 proof (intro conjI allI impI)
   fix \<eta> \<Gamma> \<tau>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and typed: "has_type \<Sigma> \<eta> \<Gamma> (ExprAttribute e x) \<tau>"
-  from typed show "result_typed (Val v) (inst \<eta> \<tau>)"
-  proof (cases rule: attr_typed)
-    case (module_ty q q'' \<Gamma>' \<sigma>)
-    from sound_expr_module_env[OF assms(1) env module_ty(1, 2)] have "[] \<turnstile> \<rho>' : \<Gamma>'" by auto
-    with module_ty(3) assms(2) have "\<turnstile> v : Ty (inst \<eta> \<sigma>)" by (auto dest!: module_member simp: subst_closed)
-    with module_ty(4) show ?thesis by (auto intro: wf_val_inst_sub)
-  next
-    case (module_scheme q q'' \<Gamma>' \<alpha>s \<sigma> \<tau>s)
-    from sound_expr_module_env[OF assms(1) env module_scheme(1, 2)] have "[] \<turnstile> \<rho>' : \<Gamma>'" by auto
-    with module_scheme(3) assms(2) have v: "\<turnstile> v : Scheme (TyScheme \<alpha>s \<sigma>)" and fv: "fv \<sigma> \<subseteq> set \<alpha>s"
-      by (auto dest!: module_member)
-    have len: "length \<tau>s = length \<alpha>s" using module_scheme(4) by (rule type_args_of_length)
-    have closed: "\<forall>\<tau>' \<in> set (map (inst \<eta>) \<tau>s). fv \<tau>' = {}"
-      using type_args_fv[OF module_scheme(4)] module_scheme(6) wf_env_closed[OF env]
-      by (auto intro!: inst_closed)
-    have "length (map (inst \<eta>) \<tau>s) = length \<alpha>s" by (simp add: len)
-    from v this closed have "\<turnstile> v : Ty (subst (map (inst \<eta>) \<tau>s) \<alpha>s \<sigma>)" by (rule ValInst)
-    then have "\<turnstile> v : Ty (inst \<eta> (subst \<tau>s \<alpha>s \<sigma>))" by (simp only: subst_subst[OF fv len])
-    with module_scheme(5) show ?thesis by (auto intro: wf_val_inst_sub)
-  next
-    case (module_tyvar q q'' \<Gamma>')
-    from sound_expr_module_env[OF assms(1) env module_tyvar(1, 2)] module_tyvar(3) show ?thesis
-      by (auto dest: module_member_TypeVar)
-  next
-    case (object \<sigma> \<sigma>')
-    from sound_expr_synth_at[OF assms(1) env object(1)] show ?thesis by (auto dest: wf_mod_loaded)
-  qed
+  assume "\<eta> \<turnstile> \<rho> : \<Gamma>" and "has_type \<Sigma> \<eta> \<Gamma> (ExprAttribute e x) \<tau>"
+  from attr_module_typed[OF assms(1) this] assms(2) show "result_typed (Val v) (inst \<eta> \<tau>)" by simp
 next
-  fix \<eta> \<Gamma> \<theta>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and entry: "expr_entry \<Gamma> (ExprAttribute e x) = Some \<theta>"
-  from entry obtain q q'' \<Gamma>' where "dotted_name (node e) = Some q" and "lookup \<Gamma> q = Some (ModChecked q'' \<Gamma>')"
-    and x: "fmlookup \<Gamma>' x = Some \<theta>"
-    unfolding expr_entry_simps by (rule entry_of_attribute)
-  from sound_expr_module_env[OF assms(1) env this(1, 2)] have "[] \<turnstile> \<rho>' : \<Gamma>'" by auto
-  moreover from this x have "\<theta> \<noteq> TypeVar" by (auto dest: module_member_TypeVar)
-  ultimately show "wf_result (\<lambda>v. \<turnstile> v : inst_entry \<eta> \<theta>) (Val v)"
-    using x assms(2) by (auto dest!: module_member simp: inst_entry_closed)
+  show "sound_name \<rho> (ExprAttribute e x) (Val v)" by (rule sound_name_module[OF assms(1)]) (simp add: assms(2))
 qed
 
 lemma attr_module_missing_sound:
   assumes "sound_expr \<rho> (node e) (Val (VModLoaded q' \<rho>'))" and "fmlookup \<rho>' x = None"
   shows "sound_expr \<rho> (ExprAttribute e x) (Aborts AttributeError)"
-  unfolding sound_expr_def sound_name_def
+  unfolding sound_expr_def
 proof (intro conjI allI impI)
   fix \<eta> \<Gamma> \<tau>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and typed: "has_type \<Sigma> \<eta> \<Gamma> (ExprAttribute e x) \<tau>"
-  from typed show "result_typed (Aborts AttributeError) (inst \<eta> \<tau>)"
-  proof (cases rule: attr_typed)
-    case (module_ty q q'' \<Gamma>' \<sigma>)
-    from sound_expr_module_env[OF assms(1) env module_ty(1, 2)] module_ty(3) assms(2) show ?thesis
-      by (auto dest!: module_member)
-  next
-    case (module_scheme q q'' \<Gamma>' \<alpha>s \<sigma> \<tau>s)
-    from sound_expr_module_env[OF assms(1) env module_scheme(1, 2)] module_scheme(3) assms(2) show ?thesis
-      by (auto dest!: module_member)
-  next
-    case (module_tyvar q q'' \<Gamma>')
-    from sound_expr_module_env[OF assms(1) env module_tyvar(1, 2)] module_tyvar(3) show ?thesis
-      by (auto dest: module_member_TypeVar)
-  next
-    case (object \<sigma> \<sigma>')
-    from sound_expr_synth_at[OF assms(1) env object(1)] show ?thesis by (auto dest: wf_mod_loaded)
-  qed
+  assume "\<eta> \<turnstile> \<rho> : \<Gamma>" and "has_type \<Sigma> \<eta> \<Gamma> (ExprAttribute e x) \<tau>"
+  from attr_module_typed[OF assms(1) this] assms(2) show "result_typed (Aborts AttributeError) (inst \<eta> \<tau>)"
+    by simp
 next
-  fix \<eta> \<Gamma> \<theta>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and entry: "expr_entry \<Gamma> (ExprAttribute e x) = Some \<theta>"
-  from entry obtain q q'' \<Gamma>' where "dotted_name (node e) = Some q" and "lookup \<Gamma> q = Some (ModChecked q'' \<Gamma>')"
-    and x: "fmlookup \<Gamma>' x = Some \<theta>"
-    unfolding expr_entry_simps by (rule entry_of_attribute)
-  from sound_expr_module_env[OF assms(1) env this(1, 2)] have "[] \<turnstile> \<rho>' : \<Gamma>'" by auto
-  moreover from this x have "\<theta> \<noteq> TypeVar" by (auto dest: module_member_TypeVar)
-  ultimately show "wf_result (\<lambda>v. \<turnstile> v : inst_entry \<eta> \<theta>) (Aborts AttributeError)"
-    using x assms(2) by (auto dest!: module_member)
+  show "sound_name \<rho> (ExprAttribute e x) (Aborts AttributeError)"
+    by (rule sound_name_module[OF assms(1)]) (simp add: assms(2))
 qed
 
 lemma attr_nonobject_sound:
@@ -1233,8 +1228,7 @@ subsection \<open>Comprehensions\<close>
 lemma quals_nil_sound: "sound_quals \<rho> [] (Val [\<rho>])"
   by (simp add: sound_quals_def)
 
-lemma qual_guard_true_sound:
-  "\<lbrakk> sound_expr \<rho> (node e) (Val true) ; sound_quals \<rho> gs r \<rbrakk> \<Longrightarrow> sound_quals \<rho> (At p (Guard e) # gs) r"
+lemma qual_guard_true_sound: "sound_quals \<rho> gs r \<Longrightarrow> sound_quals \<rho> (At p (Guard e) # gs) r"
   by (auto simp: sound_quals_def bind_sum_def split: sum.splits)
 
 lemma qual_guard_false_sound: "sound_expr \<rho> (node e) (Val false) \<Longrightarrow> sound_quals \<rho> (At p (Guard e) # gs) (Val [])"
@@ -1312,7 +1306,8 @@ next
     from TyUnion(1)[OF this \<tau>' TyUnion(5)] show ?thesis unfolding \<tau> by (blast intro: wf_val_inst_sub join_upper)
   next
     assume "\<turnstile> v : Ty (inst \<eta> \<sigma>')"
-    from TyUnion(2)[OF this \<tau>'' TyUnion(5)] show ?thesis unfolding \<tau> by (blast intro: wf_val_inst_sub join_upper)
+    from TyUnion(2)[OF this \<tau>'' TyUnion(5)] show ?thesis
+      unfolding \<tau> by (blast intro: wf_val_inst_sub join_upper)
   qed
 qed simp_all
 
@@ -1442,17 +1437,16 @@ lemma entries_nil_sound: "sound_entries [] e e' (Val [])"
   by (simp add: sound_entries_def)
 
 lemma entries_cons_sound:
-  assumes "sound_expr \<rho> (node e) (Val (VLit (LitString w)))" and "sound_expr \<rho> (node e') (Val v)"
-    and "sound_entries \<rho>s e e' r"
+  assumes "sound_expr \<rho> (node e') (Val v)" and "sound_entries \<rho>s e e' r"
   shows "sound_entries (\<rho> # \<rho>s) e e' (mlet r (\<lambda>\<delta>. Val ((w, v) # \<delta>)))"
   unfolding sound_entries_def
 proof (intro allI impI)
   fix \<eta> \<Gamma> \<tau>
   assume envs: "\<forall>\<rho> \<in> set (\<rho> # \<rho>s). \<eta> \<turnstile> \<rho> : \<Gamma>" and key: "check_expr_at \<Sigma> \<Gamma> e (TyPrim str) = Ok ()"
     and e': "has_type_at \<Sigma> \<eta> \<Gamma> e' \<tau>"
-  from assms(2) envs e' have "\<turnstile> v : Ty (inst \<eta> \<tau>)" by (auto dest: sound_expr_has_type_at)
+  from assms(1) envs e' have "\<turnstile> v : Ty (inst \<eta> \<tau>)" by (auto dest: sound_expr_has_type_at)
   moreover from envs have "\<forall>\<rho> \<in> set \<rho>s. \<eta> \<turnstile> \<rho> : \<Gamma>" by simp
-  with assms(3) key e' have "wf_entries r (inst \<eta> \<tau>)" by (blast intro: sound_entriesD)
+  with assms(2) key e' have "wf_entries r (inst \<eta> \<tau>)" by (blast intro: sound_entriesD)
   ultimately show "wf_entries (mlet r (\<lambda>\<delta>. Val ((w, v) # \<delta>))) (inst \<eta> \<tau>)" by (cases r) auto
 qed
 
@@ -1466,8 +1460,7 @@ lemma entries_nonstr_sound:
   unfolding sound_entries_def by (auto dest!: str_operand)
 
 lemma entries_fail_value_sound:
-  "\<lbrakk> sound_expr \<rho> (node e) (Val (VLit (LitString w))) ; sound_expr \<rho> (node e') (Aborts \<kappa>) \<rbrakk>
-  \<Longrightarrow> sound_entries (\<rho> # \<rho>s) e e' (Aborts \<kappa>)"
+  "sound_expr \<rho> (node e') (Aborts \<kappa>) \<Longrightarrow> sound_entries (\<rho> # \<rho>s) e e' (Aborts \<kappa>)"
   unfolding sound_entries_def by (auto dest: sound_expr_has_type_at)
 
 end

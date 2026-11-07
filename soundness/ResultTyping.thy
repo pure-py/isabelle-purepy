@@ -167,13 +167,16 @@ lemma result_typed_sub: "\<lbrakk> result_typed r (inst \<eta> \<sigma>) ; \<Sig
   by (cases r) (auto intro: wf_val_inst_sub)
 
 lemma wf_lit_bool: "\<turnstile> VLit (LitBool b) : Ty (TyPrim bool)"
-  by (rule ValSub[OF ValLit], rule SubtyLiteral) (simp add: SubtyRefl)
+  by (rule ValSub[OF ValLit SubtyLiteral]) (simp add: SubtyRefl)
 
 lemma wf_str_char: "\<turnstile> VLit (LitString c) : Ty (TyPrim str)"
-  by (rule ValSub[OF wf_val_wf_env.ValLit SubtyLiteral]) (simp add: SubtyRefl)
+  by (rule ValSub[OF ValLit SubtyLiteral]) (simp add: SubtyRefl)
 
 lemma wf_int_lit: "\<turnstile> VLit (LitInt k) : Ty (TyPrim int)"
-  by (rule ValSub[OF wf_val_wf_env.ValLit SubtyLiteral]) (simp add: SubtyRefl)
+  by (rule ValSub[OF ValLit SubtyLiteral]) (simp add: SubtyRefl)
+
+lemma wf_int_float: "\<turnstile> VLit (LitInt k) : Ty (TyPrim float)"
+  by (rule ValSub[OF wf_int_lit SubtyIntFloat])
 
 subsection \<open>Well-scoped types\<close>
 
@@ -361,7 +364,7 @@ lemma intro_def_wf:
   shows "\<turnstile> Def(\<rho>, ds, i) : Ty (subst \<tau>s \<alpha>s (inst (filter (\<lambda>(\<alpha>, _). \<alpha> \<notin> set \<alpha>s) \<eta>) \<tau>))"
 proof -
   have def: "\<turnstile> Def(\<rho>, ds, i) : inst_entry \<eta> (signature_entry (TyScheme \<alpha>s \<tau>))"
-    by (rule wf_val_wf_env.ValDef[OF assms(1, 2) refl assms(3-7)])
+    by (rule ValDef[OF assms(1, 2) refl assms(3-7)])
   show ?thesis
   proof (cases "\<alpha>s = []")
     case True
@@ -370,23 +373,22 @@ proof -
     case False
     with def have "\<turnstile> Def(\<rho>, ds, i) : Scheme (TyScheme \<alpha>s (inst (filter (\<lambda>(\<alpha>, _). \<alpha> \<notin> set \<alpha>s) \<eta>) \<tau>))"
       by (simp add: inst_entry_signature_entry)
-    from wf_val_wf_env.ValInst[OF this assms(8, 9)] show ?thesis .
+    from ValInst[OF this assms(8, 9)] show ?thesis .
   qed
 qed
 
 lemma intro_typed_wf: "intro_typed v \<sigma> \<Longrightarrow> \<turnstile> v : Ty \<sigma>"
 proof (cases v)
   case (VLamClosure \<rho> xs e)
-  then show "intro_typed v \<sigma> \<Longrightarrow> \<turnstile> v : Ty \<sigma>" by (auto intro: wf_val_wf_env.ValLambda[simplified])
+  then show "intro_typed v \<sigma> \<Longrightarrow> \<turnstile> v : Ty \<sigma>" by (auto intro: ValLambda[simplified])
 next
   case (VDefClosure \<rho> ds i)
   then show "intro_typed v \<sigma> \<Longrightarrow> \<turnstile> v : Ty \<sigma>"
     by (clarsimp simp only: intro_typed.simps) (rule intro_def_wf, assumption+)
 next
   case (VPrim f)
-  then show "intro_typed v \<sigma> \<Longrightarrow> \<turnstile> v : Ty \<sigma>" by (auto intro: wf_val_wf_env.ValPrim)
-qed (auto intro: wf_val_wf_env.ValLit wf_val_wf_env.ValLitFloat wf_val_wf_env.ValList wf_val_wf_env.ValTuple
-     wf_val_wf_env.ValDict wf_val_wf_env.ValObj)
+  then show "intro_typed v \<sigma> \<Longrightarrow> \<turnstile> v : Ty \<sigma>" by (auto intro: ValPrim)
+qed (auto intro: ValLit ValLitFloat ValList ValTuple ValDict ValObj)
 
 lemma intro_typed_nonunion: "intro_typed v \<sigma> \<Longrightarrow> \<not> is_union \<sigma> \<and> \<sigma> \<noteq> TyPrim Never"
   by (cases v) auto
@@ -523,13 +525,16 @@ qed
 
 lemma wf_dict:
   assumes "\<turnstile> v : Ty (TyDict \<tau>)"
-  obtains \<delta> where "v = VDict \<delta>"
+  obtains \<delta> where "v = VDict \<delta>" and "\<forall>w u. (w, u) \<in> set \<delta> \<longrightarrow> \<turnstile> u : Ty \<tau>"
 proof -
   from wf_val_intro(1)[OF assms] obtain \<sigma> where intro: "intro_typed v \<sigma>" and sub: "\<Sigma> \<turnstile> \<sigma> <: TyDict \<tau>"
     by blast
-  from subty_dict_inv(1)[OF sub refl] intro_typed_nonunion[OF intro] obtain \<sigma>' where "\<sigma> = TyDict \<sigma>'"
+  from subty_dict_inv(1)[OF sub refl] intro_typed_nonunion[OF intro] obtain \<sigma>' where \<sigma>: "\<sigma> = TyDict \<sigma>'"
+    and sub': "\<Sigma> \<turnstile> \<sigma>' <: \<tau>"
     by blast
-  with intro that show thesis by (cases v) auto
+  from intro \<sigma> obtain \<delta> where v: "v = VDict \<delta>" and "\<forall>w u. (w, u) \<in> set \<delta> \<longrightarrow> \<turnstile> u : Ty \<sigma>'"
+    by (cases v) auto
+  with sub' that show thesis by (blast intro: ValSub)
 qed
 
 (* Field of an object of class C, typed by the field of the class at type arguments typing the fields *)
@@ -557,9 +562,6 @@ lemma wf_int: "\<lbrakk> \<turnstile> v : Ty \<tau> ; \<Sigma> \<turnstile> \<ta
 lemma wf_float:
   "\<lbrakk> \<turnstile> v : Ty \<tau> ; \<Sigma> \<turnstile> \<tau> <: TyPrim float \<rbrakk> \<Longrightarrow> (\<exists>n. v = VLit (LitInt n)) \<or> (\<exists>x. v = VLit (LitFloat x))"
   by (erule wf_prim_lit) (auto elim: base_type_lit.elims)
-
-lemma wf_int_float: "\<turnstile> VLit (LitInt k) : Ty (TyPrim float)"
-  by (rule ValSub[OF wf_int_lit SubtyIntFloat])
 
 lemma wf_lit: "\<turnstile> v : Ty (TyLiteral l) \<Longrightarrow> v = VLit l"
 proof -

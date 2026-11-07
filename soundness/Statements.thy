@@ -51,14 +51,24 @@ proof -
   then show ?thesis by (cases o) (simp add: wf_completion_bindings[OF R'])
 qed
 
+lemma sound_stmtI:
+  assumes "\<And>\<eta> \<Gamma> \<zeta> R. \<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; wf_return \<eta> \<zeta> ; check_stmt \<Sigma> \<Gamma> \<zeta> s = Ok R \<rbrakk> \<Longrightarrow> wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R"
+  shows "sound_stmt \<rho> s o"
+  unfolding sound_stmt_def using assms by blast
+
+lemma sound_elifI:
+  assumes "\<And>\<eta> \<Gamma> \<zeta> Rs. \<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; wf_return \<eta> \<zeta> ; those_sum (check_elif \<Sigma> \<Gamma> \<zeta> eb) = Ok Rs \<rbrakk>
+            \<Longrightarrow> \<exists>R \<in> set Rs. wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R"
+  shows "sound_elif \<rho> eb o"
+  unfolding sound_elif_def using assms by blast
+
 subsection \<open>Statements\<close>
 
 lemma pass_sound: "sound_stmt \<rho> StmtPass (assigns\<^sub>o \<epsilon>)"
   by (simp add: sound_stmt_def)
 
 lemma declare_sound: "sound_stmt \<rho> (StmtDeclare x \<psi>) (assigns\<^sub>o \<epsilon>)"
-  unfolding sound_stmt_def
-proof (intro allI impI)
+proof (rule sound_stmtI)
   fix \<eta> \<Gamma> \<zeta> R
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtDeclare x \<psi>) = Ok R"
   from chk obtain \<tau> where \<tau>: "resolve_type \<Sigma> \<Gamma> \<psi> = Ok \<tau>" and R: "R = Assigns\<^sub>R (fmupd x (DU \<tau>) fmempty) None"
@@ -73,8 +83,7 @@ qed
 lemma assign_sound:
   assumes "sound_expr \<rho> (node e) r"
   shows "sound_stmt \<rho> (StmtAssign x \<pi> e) (mlet r (\<lambda>v. assigns\<^sub>o (fmupd x v \<epsilon>)))"
-  unfolding sound_stmt_def
-proof (intro allI impI)
+proof (rule sound_stmtI)
   fix \<eta> \<Gamma> \<zeta> R
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssign x \<pi> e) = Ok R"
   from chk obtain \<tau> where chk_e: "check_expr_at \<Sigma> \<Gamma> e \<tau> = Ok ()"
@@ -115,8 +124,7 @@ qed
 lemma expr_stmt_sound:
   assumes "sound_expr \<rho> (node e) r"
   shows "sound_stmt \<rho> (StmtExpr e) (mlet r (\<lambda>v. assigns\<^sub>o \<epsilon>))"
-  unfolding sound_stmt_def
-proof (intro allI impI)
+proof (rule sound_stmtI)
   fix \<eta> \<Gamma> \<zeta> R
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtExpr e) = Ok R"
   from check_expr_stmt[OF chk] obtain \<tau> where R: "R = Assigns\<^sub>R fmempty None" and "has_type_at \<Sigma> \<eta> \<Gamma> e \<tau>"
@@ -128,8 +136,7 @@ qed
 lemma print_sound:
   assumes "sound_expr \<rho> (node e) r"
   shows "sound_stmt \<rho> (StmtPrint e) (mlet r (\<lambda>v. ([v], Assigns \<epsilon>)))"
-  unfolding sound_stmt_def
-proof (intro allI impI)
+proof (rule sound_stmtI)
   fix \<eta> \<Gamma> \<zeta> R
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtPrint e) = Ok R"
   then obtain \<tau> where R: "R = Assigns\<^sub>R fmempty None" and "synth_expr_at \<Sigma> \<Gamma> e = Ok \<tau>"
@@ -141,8 +148,7 @@ qed
 lemma return_sound:
   assumes "sound_expr \<rho> (node e) r"
   shows "sound_stmt \<rho> (StmtReturn (Some e)) (mlet r returns\<^sub>o)"
-  unfolding sound_stmt_def
-proof (intro allI impI)
+proof (rule sound_stmtI)
   fix \<eta> \<Gamma> \<zeta> R
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtReturn (Some e)) = Ok R"
   from chk obtain \<tau> where \<zeta>: "\<zeta> = Some \<tau>" by (cases \<zeta>) auto
@@ -153,8 +159,7 @@ proof (intro allI impI)
 qed
 
 lemma return_none_sound: "sound_stmt \<rho> (StmtReturn None) (returns\<^sub>o (VLit LitNone))"
-  unfolding sound_stmt_def
-proof (intro allI impI)
+proof (rule sound_stmtI)
   fix \<eta> \<Gamma> \<zeta> R
   assume chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtReturn None) = Ok R"
   from chk obtain \<tau> where \<zeta>: "\<zeta> = Some \<tau>" by (cases \<zeta>) auto
@@ -189,8 +194,7 @@ qed
 lemma defs_sound:
   assumes vs: "vs = map (\<lambda>i. Def(\<rho>, ds, i)) [0..<length ds]"
   shows "sound_stmt \<rho> (StmtMutualRegion ds) (assigns\<^sub>o (fmap_of_list (zip (map (def_name \<circ> node) ds) vs)))"
-  unfolding sound_stmt_def
-proof (intro allI impI)
+proof (rule sound_stmtI)
   fix \<eta> \<Gamma> \<zeta> R
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtMutualRegion ds) = Ok R"
   let ?xs = "map (def_name \<circ> node) ds"
@@ -281,8 +285,7 @@ lemma check_assert:
 lemma assert_sound:
   assumes "\<rho>, node e \<Rightarrow>\<^sub>e Val true"
   shows "sound_stmt \<rho> (StmtAssert e e') (assigns\<^sub>o \<epsilon>)"
-  unfolding sound_stmt_def
-proof (intro allI impI)
+proof (rule sound_stmtI)
   fix \<eta> \<Gamma> \<zeta> R
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssert e e') = Ok R"
   from check_assert[OF chk assms] obtain r where "R = Assigns\<^sub>R fmempty r" by auto
@@ -295,8 +298,7 @@ lemma assert_false_sound: "sound_stmt \<rho> (StmtAssert e e') (aborts\<^sub>o (
 lemma assert_fail_sound:
   assumes "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa>" and "sound_expr \<rho> (node e) (Aborts \<kappa>)"
   shows "sound_stmt \<rho> (StmtAssert e e') (aborts\<^sub>o \<kappa>)"
-  unfolding sound_stmt_def
-proof (intro allI impI)
+proof (rule sound_stmtI)
   fix \<eta> \<Gamma> \<zeta> R
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssert e e') = Ok R"
   from check_assert[OF chk assms(1)] have "check_expr_at \<Sigma> \<Gamma> e (TyPrim bool) = Ok ()" by simp
@@ -306,8 +308,7 @@ qed
 lemma assert_nonbool_sound:
   assumes "\<rho>, node e \<Rightarrow>\<^sub>e Val v" and "sound_expr \<rho> (node e) (Val v)" and "v \<notin> {true, false}"
   shows "sound_stmt \<rho> (StmtAssert e e') (aborts\<^sub>o Excluded)"
-  unfolding sound_stmt_def
-proof (intro allI impI)
+proof (rule sound_stmtI)
   fix \<eta> \<Gamma> \<zeta> R
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssert e e') = Ok R"
   from check_assert[OF chk assms(1)] assms(3) have "check_expr_at \<Sigma> \<Gamma> e (TyPrim bool) = Ok ()" by simp
@@ -317,8 +318,7 @@ qed
 lemma assert_msg_false_fail_sound:
   assumes "sound_expr \<rho> (node e') (Aborts \<kappa>)"
   shows "sound_stmt \<rho> (StmtAssert e (Some e')) (aborts\<^sub>o \<kappa>)"
-  unfolding sound_stmt_def
-proof (intro allI impI)
+proof (rule sound_stmtI)
   fix \<eta> \<Gamma> \<zeta> R
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssert e (Some e')) = Ok R"
   from check_assert_msg[OF chk] assms env show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (aborts\<^sub>o \<kappa>) R"
@@ -328,8 +328,7 @@ qed
 lemma assert_msg_nonstr_sound:
   assumes "sound_expr \<rho> (node e') (Val v)" and "\<forall>w. v \<noteq> VLit (LitString w)"
   shows "sound_stmt \<rho> (StmtAssert e (Some e')) (aborts\<^sub>o Excluded)"
-  unfolding sound_stmt_def
-proof (intro allI impI)
+proof (rule sound_stmtI)
   fix \<eta> \<Gamma> \<zeta> R
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssert e (Some e')) = Ok R"
   from check_assert_msg[OF chk] assms env show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (aborts\<^sub>o Excluded) R"
@@ -398,10 +397,9 @@ lemma wf_outcome_merge_if:
   sorry
 
 lemma if_true_sound:
-  assumes "sound_expr \<rho> (node e) (Val true)" and "sound_stmt \<rho> (node s) o"
+  assumes "sound_stmt \<rho> (node s) o"
   shows "sound_stmt \<rho> (StmtIf e s elifs else') o"
-  unfolding sound_stmt_def
-proof (intro allI impI)
+proof (rule sound_stmtI)
   fix \<eta> \<Gamma> \<zeta> R
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtIf e s elifs else') = Ok R"
   from check_if[OF chk] obtain Rs
@@ -411,15 +409,14 @@ proof (intro allI impI)
     by blast
   from Rs obtain R0 where R0: "check_stmt_at \<Sigma> \<Gamma> \<zeta> s = Ok R0" and "R0 \<in> set Rs"
     by (auto simp: bind_sum_def split: sum.splits)
-  have "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R0" using assms(2) env ret R0 by (rule sound_stmt_at)
+  have "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R0" using assms env ret R0 by (rule sound_stmt_at)
   then show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R" using \<open>R0 \<in> set Rs\<close> Rs R env by (rule wf_outcome_merge_if)
 qed
 
 lemma if_false_sound:
-  assumes "sound_expr \<rho> (node e) (Val false)" and "sound_elif \<rho> (elifs, else') o"
+  assumes "sound_elif \<rho> (elifs, else') o"
   shows "sound_stmt \<rho> (StmtIf e s elifs else') o"
-  unfolding sound_stmt_def
-proof (intro allI impI)
+proof (rule sound_stmtI)
   fix \<eta> \<Gamma> \<zeta> R
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtIf e s elifs else') = Ok R"
   from check_if[OF chk] obtain Rs
@@ -429,7 +426,7 @@ proof (intro allI impI)
     by blast
   from Rs obtain R0 Rs' where Rs': "those_sum (check_elif \<Sigma> \<Gamma> \<zeta> (elifs, else')) = Ok Rs'" and "Rs = R0 # Rs'"
     by (auto simp: bind_sum_def split: sum.splits)
-  with assms(2) env ret obtain R' where "R' \<in> set Rs'" and "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R'"
+  with assms env ret obtain R' where "R' \<in> set Rs'" and "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R'"
     unfolding sound_elif_def by blast
   moreover from this(1) have "R' \<in> set Rs" by (simp add: \<open>Rs = R0 # Rs'\<close>)
   ultimately show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R" using Rs R env by (blast intro: wf_outcome_merge_if)
@@ -460,8 +457,7 @@ lemma match_abort_sound:
 lemma seq_sound:
   assumes "sound_stmt \<rho> (node s) (us, Assigns \<rho>')" and "sound_stmt (\<rho> \<otimes> \<rho>') (node s') o"
   shows "sound_stmt \<rho> (StmtSeq s s') ((us, Assigns \<rho>') \<otimes> o)"
-  unfolding sound_stmt_def
-proof (intro allI impI)
+proof (rule sound_stmtI)
   fix \<eta> \<Gamma> \<zeta> R
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtSeq s s') = Ok R"
   from check_seq[OF chk] obtain \<Delta> r R' where chk1: "check_stmt_at \<Sigma> \<Gamma> \<zeta> s = Ok (Assigns\<^sub>R \<Delta> r)"
@@ -485,8 +481,7 @@ qed
 lemma seq_exit_sound:
   assumes "sound_stmt \<rho> (node s) (us, \<omega>)" and "\<And>\<rho>'. \<omega> \<noteq> Assigns \<rho>'"
   shows "sound_stmt \<rho> (StmtSeq s s') (us, \<omega>)"
-  unfolding sound_stmt_def
-proof (intro allI impI)
+proof (rule sound_stmtI)
   fix \<eta> \<Gamma> \<zeta> R
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtSeq s s') = Ok R"
   from check_seq[OF chk] obtain \<Delta> r where "check_stmt_at \<Sigma> \<Gamma> \<zeta> s = Ok (Assigns\<^sub>R \<Delta> r)" by blast
@@ -500,8 +495,7 @@ lemma if_none_sound: "sound_elif \<rho> ([], None) (assigns\<^sub>o \<epsilon>)"
 lemma else_sound:
   assumes "sound_stmt \<rho> (node s) o"
   shows "sound_elif \<rho> ([], Some s) o"
-  unfolding sound_elif_def
-proof (intro allI impI)
+proof (rule sound_elifI)
   fix \<eta> \<Gamma> \<zeta> Rs
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>" and chk: "those_sum (check_elif \<Sigma> \<Gamma> \<zeta> ([], Some s)) = Ok Rs"
   from chk obtain R where "check_stmt_at \<Sigma> \<Gamma> \<zeta> s = Ok R" and "Rs = [R]"
@@ -510,30 +504,28 @@ proof (intro allI impI)
 qed
 
 lemma elif_true_sound:
-  assumes "sound_expr \<rho> (node e) (Val true)" and "sound_stmt \<rho> (node s) o"
+  assumes "sound_stmt \<rho> (node s) o"
   shows "sound_elif \<rho> ((e, s) # elifs, else') o"
-  unfolding sound_elif_def
-proof (intro allI impI)
+proof (rule sound_elifI)
   fix \<eta> \<Gamma> \<zeta> Rs
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>"
     and chk: "those_sum (check_elif \<Sigma> \<Gamma> \<zeta> ((e, s) # elifs, else')) = Ok Rs"
   from chk obtain R Rs' where R: "check_stmt_at \<Sigma> \<Gamma> \<zeta> s = Ok R" and Rs: "Rs = R # Rs'"
     by (auto simp: bind_sum_def split: sum.splits)
-  have "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R" using assms(2) env ret R by (rule sound_stmt_at)
+  have "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R" using assms env ret R by (rule sound_stmt_at)
   then show "\<exists>R \<in> set Rs. wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R" by (auto simp: Rs)
 qed
 
 lemma elif_false_sound:
-  assumes "sound_expr \<rho> (node e) (Val false)" and "sound_elif \<rho> (elifs, else') o"
+  assumes "sound_elif \<rho> (elifs, else') o"
   shows "sound_elif \<rho> ((e, s) # elifs, else') o"
-  unfolding sound_elif_def
-proof (intro allI impI)
+proof (rule sound_elifI)
   fix \<eta> \<Gamma> \<zeta> Rs
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>"
     and chk: "those_sum (check_elif \<Sigma> \<Gamma> \<zeta> ((e, s) # elifs, else')) = Ok Rs"
   from chk obtain R Rs' where "those_sum (check_elif \<Sigma> \<Gamma> \<zeta> (elifs, else')) = Ok Rs'" and "Rs = R # Rs'"
     by (auto simp: bind_sum_def split: sum.splits)
-  then show "\<exists>R \<in> set Rs. wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R" using assms(2) env ret unfolding sound_elif_def by auto
+  then show "\<exists>R \<in> set Rs. wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R" using assms env ret unfolding sound_elif_def by auto
 qed
 
 lemma elif_fail_sound:
