@@ -118,7 +118,8 @@ lemma merges_dom:
   obtains \<Delta>' r' where "Ok (Assigns\<^sub>R \<Delta>' r') \<in> set ms" and "x |\<in>| fmdom \<Delta>'"
 proof -
   let ?f = "\<lambda>R m. do { R' \<leftarrow> m; merge_outcome \<Sigma> X R R' }"
-  from assms(1) obtain Rs where Rs: "those_sum ms = Ok Rs" and fold: "foldr ?f Rs (Ok Returns\<^sub>R) = Ok (Assigns\<^sub>R \<Delta> r)"
+  from assms(1) obtain Rs where Rs: "those_sum ms = Ok Rs"
+    and fold: "foldr ?f Rs (Ok Returns\<^sub>R) = Ok (Assigns\<^sub>R \<Delta> r)"
     by (auto simp: merges_def bind_sum_Ok)
   have "\<exists>\<Delta>' r'. Assigns\<^sub>R \<Delta>' r' \<in> set Rs \<and> x |\<in>| fmdom \<Delta>'"
     if "foldr ?f Rs (Ok Returns\<^sub>R) = Ok (Assigns\<^sub>R \<Delta> r)" and "x |\<in>| fmdom \<Delta>" for Rs \<Delta> r
@@ -799,7 +800,8 @@ lemma check_assert_msg:
 lemma constr_synth:
   assumes "synth_expr \<Sigma> \<Gamma> (ExprCall e (es, kws)) = Ok \<tau>" and "lambda_of (node e) = None"
     and "constructor_class \<Sigma> \<Gamma> e = Some m"
-  obtains C explicit x\<sigma>s \<sigma>es \<tau>s where "m = Ok (C, explicit)" and "fields \<Sigma> C = FieldScheme (type_params \<Sigma> C) x\<sigma>s"
+  obtains C explicit x\<sigma>s \<sigma>es \<tau>s where "m = Ok (C, explicit)"
+    and "fields \<Sigma> C = FieldScheme (type_params \<Sigma> C) x\<sigma>s"
     and "constructor_args C (FieldScheme (type_params \<Sigma> C) x\<sigma>s) es kws = Ok \<sigma>es"
     and "\<forall>(\<sigma>, e') \<in> set \<sigma>es. check_expr_at \<Sigma> \<Gamma> e' (subst \<tau>s (type_params \<Sigma> C) \<sigma>) = Ok ()"
     and "\<tau> = TyClass C \<tau>s"
@@ -814,7 +816,8 @@ proof -
     case (Inr p)
     then show ?thesis using that by (cases p) simp
   qed
-  obtain x\<sigma>s where fields: "fields \<Sigma> C = FieldScheme (type_params \<Sigma> C) x\<sigma>s" by (simp add: fields_ancestor_fields)
+  obtain x\<sigma>s where fields: "fields \<Sigma> C = FieldScheme (type_params \<Sigma> C) x\<sigma>s"
+    by (simp add: fields_ancestor_fields)
   have "\<exists>\<sigma>es \<tau>s \<rho>s. constructor_args C (FieldScheme (type_params \<Sigma> C) x\<sigma>s) es kws = Ok \<sigma>es
       \<and> those_sum (map (\<lambda>(\<sigma>, e'). check_expr_at \<Sigma> \<Gamma> e' (subst \<tau>s (type_params \<Sigma> C) \<sigma>)) \<sigma>es) = Ok \<rho>s
       \<and> \<tau> = TyClass C \<tau>s
@@ -982,6 +985,7 @@ next
 next
   case (14 \<Sigma> \<Gamma> \<zeta> p s)
   then show ?case by (cases "check_stmt \<Sigma> \<Gamma> \<zeta> s") (auto split: static_outcome.splits)
-qed (auto simp: bind_sum_Ok check_unbound_def ensure_def Let_def split: option.splits cxt_entry.splits if_splits)
+qed (auto simp: bind_sum_Ok check_unbound_def ensure_def Let_def
+     split: option.splits cxt_entry.splits if_splits)
 
 end

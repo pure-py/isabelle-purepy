@@ -359,7 +359,8 @@ lemma subty_sized_inv:
 proof (induction rule: subty_subtys.inducts)
   case (SubtyClassExtend C D \<sigma>s \<tau>s \<tau>)
   let ?\<sigma> = "TyClass D (map (subst \<tau>s (type_params \<Sigma> C)) \<sigma>s)"
-  from SubtyClassExtend(3, 4) have "sized ?\<sigma> \<or> (\<exists>C' \<sigma>s'. ?\<sigma> = TyClass C' \<sigma>s' \<and> \<Sigma> \<turnstile> ?\<sigma> <: TyClass range_class [])"
+  from SubtyClassExtend(3, 4)
+  have "sized ?\<sigma> \<or> (\<exists>C' \<sigma>s'. ?\<sigma> = TyClass C' \<sigma>s' \<and> \<Sigma> \<turnstile> ?\<sigma> <: TyClass range_class [])"
     by simp
   then have "\<Sigma> \<turnstile> ?\<sigma> <: TyClass range_class []"
   proof

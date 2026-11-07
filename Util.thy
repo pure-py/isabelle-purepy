@@ -186,7 +186,8 @@ lemma field_values_rel:
   assumes "distinct (map fst x\<sigma>s)" and "n + length kws = length x\<sigma>s"
     and "set (map fst kws) = set (drop n (map fst x\<sigma>s))"
     and "list_all2 R us (map snd (take n x\<sigma>s) @ map (\<lambda>(y, _). the (map_of x\<sigma>s y)) kws)"
-  shows "list_all2 R (take n us @ map (\<lambda>y. the (map_of (zip (map fst kws) (drop n us)) y)) (drop n (map fst x\<sigma>s)))
+  shows "list_all2 R
+           (take n us @ map (\<lambda>y. the (map_of (zip (map fst kws) (drop n us)) y)) (drop n (map fst x\<sigma>s)))
            (map snd x\<sigma>s)"
 proof -
   have n: "n \<le> length x\<sigma>s" using assms(2) by simp

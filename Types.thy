@@ -145,7 +145,8 @@ lemma resolve_type_head:
          | TyExprCallable _ _ \<Rightarrow> fmlookup \<Gamma> (var ''Callable'') = Some PredefName
          | _ \<Rightarrow> True"
   using assms
-  by (cases \<psi>) (auto simp: check_type_head_def check_predefined_def ensure_def bind_sum_def split: sum.splits if_splits)
+  by (cases \<psi>)
+     (auto simp: check_type_head_def check_predefined_def ensure_def bind_sum_def split: sum.splits if_splits)
 
 (* Type supplied as the type arguments of a class name, as the class at as many type arguments as it has type
    parameters *)
@@ -161,7 +162,8 @@ proof -
   have \<tau>': "resolve_type' \<Sigma> \<Gamma> [] (aliases \<Gamma>) \<psi> = Ok \<tau>" using \<tau> by (simp add: resolve_type_def)
   from type_expr_of_subscript[OF \<psi>] resolve_type_head[OF \<tau>'] head q obtain \<psi>s where "\<psi> = TyExprName q \<psi>s"
     by auto
-  moreover have "\<not> (\<psi>s = [] \<and> (case q of Simple x \<Rightarrow> fmlookup \<Gamma> x = Some TypeVar | Qualified _ _ \<Rightarrow> False))" for \<psi>s
+  moreover have "\<not> (\<psi>s = [] \<and> (case q of Simple x \<Rightarrow> fmlookup \<Gamma> x = Some TypeVar | Qualified _ _ \<Rightarrow> False))"
+    for \<psi>s
     using resolve_name_lookup[OF entry] by (cases q) auto
   ultimately show ?thesis using \<tau>' entry by (auto simp: Let_def bind_sum_def split: sum.splits if_splits)
 qed
@@ -581,7 +583,8 @@ proof (cases "class_of_name \<Gamma> (node e)")
 next
   case None
   obtain p e0 where e: "e = At p e0" by (cases e)
-  have "\<exists>e' e''. e0 = ExprSubscript e' e''" using assms None by (cases e0) (simp_all add: constructor_class_def e)
+  have "\<exists>e' e''. e0 = ExprSubscript e' e''"
+    using assms None by (cases e0) (simp_all add: constructor_class_def e)
   then obtain e' e'' where e0: "e0 = ExprSubscript e' e''" by blast
   have "\<exists>C' \<psi>. class_of_name \<Gamma> (node e') = Some C' \<and> type_expr_of e = Some \<psi>"
     using assms None by (auto simp: constructor_class_def e e0 Let_def split: option.splits if_splits)
