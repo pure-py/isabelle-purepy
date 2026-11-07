@@ -269,6 +269,10 @@ proof (induction rule: subty_subtys.inducts)
   then show ?case by (cases l) auto
 qed (auto intro: subty_subtys.SubtyRefl)
 
+lemma subty_list_iff:
+  "\<lbrakk> \<not> is_union \<sigma> ; \<sigma> \<noteq> TyPrim Never \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: TyList \<tau> \<longleftrightarrow> (\<exists>\<sigma>'. \<sigma> = TyList \<sigma>' \<and> \<Sigma> \<turnstile> \<sigma>' \<approx> \<tau>)"
+  by (auto dest: subty_list_inv(1)[OF _ refl] intro: SubtyList)
+
 lemma subty_dict_inv:
   "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> \<tau> = TyDict \<tau>' \<Longrightarrow> \<not> is_union \<sigma> \<Longrightarrow> \<sigma> \<noteq> TyPrim Never
     \<Longrightarrow> \<exists>\<sigma>'. \<sigma> = TyDict \<sigma>' \<and> \<Sigma> \<turnstile> \<sigma>' <: \<tau>' \<and> \<Sigma> \<turnstile> \<tau>' <: \<sigma>'"
@@ -288,6 +292,15 @@ proof (induction rule: subty_subtys.inducts)
 next
   case (SubtyLiteral l \<tau>)
   then show ?case by (cases l) auto
+qed auto
+
+(* Subtyping by a literal type of a type other than a union or Never, as the literal type itself *)
+lemma subty_literal_inv:
+  "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> \<tau> = TyLiteral l \<Longrightarrow> \<not> is_union \<sigma> \<Longrightarrow> \<sigma> \<noteq> TyPrim Never \<Longrightarrow> \<sigma> = TyLiteral l"
+  and "\<Sigma> \<turnstile> \<sigma>s [<:] \<tau>s \<Longrightarrow> True"
+proof (induction rule: subty_subtys.inducts)
+  case (SubtyLiteral l' \<tau>)
+  then show ?case by (cases l') auto
 qed auto
 
 lemma subty_callable_inv:
@@ -1226,5 +1239,26 @@ proof (induction rule: subty_subtys.inducts)
   case (SubtyLiteral l \<tau>)
   then show ?case by (cases l) auto
 qed (use assms in \<open>auto elim: sized.elims\<close>)
+
+(* Subtyping by a primitive type other than object and Sized, as primitive subtyping *)
+lemma subty_prim_iff:
+  assumes "p \<notin> {object, Sized}"
+  shows "\<Sigma> \<turnstile> \<sigma> <: TyPrim p \<longleftrightarrow> prim_subtype p \<sigma>"
+proof
+  assume "\<Sigma> \<turnstile> \<sigma> <: TyPrim p"
+  from prim_subtype_subty(1)[OF assms this] show "prim_subtype p \<sigma>" by simp
+next
+  show "prim_subtype p \<sigma> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: TyPrim p"
+  proof (induction \<sigma>)
+    case (TyPrim q)
+    then show ?case by (auto intro: SubtyRefl SubtyNever SubtyIntFloat)
+  next
+    case (TyLiteral l)
+    then show ?case by (auto intro!: SubtyLiteral intro: SubtyRefl SubtyIntFloat)
+  next
+    case (TyUnion \<sigma> \<tau>)
+    then show ?case by (auto intro: SubtyUnion)
+  qed simp_all
+qed
 
 end

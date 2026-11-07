@@ -181,4 +181,20 @@ proof -
   with \<tau>' that show thesis by (cases "the_elem ?M") (auto simp: unop_overloads_def)
 qed
 
+lemma resolve_binop_overload:
+  assumes "resolve_binop \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2 = Some \<tau>"
+  obtains \<tau>\<^sub>1 \<tau>\<^sub>2 where "binop_overload \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2 ((\<tau>\<^sub>1, \<tau>\<^sub>2), \<tau>)"
+proof -
+  let ?M = "Set.filter
+    (\<lambda>((\<tau>\<^sub>1, \<tau>\<^sub>2), _). \<forall>((\<tau>\<^sub>1', \<tau>\<^sub>2'), _) \<in> binop_overloads \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2. \<Sigma> \<turnstile> \<tau>\<^sub>1 <: \<tau>\<^sub>1' \<and> \<Sigma> \<turnstile> \<tau>\<^sub>2 <: \<tau>\<^sub>2')
+    (binop_overloads \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2)"
+  from assms have "is_singleton ?M" and \<tau>: "\<tau> = snd (the_elem ?M)"
+    by (auto simp: resolve_binop_def Let_def split: if_splits)
+  then obtain \<omega> where M: "?M = {\<omega>}" by (auto simp: is_singleton_def)
+  then have "\<omega> \<in> ?M" by simp
+  then have "\<omega> \<in> binop_overloads \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2" by simp
+  moreover from \<tau> have "\<tau> = snd \<omega>" unfolding M by simp
+  ultimately show thesis using that by (cases \<omega>) (auto simp: binop_overloads_def)
+qed
+
 end

@@ -223,6 +223,15 @@ where
 "in_elems v [] = Val False" |
 "in_elems v (v' # vs) = (if eq v v' = Val False then in_elems v vs else eq v v')"
 
+lemma eq_lit_abort: "eq_lit l l' = Aborts \<kappa> \<Longrightarrow> \<kappa> = Undef"
+  by (induction l l' rule: eq_lit.induct) (auto split: if_splits)
+
+lemma eq_abort: "eq v v' = Aborts \<kappa> \<Longrightarrow> \<kappa> = Undef" "eq_elems vs vs' = Aborts \<kappa> \<Longrightarrow> \<kappa> = Undef"
+  by (induction v v' and vs vs' rule: eq_eq_elems.induct) (auto dest: eq_lit_abort split: val.splits if_splits)
+
+lemma in_elems_abort: "in_elems v vs = Aborts \<kappa> \<Longrightarrow> \<kappa> = Undef"
+  by (induction vs) (auto dest: eq_abort(1) split: if_splits)
+
 fun elems :: "val \<Rightarrow> val list option"
 where
 "elems (VList vs) = Some vs" |

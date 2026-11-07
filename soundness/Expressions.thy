@@ -561,15 +561,6 @@ lemma wf_float:
 lemma wf_int_float: "\<turnstile> VLit (LitInt k) : Ty (TyPrim float)"
   by (rule ValSub[OF wf_int_lit SubtyIntFloat])
 
-(* Subtyping by a literal type of a type other than a union or Never, as the literal type itself *)
-lemma subty_literal_inv:
-  "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> \<tau> = TyLiteral l \<Longrightarrow> \<not> is_union \<sigma> \<Longrightarrow> \<sigma> \<noteq> TyPrim Never \<Longrightarrow> \<sigma> = TyLiteral l"
-  and "\<Sigma> \<turnstile> \<sigma>s [<:] \<tau>s \<Longrightarrow> True"
-proof (induction rule: subty_subtys.inducts)
-  case (SubtyLiteral l' \<tau>)
-  then show ?case by (cases l') auto
-qed auto
-
 lemma wf_lit: "\<turnstile> v : Ty (TyLiteral l) \<Longrightarrow> v = VLit l"
 proof -
   assume "\<turnstile> v : Ty (TyLiteral l)"
@@ -709,67 +700,6 @@ proof (rule sound_expr_synthI)
     with r show ?thesis by simp
   qed
 qed (simp_all add: var_scheme_None)
-
-(* Subtyping by a primitive type other than object and Sized, as primitive subtyping *)
-lemma subty_prim_iff:
-  assumes "p \<notin> {object, Sized}"
-  shows "\<Sigma> \<turnstile> \<sigma> <: TyPrim p \<longleftrightarrow> prim_subtype p \<sigma>"
-proof
-  assume "\<Sigma> \<turnstile> \<sigma> <: TyPrim p"
-  from prim_subtype_subty(1)[OF assms this] show "prim_subtype p \<sigma>" by simp
-next
-  show "prim_subtype p \<sigma> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: TyPrim p"
-  proof (induction \<sigma>)
-    case (TyPrim q)
-    then show ?case by (auto intro: SubtyRefl SubtyNever SubtyIntFloat)
-  next
-    case (TyLiteral l)
-    then show ?case by (auto intro!: SubtyLiteral intro: SubtyRefl SubtyIntFloat)
-  next
-    case (TyUnion \<sigma> \<tau>)
-    then show ?case by (auto intro: SubtyUnion)
-  qed simp_all
-qed
-
-lemma subty_list_iff:
-  "\<lbrakk> \<not> is_union \<sigma> ; \<sigma> \<noteq> TyPrim Never \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: TyList \<tau> \<longleftrightarrow> (\<exists>\<sigma>'. \<sigma> = TyList \<sigma>' \<and> \<Sigma> \<turnstile> \<sigma>' \<approx> \<tau>)"
-  by (auto dest: subty_list_inv(1)[OF _ refl] intro: SubtyList)
-
-lemma eq_lit_abort: "eq_lit l l' = Aborts \<kappa> \<Longrightarrow> \<kappa> = Undef"
-  by (induction l l' rule: eq_lit.induct) (auto split: if_splits)
-
-lemma eq_abort: "eq v v' = Aborts \<kappa> \<Longrightarrow> \<kappa> = Undef" "eq_elems vs vs' = Aborts \<kappa> \<Longrightarrow> \<kappa> = Undef"
-  by (induction v v' and vs vs' rule: eq_eq_elems.induct) (auto dest: eq_lit_abort split: val.splits if_splits)
-
-lemma in_elems_abort: "in_elems v vs = Aborts \<kappa> \<Longrightarrow> \<kappa> = Undef"
-  by (induction vs) (auto dest: eq_abort(1) split: if_splits)
-
-lemma resolve_binop_overload:
-  assumes "resolve_binop \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2 = Some \<tau>"
-  obtains \<tau>\<^sub>1 \<tau>\<^sub>2 where "binop_overload \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2 ((\<tau>\<^sub>1, \<tau>\<^sub>2), \<tau>)"
-proof -
-  let ?M = "Set.filter
-    (\<lambda>((\<tau>\<^sub>1, \<tau>\<^sub>2), _). \<forall>((\<tau>\<^sub>1', \<tau>\<^sub>2'), _) \<in> binop_overloads \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2. \<Sigma> \<turnstile> \<tau>\<^sub>1 <: \<tau>\<^sub>1' \<and> \<Sigma> \<turnstile> \<tau>\<^sub>2 <: \<tau>\<^sub>2')
-    (binop_overloads \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2)"
-  from assms have "is_singleton ?M" and \<tau>: "\<tau> = snd (the_elem ?M)"
-    by (auto simp: resolve_binop_def Let_def split: if_splits)
-  then obtain \<omega> where M: "?M = {\<omega>}" by (auto simp: is_singleton_def)
-  then have "\<omega> \<in> ?M" by simp
-  then have "\<omega> \<in> binop_overloads \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2" by simp
-  moreover from \<tau> have "\<tau> = snd \<omega>" unfolding M by simp
-  ultimately show thesis using that by (cases \<omega>) (auto simp: binop_overloads_def)
-qed
-
-(* Operator resolution with elimination of unions, by its cases *)
-lemma resolve_binop_union_cases:
-  assumes "resolve_binop_union \<Sigma> op \<sigma> \<sigma>' = Some \<tau>"
-  obtains (overload) "resolve_binop \<Sigma> op \<sigma> \<sigma>' = Some \<tau>"
-  | (left) \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<tau>\<^sub>1 \<tau>\<^sub>2 where "\<sigma> = TyUnion \<sigma>\<^sub>1 \<sigma>\<^sub>2" and "resolve_binop_union \<Sigma> op \<sigma>\<^sub>1 \<sigma>' = Some \<tau>\<^sub>1"
-      and "resolve_binop_union \<Sigma> op \<sigma>\<^sub>2 \<sigma>' = Some \<tau>\<^sub>2" and "\<tau> = \<tau>\<^sub>1 \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>\<^sub>2"
-  | (right) \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<tau>\<^sub>1 \<tau>\<^sub>2 where "\<sigma>' = TyUnion \<sigma>\<^sub>1 \<sigma>\<^sub>2" and "resolve_binop_union \<Sigma> op \<sigma> \<sigma>\<^sub>1 = Some \<tau>\<^sub>1"
-      and "resolve_binop_union \<Sigma> op \<sigma> \<sigma>\<^sub>2 = Some \<tau>\<^sub>2" and "\<tau> = \<tau>\<^sub>1 \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>\<^sub>2"
-  using assms[unfolded resolve_binop_union.simps[of \<Sigma> op \<sigma> \<sigma>']]
-  by (auto simp: bind_eq_Some_conv split: option.splits ty.splits)
 
 lemma binop_overload_sub: "binop_overload \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<omega> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma>\<^sub>1 <: fst (fst \<omega>) \<and> \<Sigma> \<turnstile> \<sigma>\<^sub>2 <: snd (fst \<omega>)"
 proof (induction rule: binop_overload.induct)

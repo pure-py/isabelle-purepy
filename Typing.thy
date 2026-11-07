@@ -172,6 +172,17 @@ where
           }
         | _ \<Rightarrow> None))"
 
+(* Operator resolution with elimination of unions, by its cases *)
+lemma resolve_binop_union_cases:
+  assumes "resolve_binop_union \<Sigma> op \<sigma> \<sigma>' = Some \<tau>"
+  obtains (overload) "resolve_binop \<Sigma> op \<sigma> \<sigma>' = Some \<tau>"
+  | (left) \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<tau>\<^sub>1 \<tau>\<^sub>2 where "\<sigma> = TyUnion \<sigma>\<^sub>1 \<sigma>\<^sub>2" and "resolve_binop_union \<Sigma> op \<sigma>\<^sub>1 \<sigma>' = Some \<tau>\<^sub>1"
+      and "resolve_binop_union \<Sigma> op \<sigma>\<^sub>2 \<sigma>' = Some \<tau>\<^sub>2" and "\<tau> = \<tau>\<^sub>1 \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>\<^sub>2"
+  | (right) \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<tau>\<^sub>1 \<tau>\<^sub>2 where "\<sigma>' = TyUnion \<sigma>\<^sub>1 \<sigma>\<^sub>2" and "resolve_binop_union \<Sigma> op \<sigma> \<sigma>\<^sub>1 = Some \<tau>\<^sub>1"
+      and "resolve_binop_union \<Sigma> op \<sigma> \<sigma>\<^sub>2 = Some \<tau>\<^sub>2" and "\<tau> = \<tau>\<^sub>1 \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>\<^sub>2"
+  using assms[unfolded resolve_binop_union.simps[of \<Sigma> op \<sigma> \<sigma>']]
+  by (auto simp del: resolve_binop_union.simps simp: bind_eq_Some_conv split: option.splits ty.splits)
+
 function (sequential)
   synth_expr :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty may_fail" and
   synth_expr_at :: "class_table \<Rightarrow> cxt \<Rightarrow> expr located \<Rightarrow> ty may_fail" and
