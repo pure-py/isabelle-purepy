@@ -694,4 +694,42 @@ lemma check_assert_msg:
   "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssert e (Some e')) = Ok R \<Longrightarrow> check_expr_at \<Sigma> \<Gamma> e' (TyPrim str) = Ok ()"
   by (auto simp: Let_def bind_sum_def split: sum.splits if_splits)
 
+(* Synthesis of a constructor call, by checking each argument against the type of its field at the type
+   arguments of the class *)
+lemma constr_synth:
+  assumes "synth_expr \<Sigma> \<Gamma> (ExprCall e (es, kws)) = Ok \<tau>" and "lambda_of (node e) = None"
+    and "constructor_class \<Sigma> \<Gamma> e = Some m"
+  obtains C explicit x\<sigma>s \<sigma>es \<tau>s where "m = Ok (C, explicit)" and "fields \<Sigma> C = FieldScheme (type_params \<Sigma> C) x\<sigma>s"
+    and "constructor_args C (FieldScheme (type_params \<Sigma> C) x\<sigma>s) es kws = Ok \<sigma>es"
+    and "\<forall>(\<sigma>, e') \<in> set \<sigma>es. check_expr_at \<Sigma> \<Gamma> e' (subst \<tau>s (type_params \<Sigma> C) \<sigma>) = Ok ()"
+    and "\<tau> = TyClass C \<tau>s"
+    and "explicit = Some \<tau>s \<or> explicit = None
+      \<and> inferred_type_args \<Sigma> (type_params \<Sigma> C) (map fst \<sigma>es) (map (synth_expr_at \<Sigma> \<Gamma> \<circ> snd) \<sigma>es) = Ok \<tau>s"
+proof -
+  obtain C explicit where m: "m = Ok (C, explicit)"
+  proof (cases m)
+    case (Inl r)
+    with assms show ?thesis by (simp add: bind_sum_def)
+  next
+    case (Inr p)
+    then show ?thesis using that by (cases p) simp
+  qed
+  obtain x\<sigma>s where fields: "fields \<Sigma> C = FieldScheme (type_params \<Sigma> C) x\<sigma>s" by (simp add: fields_ancestor_fields)
+  have "\<exists>\<sigma>es \<tau>s \<rho>s. constructor_args C (FieldScheme (type_params \<Sigma> C) x\<sigma>s) es kws = Ok \<sigma>es
+      \<and> those_sum (map (\<lambda>(\<sigma>, e'). check_expr_at \<Sigma> \<Gamma> e' (subst \<tau>s (type_params \<Sigma> C) \<sigma>)) \<sigma>es) = Ok \<rho>s
+      \<and> \<tau> = TyClass C \<tau>s
+      \<and> (explicit = Some \<tau>s \<or> explicit = None
+         \<and> inferred_type_args \<Sigma> (type_params \<Sigma> C) (map fst \<sigma>es) (map (synth_expr_at \<Sigma> \<Gamma> \<circ> snd) \<sigma>es) = Ok \<tau>s)"
+    using assms m fields by (auto simp: bind_sum_def split: sum.splits option.splits)
+  then obtain \<sigma>es \<tau>s \<rho>s where args: "constructor_args C (FieldScheme (type_params \<Sigma> C) x\<sigma>s) es kws = Ok \<sigma>es"
+    and checked: "those_sum (map (\<lambda>(\<sigma>, e'). check_expr_at \<Sigma> \<Gamma> e' (subst \<tau>s (type_params \<Sigma> C) \<sigma>)) \<sigma>es) = Ok \<rho>s"
+    and "\<tau> = TyClass C \<tau>s"
+    and "explicit = Some \<tau>s \<or> explicit = None
+      \<and> inferred_type_args \<Sigma> (type_params \<Sigma> C) (map fst \<sigma>es) (map (synth_expr_at \<Sigma> \<Gamma> \<circ> snd) \<sigma>es) = Ok \<tau>s"
+    by blast
+  moreover have "\<forall>(\<sigma>, e') \<in> set \<sigma>es. check_expr_at \<Sigma> \<Gamma> e' (subst \<tau>s (type_params \<Sigma> C) \<sigma>) = Ok ()"
+    using those_sum_map_Ok[OF checked] by (fastforce simp: list_all2_conv_all_nth in_set_conv_nth)
+  ultimately show thesis using that m fields by blast
+qed
+
 end

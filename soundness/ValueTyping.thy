@@ -254,6 +254,9 @@ inductive_cases WfTypeE: "\<turnstile> v : Type C"
 lemma wf_type_entry: "\<turnstile> v : Type C \<Longrightarrow> v = VClass C"
   by (erule WfTypeE) (auto dest: prim_entry_callable simp: inst_entry_signature_entry split: if_splits)
 
+lemma wf_class_dom: "\<turnstile> v : Type C \<Longrightarrow> C |\<in>| fmdom \<Sigma>"
+  by (erule WfTypeE) (auto dest: prim_entry_callable simp: inst_entry_signature_entry split: if_splits)
+
 lemma module_member_TypeVar: "[] \<turnstile> \<rho> : \<Gamma> \<Longrightarrow> fmlookup \<Gamma> x \<noteq> Some TypeVar"
   using wf_env_tyvars[of "[]" \<rho> \<Gamma>] by (force simp: tyvars_def fmlookup_dom'_iff)
 

@@ -568,9 +568,71 @@ where
                  (SelectsNoRule JudgementResolveType (NotTypeExpression e'''))))))
    | _ \<Rightarrow> None)"
 
+(* Class of a constructor callee, as the class of the callee or the class to which the callee applies type
+   arguments, which are resolved at the class *)
+lemma constructor_class_Ok:
+  assumes "constructor_class \<Sigma> \<Gamma> e = Some (Ok (C, explicit))"
+  shows "explicit = None \<and> class_of_name \<Gamma> (node e) = Some C
+    \<or> (\<exists>e' e'' \<psi> \<tau>s. node e = ExprSubscript e' e'' \<and> class_of_name \<Gamma> (node e') = Some C \<and> explicit = Some \<tau>s
+         \<and> resolve_type \<Sigma> \<Gamma> \<psi> = Ok (TyClass C \<tau>s) \<and> length \<tau>s = length (type_params \<Sigma> C))"
+proof (cases "class_of_name \<Gamma> (node e)")
+  case (Some C')
+  with assms show ?thesis by (simp add: constructor_class_def)
+next
+  case None
+  obtain p e0 where e: "e = At p e0" by (cases e)
+  have "\<exists>e' e''. e0 = ExprSubscript e' e''" using assms None by (cases e0) (simp_all add: constructor_class_def e)
+  then obtain e' e'' where e0: "e0 = ExprSubscript e' e''" by blast
+  have "\<exists>C' \<psi>. class_of_name \<Gamma> (node e') = Some C' \<and> type_expr_of e = Some \<psi>"
+    using assms None by (auto simp: constructor_class_def e e0 Let_def split: option.splits if_splits)
+  then obtain C' \<psi> where C': "class_of_name \<Gamma> (node e') = Some C'" and \<psi>: "type_expr_of e = Some \<psi>" by blast
+  obtain \<tau> where \<tau>: "resolve_type \<Sigma> \<Gamma> \<psi> = Ok \<tau>"
+    using assms None C' \<psi> by (cases "resolve_type \<Sigma> \<Gamma> \<psi>") (auto simp: constructor_class_def e e0 bind_sum_def)
+  from resolve_type_subscript_class[OF C' \<psi>[unfolded e e0] \<tau>] obtain \<tau>s
+    where \<tau>': "\<tau> = TyClass C' \<tau>s" and len: "length \<tau>s = length (type_params \<Sigma> C')"
+    by blast
+  have "C' = C \<and> explicit = Some \<tau>s"
+    using assms None C' \<psi> \<tau> \<tau>' by (simp add: constructor_class_def e e0 bind_sum_def)
+  with e e0 C' \<tau> \<tau>' len show ?thesis by auto
+qed
+
 lemma constructor_args_elem:
   "\<lbrakk> constructor_args C \<pi> es kws = Ok \<sigma>es ; (\<sigma>, e) \<in> set \<sigma>es \<rbrakk> \<Longrightarrow> e \<in> set es \<or> e \<in> set (map snd kws)"
   unfolding constructor_args_def
   by (cases \<pi>) (fastforce simp: bind_sum_def image_iff split: sum.splits dest!: set_zip_rightD)
+
+lemma constructor_args_Ok:
+  assumes "constructor_args C (FieldScheme \<alpha>s x\<sigma>s) es kws = Ok \<sigma>es"
+  shows "length es + length kws = length x\<sigma>s" and "set (map fst kws) = set (drop (length es) (map fst x\<sigma>s))"
+    and "\<sigma>es = zip (map snd (take (length es) x\<sigma>s)) es @ map (\<lambda>(y, e). (the (map_of x\<sigma>s y), e)) kws"
+  using assms by (auto simp: constructor_args_def check_field_map_def bind_sum_def split: sum.splits if_splits)
+
+lemma constructor_args_exprs:
+  assumes "constructor_args C (FieldScheme \<alpha>s x\<sigma>s) es kws = Ok \<sigma>es"
+  shows "map snd \<sigma>es = es @ map snd kws"
+    and "map fst \<sigma>es = map snd (take (length es) x\<sigma>s) @ map (\<lambda>(y, _). the (map_of x\<sigma>s y)) kws"
+  using constructor_args_Ok(1, 3)[OF assms] by (simp_all add: split_def min_def)
+
+(* Type of the field supplied by each constructor argument, as a field type *)
+lemma constructor_args_field:
+  assumes "constructor_args C (FieldScheme \<alpha>s x\<sigma>s) es kws = Ok \<sigma>es" and "(\<sigma>, e') \<in> set \<sigma>es"
+  shows "\<sigma> \<in> snd ` set x\<sigma>s"
+proof -
+  note kws = constructor_args_Ok(2)[OF assms(1)]
+  from assms(2) constructor_args_Ok(3)[OF assms(1)]
+  consider "\<sigma> \<in> set (map snd (take (length es) x\<sigma>s))" | y where "(y, e') \<in> set kws" and "\<sigma> = the (map_of x\<sigma>s y)"
+    by (auto dest: set_zip_leftD)
+  then show ?thesis
+  proof cases
+    case 1
+    then show ?thesis by (auto dest: in_set_takeD)
+  next
+    case 2
+    then have "y \<in> set (map fst kws)" by force
+    with kws have "y \<in> set (map fst x\<sigma>s)" by (auto dest: in_set_dropD)
+    then obtain \<sigma>' where "map_of x\<sigma>s y = Some \<sigma>'" by (cases "map_of x\<sigma>s y") (auto simp: map_of_eq_None_iff)
+    with 2 show ?thesis by (force dest: map_of_SomeD)
+  qed
+qed
 
 end

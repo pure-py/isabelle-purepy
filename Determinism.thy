@@ -54,6 +54,14 @@ inductive_cases EntriesConsE: "\<rho> # \<rho>s, e, e' \<Rightarrow>\<^sub>e\<^s
 lemma literal_false: "\<rho>, ExprLiteral (LitBool False) \<Rightarrow>\<^sub>e r \<Longrightarrow> r = Val false"
   by (auto elim!: LiteralE)
 
+(* Callee of a call, a class and not a lambda *)
+lemma class_callee_lambda: "\<rho>, node e \<Rightarrow>\<^sub>e Val (VClass C) \<Longrightarrow> lambda_of (node e) = None"
+proof (cases "lambda_of (node e)")
+  case (Some xe)
+  then obtain xs e' where "node e = ExprLambda xs e'" by (cases "node e") auto
+  then show "\<rho>, node e \<Rightarrow>\<^sub>e Val (VClass C) \<Longrightarrow> lambda_of (node e) = None" by (auto elim: LambdaE)
+qed
+
 lemma determinism:
   shows
       expr_det: "\<rho>, e \<Rightarrow>\<^sub>e r \<Longrightarrow> \<rho>, e \<Rightarrow>\<^sub>e r' \<Longrightarrow> r = r'"

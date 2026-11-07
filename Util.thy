@@ -155,4 +155,52 @@ proof -
   with assms(2) show ?thesis by (simp add: list_all2_conv_all_nth)
 qed
 
+(* Values of the fields filled by positional and keyword values, related by R to the field types when the
+   positional values are related to the types of the first fields and each keyword value to the type of its
+   field *)
+lemma field_values_rel:
+  assumes "distinct (map fst x\<sigma>s)" and "n + length kws = length x\<sigma>s"
+    and "set (map fst kws) = set (drop n (map fst x\<sigma>s))"
+    and "list_all2 R us (map snd (take n x\<sigma>s) @ map (\<lambda>(y, _). the (map_of x\<sigma>s y)) kws)"
+  shows "list_all2 R (take n us @ map (\<lambda>y. the (map_of (zip (map fst kws) (drop n us)) y)) (drop n (map fst x\<sigma>s)))
+           (map snd x\<sigma>s)"
+proof -
+  have n: "n \<le> length x\<sigma>s" using assms(2) by simp
+  from assms(4) obtain us1 us2 where us: "us = us1 @ us2" and rel1: "list_all2 R us1 (map snd (take n x\<sigma>s))"
+    and rel2: "list_all2 R us2 (map (\<lambda>(y, _). the (map_of x\<sigma>s y)) kws)"
+    by (auto simp: list_all2_append2)
+  have len1: "length us1 = n" using rel1 n by (auto dest: list_all2_lengthD)
+  have len2: "length us2 = length kws" using rel2 by (auto dest: list_all2_lengthD)
+  have distinct_kws: "distinct (map fst kws)"
+  proof (rule card_distinct)
+    show "card (set (map fst kws)) = length (map fst kws)"
+      using assms(2, 3) distinct_card[OF distinct_drop[OF assms(1)]] by simp
+  qed
+  have rest: "list_all2 R (map (\<lambda>y. the (map_of (zip (map fst kws) us2) y)) (drop n (map fst x\<sigma>s)))
+    (map snd (drop n x\<sigma>s))"
+  proof (rule list_all2_all_nthI)
+    fix i
+    assume "i < length (map (\<lambda>y. the (map_of (zip (map fst kws) us2) y)) (drop n (map fst x\<sigma>s)))"
+    then have i: "i < length (drop n x\<sigma>s)" by simp
+    let ?x\<sigma> = "drop n x\<sigma>s ! i"
+    have "?x\<sigma> \<in> set (drop n x\<sigma>s)" using i by (rule nth_mem)
+    then have "fst ?x\<sigma> \<in> set (map fst kws)" using assms(3) by (force simp: drop_map)
+    then obtain j where j: "j < length kws" and y: "map fst kws ! j = fst ?x\<sigma>" by (auto simp: in_set_conv_nth)
+    have "map_of (zip (map fst kws) us2) (fst ?x\<sigma>) = Some (us2 ! j)"
+      using map_of_zip_nth[of "map fst kws" us2 j] distinct_kws len2 j y by simp
+    moreover have "the (map_of x\<sigma>s (fst ?x\<sigma>)) = snd ?x\<sigma>"
+      using map_of_is_SomeI[OF assms(1), of "fst ?x\<sigma>" "snd ?x\<sigma>"] i by (simp add: in_set_dropD)
+    moreover have "R (us2 ! j) (the (map_of x\<sigma>s (fst (kws ! j))))"
+      using list_all2_nthD[OF rel2, of j] j len2 by (simp add: split_def)
+    ultimately show "R (map (\<lambda>y. the (map_of (zip (map fst kws) us2) y)) (drop n (map fst x\<sigma>s)) ! i)
+      (map snd (drop n x\<sigma>s) ! i)"
+      using i y j by (simp add: drop_map)
+  qed simp
+  from list_all2_appendI[OF rel1 rest]
+  have "list_all2 R (us1 @ map (\<lambda>y. the (map_of (zip (map fst kws) us2) y)) (drop n (map fst x\<sigma>s)))
+    (map snd (take n x\<sigma>s @ drop n x\<sigma>s))"
+    by (simp only: map_append)
+  with us len1 show ?thesis by simp
+qed
+
 end
