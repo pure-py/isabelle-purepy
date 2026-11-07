@@ -333,6 +333,8 @@ def message(r: Reason) -> str:
             return f"pattern keywords for '{c}' must be {', '.join(xs)}"
         case Reasons.RangePattern():
             return "'range' not permitted in a constructor pattern"
+        case Reasons.RangeBase():
+            return "'range' not permitted as a base class"
         case Reasons.PatternClassUndetermined(c, tau):
             return f"type arguments of '{c}' in pattern not determined by type {unparse_type(tau)}"
         case Reasons.SequenceKindMismatch(kind, tau, other):

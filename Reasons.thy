@@ -50,6 +50,7 @@ datatype reason =
   | PatternArityMismatch var nat nat
   | UnknownFieldInPattern var "var list"
   | RangePattern
+  | RangeBase
   | PatternClassUndetermined var ty
   | SequenceKindMismatch sequence_kind ty sequence_kind
   | UnreachableCase "pat located"

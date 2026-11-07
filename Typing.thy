@@ -602,7 +602,9 @@ where
         None \<Rightarrow> Ok None
       | Some (q', \<psi>s) \<Rightarrow>
           (case resolve_name \<Gamma> q' of
-             Some (Type D) \<Rightarrow> do { resolve_type \<Sigma> \<Gamma> (TyExprName q' \<psi>s); Ok (Some D) }
+             Some (Type D) \<Rightarrow>
+               if D = range_class then Fail (Violates RuleClassExtend RangeBase)
+               else do { resolve_type \<Sigma> \<Gamma> (TyExprName q' \<psi>s); Ok (Some D) }
            | None \<Rightarrow> Fail (SelectsNoRule JudgementResolveName (not_type_name \<Gamma> q'))
            | Some _ \<Rightarrow> Fail (Violates RuleClassExtend (not_type_name \<Gamma> q'))));
    (case redeclared id {} (map fst \<phi>) of Some x \<Rightarrow> Fail (DuplicateField x c) | None \<Rightarrow> Ok ());

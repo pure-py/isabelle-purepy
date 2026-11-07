@@ -270,7 +270,8 @@ where
 "inherits_within (Suc n) \<Sigma> C = (case base \<Sigma> C of None \<Rightarrow> True | Some (D, _) \<Rightarrow> inherits_within n \<Sigma> D)"
 
 (* Class table of dataclasses, each with fewer classes in its chain of base classes than the table has, a base
-   class which is a well-formed type over its type parameters, and declared fields with types over them *)
+   class other than range which is a well-formed type over its type parameters, and declared fields with types
+   over them *)
 definition wf_class_table :: "class_table \<Rightarrow> bool"
 where
 "wf_class_table \<Sigma> =
@@ -278,7 +279,7 @@ where
      (\<exists>\<Gamma> q \<chi>s i c \<alpha>s b \<phi>. fmlookup \<Sigma> C = Some (ClassDef \<Gamma> q \<chi>s i) \<and> node (\<chi>s ! i) = Dataclass c \<alpha>s b \<phi>)
      \<and> inherits_within (fcard (fmdom \<Sigma>)) \<Sigma> C
      \<and> (\<forall>D \<sigma>s. base \<Sigma> C = Some (D, \<sigma>s)
-          \<longrightarrow> wf_ty \<Sigma> (TyClass D \<sigma>s) \<and> (\<forall>\<sigma> \<in> set \<sigma>s. fv \<sigma> \<subseteq> set (type_params \<Sigma> C)))
+          \<longrightarrow> D \<noteq> range_class \<and> wf_ty \<Sigma> (TyClass D \<sigma>s) \<and> (\<forall>\<sigma> \<in> set \<sigma>s. fv \<sigma> \<subseteq> set (type_params \<Sigma> C)))
      \<and> (\<forall>(x, \<sigma>) \<in> set (declared_fields \<Sigma> C (map TyVar (type_params \<Sigma> C))). fv \<sigma> \<subseteq> set (type_params \<Sigma> C)))"
 
 lemma wf_class_table_dataclass:
@@ -301,7 +302,7 @@ lemma wf_class_table_inherits:
 
 lemma wf_class_table_baseD:
   "\<lbrakk> wf_class_table \<Sigma> ; C |\<in>| fmdom \<Sigma> ; base \<Sigma> C = Some (D, \<sigma>s) \<rbrakk>
-  \<Longrightarrow> wf_ty \<Sigma> (TyClass D \<sigma>s) \<and> (\<forall>\<sigma> \<in> set \<sigma>s. fv \<sigma> \<subseteq> set (type_params \<Sigma> C))"
+  \<Longrightarrow> D \<noteq> range_class \<and> wf_ty \<Sigma> (TyClass D \<sigma>s) \<and> (\<forall>\<sigma> \<in> set \<sigma>s. fv \<sigma> \<subseteq> set (type_params \<Sigma> C))"
   unfolding wf_class_table_def by blast
 
 lemma wf_class_table_declared_fields:
