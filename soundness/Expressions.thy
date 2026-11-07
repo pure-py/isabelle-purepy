@@ -6,7 +6,7 @@ begin
 (* Equations with a variable on the left in place of a constructor, which as default simp rules would unfold
    every occurrence; applied explicitly instead *)
 declare check_expr.simps [simp del] callee.simps [simp del] elements_join.simps [simp del]
-  check_args.simps [simp del]
+  check_args.simps [simp del] resolve_binop_union.simps [simp del]
 
 (* Termination kinds ruled out by well-formedness *)
 fun prevented :: "termination_kind \<Rightarrow> bool"
@@ -554,6 +554,31 @@ lemma wf_str: "\<lbrakk> \<turnstile> v : Ty \<tau> ; \<Sigma> \<turnstile> \<ta
 lemma wf_int: "\<lbrakk> \<turnstile> v : Ty \<tau> ; \<Sigma> \<turnstile> \<tau> <: TyPrim int \<rbrakk> \<Longrightarrow> \<exists>n. v = VLit (LitInt n)"
   by (erule wf_prim_lit) (auto elim: base_type_lit.elims)
 
+lemma wf_float:
+  "\<lbrakk> \<turnstile> v : Ty \<tau> ; \<Sigma> \<turnstile> \<tau> <: TyPrim float \<rbrakk> \<Longrightarrow> (\<exists>n. v = VLit (LitInt n)) \<or> (\<exists>x. v = VLit (LitFloat x))"
+  by (erule wf_prim_lit) (auto elim: base_type_lit.elims)
+
+lemma wf_int_float: "\<turnstile> VLit (LitInt k) : Ty (TyPrim float)"
+  by (rule ValSub[OF wf_int_lit SubtyIntFloat])
+
+(* Subtyping by a literal type of a type other than a union or Never, as the literal type itself *)
+lemma subty_literal_inv:
+  "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> \<tau> = TyLiteral l \<Longrightarrow> \<not> is_union \<sigma> \<Longrightarrow> \<sigma> \<noteq> TyPrim Never \<Longrightarrow> \<sigma> = TyLiteral l"
+  and "\<Sigma> \<turnstile> \<sigma>s [<:] \<tau>s \<Longrightarrow> True"
+proof (induction rule: subty_subtys.inducts)
+  case (SubtyLiteral l' \<tau>)
+  then show ?case by (cases l') auto
+qed auto
+
+lemma wf_lit: "\<turnstile> v : Ty (TyLiteral l) \<Longrightarrow> v = VLit l"
+proof -
+  assume "\<turnstile> v : Ty (TyLiteral l)"
+  from wf_val_intro(1)[OF this] obtain \<sigma> where intro: "intro_typed v \<sigma>" and sub: "\<Sigma> \<turnstile> \<sigma> <: TyLiteral l"
+    by blast
+  from subty_literal_inv(1)[OF sub refl] intro_typed_nonunion[OF intro] have "\<sigma> = TyLiteral l" by blast
+  with intro show "v = VLit l" by (cases v) auto
+qed
+
 (* Operand checked at a primitive type *)
 lemma prim_operand:
   "\<lbrakk> sound_expr \<rho> (node e) r ; \<eta> \<turnstile> \<rho> : \<Gamma> ; check_expr_at \<Sigma> \<Gamma> e (TyPrim p) = Ok () \<rbrakk> \<Longrightarrow> result_typed r (TyPrim p)"
@@ -685,10 +710,244 @@ proof (rule sound_expr_synthI)
   qed
 qed (simp_all add: var_scheme_None)
 
+(* Subtyping by a primitive type other than object and Sized, as primitive subtyping *)
+lemma subty_prim_iff:
+  assumes "p \<notin> {object, Sized}"
+  shows "\<Sigma> \<turnstile> \<sigma> <: TyPrim p \<longleftrightarrow> prim_subtype p \<sigma>"
+proof
+  assume "\<Sigma> \<turnstile> \<sigma> <: TyPrim p"
+  from prim_subtype_subty(1)[OF assms this] show "prim_subtype p \<sigma>" by simp
+next
+  show "prim_subtype p \<sigma> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: TyPrim p"
+  proof (induction \<sigma>)
+    case (TyPrim q)
+    then show ?case by (auto intro: SubtyRefl SubtyNever SubtyIntFloat)
+  next
+    case (TyLiteral l)
+    then show ?case by (auto intro!: SubtyLiteral intro: SubtyRefl SubtyIntFloat)
+  next
+    case (TyUnion \<sigma> \<tau>)
+    then show ?case by (auto intro: SubtyUnion)
+  qed simp_all
+qed
+
+lemma subty_list_iff:
+  "\<lbrakk> \<not> is_union \<sigma> ; \<sigma> \<noteq> TyPrim Never \<rbrakk> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: TyList \<tau> \<longleftrightarrow> (\<exists>\<sigma>'. \<sigma> = TyList \<sigma>' \<and> \<Sigma> \<turnstile> \<sigma>' \<approx> \<tau>)"
+  by (auto dest: subty_list_inv(1)[OF _ refl] intro: SubtyList)
+
+lemma eq_lit_abort: "eq_lit l l' = Aborts \<kappa> \<Longrightarrow> \<kappa> = Undef"
+  by (induction l l' rule: eq_lit.induct) (auto split: if_splits)
+
+lemma eq_abort: "eq v v' = Aborts \<kappa> \<Longrightarrow> \<kappa> = Undef" "eq_elems vs vs' = Aborts \<kappa> \<Longrightarrow> \<kappa> = Undef"
+  by (induction v v' and vs vs' rule: eq_eq_elems.induct) (auto dest: eq_lit_abort split: val.splits if_splits)
+
+lemma in_elems_abort: "in_elems v vs = Aborts \<kappa> \<Longrightarrow> \<kappa> = Undef"
+  by (induction vs) (auto dest: eq_abort(1) split: if_splits)
+
+lemma resolve_binop_overload:
+  assumes "resolve_binop \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2 = Some \<tau>"
+  obtains \<tau>\<^sub>1 \<tau>\<^sub>2 where "binop_overload \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2 ((\<tau>\<^sub>1, \<tau>\<^sub>2), \<tau>)"
+proof -
+  let ?M = "Set.filter
+    (\<lambda>((\<tau>\<^sub>1, \<tau>\<^sub>2), _). \<forall>((\<tau>\<^sub>1', \<tau>\<^sub>2'), _) \<in> binop_overloads \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2. \<Sigma> \<turnstile> \<tau>\<^sub>1 <: \<tau>\<^sub>1' \<and> \<Sigma> \<turnstile> \<tau>\<^sub>2 <: \<tau>\<^sub>2')
+    (binop_overloads \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2)"
+  from assms have "is_singleton ?M" and \<tau>: "\<tau> = snd (the_elem ?M)"
+    by (auto simp: resolve_binop_def Let_def split: if_splits)
+  then obtain \<omega> where M: "?M = {\<omega>}" by (auto simp: is_singleton_def)
+  then have "\<omega> \<in> ?M" by simp
+  then have "\<omega> \<in> binop_overloads \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2" by simp
+  moreover from \<tau> have "\<tau> = snd \<omega>" unfolding M by simp
+  ultimately show thesis using that by (cases \<omega>) (auto simp: binop_overloads_def)
+qed
+
+(* Operator resolution with elimination of unions, by its cases *)
+lemma resolve_binop_union_cases:
+  assumes "resolve_binop_union \<Sigma> op \<sigma> \<sigma>' = Some \<tau>"
+  obtains (overload) "resolve_binop \<Sigma> op \<sigma> \<sigma>' = Some \<tau>"
+  | (left) \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<tau>\<^sub>1 \<tau>\<^sub>2 where "\<sigma> = TyUnion \<sigma>\<^sub>1 \<sigma>\<^sub>2" and "resolve_binop_union \<Sigma> op \<sigma>\<^sub>1 \<sigma>' = Some \<tau>\<^sub>1"
+      and "resolve_binop_union \<Sigma> op \<sigma>\<^sub>2 \<sigma>' = Some \<tau>\<^sub>2" and "\<tau> = \<tau>\<^sub>1 \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>\<^sub>2"
+  | (right) \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<tau>\<^sub>1 \<tau>\<^sub>2 where "\<sigma>' = TyUnion \<sigma>\<^sub>1 \<sigma>\<^sub>2" and "resolve_binop_union \<Sigma> op \<sigma> \<sigma>\<^sub>1 = Some \<tau>\<^sub>1"
+      and "resolve_binop_union \<Sigma> op \<sigma> \<sigma>\<^sub>2 = Some \<tau>\<^sub>2" and "\<tau> = \<tau>\<^sub>1 \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>\<^sub>2"
+  using assms[unfolded resolve_binop_union.simps[of \<Sigma> op \<sigma> \<sigma>']]
+  by (auto simp: bind_eq_Some_conv split: option.splits ty.splits)
+
+lemma binop_overload_sub: "binop_overload \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<omega> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma>\<^sub>1 <: fst (fst \<omega>) \<and> \<Sigma> \<turnstile> \<sigma>\<^sub>2 <: snd (fst \<omega>)"
+proof (induction rule: binop_overload.induct)
+  case OverloadBase
+  then show ?case using subty_trans'[OF base_type_upper] by simp
+qed (auto intro: SubtyRefl)
+
+lemmas binop_simps = binop_meaning_def overload_def tuple_overload_def subty_prim_iff subty_list_iff SubtyRefl
+  SubtyObject compare_numbers_def compare_strings_def int_arith_def int_division_def int_quotient_def
+  float_arith_def float_division_def float_operands_def float_of_def float_power_def int_power_def concat_str_def
+  concat_list_def concat_tuple_def repeat_str_def repeat_list_def Let_def wf_int_lit wf_int_float ValLitFloat
+  wf_lit_bool wf_str_char
+
+(* Meaning of a binary operator at operands typed by the operand types of an overload *)
+lemma binop_meaning_typed:
+  "\<lbrakk> binop_overload \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<omega> ; \<turnstile> v : Ty (inst \<eta> (fst (fst \<omega>))) ; \<turnstile> u : Ty (inst \<eta> (snd (fst \<omega>))) \<rbrakk>
+  \<Longrightarrow> result_typed (binop_meaning op v u) (inst \<eta> (snd \<omega>))"
+proof (induction rule: binop_overload.induct)
+  case OverloadEq
+  then show ?case using eq_abort(1)[of v u] by (cases "eq v u") (auto simp: binop_simps)
+next
+  case (OverloadInList op \<sigma>\<^sub>1 \<tau>)
+  from OverloadInList.prems(2) obtain us where "u = VList us" by (auto elim: wf_list)
+  with OverloadInList.hyps(1) show ?case
+    using in_elems_abort[of v us] by (cases "in_elems v us") (auto simp: binop_simps)
+next
+  case (OverloadInTuple op \<sigma>\<^sub>1 \<tau>s)
+  from OverloadInTuple.prems(2) obtain us where "u = VTuple us" by (auto elim: wf_tuple)
+  with OverloadInTuple.hyps(1) show ?case
+    using in_elems_abort[of v us] by (cases "in_elems v us") (auto simp: binop_simps)
+next
+  case OverloadInStr
+  then obtain w w' where "v = VLit (LitString w)" and "u = VLit (LitString w')"
+    by (auto dest!: wf_str[OF _ SubtyRefl])
+  with OverloadInStr.hyps(1) show ?case by (auto simp: binop_simps)
+next
+  case (OverloadInDict op \<sigma>\<^sub>1 \<tau>)
+  then obtain w where "v = VLit (LitString w)" by (auto dest!: wf_str[OF _ SubtyRefl])
+  moreover from OverloadInDict.prems(2) obtain \<delta> where "u = VDict \<delta>" by (auto elim: wf_dict)
+  ultimately show ?case using OverloadInDict.hyps(1) by (auto simp: binop_simps)
+next
+  case OverloadOrderFloat
+  then show ?case by (auto simp: binop_simps dest!: wf_float[OF _ SubtyRefl])
+next
+  case OverloadOrderStr
+  then show ?case by (auto simp: binop_simps dest!: wf_str[OF _ SubtyRefl])
+next
+  case OverloadArithInt
+  then show ?case by (auto simp: binop_simps dest!: wf_int[OF _ SubtyRefl])
+next
+  case OverloadArithFloat
+  then show ?case by (auto simp: binop_simps dest!: wf_float[OF _ SubtyRefl])
+next
+  case OverloadPowFloat
+  then show ?case by (auto simp: binop_simps dest!: wf_float[OF _ SubtyRefl] wf_int[OF _ SubtyRefl])
+next
+  case OverloadAddStr
+  then show ?case by (auto simp: binop_simps dest!: wf_str[OF _ SubtyRefl])
+next
+  case (OverloadAddList \<sigma> \<tau>)
+  from OverloadAddList.prems(1) obtain vs where v: "v = VList vs" and vs: "\<forall>v' \<in> set vs. \<turnstile> v' : Ty (inst \<eta> \<sigma>)"
+    by (auto elim: wf_list)
+  from OverloadAddList.prems(2) obtain us where u: "u = VList us" and us: "\<forall>u' \<in> set us. \<turnstile> u' : Ty (inst \<eta> \<tau>)"
+    by (auto elim: wf_list)
+  have "\<forall>v' \<in> set (vs @ us). \<turnstile> v' : Ty (inst \<eta> (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>))"
+    using vs us by (auto intro: wf_val_inst_sub[OF _ join_upper(1)] wf_val_inst_sub[OF _ join_upper(2)])
+  then have "\<turnstile> VList (vs @ us) : Ty (TyList (inst \<eta> (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>)))" by (rule ValList)
+  with v u show ?case by (simp add: binop_simps)
+next
+  case (OverloadAddTuple \<sigma>s \<tau>s)
+  from OverloadAddTuple.prems(1) obtain vs where v: "v = VTuple vs"
+    and vs: "list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) vs (map (inst \<eta>) \<sigma>s)"
+    by (auto elim: wf_tuple)
+  from OverloadAddTuple.prems(2) obtain us where u: "u = VTuple us"
+    and us: "list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) us (map (inst \<eta>) \<tau>s)"
+    by (auto elim: wf_tuple)
+  have "\<turnstile> VTuple (vs @ us) : Ty (TyTuple (map (inst \<eta>) \<sigma>s @ map (inst \<eta>) \<tau>s))"
+    by (rule ValTuple[OF list_all2_appendI[OF vs us]])
+  with v u show ?case by (simp add: binop_simps)
+next
+  case OverloadMulStrInt
+  then show ?case by (auto simp: binop_simps dest!: wf_str[OF _ SubtyRefl] wf_int[OF _ SubtyRefl])
+next
+  case OverloadMulIntStr
+  then show ?case by (auto simp: binop_simps dest!: wf_str[OF _ SubtyRefl] wf_int[OF _ SubtyRefl])
+next
+  case (OverloadMulListInt \<sigma>\<^sub>2 \<tau>)
+  from OverloadMulListInt.prems(1) obtain vs where v: "v = VList vs" and vs: "\<forall>v' \<in> set vs. \<turnstile> v' : Ty (inst \<eta> \<tau>)"
+    by (auto elim: wf_list)
+  from OverloadMulListInt.prems(2) obtain n where u: "u = VLit (LitInt n)" by (auto dest!: wf_int[OF _ SubtyRefl])
+  from vs have "\<turnstile> VList (concat (replicate (nat n) vs)) : Ty (TyList (inst \<eta> \<tau>))" by (auto intro!: ValList)
+  with v u show ?case by (simp add: binop_simps)
+next
+  case (OverloadMulIntList \<sigma>\<^sub>1 \<tau>)
+  from OverloadMulIntList.prems(2) obtain us where u: "u = VList us" and us: "\<forall>u' \<in> set us. \<turnstile> u' : Ty (inst \<eta> \<tau>)"
+    by (auto elim: wf_list)
+  from OverloadMulIntList.prems(1) obtain n where v: "v = VLit (LitInt n)" by (auto dest!: wf_int[OF _ SubtyRefl])
+  from us have "\<turnstile> VList (concat (replicate (nat n) us)) : Ty (TyList (inst \<eta> \<tau>))" by (auto intro!: ValList)
+  with v u show ?case by (simp add: binop_simps)
+next
+  case OverloadPowNat
+  then show ?case by (auto simp: binop_simps dest!: wf_int[OF _ SubtyRefl] wf_lit)
+next
+  case OverloadPowNeg
+  then show ?case by (auto simp: binop_simps dest!: wf_int[OF _ SubtyRefl] wf_lit)
+next
+  case OverloadBase
+  then show ?case by simp
+qed
+
+(* Meaning of a binary operator at operands typed by the operand types, at the type given by operator resolution
+   with elimination of unions *)
+lemma binop_union_typed:
+  "\<lbrakk> resolve_binop_union \<Sigma> op \<sigma> \<sigma>' = Some \<tau> ; \<turnstile> v : Ty (inst \<eta> \<sigma>) ; \<turnstile> u : Ty (inst \<eta> \<sigma>') \<rbrakk>
+  \<Longrightarrow> result_typed (binop_meaning op v u) (inst \<eta> \<tau>)"
+proof (induction "size \<sigma> + size \<sigma>'" arbitrary: \<sigma> \<sigma>' \<tau> v u rule: less_induct)
+  case less
+  from less.prems(1) show ?case
+  proof (cases rule: resolve_binop_union_cases)
+    case overload
+    then obtain \<tau>\<^sub>1 \<tau>\<^sub>2 where ov: "binop_overload \<Sigma> op \<sigma> \<sigma>' ((\<tau>\<^sub>1, \<tau>\<^sub>2), \<tau>)" by (rule resolve_binop_overload)
+    from binop_overload_sub[OF ov] less.prems(2, 3) have "\<turnstile> v : Ty (inst \<eta> \<tau>\<^sub>1)" and "\<turnstile> u : Ty (inst \<eta> \<tau>\<^sub>2)"
+      by (auto intro: wf_val_inst_sub)
+    with binop_meaning_typed[OF ov] show ?thesis by simp
+  next
+    case (left \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<tau>\<^sub>1 \<tau>\<^sub>2)
+    from less.prems(2) left(1) have "\<turnstile> v : Ty (inst \<eta> \<sigma>\<^sub>1) \<or> \<turnstile> v : Ty (inst \<eta> \<sigma>\<^sub>2)" by (auto dest: wf_val_union)
+    then show ?thesis
+    proof
+      assume "\<turnstile> v : Ty (inst \<eta> \<sigma>\<^sub>1)"
+      from less.hyps[OF _ left(2) this less.prems(3)] left(1)
+      have "result_typed (binop_meaning op v u) (inst \<eta> \<tau>\<^sub>1)" by simp
+      from result_typed_sub[OF this join_upper(1)] left(4) show ?thesis by simp
+    next
+      assume "\<turnstile> v : Ty (inst \<eta> \<sigma>\<^sub>2)"
+      from less.hyps[OF _ left(3) this less.prems(3)] left(1)
+      have "result_typed (binop_meaning op v u) (inst \<eta> \<tau>\<^sub>2)" by simp
+      from result_typed_sub[OF this join_upper(2)] left(4) show ?thesis by simp
+    qed
+  next
+    case (right \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<tau>\<^sub>1 \<tau>\<^sub>2)
+    from less.prems(3) right(1) have "\<turnstile> u : Ty (inst \<eta> \<sigma>\<^sub>1) \<or> \<turnstile> u : Ty (inst \<eta> \<sigma>\<^sub>2)" by (auto dest: wf_val_union)
+    then show ?thesis
+    proof
+      assume "\<turnstile> u : Ty (inst \<eta> \<sigma>\<^sub>1)"
+      from less.hyps[OF _ right(2) less.prems(2) this] right(1)
+      have "result_typed (binop_meaning op v u) (inst \<eta> \<tau>\<^sub>1)" by simp
+      from result_typed_sub[OF this join_upper(1)] right(4) show ?thesis by simp
+    next
+      assume "\<turnstile> u : Ty (inst \<eta> \<sigma>\<^sub>2)"
+      from less.hyps[OF _ right(3) less.prems(2) this] right(1)
+      have "result_typed (binop_meaning op v u) (inst \<eta> \<tau>\<^sub>2)" by simp
+      from result_typed_sub[OF this join_upper(2)] right(4) show ?thesis by simp
+    qed
+  qed
+qed
+
 lemma binop_sound:
-  "\<lbrakk> sound_expr \<rho> (node e) (Val v) ; sound_expr \<rho> (node e') r \<rbrakk>
-  \<Longrightarrow> sound_expr \<rho> (ExprBinOp op e e') (mlet r (binop_meaning op v))"
-  sorry
+  assumes e: "sound_expr \<rho> (node e) (Val v)" and e': "sound_expr \<rho> (node e') r"
+  shows "sound_expr \<rho> (ExprBinOp op e e') (mlet r (binop_meaning op v))"
+proof (rule sound_expr_synthI)
+  fix \<eta> \<Gamma> \<tau>
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "synth_expr \<Sigma> \<Gamma> (ExprBinOp op e e') = Ok \<tau>"
+  then obtain \<sigma> \<sigma>' where \<sigma>: "synth_expr_at \<Sigma> \<Gamma> e = Ok \<sigma>" and \<sigma>': "synth_expr_at \<Sigma> \<Gamma> e' = Ok \<sigma>'"
+    and res: "resolve_binop_union \<Sigma> op \<sigma> \<sigma>' = Some \<tau>"
+    by (auto simp: bind_sum_def or_else_def split: if_splits sum.splits option.splits)
+  from sound_expr_synth_at[OF e env \<sigma>] have v: "\<turnstile> v : Ty (inst \<eta> \<sigma>)" by simp
+  from sound_expr_synth_at[OF e' env \<sigma>'] have r: "result_typed r (inst \<eta> \<sigma>')" .
+  show "result_typed (mlet r (binop_meaning op v)) (inst \<eta> \<tau>)"
+  proof (cases r)
+    case (Val u)
+    with r have "\<turnstile> u : Ty (inst \<eta> \<sigma>')" by simp
+    from binop_union_typed[OF res v this] Val show ?thesis by simp
+  next
+    case (Aborts \<kappa>)
+    with r show ?thesis by simp
+  qed
+qed (simp_all add: var_scheme_None)
 
 lemma binop_fail_sound: "sound_expr \<rho> (node e) (Aborts \<kappa>) \<Longrightarrow> sound_expr \<rho> (ExprBinOp op e e') (Aborts \<kappa>)"
   by (rule sound_expr_synthI)
@@ -1019,24 +1278,6 @@ proof (rule sound_expr_typedI)
     from dict_entries_typed[OF this(3)[unfolded wf_result.simps(1)]] assms(2) show ?thesis by simp
   qed
 qed simp_all
-
-(* Subtyping by a literal type of a type other than a union or Never, as the literal type itself *)
-lemma subty_literal_inv:
-  "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> \<tau> = TyLiteral l \<Longrightarrow> \<not> is_union \<sigma> \<Longrightarrow> \<sigma> \<noteq> TyPrim Never \<Longrightarrow> \<sigma> = TyLiteral l"
-  and "\<Sigma> \<turnstile> \<sigma>s [<:] \<tau>s \<Longrightarrow> True"
-proof (induction rule: subty_subtys.inducts)
-  case (SubtyLiteral l' \<tau>)
-  then show ?case by (cases l') auto
-qed auto
-
-lemma wf_lit: "\<turnstile> v : Ty (TyLiteral l) \<Longrightarrow> v = VLit l"
-proof -
-  assume "\<turnstile> v : Ty (TyLiteral l)"
-  from wf_val_intro(1)[OF this] obtain \<sigma> where intro: "intro_typed v \<sigma>" and sub: "\<Sigma> \<turnstile> \<sigma> <: TyLiteral l"
-    by blast
-  from subty_literal_inv(1)[OF sub refl] intro_typed_nonunion[OF intro] have "\<sigma> = TyLiteral l" by blast
-  with intro show "v = VLit l" by (cases v) auto
-qed
 
 lemma wf_dict_entries:
   assumes "\<turnstile> v : Ty (TyDict \<tau>)"
