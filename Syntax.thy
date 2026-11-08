@@ -383,6 +383,9 @@ where
    then Some (fmconst (assigns_stmt (node s) - set ys) u)
    else None)"
 
+lemma scope_stmt_Some: "scope_stmt u ys s = Some m \<Longrightarrow> m = fmconst (assigns_stmt (node s) - set ys) u"
+  by (simp add: scope_stmt_def split: if_splits)
+
 definition scope_top :: "'a \<Rightarrow> var list \<Rightarrow> top_stmt \<Rightarrow> (var, 'a) fmap option"
 where
 "scope_top u ys t =

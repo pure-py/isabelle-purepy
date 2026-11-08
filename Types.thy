@@ -211,6 +211,14 @@ qed (auto intro: map_idI)
 lemma subst_closed: "fv \<tau> = {} \<Longrightarrow> subst \<tau>s \<alpha>s \<tau> = \<tau>"
   by (simp add: subst_fresh)
 
+(* Substitutions agreeing on the free type variables of a type *)
+lemma subst_cong:
+  "(\<And>\<alpha>. \<alpha> \<in> fv \<sigma> \<Longrightarrow> map_of (zip \<alpha>s \<tau>s) \<alpha> = map_of (zip \<alpha>s' \<tau>s') \<alpha>) \<Longrightarrow> subst \<tau>s \<alpha>s \<sigma> = subst \<tau>s' \<alpha>s' \<sigma>"
+proof (induction \<sigma>)
+  case (TyVar \<alpha>)
+  then show ?case by simp
+qed (simp_all cong: map_cong, blast+)
+
 lemma subst_Nil [simp]: "subst [] \<alpha>s \<tau> = \<tau>"
   by (induction \<tau>) (auto intro: map_idI)
 

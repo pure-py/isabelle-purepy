@@ -45,6 +45,22 @@ lemma inst_scheme_closed: "fv_scheme \<pi> = {} \<Longrightarrow> inst_scheme \<
 lemma inst_entry_closed: "fv_entry \<theta> = {} \<Longrightarrow> inst_entry \<eta> \<theta> = \<theta>"
   by (cases \<theta>) (simp_all add: subst_closed inst_scheme_closed)
 
+lemma inst_cong:
+  assumes "\<And>\<alpha>. \<alpha> \<in> fv \<sigma> \<Longrightarrow> map_of \<eta> \<alpha> = map_of \<eta>' \<alpha>"
+  shows "inst \<eta> \<sigma> = inst \<eta>' \<sigma>"
+  using assms by (intro subst_cong) (simp add: zip_map_fst_snd)
+
+lemma inst_entry_cong:
+  assumes "\<And>\<alpha>. \<alpha> \<in> fv_entry \<theta> \<Longrightarrow> map_of \<eta> \<alpha> = map_of \<eta>' \<alpha>"
+  shows "inst_entry \<eta> \<theta> = inst_entry \<eta>' \<theta>"
+proof (cases \<theta>)
+  case (Scheme \<pi>)
+  then show ?thesis using assms by (cases \<pi>) (auto simp: map_of_filter_key intro!: inst_cong)
+next
+  case (PUScheme \<pi> b)
+  then show ?thesis using assms by (cases \<pi>) (auto simp: map_of_filter_key intro!: inst_cong)
+qed (use assms in \<open>auto intro!: inst_cong\<close>)
+
 lemma inst_closed: "\<lbrakk> closed_inst \<eta> ; fv \<tau> \<subseteq> fst ` set \<eta> \<rbrakk> \<Longrightarrow> fv (inst \<eta> \<tau>) = {}"
   by (induction \<tau>)
      (auto simp: closed_inst_def zip_map_fst_snd map_of_eq_None_iff UN_subset_iff split: option.splits
@@ -69,6 +85,41 @@ proof (induction \<sigma>)
       by (auto simp: zip_map_fst_snd map_of_filter_key subst_closed closed_inst_def split: option.splits
           dest!: map_of_SomeD dest: set_zip_leftD)
   qed
+qed (simp_all cong: map_cong)
+
+(* Instantiation of the type parameters \<alpha>s at \<tau>s, shadowing their bindings in \<eta> *)
+definition inst_params :: "var list \<Rightarrow> ty list \<Rightarrow> (var \<times> ty) list \<Rightarrow> (var \<times> ty) list"
+where
+"inst_params \<alpha>s \<tau>s \<eta> = zip \<alpha>s \<tau>s @ filter (\<lambda>(\<alpha>, _). \<alpha> \<notin> set \<alpha>s) \<eta>"
+
+lemma map_of_inst_params:
+  "length \<tau>s = length \<alpha>s
+  \<Longrightarrow> map_of (inst_params \<alpha>s \<tau>s \<eta>) \<alpha> = (if \<alpha> \<in> set \<alpha>s then map_of (zip \<alpha>s \<tau>s) \<alpha> else map_of \<eta> \<alpha>)"
+  by (auto simp: inst_params_def map_of_filter_key map_of_zip_is_None map_add_def split: option.splits
+      dest: map_of_SomeD set_zip_leftD)
+
+lemma fst_inst_params: "length \<tau>s = length \<alpha>s \<Longrightarrow> fst ` set (inst_params \<alpha>s \<tau>s \<eta>) = set \<alpha>s \<union> fst ` set \<eta>"
+proof -
+  assume "length \<tau>s = length \<alpha>s"
+  then have zip: "fst ` set (zip \<alpha>s \<tau>s) = set \<alpha>s" by (metis map_fst_zip set_map)
+  have filter: "fst ` set (filter (\<lambda>(\<alpha>, _). \<alpha> \<notin> set \<alpha>s) \<eta>) = fst ` set \<eta> - set \<alpha>s"
+    by (auto simp: image_iff case_prod_beta)
+  show ?thesis unfolding inst_params_def set_append image_Un zip filter by auto
+qed
+
+lemma closed_inst_params:
+  "\<lbrakk> closed_inst \<eta> ; \<forall>\<tau> \<in> set \<tau>s. fv \<tau> = {} \<rbrakk> \<Longrightarrow> closed_inst (inst_params \<alpha>s \<tau>s \<eta>)"
+  by (auto simp: closed_inst_def inst_params_def dest: set_zip_rightD)
+
+lemma inst_inst_params:
+  assumes "closed_inst \<eta>" and "length \<tau>s = length \<alpha>s"
+  shows "inst (inst_params \<alpha>s \<tau>s \<eta>) \<sigma> = subst \<tau>s \<alpha>s (inst (filter (\<lambda>(\<alpha>, _). \<alpha> \<notin> set \<alpha>s) \<eta>) \<sigma>)"
+proof (induction \<sigma>)
+  case (TyVar \<beta>)
+  show ?case
+    using assms
+    by (auto simp: zip_map_fst_snd map_of_inst_params map_of_filter_key map_of_zip_is_None closed_inst_def
+        subst_closed split: option.splits dest!: map_of_SomeD dest: set_zip_leftD)
 qed (simp_all cong: map_cong)
 
 (* Type scheme of a function signature *)
@@ -178,6 +229,63 @@ proof (rule WfEnv)
     qed
   qed
 qed
+
+(* Instantiation agreeing with \<eta> on the type variables of the context *)
+lemma wf_env_inst:
+  assumes "\<eta> \<turnstile> \<rho> : \<Gamma>" and "closed_inst \<eta>'" and agree: "\<And>\<alpha>. \<alpha> \<in> tyvars \<Gamma> \<Longrightarrow> map_of \<eta>' \<alpha> = map_of \<eta> \<alpha>"
+  shows "\<eta>' \<turnstile> \<rho> : \<Gamma>"
+proof (rule WfEnv[OF assms(2)])
+  show "tyvars \<Gamma> \<subseteq> fst ` set \<eta>'"
+  proof
+    fix \<alpha>
+    assume \<alpha>: "\<alpha> \<in> tyvars \<Gamma>"
+    with wf_env_tyvars[OF assms(1)] have "\<alpha> \<in> fst ` set \<eta>" by blast
+    then have "map_of \<eta> \<alpha> \<noteq> None" by (simp add: map_of_eq_None_iff)
+    then have "map_of \<eta>' \<alpha> \<noteq> None" by (simp add: agree[OF \<alpha>])
+    then show "\<alpha> \<in> fst ` set \<eta>'" by (simp add: map_of_eq_None_iff)
+  qed
+  show "\<forall>x \<theta>. fmlookup \<Gamma> x = Some \<theta> \<longrightarrow> \<theta> \<noteq> TypeVar \<longrightarrow> (\<exists>v. fmlookup \<rho> x = Some v \<and> \<turnstile> v : inst_entry \<eta>' \<theta>)"
+  proof (intro allI impI)
+    fix x \<theta>
+    assume look: "fmlookup \<Gamma> x = Some \<theta>" and "\<theta> \<noteq> TypeVar"
+    have "inst_entry \<eta>' \<theta> = inst_entry \<eta> \<theta>" using agree tyvars_entry[OF look] by (intro inst_entry_cong) blast
+    with wf_env_lookup[OF assms(1) look \<open>\<theta> \<noteq> TypeVar\<close>]
+    show "\<exists>v. fmlookup \<rho> x = Some v \<and> \<turnstile> v : inst_entry \<eta>' \<theta>" by simp
+  qed
+  show "\<forall>x \<pi>. fmlookup \<Gamma> x = Some (Scheme \<pi>) \<longrightarrow> callable_scheme \<pi>" using wf_env_scheme[OF assms(1)] by blast
+qed
+
+(* Type parameters brought into scope *)
+lemma wf_env_type_params:
+  assumes "\<eta> \<turnstile> \<rho> : \<Gamma>" and "set \<alpha>s \<subseteq> fst ` set \<eta>"
+  shows "\<eta> \<turnstile> \<rho> : \<Gamma> \<otimes> fmconst (set \<alpha>s) TypeVar"
+proof -
+  have "\<eta> \<turnstile> \<rho> \<otimes> fmempty : \<Gamma> \<otimes> fmconst (set \<alpha>s) TypeVar"
+  proof (rule wf_env_add[OF assms(1)])
+    show "tyvars (fmconst (set \<alpha>s) TypeVar) \<subseteq> fst ` set \<eta>" using tyvars_fmconst assms(2) by blast
+  qed (auto dest!: fmconst_entry)
+  then show ?thesis by simp
+qed
+
+(* Variables of a scope, unbound *)
+lemma wf_env_unbound:
+  assumes "\<eta> \<turnstile> \<rho> : \<Gamma>"
+  shows "\<eta> \<turnstile> \<rho> \<otimes> fmconst A VUnbound : \<Gamma> \<otimes> fmconst A Unbound"
+proof (rule wf_env_add[OF assms])
+  show "tyvars (fmconst A Unbound) \<subseteq> fst ` set \<eta>"
+    by (auto simp: tyvars_def fmlookup_dom'_iff fmlookup_ran'_iff dest!: fmconst_entry)
+  show "fmdom (fmconst A VUnbound) |\<subseteq>| fmdom (fmconst A Unbound)"
+    unfolding fmconst_map[of A VUnbound Unbound] by simp
+  show "\<exists>v. fmlookup (\<rho> \<otimes> fmconst A VUnbound) x = Some v \<and> \<turnstile> v : inst_entry \<eta> \<theta>"
+    if "fmlookup (fmconst A Unbound) x = Some \<theta>" for x \<theta>
+  proof -
+    from that have mem: "x |\<in>| fmdom (fmconst A VUnbound)"
+      unfolding fmconst_map[of A VUnbound Unbound] by (simp add: fmlookup_dom_iff)
+    then obtain v where v: "fmlookup (fmconst A VUnbound) x = Some v" by (auto simp: fmlookup_dom_iff)
+    from fmconst_entry[OF v] fmconst_entry[OF that] have "\<turnstile> v : inst_entry \<eta> \<theta>" by (simp add: ValUnbound)
+    with mem v show ?thesis by simp
+  qed
+qed (auto dest!: fmconst_entry)
 
 lemma wf_env_upd:
   assumes "\<eta> \<turnstile> \<rho> : \<Gamma>" and "\<theta> \<noteq> TypeVar" and "fv_entry \<theta> \<subseteq> fst ` set \<eta>" and "\<turnstile> v : inst_entry \<eta> \<theta>"

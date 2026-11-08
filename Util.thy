@@ -33,6 +33,21 @@ proof -
   then show ?thesis by (simp add: A fmconst_code)
 qed
 
+lemma fmconst_entry:
+  assumes "fmlookup (fmconst A u) x = Some u'"
+  shows "u' = u"
+proof (cases "finite A")
+  case True
+  with assms show ?thesis by (simp add: fmlookup_fmconst split: if_splits)
+qed (use assms in \<open>simp add: fmconst_def Finite_Set.fold_infinite\<close>)
+
+(* Constant map over A, as a function of the constant *)
+lemma fmconst_map: "fmconst A u = fmmap (\<lambda>_. u) (fmconst A u')"
+proof (cases "finite A")
+  case True
+  then show ?thesis by (intro fmap_ext) (simp add: fmlookup_fmconst)
+qed (simp add: fmconst_def Finite_Set.fold_infinite)
+
 lemma fold_fmadd_dom: "x |\<in>| fmdom (fold fmadd \<Delta>s \<Delta>) \<Longrightarrow> x |\<in>| fmdom \<Delta> \<or> (\<exists>\<Delta>' \<in> set \<Delta>s. x |\<in>| fmdom \<Delta>')"
 proof (induction \<Delta>s arbitrary: \<Delta>)
   case (Cons \<Delta>' \<Delta>s)
@@ -145,6 +160,9 @@ where
 "those_sum (m # ms) = do { x \<leftarrow> m; xs \<leftarrow> those_sum ms; Ok (x # xs) }"
 
 lemma those_sum_Ok: "those_sum ms = Ok xs \<Longrightarrow> list_all2 (\<lambda>m x. m = Ok x) ms xs"
+  by (induction ms arbitrary: xs) (auto simp: bind_sum_def split: sum.splits)
+
+lemma those_sum_eq: "those_sum ms = Ok xs \<Longrightarrow> ms = map Ok xs"
   by (induction ms arbitrary: xs) (auto simp: bind_sum_def split: sum.splits)
 
 lemma those_sum_map_Ok: "those_sum (map f xs) = Ok ys \<Longrightarrow> list_all2 (\<lambda>x y. f x = Ok y) xs ys"

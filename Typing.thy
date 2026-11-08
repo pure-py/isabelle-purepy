@@ -81,6 +81,51 @@ proof -
   with assms(2) \<Gamma>'' show ?thesis by (auto simp: fmlookup_dom_iff)
 qed
 
+(* Type variables of the merge of two entries, among those of either *)
+lemma merge_entry_fv:
+  "merge_cxt_entry \<Sigma> b e e' = Some \<theta>''
+  \<Longrightarrow> fv_entry \<theta>'' \<subseteq> \<Union> (fv_entry ` set_option e) \<union> \<Union> (fv_entry ` set_option e')"
+proof (cases e)
+  case (Some \<theta>)
+  show "merge_cxt_entry \<Sigma> b e e' = Some \<theta>''
+    \<Longrightarrow> fv_entry \<theta>'' \<subseteq> \<Union> (fv_entry ` set_option e) \<union> \<Union> (fv_entry ` set_option e')"
+  proof (cases e')
+    case (Some \<theta>')
+    assume "merge_cxt_entry \<Sigma> b e e' = Some \<theta>''"
+    with \<open>e = Some \<theta>\<close> Some merge_cxt_entry_cases[of \<Sigma> b \<theta> \<theta>' \<theta>''] show ?thesis
+      by (auto dest!: scheme_of_Some var_ty_Some dest: fv_join[THEN subsetD])
+  qed (use Some in \<open>cases \<theta>; auto\<close>)
+qed (cases e'; auto elim: possibly_unassigned.elims)
+
+lemma merge_entry_TypeVar: "merge_cxt_entry \<Sigma> b e e' = Some TypeVar \<Longrightarrow> e = Some TypeVar"
+  by (cases e; cases e')
+     (auto elim: possibly_unassigned.elims dest!: merge_cxt_entry_cases scheme_of_Some var_ty_Some)
+
+lemma merge_tyvars:
+  assumes "merge \<Sigma> X \<Gamma> \<Gamma>' = Ok \<Gamma>''"
+  shows "tyvars \<Gamma>'' \<subseteq> tyvars \<Gamma> \<union> tyvars \<Gamma>'"
+proof
+  fix \<alpha>
+  assume "\<alpha> \<in> tyvars \<Gamma>''"
+  then consider (var) "fmlookup \<Gamma>'' \<alpha> = Some TypeVar"
+    | (entry) x \<theta>'' where "fmlookup \<Gamma>'' x = Some \<theta>''" and "\<alpha> \<in> fv_entry \<theta>''"
+    by (auto simp: tyvars_def fmlookup_dom'_iff fmlookup_ran'_iff)
+  then show "\<alpha> \<in> tyvars \<Gamma> \<union> tyvars \<Gamma>'"
+  proof cases
+    case var
+    with merge_dom[OF assms] have "\<alpha> |\<in>| fmdom (\<Gamma> \<otimes> \<Gamma>')" by (auto simp: fmlookup_dom_iff)
+    with var merge_lookup[OF assms this] have "fmlookup \<Gamma> \<alpha> = Some TypeVar" by (auto dest: merge_entry_TypeVar)
+    then show ?thesis by (auto simp: tyvars_def fmlookup_dom'_iff)
+  next
+    case entry
+    with merge_dom[OF assms] have "x |\<in>| fmdom (\<Gamma> \<otimes> \<Gamma>')" by (auto simp: fmlookup_dom_iff)
+    with entry(1) have "merge_cxt_entry \<Sigma> (x \<in> X) (fmlookup \<Gamma> x) (fmlookup \<Gamma>' x) = Some \<theta>''"
+      by (simp add: merge_lookup[OF assms])
+    from merge_entry_fv[OF this] entry(2) show ?thesis
+      by (auto split: option.splits dest: tyvars_entry[THEN subsetD])
+  qed
+qed
+
 (* Assigns\<^sub>R \<Delta> r: the statement can complete normally, adding bindings \<Delta>. If present, r is the error reported
    when a function body ends with a statement which PurePy determines to return or raise but which mypy treats
    as completing normally. *)
@@ -137,6 +182,35 @@ proof -
     by (auto simp: list_all2_conv_all_nth)
   then have "Ok (Assigns\<^sub>R \<Delta>' r') \<in> set ms" by (metis nth_mem)
   with x that show thesis by blast
+qed
+
+lemma merge_outcome_tyvars:
+  assumes "merge_outcome \<Sigma> X R R' = Ok (Assigns\<^sub>R \<Delta> r)" and "\<alpha> \<in> tyvars \<Delta>"
+  shows "(\<exists>\<Delta>' r'. R = Assigns\<^sub>R \<Delta>' r' \<and> \<alpha> \<in> tyvars \<Delta>') \<or> (\<exists>\<Delta>' r'. R' = Assigns\<^sub>R \<Delta>' r' \<and> \<alpha> \<in> tyvars \<Delta>')"
+  using assms by (cases "(\<Sigma>, X, R, R')" rule: merge_outcome.cases) (auto simp: bind_sum_Ok dest!: merge_tyvars)
+
+(* Type variable of a merge of static outcomes, a type variable of one of them *)
+lemma merges_tyvars:
+  assumes "merges \<Sigma> X ms = Ok (Assigns\<^sub>R \<Delta> r)" and "\<alpha> \<in> tyvars \<Delta>"
+  obtains \<Delta>' r' where "Ok (Assigns\<^sub>R \<Delta>' r') \<in> set ms" and "\<alpha> \<in> tyvars \<Delta>'"
+proof -
+  let ?f = "\<lambda>R m. do { R' \<leftarrow> m; merge_outcome \<Sigma> X R R' }"
+  from assms(1) obtain Rs where Rs: "those_sum ms = Ok Rs"
+    and fold: "foldr ?f Rs (Ok Returns\<^sub>R) = Ok (Assigns\<^sub>R \<Delta> r)"
+    by (auto simp: merges_def bind_sum_Ok)
+  have "\<exists>\<Delta>' r'. Assigns\<^sub>R \<Delta>' r' \<in> set Rs \<and> \<alpha> \<in> tyvars \<Delta>'"
+    if "foldr ?f Rs (Ok Returns\<^sub>R) = Ok (Assigns\<^sub>R \<Delta> r)" and "\<alpha> \<in> tyvars \<Delta>" for Rs \<Delta> r
+    using that
+  proof (induction Rs arbitrary: \<Delta> r)
+    case (Cons R Rs)
+    from Cons.prems(1) obtain R' where R': "foldr ?f Rs (Ok Returns\<^sub>R) = Ok R'"
+      and m: "merge_outcome \<Sigma> X R R' = Ok (Assigns\<^sub>R \<Delta> r)"
+      by (auto simp: bind_sum_Ok)
+    from merge_outcome_tyvars[OF m Cons.prems(2)] Cons.IH R' show ?case by (cases R') auto
+  qed (simp add: tyvars_def)
+  from this[OF fold assms(2)] obtain \<Delta>' r' where "Assigns\<^sub>R \<Delta>' r' \<in> set Rs" and \<alpha>: "\<alpha> \<in> tyvars \<Delta>'" by blast
+  with those_sum_eq[OF Rs] have "Ok (Assigns\<^sub>R \<Delta>' r') \<in> set ms" by simp
+  with \<alpha> that show thesis by blast
 qed
 
 fun override_outcome :: "static_outcome \<Rightarrow> static_outcome \<Rightarrow> static_outcome"
@@ -514,6 +588,9 @@ where
       Ok (TyScheme \<alpha>s (TyCallable \<sigma>s \<tau>))
     }))"
 
+lemma def_signature_Ok: "def_signature \<Sigma> \<Gamma> (Def f \<alpha>s xps \<psi> s) = Ok (TyScheme \<alpha>s' \<tau>) \<Longrightarrow> \<alpha>s' = \<alpha>s"
+  by (auto simp: Let_def bind_sum_Ok split: option.splits)
+
 lemma def_signature_disjoint:
   "def_signature \<Sigma> \<Gamma> d = Ok \<pi> \<Longrightarrow> case d of Def _ \<alpha>s _ _ _ \<Rightarrow> set \<alpha>s \<inter> tyvars \<Gamma> = {}"
   by (cases d) (auto simp: Let_def bind_sum_def find_None_iff split: sum.splits option.splits)
@@ -843,12 +920,32 @@ proof (cases s)
   then show ?thesis using assms by (cases "check_stmt \<Sigma> \<Gamma> \<zeta> s'") (auto split: static_outcome.splits)
 qed
 
+(* Static outcome of a function body, in a definition which checks *)
+lemma check_def_body_Ok:
+  "(case R of Assigns\<^sub>R _ r \<Rightarrow> if \<Sigma> \<turnstile> \<tau> \<approx> TyPrim NoneType then Ok () else Fail (e r) | Returns\<^sub>R \<Rightarrow> Ok ()) = Ok ()
+  \<Longrightarrow> R = Returns\<^sub>R \<or> (\<exists>\<Delta> r. R = Assigns\<^sub>R \<Delta> r \<and> \<Sigma> \<turnstile> \<tau> \<approx> TyPrim NoneType)"
+  by (cases R) (auto split: if_splits)
+
+lemma check_def_Ok:
+  assumes "check_def \<Sigma> \<Gamma> (Def f \<alpha>s xps \<psi> s) (TyScheme \<alpha>s' (TyCallable \<sigma>s \<tau>)) = Ok ()"
+  obtains \<Delta> \<Delta>' R where "scope Unbound (map fst xps) s = Some \<Delta>" and "length xps = length \<sigma>s"
+    and "params_cxt (map fst xps) \<sigma>s = Ok \<Delta>'"
+    and "check_stmt_at \<Sigma> (\<Gamma> \<otimes> fmconst (set \<alpha>s) TypeVar \<otimes> \<Delta>' \<otimes> \<Delta>) (Some \<tau>) s = Ok R"
+    and "R = Returns\<^sub>R \<or> (\<exists>\<Delta>'' r. R = Assigns\<^sub>R \<Delta>'' r \<and> \<Sigma> \<turnstile> \<tau> \<approx> TyPrim NoneType)"
+  using assms by (auto simp: Let_def bind_sum_Ok split: option.splits if_splits dest!: check_def_body_Ok)
+
 (* Static outcomes of the branches of an elif block, as listed by the if rule *)
 fun check_elif :: "class_table \<Rightarrow> cxt \<Rightarrow> ty option \<Rightarrow> elif_block \<Rightarrow> static_outcome may_fail list"
 where
 "check_elif \<Sigma> \<Gamma> \<zeta> (elifs, else') =
   map (\<lambda>(e', s'). do { check_expr_at \<Sigma> \<Gamma> e' (TyPrim bool); check_stmt_at \<Sigma> \<Gamma> \<zeta> s' }) elifs
   @ [case else' of Some s' \<Rightarrow> check_stmt_at \<Sigma> \<Gamma> \<zeta> s' | None \<Rightarrow> Ok (Assigns\<^sub>R fmempty None)]"
+
+(* Static outcome of a branch of an if statement: that of its statement, or empty for a missing else *)
+lemma check_elif_branch:
+  "Ok R \<in> set (check_stmt_at \<Sigma> \<Gamma> \<zeta> s # check_elif \<Sigma> \<Gamma> \<zeta> (elifs, else'))
+  \<Longrightarrow> (\<exists>s'. check_stmt_at \<Sigma> \<Gamma> \<zeta> s' = Ok R) \<or> R = Assigns\<^sub>R fmempty None"
+  by (auto simp: Ok_bind_sum split: option.splits)
 
 lemma check_stmt_if:
   "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtIf e s elifs else') = by_rule (if else' = None then RuleIf else RuleIfElse) (do {

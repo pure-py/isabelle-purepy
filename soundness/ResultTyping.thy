@@ -198,6 +198,21 @@ lemma inferred_type_args_fv:
   "inferred_type_args \<Sigma> \<alpha>s \<sigma>s ms = Ok \<tau>s \<Longrightarrow> \<forall>\<tau> \<in> set \<tau>s. fv \<tau> \<subseteq> \<Union> {fv \<tau>' | \<tau>'. Ok \<tau>' \<in> set ms}"
   sorry
 
+(* Bindings of a statement are over the type variables in scope *)
+lemma check_stmt_tyvars: "check_stmt \<Sigma> \<Gamma> \<zeta> s = Ok (Assigns\<^sub>R \<Delta> r) \<Longrightarrow> tyvars \<Delta> \<subseteq> tyvars \<Gamma>"
+  sorry
+
+lemma check_stmt_at_tyvars:
+  assumes "check_stmt_at \<Sigma> \<Gamma> \<zeta> s = Ok (Assigns\<^sub>R \<Delta> r)"
+  shows "tyvars \<Delta> \<subseteq> tyvars \<Gamma>"
+proof -
+  from check_stmt_at_Ok[OF assms] obtain R where R: "check_stmt \<Sigma> \<Gamma> \<zeta> (node s) = Ok R"
+    and "bindings_of R = Some \<Delta>"
+    by auto
+  then obtain r' where "R = Assigns\<^sub>R \<Delta> r'" by (cases R) auto
+  with R show ?thesis by (simp add: check_stmt_tyvars)
+qed
+
 subsection \<open>Checking\<close>
 
 lemma sound_exprI:
