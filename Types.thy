@@ -294,8 +294,8 @@ where
 "wf_entry \<Sigma> (Ty \<tau>) = wf_ty \<Sigma> \<tau>" |
 "wf_entry \<Sigma> (DU \<tau>) = wf_ty \<Sigma> \<tau>" |
 "wf_entry \<Sigma> (PU \<tau> _) = wf_ty \<Sigma> \<tau>" |
-"wf_entry \<Sigma> (Scheme (TyScheme _ \<tau>)) = wf_ty \<Sigma> \<tau>" |
-"wf_entry \<Sigma> (PUScheme (TyScheme _ \<tau>) _) = wf_ty \<Sigma> \<tau>" |
+"wf_entry \<Sigma> (Scheme (TyScheme _ \<tau>)) = (wf_ty \<Sigma> \<tau> \<and> (\<exists>\<sigma>s \<sigma>. \<tau> = TyCallable \<sigma>s \<sigma>))" |
+"wf_entry \<Sigma> (PUScheme (TyScheme _ \<tau>) _) = (wf_ty \<Sigma> \<tau> \<and> (\<exists>\<sigma>s \<sigma>. \<tau> = TyCallable \<sigma>s \<sigma>))" |
 "wf_entry \<Sigma> (Type C) = (C |\<in>| fmdom \<Sigma>)" |
 "wf_entry \<Sigma> (ModChecked _ \<Gamma>) = (tyvars \<Gamma> = {} \<and> wf_cxt \<Sigma> \<Gamma>)" |
 "wf_entry \<Sigma> (TypeAlias \<Gamma> q \<chi>s i) =
@@ -395,10 +395,10 @@ qed
 
 (* Types resolved in a well-formed context: well-formed and over the type variables of the context *)
 lemma resolve_type'_wf:
-  "\<lbrakk> wf_class_table \<Sigma> ; wf_cxt \<Sigma> \<Gamma> ; resolve_type' \<Sigma> \<Gamma> A n \<psi> = Ok \<tau> \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> \<tau> \<and> fv \<tau> \<subseteq> tyvars \<Gamma>"
+  "\<lbrakk> wf_cxt \<Sigma> \<Gamma> ; resolve_type' \<Sigma> \<Gamma> A n \<psi> = Ok \<tau> \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> \<tau> \<and> fv \<tau> \<subseteq> tyvars \<Gamma>"
 proof (induction n arbitrary: \<Gamma> A \<psi> \<tau> rule: less_induct)
   case (less n)
-  from less.prems(2, 3) show ?case
+  from less.prems show ?case
   proof (induction \<psi> arbitrary: \<tau>)
     case (TyExprName q \<psi>s)
     have args: "\<forall>\<tau>' \<in> set \<tau>s. wf_ty \<Sigma> \<tau>' \<and> fv \<tau>' \<subseteq> tyvars \<Gamma>"
@@ -432,7 +432,7 @@ proof (induction n arbitrary: \<Gamma> A \<psi> \<tau> rule: less_induct)
           by (auto simp: bind_sum_Ok ensure_def split: if_splits nat.splits)
         from wf\<theta> have wf': "wf_entry \<Sigma> (TypeAlias \<Gamma>' q' \<chi>s i)" by (simp add: TypeAlias)
         note cxt = type_context_alias(1)[OF wf' \<chi>] and tyvars = type_context_alias(2)[OF wf' \<chi>]
-        from less.IH[OF _ less.prems(1) cxt \<tau>'] n tyvars have "wf_ty \<Sigma> \<tau>'" and "fv \<tau>' \<subseteq> set \<alpha>s" by auto
+        from less.IH[OF _ cxt \<tau>'] n tyvars have "wf_ty \<Sigma> \<tau>'" and "fv \<tau>' \<subseteq> set \<alpha>s" by auto
         with args[OF \<sigma>s] fv_subst[OF this(2) len] show ?thesis unfolding \<tau> by (fastforce intro: wf_ty_subst)
       qed (use False \<theta> TyExprName.prems(2) in auto)
     qed
@@ -456,7 +456,7 @@ proof (induction n arbitrary: \<Gamma> A \<psi> \<tau> rule: less_induct)
 qed
 
 lemma resolve_type_wf:
-  "\<lbrakk> wf_class_table \<Sigma> ; wf_cxt \<Sigma> \<Gamma> ; resolve_type \<Sigma> \<Gamma> \<psi> = Ok \<tau> \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> \<tau> \<and> fv \<tau> \<subseteq> tyvars \<Gamma>"
+  "\<lbrakk> wf_cxt \<Sigma> \<Gamma> ; resolve_type \<Sigma> \<Gamma> \<psi> = Ok \<tau> \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> \<tau> \<and> fv \<tau> \<subseteq> tyvars \<Gamma>"
   by (simp add: resolve_type_def resolve_type'_wf)
 
 fun instantiate :: "field_scheme \<Rightarrow> ty list \<Rightarrow> (var \<times> ty) list"
