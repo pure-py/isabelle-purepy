@@ -1582,6 +1582,66 @@ lemma field_types_inst:
   shows "field_types \<Sigma> C (map (subst \<tau>s \<alpha>s) \<sigma>s) = map (subst \<tau>s \<alpha>s) (field_types \<Sigma> C \<sigma>s)"
   unfolding field_types_def instantiate_fields_subst[OF assms] by (simp add: case_prod_beta)
 
+lemma remaining_literal_literal:
+  "remaining \<Sigma> \<Gamma> (TyLiteral l') (PatLiteral l) = (if l' = l then TyPrim Never else TyLiteral l')"
+  by simp
+
+lemma remaining_literal_bool:
+  "remaining \<Sigma> \<Gamma> (TyPrim bool) (PatLiteral l) = (case l of LitBool b \<Rightarrow> TyLiteral (LitBool (\<not> b)) | _ \<Rightarrow> TyPrim bool)"
+  by (cases l) auto
+
+lemma remaining_literal_none:
+  "remaining \<Sigma> \<Gamma> (TyPrim NoneType) (PatLiteral l) = (if l = LitNone then TyPrim Never else TyPrim NoneType)"
+  by (cases l) auto
+
+lemma remaining_literal_prim: "p \<notin> {bool, NoneType} \<Longrightarrow> remaining \<Sigma> \<Gamma> (TyPrim p) (PatLiteral l) = TyPrim p"
+  by (cases p; cases l) auto
+
+lemma remaining_literal_other:
+  "\<lbrakk> \<not> is_union \<sigma> ; \<forall>l'. \<sigma> \<noteq> TyLiteral l' ; \<forall>p. \<sigma> \<noteq> TyPrim p \<rbrakk> \<Longrightarrow> remaining \<Sigma> \<Gamma> \<sigma> (PatLiteral l) = \<sigma>"
+  by (cases \<sigma>) auto
+
+(* Lookup in a fold of maps agreeing at a variable *)
+lemma foldr_fmadd_lookup_agree:
+  "\<lbrakk> j < length \<rho>s ; x \<in> fmdom' (\<rho>s ! j)
+   ; \<forall>k < length \<rho>s. x \<in> fmdom' (\<rho>s ! k) \<longrightarrow> fmlookup (\<rho>s ! k) x = fmlookup (\<rho>s ! j) x \<rbrakk>
+  \<Longrightarrow> fmlookup (foldr fmadd \<rho>s fmempty) x = fmlookup (\<rho>s ! j) x"
+proof (induction \<rho>s arbitrary: j)
+  case (Cons \<rho> \<rho>s)
+  show ?case
+  proof (cases "x \<in> fmdom' (foldr fmadd \<rho>s fmempty)")
+    case True
+    then obtain k where k: "k < length \<rho>s" and xk: "x \<in> fmdom' (\<rho>s ! k)"
+      by (auto simp: foldr_fmadd_dom' in_set_conv_nth)
+    have agree: "fmlookup (\<rho>s ! k') x = fmlookup (\<rho>s ! k) x" if "k' < length \<rho>s" and "x \<in> fmdom' (\<rho>s ! k')" for k'
+      using Cons.prems(3)[rule_format, of "Suc k'"] Cons.prems(3)[rule_format, of "Suc k"] that k xk by simp
+    have "\<forall>k' < length \<rho>s. x \<in> fmdom' (\<rho>s ! k') \<longrightarrow> fmlookup (\<rho>s ! k') x = fmlookup (\<rho>s ! k) x"
+      using agree by blast
+    then have "fmlookup (foldr fmadd \<rho>s fmempty) x = fmlookup (\<rho>s ! k) x" by (rule Cons.IH[OF k xk])
+    moreover have "fmlookup (\<rho>s ! k) x = fmlookup ((\<rho> # \<rho>s) ! j) x"
+      using Cons.prems(3)[rule_format, of "Suc k"] k xk by simp
+    ultimately show ?thesis using True by (simp add: fmdom'_alt_def)
+  next
+    case False
+    with Cons.prems have "x \<in> fmdom' \<rho>" by (cases j) (auto simp: foldr_fmadd_dom' dest!: nth_mem)
+    with False Cons.prems(3) show ?thesis by (auto simp: fmdom'_alt_def)
+  qed
+qed simp
+
+lemma UN_set_nth: "\<Union> (f ` set xs) = (\<Union>j \<in> {..<length xs}. f (xs ! j))"
+proof (intro set_eqI iffI)
+  fix x
+  assume "x \<in> \<Union> (f ` set xs)"
+  then obtain y where "y \<in> set xs" and "x \<in> f y" by blast
+  then obtain j where "j < length xs" and "y = xs ! j" by (auto simp: in_set_conv_nth)
+  with \<open>x \<in> f y\<close> show "x \<in> (\<Union>j \<in> {..<length xs}. f (xs ! j))" by auto
+next
+  fix x
+  assume "x \<in> (\<Union>j \<in> {..<length xs}. f (xs ! j))"
+  then obtain j where "j < length xs" and "x \<in> f (xs ! j)" by auto
+  then show "x \<in> \<Union> (f ` set xs)" using nth_mem by blast
+qed
+
 lemma foldr_match_append:
   "foldr seq_compose_match (xs @ ys) (Match fmempty)
    = seq_compose_match (foldr seq_compose_match xs (Match fmempty)) (foldr seq_compose_match ys (Match fmempty))"
@@ -1622,6 +1682,30 @@ lemma match_dict_foldr:
    = foldr seq_compose_match (map (\<lambda>(w, p). match \<rho> (node p) (the (map_of \<delta> w))) kps) (Match fmempty)"
   by (induction kps) auto
 
+(* Literal at an instance of a type other than a union or a type variable: the literal type below the type *)
+lemma lit_comparable:
+  assumes "\<turnstile> VLit l : Ty (inst \<eta> \<sigma>)" and "\<forall>x. l \<noteq> LitFloat x" and "\<not> is_union \<sigma>" and "\<forall>\<beta>. \<sigma> \<noteq> TyVar \<beta>"
+  shows "\<Sigma> \<turnstile> TyLiteral l <: \<sigma>"
+proof -
+  from wf_lit_sub[OF assms(1)] assms(2) have "\<Sigma> \<turnstile> TyLiteral l <: inst \<eta> \<sigma>" by auto
+  with assms(3, 4) show ?thesis by (cases \<sigma>) (auto dest!: subty_structured_inv)
+qed
+
+(* Number at an instance of a type other than a union or a type variable: the type comparable with float *)
+lemma number_comparable_float:
+  assumes "\<turnstile> VLit l : Ty (inst \<eta> \<sigma>)" and "is_number (VLit l)" and "\<not> is_union \<sigma>" and "\<forall>\<beta>. \<sigma> \<noteq> TyVar \<beta>"
+  shows "\<Sigma> \<turnstile> TyPrim float <: \<sigma> \<or> \<Sigma> \<turnstile> \<sigma> <: TyPrim float"
+proof (cases \<sigma>)
+  case (TyPrim p)
+  have "\<not> \<Sigma> \<turnstile> TyLiteral l <: TyPrim Sized" using assms(2) subty_sized_inv(1)[OF _ refl] by (cases l) fastforce+
+  with wf_lit_sub[OF assms(1)] assms(2) show ?thesis
+    unfolding TyPrim by (cases p; cases l) (auto simp: subty_prim_iff intro: SubtyObject SubtyRefl SubtyIntFloat)
+next
+  case (TyLiteral l')
+  with wf_lit_sub[OF assms(1)] have "l' = l" by (auto dest!: subty_literal_inv')
+  with assms(2) show ?thesis unfolding TyLiteral by (cases l) (auto intro!: SubtyLiteral intro: SubtyRefl SubtyIntFloat)
+qed (use assms in \<open>auto dest!: wf_lit_sub subty_structured_inv\<close>)
+
 (* Sequence of sub-patterns matched against values, each sound against its type: the sequence sound *)
 lemma match_seq_sound:
   assumes pus: "set pus = set (zip fps us)" and len: "length fps = length us" "length fps = length \<Delta>s"
@@ -1634,7 +1718,116 @@ lemma match_seq_sound:
     and "m = Match \<rho>' \<Longrightarrow> fmdom' \<rho>' = fmdom' (fold fmadd \<Delta>s fmempty)
       \<and> (\<forall>x \<upsilon>. fmlookup (fold fmadd \<Delta>s fmempty) x = Some \<upsilon> \<longrightarrow> (\<exists>u. fmlookup \<rho>' x = Some u \<and> \<turnstile> u : Ty (inst \<eta> \<upsilon>)))
       \<and> (\<forall>i < length fps. \<exists>\<rho>\<^sub>i. match \<rho> (node (fps ! i)) (us ! i) = Match \<rho>\<^sub>i)"
-  sorry
+proof -
+  let ?ms = "map (\<lambda>(p, u). match \<rho> (node p) u) pus"
+  have index: "\<exists>i < length fps. p = fps ! i \<and> u = us ! i" if "(p, u) \<in> set pus" for p u
+    using that pus len(1) by (auto simp: in_set_zip)
+  have index': "(fps ! i, us ! i) \<in> set pus" if "i < length fps" for i
+    using that pus len(1) by (auto simp: in_set_zip)
+  have disjoint: "binds (node (fps ! i)) \<inter> binds (node (fps ! j)) = {}"
+    if "i < length fps" and "j < length fps" and "i \<noteq> j" for i j
+    using distinct_concat_nth[OF once, of i j] that finite_binds_pat by simp
+  show "\<not> prevented \<kappa>" if "m = MatchAborts \<kappa>" for \<kappa>
+  proof -
+    from foldr_match_Aborts[OF that[unfolded m_def]] obtain p u where "(p, u) \<in> set pus"
+      and "match \<rho> (node p) u = MatchAborts \<kappa>"
+      by auto
+    with index[OF this(1)] sound show ?thesis by (auto simp: pat_sound_def)
+  qed
+  show "\<exists>i < length fps. match \<rho> (node (fps ! i)) (us ! i) = NoMatch" if "m = NoMatch"
+  proof -
+    from foldr_match_NoMatch[OF that[unfolded m_def]] obtain p u where "(p, u) \<in> set pus"
+      and "match \<rho> (node p) u = NoMatch"
+      by auto
+    with index[OF this(1)] show ?thesis by auto
+  qed
+  show "fmdom' \<rho>' = fmdom' (fold fmadd \<Delta>s fmempty)
+      \<and> (\<forall>x \<upsilon>. fmlookup (fold fmadd \<Delta>s fmempty) x = Some \<upsilon> \<longrightarrow> (\<exists>u. fmlookup \<rho>' x = Some u \<and> \<turnstile> u : Ty (inst \<eta> \<upsilon>)))
+      \<and> (\<forall>i < length fps. \<exists>\<rho>\<^sub>i. match \<rho> (node (fps ! i)) (us ! i) = Match \<rho>\<^sub>i)"
+    if "m = Match \<rho>'"
+  proof -
+    from foldr_match_Match[OF that[unfolded m_def]] obtain \<rho>s
+      where rel: "list_all2 (\<lambda>m \<rho>. m = Match \<rho>) ?ms \<rho>s" and \<rho>': "\<rho>' = foldr fmadd \<rho>s fmempty"
+      by blast
+    have len\<rho>s: "length \<rho>s = length pus" using list_all2_lengthD[OF rel] by simp
+    have at: "match \<rho> (node (fst (pus ! j))) (snd (pus ! j)) = Match (\<rho>s ! j)" if "j < length pus" for j
+      using rel that by (auto simp: list_all2_conv_all_nth case_prod_beta)
+    (* Runtime result j: the result for the sub-pattern at index i, with its domain *)
+    have at_i: "\<exists>i < length fps. fst (pus ! j) = fps ! i \<and> snd (pus ! j) = us ! i
+                 \<and> fmdom' (\<rho>s ! j) = fmdom' (\<Delta>s ! i)
+                 \<and> (\<forall>x \<upsilon>. fmlookup (\<Delta>s ! i) x = Some \<upsilon> \<longrightarrow> (\<exists>u. fmlookup (\<rho>s ! j) x = Some u \<and> \<turnstile> u : Ty (inst \<eta> \<upsilon>)))"
+      if j: "j < length pus" for j
+    proof -
+      from index[of "fst (pus ! j)" "snd (pus ! j)"] j obtain i where i: "i < length fps"
+        and p: "fst (pus ! j) = fps ! i" and u: "snd (pus ! j) = us ! i"
+        by auto
+      from sound[OF i] at[OF j] have "fmdom' (\<rho>s ! j) = fmdom' (\<Delta>s ! i)
+        \<and> (\<forall>x \<upsilon>. fmlookup (\<Delta>s ! i) x = Some \<upsilon> \<longrightarrow> (\<exists>u. fmlookup (\<rho>s ! j) x = Some u \<and> \<turnstile> u : Ty (inst \<eta> \<upsilon>)))"
+        unfolding pat_sound_def p u by blast
+      with i p u show ?thesis by blast
+    qed
+    have matched: "\<exists>\<rho>\<^sub>i. match \<rho> (node (fps ! i)) (us ! i) = Match \<rho>\<^sub>i" if i: "i < length fps" for i
+    proof -
+      from index'[OF i] obtain j where "j < length pus" and "pus ! j = (fps ! i, us ! i)" by (auto simp: in_set_conv_nth)
+      with at[OF this(1)] show ?thesis by auto
+    qed
+    have dom': "fmdom' \<rho>' = fmdom' (fold fmadd \<Delta>s fmempty)"
+    proof -
+      have eq: "fmdom' (\<rho>s ! j) = binds (node (fst (pus ! j)))" if "j < length pus" for j
+        using at_i[OF that] dom by auto
+      have "fmdom' \<rho>' = (\<Union>j \<in> {..<length pus}. fmdom' (\<rho>s ! j))"
+        unfolding \<rho>' foldr_fmadd_dom' UN_set_nth len\<rho>s by simp
+      also have "\<dots> = (\<Union>j \<in> {..<length pus}. (\<lambda>(p, u). binds (node p)) (pus ! j))"
+        using eq by (intro SUP_cong) (auto simp: case_prod_beta)
+      also have "\<dots> = \<Union> ((\<lambda>(p, u). binds (node p)) ` set pus)" by (simp only: UN_set_nth)
+      also have "\<dots> = \<Union> ((\<lambda>(p, u). binds (node p)) ` set (zip fps us))" by (simp add: pus)
+      also have "\<dots> = (\<Union>i \<in> {..<length fps}. binds (node (fps ! i)))"
+        unfolding UN_set_nth using len(1) by (simp add: case_prod_beta)
+      also have "\<dots> = (\<Union>i \<in> {..<length \<Delta>s}. fmdom' (\<Delta>s ! i))" using dom len(2) by (intro SUP_cong) auto
+      also have "\<dots> = fmdom' (fold fmadd \<Delta>s fmempty)" by (simp add: fold_fmadd_dom' UN_set_nth)
+      finally show ?thesis .
+    qed
+    have look: "\<exists>u. fmlookup \<rho>' x = Some u \<and> \<turnstile> u : Ty (inst \<eta> \<upsilon>)" if \<upsilon>: "fmlookup (fold fmadd \<Delta>s fmempty) x = Some \<upsilon>"
+      for x \<upsilon>
+    proof -
+      from \<upsilon> have "x \<in> fmdom' (fold fmadd \<Delta>s fmempty)" by (simp add: fmlookup_dom'_iff)
+      then obtain i where i: "i < length \<Delta>s" and xi: "x \<in> fmdom' (\<Delta>s ! i)"
+        by (auto simp: fold_fmadd_dom' in_set_conv_nth)
+      have others: "x \<notin> fmdom' (\<Delta>s ! k)" if "k < length \<Delta>s" and "k \<noteq> i" for k
+        using disjoint[of i k] dom i that len(2) xi by auto
+      from fold_fmadd_lookup[OF i xi] others \<upsilon> have \<upsilon>i: "fmlookup (\<Delta>s ! i) x = Some \<upsilon>" by auto
+      from index'[of i] i len(2) obtain j where j: "j < length pus" and pj: "pus ! j = (fps ! i, us ! i)"
+        by (auto simp: in_set_conv_nth)
+      from at_i[OF j] pj obtain i' where i': "i' < length fps" and "fps ! i = fps ! i'" and "us ! i = us ! i'"
+        and domj: "fmdom' (\<rho>s ! j) = fmdom' (\<Delta>s ! i')"
+        and lookj: "\<forall>x \<upsilon>. fmlookup (\<Delta>s ! i') x = Some \<upsilon> \<longrightarrow> (\<exists>u. fmlookup (\<rho>s ! j) x = Some u \<and> \<turnstile> u : Ty (inst \<eta> \<upsilon>))"
+        by auto
+      have "i' = i"
+      proof (rule ccontr)
+        assume "i' \<noteq> i"
+        with others[of i'] i' len(2) have "x \<notin> fmdom' (\<Delta>s ! i')" by simp
+        moreover have "x \<in> fmdom' (\<Delta>s ! i')"
+          using dom[of i] dom[of i'] \<open>fps ! i = fps ! i'\<close> \<upsilon>i i i' len(2) by (auto simp: fmlookup_dom'_iff)
+        ultimately show False ..
+      qed
+      with lookj \<upsilon>i obtain u where u: "fmlookup (\<rho>s ! j) x = Some u" and typed: "\<turnstile> u : Ty (inst \<eta> \<upsilon>)" by blast
+      have agree: "fmlookup (\<rho>s ! k) x = fmlookup (\<rho>s ! j) x" if k: "k < length \<rho>s" and xk: "x \<in> fmdom' (\<rho>s ! k)" for k
+      proof -
+        from at_i[OF k[unfolded len\<rho>s]] obtain i'' where i'': "i'' < length fps" and pk: "fst (pus ! k) = fps ! i''"
+          and uk: "snd (pus ! k) = us ! i''" and domk: "fmdom' (\<rho>s ! k) = fmdom' (\<Delta>s ! i'')"
+          by blast
+        with xk others i len(2) have "i'' = i" by (cases "i'' = i") auto
+        with at[OF k[unfolded len\<rho>s]] at[OF j] pj pk uk show ?thesis by simp
+      qed
+      have all: "\<forall>k < length \<rho>s. x \<in> fmdom' (\<rho>s ! k) \<longrightarrow> fmlookup (\<rho>s ! k) x = fmlookup (\<rho>s ! j) x"
+        using agree by blast
+      have "fmlookup \<rho>' x = fmlookup (\<rho>s ! j) x"
+        unfolding \<rho>' using j len\<rho>s domj \<open>i' = i\<close> xi by (intro foldr_fmadd_lookup_agree[OF _ _ all]) simp_all
+      with u typed show ?thesis by simp
+    qed
+    from dom' look matched show ?thesis by blast
+  qed
+qed
 
 lemma check_pat_sound_aux:
   "\<lbrakk> \<Sigma>' = \<Sigma> ; check_pat \<Sigma>' \<Gamma> p \<tau> = Ok \<Delta> ; \<eta> \<turnstile> \<rho> : \<Gamma> ; wf_ty \<Sigma> \<tau> ; fv \<tau> \<subseteq> fst ` set \<eta> ; \<turnstile> v : Ty (inst \<eta> \<tau>) \<rbrakk>
@@ -1644,16 +1837,187 @@ lemma check_pat_sound_aux:
   \<Longrightarrow> pat_sound \<Gamma> \<eta> \<rho> (node p') \<tau>' \<Delta>' v"
 proof (induction \<Sigma>' \<Gamma> p \<tau> and \<Sigma>' \<Gamma> p' \<tau>' arbitrary: \<Delta> v and \<Delta>' v rule: check_pat_check_pat_at.induct)
   case (1 \<Sigma>' \<Gamma> \<tau>)
-  then show ?case sorry
+  note env = "1.prems"(3)
+  from "1.prems"(2) have \<Delta>: "\<Delta> = fmempty" by simp
+  from wf_val_inst_disjunct[OF "1.prems"(6)] obtain \<sigma> where \<sigma>: "\<sigma> \<in> set (disjuncts \<tau>)" and v: "\<turnstile> v : Ty (inst \<eta> \<sigma>)"
+    by blast
+  have "\<turnstile> v : Ty (inst \<eta> (matched_as \<Sigma> \<Gamma> \<tau> PatWildcard))"
+    using matched_as_lift[OF \<sigma> "1.prems"(2)[unfolded "1.prems"(1)] wf_env_wf_cxt[OF env] "1.prems"(4) wf_env_wf_inst[OF env]]
+      v matched_as_wild[OF disjuncts_nonunion[OF \<sigma>]]
+    by simp
+  then show ?case by (simp add: pat_sound_def \<Delta>)
 next
   case (2 \<Sigma>' \<Gamma> x \<tau>)
-  then show ?case sorry
+  note env = "2.prems"(3)
+  from "2.prems"(2) have \<Delta>: "\<Delta> = fmupd x \<tau> fmempty" by (auto simp: bind_sum_Ok)
+  from wf_val_inst_disjunct[OF "2.prems"(6)] obtain \<sigma> where \<sigma>: "\<sigma> \<in> set (disjuncts \<tau>)" and v: "\<turnstile> v : Ty (inst \<eta> \<sigma>)"
+    by blast
+  have "\<turnstile> v : Ty (inst \<eta> (matched_as \<Sigma> \<Gamma> \<tau> (PatVar x)))"
+    using matched_as_lift[OF \<sigma> "2.prems"(2)[unfolded "2.prems"(1)] wf_env_wf_cxt[OF env] "2.prems"(4) wf_env_wf_inst[OF env]]
+      v matched_as_var[OF disjuncts_nonunion[OF \<sigma>]]
+    by simp
+  with "2.prems"(6) show ?case by (simp add: pat_sound_def \<Delta>)
 next
   case (3 \<Sigma>' \<Gamma> p x \<tau>)
-  then show ?case sorry
+  note env = "3.prems"(3)
+  from "3.prems"(2) obtain \<Delta>\<^sub>p where unb: "check_unbound \<Gamma> x = Ok ()"
+    and once: "ensure (x \<notin> binds (node p)) (SelectsNoRule JudgementCheckPattern (PatternBindsTwice x)) = Ok ()"
+    and chk: "check_pat_at \<Sigma>' \<Gamma> p \<tau> = Ok \<Delta>\<^sub>p"
+    and \<Delta>: "\<Delta> = \<Delta>\<^sub>p ++\<^sub>f fmupd x (matched_as \<Sigma>' \<Gamma> \<tau> (node p)) fmempty"
+    by (auto simp: bind_sum_Ok)
+  from once have x: "x \<notin> binds (node p)" by (simp add: ensure_def split: if_splits)
+  note IH = "3.IH"[OF unb once "3.prems"(1) chk "3.prems"(3-6), unfolded pat_sound_def]
+  have dom\<^sub>p: "fmdom' \<Delta>\<^sub>p = binds (node p)"
+    using check_pat_wf(2)[OF wf_class_table wf_env_wf_cxt[OF env] "3.prems"(4) chk[unfolded "3.prems"(1)]] by simp
+  show ?case
+    unfolding pat_sound_def
+  proof (intro conjI)
+    show "\<forall>\<kappa>. match \<rho> (PatAs p x) v = MatchAborts \<kappa> \<longrightarrow> \<not> prevented \<kappa>"
+      using IH by (cases "match \<rho> (node p) v") auto
+    show "match \<rho> (PatAs p x) v = NoMatch \<longrightarrow> \<turnstile> v : Ty (inst \<eta> (remaining \<Sigma> \<Gamma> \<tau> (PatAs p x)))"
+      using IH by (cases "match \<rho> (node p) v") (auto simp: remaining_as)
+    show "\<forall>\<rho>'. match \<rho> (PatAs p x) v = Match \<rho>' \<longrightarrow> fmdom' \<rho>' = fmdom' \<Delta>
+          \<and> (\<forall>y \<sigma>. fmlookup \<Delta> y = Some \<sigma> \<longrightarrow> (\<exists>u. fmlookup \<rho>' y = Some u \<and> \<turnstile> u : Ty (inst \<eta> \<sigma>)))
+          \<and> \<turnstile> v : Ty (inst \<eta> (matched_as \<Sigma> \<Gamma> \<tau> (PatAs p x)))"
+    proof (intro allI impI)
+    fix \<rho>'
+    assume m: "match \<rho> (PatAs p x) v = Match \<rho>'"
+    then obtain \<rho>\<^sub>p where mp: "match \<rho> (node p) v = Match \<rho>\<^sub>p" and \<rho>': "\<rho>' = \<rho>\<^sub>p ++\<^sub>f fmupd x v fmempty"
+      by (cases "match \<rho> (node p) v") auto
+    with IH have dom: "fmdom' \<rho>\<^sub>p = fmdom' \<Delta>\<^sub>p"
+      and look: "\<forall>y \<sigma>. fmlookup \<Delta>\<^sub>p y = Some \<sigma> \<longrightarrow> (\<exists>u. fmlookup \<rho>\<^sub>p y = Some u \<and> \<turnstile> u : Ty (inst \<eta> \<sigma>))"
+      and matched: "\<turnstile> v : Ty (inst \<eta> (matched_as \<Sigma> \<Gamma> \<tau> (node p)))"
+      by auto
+    show "fmdom' \<rho>' = fmdom' \<Delta>
+          \<and> (\<forall>y \<sigma>. fmlookup \<Delta> y = Some \<sigma> \<longrightarrow> (\<exists>u. fmlookup \<rho>' y = Some u \<and> \<turnstile> u : Ty (inst \<eta> \<sigma>)))
+          \<and> \<turnstile> v : Ty (inst \<eta> (matched_as \<Sigma> \<Gamma> \<tau> (PatAs p x)))"
+      using dom look matched x dom\<^sub>p unfolding \<rho>' \<Delta> "3.prems"(1) matched_as_as
+      by (auto simp: fmdom'_alt_def fmlookup_dom'_iff split: if_splits)
+    qed
+  qed
 next
   case (4 \<Sigma>' \<Gamma> l \<tau>)
-  then show ?case sorry
+  note env = "4.prems"(3)
+  from "4.prems"(2) have \<Delta>: "\<Delta> = fmempty" and no_float: "\<not> (is_int_lit l \<and> has_float_values \<Sigma> \<tau>)"
+    by (auto simp: bind_sum_Ok ensure_def "4.prems"(1) split: if_splits)
+  from wf_val_inst_disjunct[OF "4.prems"(6)] obtain \<sigma> where \<sigma>: "\<sigma> \<in> set (disjuncts \<tau>)" and v: "\<turnstile> v : Ty (inst \<eta> \<sigma>)"
+    by blast
+  note nonunion = disjuncts_nonunion[OF \<sigma>]
+  note lift_m = matched_as_lift[OF \<sigma> "4.prems"(2)[unfolded "4.prems"(1)] wf_env_wf_cxt[OF env] "4.prems"(4)
+      wf_env_wf_inst[OF env]]
+  note lift_r = remaining_lift[OF \<sigma> "4.prems"(4) wf_env_wf_inst[OF env]]
+  have not_float: "\<not> (is_int_lit l \<and> is_float v)"
+  proof
+    assume "is_int_lit l \<and> is_float v"
+    then obtain x where "v = VLit (LitFloat x)" by (cases v) (auto elim: is_float.elims)
+    with v float_has_values has_float_values_disjunct[OF \<sigma>] no_float \<open>is_int_lit l \<and> is_float v\<close> show False by blast
+  qed
+  show ?case
+    unfolding pat_sound_def
+  proof (intro conjI)
+    show "\<forall>\<kappa>. match \<rho> (PatLiteral l) v = MatchAborts \<kappa> \<longrightarrow> \<not> prevented \<kappa>"
+    proof (intro allI impI)
+      fix \<kappa>
+      assume "match \<rho> (PatLiteral l) v = MatchAborts \<kappa>"
+      with not_float have "eq (VLit l) v = Aborts \<kappa>" by (auto split: if_splits result.splits bool.splits)
+      with eq_abort(1)[OF this] show "\<not> prevented \<kappa>" by simp
+    qed
+    show "match \<rho> (PatLiteral l) v = NoMatch \<longrightarrow> \<turnstile> v : Ty (inst \<eta> (remaining \<Sigma> \<Gamma> \<tau> (PatLiteral l)))"
+    proof
+    assume no: "match \<rho> (PatLiteral l) v = NoMatch"
+    have "\<turnstile> v : Ty (inst \<eta> (remaining \<Sigma> \<Gamma> \<sigma> (PatLiteral l)))"
+    proof (cases \<sigma>)
+      case (TyLiteral l')
+      with v have "v = VLit l'" by (auto dest: wf_val_literal)
+      with no not_float have "l' \<noteq> l" by (cases l) (auto split: if_splits result.splits bool.splits)
+      with \<open>v = VLit l'\<close> show ?thesis unfolding TyLiteral by (simp add: ValLit)
+    next
+      case (TyPrim p)
+      show ?thesis
+      proof (cases "p \<in> {bool, NoneType}")
+        case True
+        then have "p = bool \<or> p = NoneType" by simp
+        then show ?thesis
+        proof
+          assume p: "p = bool"
+          with v TyPrim obtain b' where v': "v = VLit (LitBool b')" by (auto dest: wf_val_bool)
+          show ?thesis
+          proof (cases l)
+            case (LitBool b)
+            with no v' have "b' \<noteq> b" by (auto split: if_splits bool.splits result.splits)
+            with v' show ?thesis unfolding TyPrim p LitBool by (simp add: remaining_literal_bool ValLit)
+          qed (use v TyPrim p in \<open>simp_all add: remaining_literal_bool\<close>)
+        next
+          assume p: "p = NoneType"
+          with v TyPrim have v': "v = VLit LitNone" by (auto dest: wf_val_none)
+          with no have "l \<noteq> LitNone" by (cases l) (auto split: if_splits)
+          with v TyPrim p show ?thesis by (simp add: remaining_literal_none)
+        qed
+      next
+        case False
+        with v TyPrim show ?thesis by (simp add: remaining_literal_prim)
+      qed
+    qed (use v nonunion in \<open>simp_all add: remaining_literal_other\<close>)
+    then show "\<turnstile> v : Ty (inst \<eta> (remaining \<Sigma> \<Gamma> \<tau> (PatLiteral l)))" by (rule lift_r)
+    qed
+    show "\<forall>\<rho>'. match \<rho> (PatLiteral l) v = Match \<rho>' \<longrightarrow> fmdom' \<rho>' = fmdom' \<Delta>
+          \<and> (\<forall>x \<sigma>. fmlookup \<Delta> x = Some \<sigma> \<longrightarrow> (\<exists>u. fmlookup \<rho>' x = Some u \<and> \<turnstile> u : Ty (inst \<eta> \<sigma>)))
+          \<and> \<turnstile> v : Ty (inst \<eta> (matched_as \<Sigma> \<Gamma> \<tau> (PatLiteral l)))"
+    proof (intro allI impI)
+    fix \<rho>'
+    assume m: "match \<rho> (PatLiteral l) v = Match \<rho>'"
+    with not_float have \<rho>': "\<rho>' = fmempty" and eq: "eq (VLit l) v = Val True"
+      by (auto split: if_splits result.splits bool.splits)
+    from eq obtain l' where v': "v = VLit l'" and eq_lit: "eq_lit l l' = Val True" by (cases v) auto
+    have "\<turnstile> v : Ty (inst \<eta> (matched_as \<Sigma> \<Gamma> \<sigma> (PatLiteral l)))"
+    proof (cases "\<exists>\<beta>. \<sigma> = TyVar \<beta>")
+      case True
+      with v show ?thesis by auto
+    next
+      case False
+      note matched = matched_as_literal[OF nonunion, of \<Sigma> \<Gamma> l] False
+      show ?thesis
+      proof (cases l)
+        case (LitFloat x)
+        from eq_lit_float[OF eq_lit[unfolded LitFloat]] have number: "is_number (VLit l')" .
+        then have float: "\<turnstile> v : Ty (TyPrim float)" unfolding v' by (cases l') (auto intro: wf_int_float ValLitFloat)
+        from number_comparable_float[OF v[unfolded v'] number nonunion] False
+        consider "\<Sigma> \<turnstile> TyPrim float <: \<sigma>" | "\<Sigma> \<turnstile> \<sigma> <: TyPrim float" by blast
+        then show ?thesis
+          using matched float v unfolding LitFloat by cases (auto simp: meet_float[OF nonunion])
+      next
+        case LitInt
+        with not_float v' have "\<forall>x. l' \<noteq> LitFloat x" by auto
+        with eq_lit_same[OF eq_lit] LitInt have "l' = l" by auto
+        with v' have lit: "\<turnstile> v : Ty (TyLiteral l)" by (simp add: ValLit)
+        from lit_comparable[OF v[unfolded v' \<open>l' = l\<close>] _ nonunion] False LitInt have "\<Sigma> \<turnstile> TyLiteral l <: \<sigma>" by auto
+        with matched lit show ?thesis unfolding LitInt by (simp add: meet_literal[OF nonunion])
+      next
+        case LitString
+        with eq_lit have "l' = l" by (cases l') auto
+        with v' have lit: "\<turnstile> v : Ty (TyLiteral l)" by (simp add: ValLit)
+        from lit_comparable[OF v[unfolded v' \<open>l' = l\<close>] _ nonunion] False LitString have "\<Sigma> \<turnstile> TyLiteral l <: \<sigma>" by auto
+        with matched lit show ?thesis unfolding LitString by (simp add: meet_literal[OF nonunion])
+      next
+        case LitBool
+        with eq_lit have "l' = l" by (cases l') auto
+        with v' have lit: "\<turnstile> v : Ty (TyLiteral l)" by (simp add: ValLit)
+        from lit_comparable[OF v[unfolded v' \<open>l' = l\<close>] _ nonunion] False LitBool have "\<Sigma> \<turnstile> TyLiteral l <: \<sigma>" by auto
+        with matched lit show ?thesis unfolding LitBool by (simp add: meet_literal[OF nonunion])
+      next
+        case LitNone
+        with eq_lit have "l' = l" by (cases l') auto
+        with v' have lit: "\<turnstile> v : Ty (TyLiteral l)" by (simp add: ValLit)
+        from lit_comparable[OF v[unfolded v' \<open>l' = l\<close>] _ nonunion] False LitNone have "\<Sigma> \<turnstile> TyLiteral l <: \<sigma>" by auto
+        with matched lit show ?thesis unfolding LitNone by (simp add: meet_literal[OF nonunion])
+      qed
+    qed
+    then show "fmdom' \<rho>' = fmdom' \<Delta>
+          \<and> (\<forall>x \<sigma>. fmlookup \<Delta> x = Some \<sigma> \<longrightarrow> (\<exists>u. fmlookup \<rho>' x = Some u \<and> \<turnstile> u : Ty (inst \<eta> \<sigma>)))
+          \<and> \<turnstile> v : Ty (inst \<eta> (matched_as \<Sigma> \<Gamma> \<tau> (PatLiteral l)))"
+      using lift_m by (simp add: \<rho>' \<Delta>)
+    qed
+  qed
 next
   case (5 \<Sigma>' \<Gamma> ps \<tau>)
   then show ?case sorry
