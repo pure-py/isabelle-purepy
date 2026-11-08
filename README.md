@@ -97,6 +97,7 @@ Run the `Release` GitHub Action manually. The version number of a release is tha
 | `soundness/Extension.thy`    | Stability of the type checker under extension of the class table                      |
 | `soundness/ValueTyping.thy`  | Value and environment typing                                                          |
 | `soundness/ResultTyping.thy` | Typing of evaluation results; canonical forms of values                               |
+| `soundness/Instances.thy`    | Instances of a class along its chain of base classes, and matching of type arguments  |
 | `soundness/Expressions.thy`  | Soundness of evaluation of expressions other than calls                               |
 | `soundness/Calls.thy`        | Soundness of call evaluation                                                          |
 | `soundness/Dispatch.thy`     | Soundness of pattern matching and of dispatch over the cases of a match statement     |

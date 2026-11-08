@@ -40,6 +40,7 @@ session "isabelle-purepy-soundness" in "soundness" = "isabelle-purepy" +
     Extension
     ValueTyping
     ResultTyping
+    Instances
     Expressions
     Calls
     Dispatch
