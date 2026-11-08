@@ -731,4 +731,157 @@ next
   then show ?case by (cases \<sigma>) (auto split: if_splits)
 qed auto
 
+
+context evaluation
+begin
+
+subsection \<open>Values at types\<close>
+
+lemma wf_val_never: "\<turnstile> v : Ty (TyPrim Never) \<Longrightarrow> False"
+proof -
+  assume "\<turnstile> v : Ty (TyPrim Never)"
+  from wf_val_intro(1)[OF this] obtain \<sigma> where "intro_typed v \<sigma>" and "\<Sigma> \<turnstile> \<sigma> <: TyPrim Never" by blast
+  with intro_typed_nonunion[OF this(1)] subty_never_inv show False by blast
+qed
+
+(* Value at an instance of a type: at the instance of one of its disjuncts *)
+lemma wf_val_inst_disjunct: "\<turnstile> v : Ty (inst \<eta> \<tau>) \<Longrightarrow> \<exists>\<sigma> \<in> set (disjuncts \<tau>). \<turnstile> v : Ty (inst \<eta> \<sigma>)"
+  by (induction \<tau>) (auto dest: wf_val_union)
+
+lemma disjunct_subty: "\<sigma> \<in> set (disjuncts \<tau>) \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: \<tau>"
+  by (induction \<tau>) (auto intro: SubtyRefl SubtyUnionLeft SubtyUnionRight)
+
+(* Introduction type of a value, below each of its types *)
+lemma wf_list_sub: "\<turnstile> VList vs : Ty \<tau> \<Longrightarrow> \<exists>\<upsilon>. \<Sigma> \<turnstile> TyList \<upsilon> <: \<tau>"
+  using wf_val_intro(1) by fastforce
+
+lemma wf_tuple_sub: "\<turnstile> VTuple vs : Ty \<tau> \<Longrightarrow> \<exists>\<upsilon>s. \<Sigma> \<turnstile> TyTuple \<upsilon>s <: \<tau>"
+  using wf_val_intro(1) by fastforce
+
+lemma wf_dict_sub: "\<turnstile> VDict \<delta> : Ty \<tau> \<Longrightarrow> \<exists>\<upsilon>. \<Sigma> \<turnstile> TyDict \<upsilon> <: \<tau>"
+  using wf_val_intro(1) by fastforce
+
+lemma wf_lit_sub:
+  "\<turnstile> VLit l : Ty \<tau> \<Longrightarrow> \<Sigma> \<turnstile> TyLiteral l <: \<tau> \<or> (\<exists>x. l = LitFloat x \<and> \<Sigma> \<turnstile> TyPrim float <: \<tau>)"
+  using wf_val_intro(1) by fastforce
+
+(* Range class: no base class, no type parameters, no other ancestor *)
+lemma range_base: "base \<Sigma> range_class = None"
+  using range_lookup by (simp add: base_def predefined_classes_def)
+
+lemma range_params: "type_params \<Sigma> range_class = []"
+  using range_lookup by (simp add: type_params_def predefined_classes_def)
+
+lemma range_ancestors: "instantiated_ancestors \<Sigma> range_class \<tau>s = [(range_class, \<tau>s)]"
+proof -
+  have "range_class |\<in>| fmdom \<Sigma>" using range_lookup by (simp add: predefined_classes_def fmlookup_dom_iff)
+  from fcard_fmdom_Suc[OF this] show ?thesis by (auto simp: instantiated_ancestors_def range_base)
+qed
+
+lemma wf_range_sub: "\<turnstile> VObject range_class xvs : Ty \<tau> \<Longrightarrow> \<Sigma> \<turnstile> TyClass range_class [] <: \<tau>"
+  by (auto elim!: wf_object simp: range_params)
+
+(* Value of a kind at an instance of a type: the type has values of that kind *)
+lemma list_has_values: "\<turnstile> VList vs : Ty (inst \<eta> \<sigma>) \<Longrightarrow> has_values \<Sigma> ListKind \<sigma>"
+proof (induction \<sigma>)
+  case (TyUnion \<sigma> \<tau>)
+  then show ?case by (auto dest: wf_val_union)
+next
+  case (TyPrim p)
+  from wf_list_sub[OF TyPrim.prems] obtain \<upsilon> where "\<Sigma> \<turnstile> TyList \<upsilon> <: TyPrim p" by auto
+  then show ?case by (cases p) (auto simp: subty_prim_iff intro: SubtyObject SubtySized)
+qed (auto dest!: wf_list_sub subty_structured_inv)
+
+lemma tuple_has_values: "\<turnstile> VTuple vs : Ty (inst \<eta> \<sigma>) \<Longrightarrow> has_values \<Sigma> TupleKind \<sigma>"
+proof (induction \<sigma>)
+  case (TyUnion \<sigma> \<tau>)
+  then show ?case by (auto dest: wf_val_union)
+next
+  case (TyPrim p)
+  from wf_tuple_sub[OF TyPrim.prems] obtain \<upsilon>s where "\<Sigma> \<turnstile> TyTuple \<upsilon>s <: TyPrim p" by auto
+  then show ?case by (cases p) (auto simp: subty_prim_iff intro: SubtyObject SubtySized)
+qed (auto dest!: wf_tuple_sub subty_structured_inv)
+
+lemma dict_has_values: "\<turnstile> VDict \<delta> : Ty (inst \<eta> \<sigma>) \<Longrightarrow> has_dict_values \<Sigma> \<sigma>"
+proof (induction \<sigma>)
+  case (TyUnion \<sigma> \<tau>)
+  then show ?case by (auto dest: wf_val_union)
+next
+  case (TyPrim p)
+  from wf_dict_sub[OF TyPrim.prems] obtain \<upsilon> where "\<Sigma> \<turnstile> TyDict \<upsilon> <: TyPrim p" by auto
+  then show ?case by (cases p) (auto simp: subty_prim_iff intro: SubtyObject SubtySized)
+qed (auto dest!: wf_dict_sub subty_structured_inv)
+
+lemma range_has_values: "\<turnstile> VObject range_class xvs : Ty (inst \<eta> \<sigma>) \<Longrightarrow> has_values \<Sigma> RangeKind \<sigma>"
+proof (induction \<sigma>)
+  case (TyUnion \<sigma> \<tau>)
+  then show ?case by (auto dest: wf_val_union)
+next
+  case (TyClass D \<sigma>s)
+  have range: "range_class |\<in>| fmdom \<Sigma>" using range_lookup by (simp add: predefined_classes_def fmlookup_dom_iff)
+  from subty_class_class(1)[OF wf_class_table wf_range_sub[OF TyClass.prems, simplified] refl refl range]
+  have "D \<in> set (ancestors \<Sigma> range_class)"
+    and "list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (instantiated_ancestor \<Sigma> range_class [] D) (map (inst \<eta>) \<sigma>s)"
+    by auto
+  then have "D = range_class" and "\<sigma>s = []"
+    by (auto simp: ancestors_def range_ancestors instantiated_ancestor_def dest: list_all2_lengthD)
+  then show ?case by (simp add: SubtyRefl)
+qed (auto dest!: wf_range_sub subty_structured_inv)
+
+lemma float_has_values: "\<turnstile> VLit (LitFloat x) : Ty (inst \<eta> \<sigma>) \<Longrightarrow> has_float_values \<Sigma> \<sigma>"
+proof (induction \<sigma>)
+  case (TyUnion \<sigma> \<tau>)
+  then show ?case by (auto dest: wf_val_union)
+next
+  case (TyPrim p)
+  have "\<not> \<Sigma> \<turnstile> TyLiteral (LitFloat x) <: TyPrim Sized" using subty_sized_inv(1)[OF _ refl] by fastforce
+  with wf_lit_sub[OF TyPrim.prems] show ?case
+    by (cases p) (auto simp: subty_prim_iff intro: SubtyObject SubtyRefl)
+next
+  case (TyLiteral l)
+  then show ?case by (cases l) (auto dest!: wf_lit_sub subty_literal_inv')
+qed (auto dest!: wf_lit_sub subty_structured_inv)
+
+subsection \<open>Literals\<close>
+
+(* Literals other than floats which compare equal: the same literal *)
+lemma eq_lit_same: "\<lbrakk> eq_lit l l' = Val True ; \<forall>x. l \<noteq> LitFloat x ; \<forall>x. l' \<noteq> LitFloat x \<rbrakk> \<Longrightarrow> l = l'"
+  by (cases l; cases l') auto
+
+lemma eq_lit_float: "eq_lit (LitFloat x) l' = Val True \<Longrightarrow> is_number (VLit l')"
+  by (cases l') auto
+
+lemma eq_lit_refl: "eq_lit l l = Val True \<or> (\<exists>\<kappa>. eq_lit l l = Aborts \<kappa>)"
+  by (cases l) auto
+
+subsection \<open>Resolution of the class of a constructor pattern\<close>
+
+lemma lookup_root:
+  "lookup \<Gamma> q = Some \<theta> \<Longrightarrow> \<exists>\<theta>'. fmlookup \<Gamma> (root q) = Some \<theta>' \<and> (\<theta>' = \<theta> \<or> (\<exists>q' \<Gamma>'. \<theta>' = ModChecked q' \<Gamma>'))"
+  by (induction q arbitrary: \<theta>) (auto split: option.splits cxt_entry.splits)
+
+(* Class named by a constructor pattern checked in \<Gamma>, as resolved in an environment typed by \<Gamma> *)
+lemma pattern_class_value:
+  assumes env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and cls: "check_pattern_class \<Gamma> q = Ok C"
+  shows "\<exists>u. fmlookup \<rho> (root q) = Some u \<and> u \<noteq> VUnbound" and "resolve \<rho> q = Some (VClass C)"
+    and "C \<noteq> range_class"
+proof -
+  from cls have look: "lookup \<Gamma> q = Some (Type C)"
+    by (auto simp: check_pattern_class_def resolve_name_def split: option.splits cxt_entry.splits if_splits)
+  from cls show "C \<noteq> range_class"
+    by (auto simp: check_pattern_class_def split: option.splits cxt_entry.splits if_splits)
+  from wf_env_resolve[OF env look] obtain v where "resolve \<rho> q = Some v" and "\<turnstile> v : Type C" by auto
+  then show "resolve \<rho> q = Some (VClass C)" using wf_type_entry by simp
+  from lookup_root[OF look] obtain \<theta>' where root: "fmlookup \<Gamma> (root q) = Some \<theta>'"
+    and \<theta>': "\<theta>' = Type C \<or> (\<exists>q' \<Gamma>'. \<theta>' = ModChecked q' \<Gamma>')"
+    by blast
+  then have "\<theta>' \<noteq> TypeVar" by auto
+  from wf_env_lookup[OF env root this] obtain u where "fmlookup \<rho> (root q) = Some u" and "\<turnstile> u : inst_entry \<eta> \<theta>'"
+    by blast
+  with \<theta>' show "\<exists>u. fmlookup \<rho> (root q) = Some u \<and> u \<noteq> VUnbound"
+    by (auto dest!: wf_type_entry wf_mod_checked)
+qed
+
+end
+
 end
