@@ -6,6 +6,28 @@ begin
 context evaluation
 begin
 
+(* Soundness of each evaluation rule *)
+lemmas rule_sound =
+  var_sound var_unknown_sound var_unbound_sound literal_sound lambda_sound unop_sound binop_sound
+  binop_fail_sound and_false_sound and_true_sound and_fail_sound and_nonbool_sound or_true_sound
+  or_false_sound or_fail_sound or_nonbool_sound cond_true_sound cond_false_sound cond_fail_sound
+  cond_nonbool_sound list_sound list_fail_sound tuple_sound tuple_fail_sound dict_sound dict_fail_sound
+  dict_nonstr_sound subscript_sound class_type_args_sound subscript_fail_sound list_comp_sound
+  list_comp_fail_quals_sound list_comp_fail_sound dict_comp_sound dict_comp_fail_quals_sound
+  dict_comp_fail_sound attr_object_sound attr_object_missing_sound attr_module_sound
+  attr_module_missing_sound attr_nonobject_sound attr_fail_sound call_lambda_sound call_lambda_arity_sound
+  call_def_sound call_def_arity_sound call_prim_sound call_nonfun_sound call_fail_sound call_fail_args_sound
+  constr_sound constr_arity_sound constr_fail_sound exprs_nil_sound exprs_cons_sound exprs_fail_sound
+  pass_sound declare_sound assign_sound expr_stmt_sound print_sound return_sound return_none_sound defs_sound
+  assert_sound assert_false_sound assert_fail_sound assert_nonbool_sound assert_msg_false_fail_sound
+  assert_msg_nonstr_sound if_true_sound if_false_sound if_fail_sound if_nonbool_sound match_sound
+  match_fail_sound match_abort_sound seq_sound seq_exit_sound if_none_sound else_sound elif_true_sound
+  elif_false_sound elif_fail_sound elif_nonbool_sound quals_nil_sound qual_guard_true_sound
+  qual_guard_false_sound qual_guard_fail_sound qual_guard_nonbool_sound qual_generator_sound
+  qual_generator_fail_sound qual_generator_nonseq_sound gen_nil_sound gen_cons_sound gen_fail_sound
+  comp_nil_sound comp_cons_sound comp_fail_sound entries_nil_sound entries_cons_sound entries_fail_key_sound
+  entries_nonstr_sound entries_fail_value_sound
+
 theorem soundness:
   shows
       expr_sound: "\<rho>, e \<Rightarrow>\<^sub>e r \<Longrightarrow> sound_expr \<rho> e r"
@@ -16,335 +38,9 @@ theorem soundness:
   and gen_sound: "\<rho>, x, us, gs \<Rightarrow>\<^sub>g\<^sub>e\<^sub>n q \<Longrightarrow> sound_gen \<rho> x us gs q"
   and comp_sound: "\<rho>s, ec \<Rightarrow>\<^sub>c\<^sub>o\<^sub>m\<^sub>p vr \<Longrightarrow> sound_comp \<rho>s ec vr"
   and entries_sound: "\<rho>s, ec, ec' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s dr \<Longrightarrow> sound_entries \<rho>s ec ec' dr"
-proof (induction
-    rule: eval_expr_eval_exprs_eval_stmt_eval_elif_eval_quals_eval_gen_eval_comp_eval_entries.inducts)
-  case EvalVar
-  then show ?case by (blast intro: var_sound)
-next
-  case EvalVarUnknown
-  then show ?case by (blast intro: var_unknown_sound)
-next
-  case EvalVarUnbound
-  then show ?case by (blast intro: var_unbound_sound)
-next
-  case EvalLiteral
-  show ?case by (rule literal_sound)
-next
-  case EvalLambda
-  show ?case by (rule lambda_sound)
-next
-  case EvalUnOp
-  then show ?case by (blast intro: unop_sound)
-next
-  case EvalBinOp
-  then show ?case by (blast intro: binop_sound)
-next
-  case EvalBinOpFail
-  then show ?case by (blast intro: binop_fail_sound)
-next
-  case EvalAndFalse
-  then show ?case by (blast intro: and_false_sound)
-next
-  case EvalAndTrue
-  then show ?case by (blast intro: and_true_sound)
-next
-  case EvalAndFail
-  then show ?case by (blast intro: and_fail_sound)
-next
-  case EvalAndNonBool
-  then show ?case by (blast intro: and_nonbool_sound)
-next
-  case EvalOrTrue
-  then show ?case by (blast intro: or_true_sound)
-next
-  case EvalOrFalse
-  then show ?case by (blast intro: or_false_sound)
-next
-  case EvalOrFail
-  then show ?case by (blast intro: or_fail_sound)
-next
-  case EvalOrNonBool
-  then show ?case by (blast intro: or_nonbool_sound)
-next
-  case EvalCondTrue
-  then show ?case by (blast intro: cond_true_sound)
-next
-  case EvalCondFalse
-  then show ?case by (blast intro: cond_false_sound)
-next
-  case EvalCondFail
-  then show ?case by (blast intro: cond_fail_sound)
-next
-  case EvalCondNonBool
-  then show ?case by (blast intro: cond_nonbool_sound)
-next
-  case EvalList
-  then show ?case by (blast intro: list_sound)
-next
-  case EvalListFail
-  then show ?case by (blast intro: list_fail_sound)
-next
-  case EvalTuple
-  then show ?case by (blast intro: tuple_sound)
-next
-  case EvalTupleFail
-  then show ?case by (blast intro: tuple_fail_sound)
-next
-  case EvalDict
-  then show ?case by (blast intro: dict_sound)
-next
-  case EvalDictFail
-  then show ?case by (blast intro: dict_fail_sound)
-next
-  case EvalDictNonStr
-  then show ?case by (blast intro: dict_nonstr_sound)
-next
-  case EvalSubscript
-  then show ?case by (blast intro: subscript_sound)
-next
-  case EvalClassTypeArgs
-  then show ?case by (blast intro: class_type_args_sound)
-next
-  case EvalSubscriptFail
-  then show ?case by (blast intro: subscript_fail_sound)
-next
-  case EvalListComp
-  then show ?case by (blast intro: list_comp_sound)
-next
-  case EvalListCompFailQuals
-  then show ?case by (blast intro: list_comp_fail_quals_sound)
-next
-  case EvalListCompFail
-  then show ?case by (blast intro: list_comp_fail_sound)
-next
-  case EvalDictComp
-  then show ?case by (blast intro: dict_comp_sound)
-next
-  case EvalDictCompFailQuals
-  then show ?case by (blast intro: dict_comp_fail_quals_sound)
-next
-  case EvalDictCompFail
-  then show ?case by (blast intro: dict_comp_fail_sound)
-next
-  case EvalAttrObject
-  then show ?case by (blast intro: attr_object_sound)
-next
-  case EvalAttrObjectMissing
-  then show ?case by (blast intro: attr_object_missing_sound)
-next
-  case EvalAttrModule
-  then show ?case by (blast intro: attr_module_sound)
-next
-  case EvalAttrModuleMissing
-  then show ?case by (blast intro: attr_module_missing_sound)
-next
-  case EvalAttrNonObject
-  then show ?case by (blast intro: attr_nonobject_sound)
-next
-  case EvalAttrFail
-  then show ?case by (blast intro: attr_fail_sound)
-next
-  case EvalCallLambda
-  then show ?case by (blast intro: call_lambda_sound)
-next
-  case EvalCallLambdaArity
-  then show ?case by (blast intro: call_lambda_arity_sound)
-next
-  case EvalCallDef
-  then show ?case by (blast intro: call_def_sound)
-next
-  case EvalCallDefArity
-  then show ?case by (blast intro: call_def_arity_sound)
-next
-  case EvalCallPrim
-  then show ?case by (blast intro: call_prim_sound)
-next
-  case EvalCallNonFun
-  then show ?case by (blast intro: call_nonfun_sound)
-next
-  case EvalCallFail
-  then show ?case by (blast intro: call_fail_sound)
-next
-  case EvalCallFailArgs
-  then show ?case by (blast intro: call_fail_args_sound)
-next
-  case EvalConstr
-  then show ?case by (blast intro: constr_sound)
-next
-  case EvalConstrArity
-  then show ?case by (blast intro: constr_arity_sound)
-next
-  case EvalConstrFail
-  then show ?case by (blast intro: constr_fail_sound)
-next
-  case EvalExprsNil
-  show ?case by (rule exprs_nil_sound)
-next
-  case EvalExprsCons
-  then show ?case by (blast intro: exprs_cons_sound)
-next
-  case EvalExprsFail
-  then show ?case by (blast intro: exprs_fail_sound)
-next
-  case EvalPass
-  show ?case by (rule pass_sound)
-next
-  case EvalDeclare
-  show ?case by (rule declare_sound)
-next
-  case EvalAssign
-  then show ?case by (blast intro: assign_sound)
-next
-  case EvalExprStmt
-  then show ?case by (blast intro: expr_stmt_sound)
-next
-  case EvalPrint
-  then show ?case by (blast intro: print_sound)
-next
-  case EvalReturn
-  then show ?case by (blast intro: return_sound)
-next
-  case EvalReturnNone
-  show ?case by (rule return_none_sound)
-next
-  case EvalDefs
-  then show ?case by (blast intro: defs_sound)
-next
-  case EvalAssert
-  then show ?case by (blast intro: assert_sound)
-next
-  case EvalAssertFalse
-  then show ?case by (blast intro: assert_false_sound)
-next
-  case EvalAssertFail
-  then show ?case by (blast intro: assert_fail_sound)
-next
-  case EvalAssertNonBool
-  then show ?case by (blast intro: assert_nonbool_sound)
-next
-  case EvalAssertMsg
-  then show ?case by (blast intro: assert_sound)
-next
-  case EvalAssertMsgFalse
-  then show ?case by (blast intro: assert_false_sound)
-next
-  case EvalAssertMsgFalseFail
-  then show ?case by (blast intro: assert_msg_false_fail_sound)
-next
-  case EvalAssertMsgFail
-  then show ?case by (blast intro: assert_fail_sound)
-next
-  case EvalAssertMsgNonBool
-  then show ?case by (blast intro: assert_nonbool_sound)
-next
-  case EvalAssertMsgNonStr
-  then show ?case by (blast intro: assert_msg_nonstr_sound)
-next
-  case EvalIfTrue
-  then show ?case by (blast intro: if_true_sound)
-next
-  case EvalIfFalse
-  then show ?case by (blast intro: if_false_sound)
-next
-  case EvalIfFail
-  then show ?case by (blast intro: if_fail_sound)
-next
-  case EvalIfNonBool
-  then show ?case by (blast intro: if_nonbool_sound)
-next
-  case EvalMatch
-  then show ?case by (blast intro: match_sound)
-next
-  case EvalMatchFail
-  then show ?case by (blast intro: match_fail_sound)
-next
-  case EvalMatchAbort
-  then show ?case by (blast intro: match_abort_sound)
-next
-  case EvalSeq
-  then show ?case by (blast intro: seq_sound)
-next
-  case EvalSeqReturn
-  then show ?case by (auto intro: seq_exit_sound)
-next
-  case EvalSeqFail
-  then show ?case by (auto intro: seq_exit_sound)
-next
-  case EvalIfNone
-  show ?case by (rule if_none_sound)
-next
-  case EvalElse
-  then show ?case by (blast intro: else_sound)
-next
-  case EvalElifTrue
-  then show ?case by (blast intro: elif_true_sound)
-next
-  case EvalElifFalse
-  then show ?case by (blast intro: elif_false_sound)
-next
-  case EvalElifFail
-  then show ?case by (blast intro: elif_fail_sound)
-next
-  case EvalElifNonBool
-  then show ?case by (blast intro: elif_nonbool_sound)
-next
-  case EvalQualsNil
-  show ?case by (rule quals_nil_sound)
-next
-  case EvalQualGuardTrue
-  then show ?case by (blast intro: qual_guard_true_sound)
-next
-  case EvalQualGuardFalse
-  then show ?case by (blast intro: qual_guard_false_sound)
-next
-  case EvalQualGuardFail
-  then show ?case by (blast intro: qual_guard_fail_sound)
-next
-  case EvalQualGuardNonBool
-  then show ?case by (blast intro: qual_guard_nonbool_sound)
-next
-  case EvalQualGenerator
-  then show ?case by (blast intro: qual_generator_sound)
-next
-  case EvalQualGeneratorFail
-  then show ?case by (blast intro: qual_generator_fail_sound)
-next
-  case EvalQualGeneratorNonSeq
-  then show ?case by (blast intro: qual_generator_nonseq_sound)
-next
-  case EvalGenNil
-  show ?case by (rule gen_nil_sound)
-next
-  case EvalGenCons
-  then show ?case by (blast intro: gen_cons_sound)
-next
-  case EvalGenFail
-  then show ?case by (blast intro: gen_fail_sound)
-next
-  case EvalCompNil
-  show ?case by (rule comp_nil_sound)
-next
-  case EvalCompCons
-  then show ?case by (blast intro: comp_cons_sound)
-next
-  case EvalCompFail
-  then show ?case by (blast intro: comp_fail_sound)
-next
-  case EvalEntriesNil
-  show ?case by (rule entries_nil_sound)
-next
-  case EvalEntriesCons
-  then show ?case by (blast intro: entries_cons_sound)
-next
-  case EvalEntriesFailKey
-  then show ?case by (blast intro: entries_fail_key_sound)
-next
-  case EvalEntriesNonStr
-  then show ?case by (blast intro: entries_nonstr_sound)
-next
-  case EvalEntriesFailValue
-  then show ?case by (blast intro: entries_fail_value_sound)
-qed
+  by (induction
+      rule: eval_expr_eval_exprs_eval_stmt_eval_elif_eval_quals_eval_gen_eval_comp_eval_entries.inducts)
+     (auto intro: rule_sound)
 
 end
 
