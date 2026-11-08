@@ -53,9 +53,6 @@ lemma wf_ty_inst_inv: "wf_ty \<Sigma> (inst \<eta> \<sigma>) \<Longrightarrow> w
 lemma object_type_inst: "object_type \<sigma> \<Longrightarrow> object_type (inst \<eta> \<sigma>)"
   by (induction \<sigma>) auto
 
-lemma wf_ty_subst_inv: "wf_ty \<Sigma> (subst \<tau>s \<alpha>s \<sigma>) \<Longrightarrow> wf_ty \<Sigma> \<sigma>"
-  by (induction \<sigma>) auto
-
 (* Instantiation as the substitution for a list of type variables covering those of the type *)
 lemma inst_subst_eq: "fv \<tau> \<subseteq> set \<alpha>s \<Longrightarrow> inst \<eta> \<tau> = subst (map \<eta> \<alpha>s) \<alpha>s \<tau>"
   by (induction \<tau>) (auto simp: map_of_zip_map cong: map_cong)

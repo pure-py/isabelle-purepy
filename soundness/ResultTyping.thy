@@ -234,9 +234,6 @@ qed
 lemma has_type_wf: "\<lbrakk> wf_cxt \<Sigma> \<Gamma> ; has_type \<Sigma> \<Gamma> e \<tau> \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> \<tau>"
   by (auto simp: has_type_def dest: synth_wf_ty)
 
-lemma has_type_at_wf: "\<lbrakk> wf_cxt \<Sigma> \<Gamma> ; has_type_at \<Sigma> \<Gamma> e \<tau> \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> \<tau>"
-  by (cases e) (auto dest: has_type_wf)
-
 lemma typed_by_rule_wf: "\<lbrakk> wf_cxt \<Sigma> \<Gamma> ; typed_by_rule \<Sigma> \<Gamma> e \<tau> \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> \<tau>"
   by (auto simp: typed_by_rule_def dest: synth_wf_ty)
 

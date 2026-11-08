@@ -385,30 +385,6 @@ proof -
     by (cases "p \<in> {object, Sized}"; cases "q \<in> {object, Sized}") (auto simp: subty_prim_iff split: if_splits)
 qed
 
-(* Substitutions agreeing on the type variables of \<sigma> up to equivalence, equivalent at \<sigma> *)
-lemma subst_equiv_vars:
-  "\<forall>\<alpha> \<in> fv \<sigma>. \<Sigma> \<turnstile> subst \<tau>s \<alpha>s (TyVar \<alpha>) \<approx> subst \<tau>s' \<alpha>s (TyVar \<alpha>)
-  \<Longrightarrow> \<Sigma> \<turnstile> subst \<tau>s \<alpha>s \<sigma> \<approx> subst \<tau>s' \<alpha>s \<sigma>"
-proof (induction \<sigma>)
-  case (TyTuple \<sigma>s)
-  have "\<Sigma> \<turnstile> subst \<tau>s \<alpha>s \<sigma> \<approx> subst \<tau>s' \<alpha>s \<sigma>" if "\<sigma> \<in> set \<sigma>s" for \<sigma>
-    using TyTuple.IH[OF that] TyTuple.prems that by auto
-  then show ?case
-    by (auto intro!: SubtyTuple list.rel_refl_strong simp: subtys_list_all2 list_all2_map1 list_all2_map2)
-next
-  case (TyCallable \<sigma>s \<sigma>)
-  have "\<Sigma> \<turnstile> subst \<tau>s \<alpha>s \<sigma>' \<approx> subst \<tau>s' \<alpha>s \<sigma>'" if "\<sigma>' \<in> set \<sigma>s" for \<sigma>'
-    using TyCallable.IH(1)[OF that] TyCallable.prems that by auto
-  with TyCallable.IH(2) TyCallable.prems show ?case
-    by (auto intro!: SubtyCallable list.rel_refl_strong simp: subtys_list_all2 list_all2_map1 list_all2_map2)
-next
-  case (TyClass C \<sigma>s)
-  have "\<Sigma> \<turnstile> subst \<tau>s \<alpha>s \<sigma> \<approx> subst \<tau>s' \<alpha>s \<sigma>" if "\<sigma> \<in> set \<sigma>s" for \<sigma>
-    using TyClass.IH[OF that] TyClass.prems that by auto
-  then show ?case
-    by (auto intro!: SubtyClass list.rel_refl_strong simp: subtys_list_all2 list_all2_map1 list_all2_map2)
-qed (auto intro: subty_subtys.intros)
-
 lemma subst_fresh: "(\<And>\<alpha>. \<alpha> \<in> fv \<sigma> \<Longrightarrow> \<alpha> \<notin> set \<alpha>s) \<Longrightarrow> subst \<tau>s \<alpha>s \<sigma> = \<sigma>"
 proof (induction \<sigma>)
   case (TyVar \<alpha>)
@@ -766,9 +742,6 @@ qed
 lemma wf_val_inst_disjunct: "\<turnstile> v : Ty (inst \<eta> \<tau>) \<Longrightarrow> \<exists>\<sigma> \<in> set (disjuncts \<tau>). \<turnstile> v : Ty (inst \<eta> \<sigma>)"
   by (induction \<tau>) (auto dest: wf_val_union)
 
-lemma disjunct_subty: "\<sigma> \<in> set (disjuncts \<tau>) \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: \<tau>"
-  by (induction \<tau>) (auto intro: SubtyRefl SubtyUnionLeft SubtyUnionRight)
-
 (* Introduction type of a value, below each of its types *)
 lemma wf_list_sub: "\<turnstile> VList vs : Ty \<tau> \<Longrightarrow> \<exists>\<upsilon>. \<Sigma> \<turnstile> TyList \<upsilon> <: \<tau>"
   using wf_val_intro(1) by fastforce
@@ -868,9 +841,6 @@ lemma eq_lit_same: "\<lbrakk> eq_lit l l' = Val True ; \<forall>x. l \<noteq> Li
 
 lemma eq_lit_float: "eq_lit (LitFloat x) l' = Val True \<Longrightarrow> is_number (VLit l')"
   by (cases l') auto
-
-lemma eq_lit_refl: "eq_lit l l = Val True \<or> (\<exists>\<kappa>. eq_lit l l = Aborts \<kappa>)"
-  by (cases l) auto
 
 subsection \<open>Resolution of the class of a constructor pattern\<close>
 
@@ -1056,17 +1026,6 @@ lemma meet_class:
     = (if \<Sigma> \<turnstile> \<sigma> <: TyClass C \<tau>s then \<sigma> else if \<Sigma> \<turnstile> TyClass C \<tau>s <: \<sigma> then TyClass C \<tau>s else TyPrim Never)"
   by (cases \<sigma>) auto
 
-(* Pattern checked at a type: checked at each disjunct *)
-lemma check_pat_disjunct:
-  "\<lbrakk> check_pat \<Sigma> \<Gamma> p \<tau> = Ok \<Delta> ; \<sigma> \<in> set (disjuncts \<tau>) \<rbrakk> \<Longrightarrow> \<exists>\<Delta>'. check_pat \<Sigma> \<Gamma> p \<sigma> = Ok \<Delta>'"
-proof (induction \<tau> arbitrary: \<Delta>)
-  case (TyUnion \<sigma>\<^sub>1 \<sigma>\<^sub>2)
-  from check_pat_union(1)[OF TyUnion.prems(1) refl] obtain \<Delta>\<^sub>1 \<Delta>\<^sub>2 where "check_pat \<Sigma> \<Gamma> p \<sigma>\<^sub>1 = Ok \<Delta>\<^sub>1"
-    and "check_pat \<Sigma> \<Gamma> p \<sigma>\<^sub>2 = Ok \<Delta>\<^sub>2"
-    by blast
-  with TyUnion.IH TyUnion.prems(2) show ?case by auto
-qed auto
-
 context evaluation
 begin
 
@@ -1125,9 +1084,6 @@ lemma wf_val_bool: "\<turnstile> v : Ty (TyPrim bool) \<Longrightarrow> \<exists
   by (erule wf_prim_lit[OF _ SubtyRefl]) (auto elim: base_type_lit.elims split: if_splits)
 
 lemma wf_val_none: "\<turnstile> v : Ty (TyPrim NoneType) \<Longrightarrow> v = VLit LitNone"
-  by (erule wf_prim_lit[OF _ SubtyRefl]) (auto elim: base_type_lit.elims split: if_splits)
-
-lemma wf_val_float: "\<turnstile> v : Ty (TyPrim float) \<Longrightarrow> \<exists>l. v = VLit l \<and> is_number (VLit l)"
   by (erule wf_prim_lit[OF _ SubtyRefl]) (auto elim: base_type_lit.elims split: if_splits)
 
 subsection \<open>Values at a disjunct of another kind\<close>
@@ -1489,12 +1445,6 @@ lemma matched_as_constr:
     = (case instance_at \<Sigma> C \<tau> of Instance \<sigma>s \<Rightarrow> meet \<Sigma> \<tau> (TyClass C \<sigma>s) | _ \<Rightarrow> TyPrim Never)"
   by (cases \<tau>) auto
 
-lemma remaining_var: "\<not> is_union \<tau> \<Longrightarrow> remaining \<Sigma> \<Gamma> \<tau> (PatVar x) = TyPrim Never"
-  by (cases \<tau>) auto
-
-lemma remaining_wild: "\<not> is_union \<tau> \<Longrightarrow> remaining \<Sigma> \<Gamma> \<tau> PatWildcard = TyPrim Never"
-  by (cases \<tau>) auto
-
 lemma remaining_tuple_other: "\<lbrakk> \<not> is_union \<tau> ; \<forall>\<sigma>s. \<tau> \<noteq> TyTuple \<sigma>s \<rbrakk> \<Longrightarrow> remaining \<Sigma> \<Gamma> \<tau> (PatTuple ps) = \<tau>"
   by (cases \<tau>) auto
 
@@ -1593,10 +1543,6 @@ proof -
     unfolding \<sigma>s field_types_inst[OF assms(1) C len, of "map \<eta> \<alpha>s" \<alpha>s]
     by (intro map_cong[OF refl]) (simp add: \<alpha>s[symmetric] field_types_fv[OF assms])
 qed
-
-lemma remaining_literal_literal:
-  "remaining \<Sigma> \<Gamma> (TyLiteral l') (PatLiteral l) = (if l' = l then TyPrim Never else TyLiteral l')"
-  by simp
 
 lemma remaining_literal_bool:
   "remaining \<Sigma> \<Gamma> (TyPrim bool) (PatLiteral l) = (case l of LitBool b \<Rightarrow> TyLiteral (LitBool (\<not> b)) | _ \<Rightarrow> TyPrim bool)"
@@ -2843,10 +2789,6 @@ lemmas check_pat_at_sound = check_pat_sound[OF check_pat_at_node]
 subsection \<open>Dispatch over the cases of a match statement\<close>
 
 lemma match_cases_length: "match_cases \<Sigma> \<Gamma> \<tau> L ps = Ok (\<Delta>s, \<tau>', L') \<Longrightarrow> length \<Delta>s = length ps"
-  by (induction ps arbitrary: \<tau> L \<Delta>s) (auto simp: bind_sum_Ok split: prod.splits)
-
-lemma match_cases_Ty:
-  "\<lbrakk> match_cases \<Sigma> \<Gamma> \<tau> L ps = Ok (\<Delta>s, \<tau>', L') ; \<Delta> \<in> set \<Delta>s \<rbrakk> \<Longrightarrow> \<exists>\<Delta>'. \<Delta> = fmmap Ty \<Delta>'"
   by (induction ps arbitrary: \<tau> L \<Delta>s) (auto simp: bind_sum_Ok split: prod.splits)
 
 (* Dispatch of a value over the cases of a match checked at its type: a case is chosen, binding its variables
