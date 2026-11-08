@@ -3046,6 +3046,71 @@ qed
 
 lemmas check_pat_sound = check_pat_sound_aux[OF refl]
 
+subsection \<open>Dispatch over the cases of a match statement\<close>
+
+lemma match_cases_length: "match_cases \<Sigma> \<Gamma> \<tau> L ps = Ok (\<Delta>s, \<tau>', L') \<Longrightarrow> length \<Delta>s = length ps"
+  by (induction ps arbitrary: \<tau> L \<Delta>s) (auto simp: bind_sum_Ok split: prod.splits)
+
+(* Dispatch of a value over the cases of a match checked at its type: a case is chosen, binding its variables
+   below the bindings of its pattern; or no case matches, and the value is at the remaining type; or an abort
+   which is not prevented *)
+lemma dispatch_sound:
+  "\<lbrakk> match_cases \<Sigma> \<Gamma> \<tau> L (map fst cases) = Ok (\<Delta>s, \<tau>', L') ; \<eta> \<turnstile> \<rho> : \<Gamma> ; wf_ty \<Sigma> \<tau> ; fv \<tau> \<subseteq> fst ` set \<eta>
+   ; \<turnstile> v : Ty (inst \<eta> \<tau>) \<rbrakk>
+  \<Longrightarrow> (\<exists>i < length cases. \<exists>\<rho>'. dispatch \<rho> v cases = Val (\<rho>', snd (cases ! i))
+         \<and> fmdom \<rho>' |\<subseteq>| fmdom (\<Delta>s ! i) \<and> \<eta> \<turnstile> \<rho> \<otimes> \<rho>' : \<Gamma> \<otimes> (\<Delta>s ! i))
+      \<or> (dispatch \<rho> v cases = Val (fmempty, At no_pos StmtPass) \<and> \<turnstile> v : Ty (inst \<eta> \<tau>'))
+      \<or> (\<exists>\<kappa>. dispatch \<rho> v cases = Aborts \<kappa> \<and> \<not> prevented \<kappa>)"
+proof (induction "cases" arbitrary: \<tau> L \<Delta>s)
+  case Nil
+  then show ?case by simp
+next
+  case (Cons c "cases")
+  obtain p s where c: "c = (p, s)" by (cases c)
+  from Cons.prems(1) obtain \<Delta> L\<^sub>1 \<Delta>s' where chk: "check_pat_at \<Sigma> \<Gamma> p \<tau> = Ok \<Delta>"
+    and mc: "match_cases \<Sigma> \<Gamma> (remaining \<Sigma> \<Gamma> \<tau> (node p)) L\<^sub>1 (map fst cases) = Ok (\<Delta>s', \<tau>', L')"
+    and \<Delta>s: "\<Delta>s = fmmap Ty \<Delta> # \<Delta>s'"
+    unfolding c by (auto simp: bind_sum_Ok split: prod.splits)
+  note sound = check_pat_sound(2)[OF chk Cons.prems(2-5), unfolded pat_sound_def]
+  from match_cases_wf[OF wf_class_table wf_env_wf_cxt[OF Cons.prems(2)] Cons.prems(3) Cons.prems(1), of "fmmap Ty \<Delta>"]
+  have wf\<Delta>: "wf_cxt \<Sigma> (fmmap Ty \<Delta>)" and tyvars: "tyvars (fmmap Ty \<Delta>) \<subseteq> fv \<tau>" by (simp_all add: \<Delta>s)
+  show ?case
+  proof (cases "match \<rho> (node p) v")
+    case (Match \<rho>')
+    with sound have dom: "fmdom' \<rho>' = fmdom' \<Delta>"
+      and look: "\<forall>x \<sigma>. fmlookup \<Delta> x = Some \<sigma> \<longrightarrow> (\<exists>u. fmlookup \<rho>' x = Some u \<and> \<turnstile> u : Ty (inst \<eta> \<sigma>))"
+      by auto
+    have dom': "fmdom \<rho>' = fmdom \<Delta>" using dom by (simp add: fmdom'_alt_def fset_inject)
+    have "\<eta> \<turnstile> \<rho> \<otimes> \<rho>' : \<Gamma> \<otimes> fmmap Ty \<Delta>"
+    proof (rule wf_env_add[OF Cons.prems(2)])
+      show "tyvars (fmmap Ty \<Delta>) \<subseteq> fst ` set \<eta>" using tyvars Cons.prems(4) by blast
+      show "fmdom \<rho>' |\<subseteq>| fmdom (fmmap Ty \<Delta>)" using dom' by simp
+      show "wf_cxt \<Sigma> (fmmap Ty \<Delta>)" by (rule wf\<Delta>)
+      fix x \<theta>
+      assume "fmlookup (fmmap Ty \<Delta>) x = Some \<theta>"
+      then obtain \<sigma> where "fmlookup \<Delta> x = Some \<sigma>" and \<theta>: "\<theta> = Ty \<sigma>" by auto
+      with look obtain u where "fmlookup \<rho>' x = Some u" and "\<turnstile> u : Ty (inst \<eta> \<sigma>)" by blast
+      then show "\<exists>u. fmlookup (\<rho> \<otimes> \<rho>') x = Some u \<and> \<turnstile> u : inst_entry \<eta> \<theta>" by (auto simp: \<theta> fmdomI)
+    qed
+    with Match dom' show ?thesis by (auto simp: c \<Delta>s intro!: exI[of _ 0])
+  next
+    case NoMatch
+    with sound have v': "\<turnstile> v : Ty (inst \<eta> (remaining \<Sigma> \<Gamma> \<tau> (node p)))" by auto
+    have wf': "wf_ty \<Sigma> (remaining \<Sigma> \<Gamma> \<tau> (node p))" and fv': "fv (remaining \<Sigma> \<Gamma> \<tau> (node p)) \<subseteq> fst ` set \<eta>"
+      using remaining_wf[OF Cons.prems(3), of \<Gamma> "node p"] Cons.prems(4) by auto
+    from Cons.IH[OF mc Cons.prems(2) wf' fv' v'] show ?thesis
+    proof (elim disjE exE conjE)
+      fix i \<rho>'
+      assume "i < length cases" and "dispatch \<rho> v cases = Val (\<rho>', snd (cases ! i))"
+        and "fmdom \<rho>' |\<subseteq>| fmdom (\<Delta>s' ! i)" and "\<eta> \<turnstile> \<rho> \<otimes> \<rho>' : \<Gamma> \<otimes> (\<Delta>s' ! i)"
+      then show ?thesis using NoMatch by (auto simp: c \<Delta>s intro!: exI[of _ "Suc i"])
+    qed (auto simp: c \<Delta>s NoMatch)
+  next
+    case (MatchAborts \<kappa>)
+    with sound show ?thesis by (auto simp: c)
+  qed
+qed
+
 end
 
 end
