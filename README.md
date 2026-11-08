@@ -98,6 +98,7 @@ Run the `Release` GitHub Action manually. The version number of a release is tha
 | `soundness/ResultTyping.thy` | Typing of evaluation results; canonical forms of values                               |
 | `soundness/Expressions.thy`  | Soundness of evaluation of expressions other than calls                               |
 | `soundness/Calls.thy`        | Soundness of call evaluation                                                          |
+| `soundness/Dispatch.thy`     | Soundness of pattern matching and of dispatch over the cases of a match statement     |
 | `soundness/Statements.thy`   | Soundness of statement evaluation                                                     |
 | `soundness/Soundness.thy`    | Type soundness                                                                        |
 <!-- /theories -->
