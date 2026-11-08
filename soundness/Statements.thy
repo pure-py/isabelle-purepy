@@ -700,18 +700,147 @@ lemma if_nonbool_sound:
   \<Longrightarrow> sound_stmt \<rho> (StmtIf e s elifs else') (aborts\<^sub>o Excluded)"
   unfolding sound_stmt_def by (auto simp: check_stmt_if bind_sum_def dest!: bool_operand split: sum.splits)
 
+(* Member of the merged outcomes of a match statement with bindings: well-formed over the type variables in
+   scope, binding variables unbound or declared but unassigned *)
+lemma match_branches_member:
+  assumes mc: "match_cases \<Sigma> \<Gamma> \<sigma> L\<^sub>0 (map fst cases) = Ok (\<Delta>s, \<tau>, L)" and wf\<Gamma>: "wf_cxt \<Sigma> \<Gamma>" and wf\<sigma>: "wf_ty \<Sigma> \<sigma>"
+    and fv\<sigma>: "fv \<sigma> \<subseteq> tyvars \<Gamma>" and mem: "Ok (Assigns\<^sub>R \<Delta> r) \<in> set (match_branches \<Sigma> \<Gamma> \<zeta> \<Delta>s cases \<tau> L)"
+  shows "wf_cxt \<Sigma> \<Delta> \<and> tyvars \<Delta> \<subseteq> tyvars \<Gamma>"
+    and "x |\<in>| fmdom \<Delta> \<Longrightarrow> fmlookup \<Gamma> x = Some Unbound \<or> (\<exists>\<tau>'. fmlookup \<Gamma> x = Some (DU \<tau>'))"
+proof -
+  let ?f = "\<lambda>\<Delta> (_, s). do { R \<leftarrow> check_stmt_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) \<zeta> s; Ok (Assigns\<^sub>R \<Delta> None \<otimes> R) }"
+  have "(wf_cxt \<Sigma> \<Delta> \<and> tyvars \<Delta> \<subseteq> tyvars \<Gamma>)
+        \<and> (x |\<in>| fmdom \<Delta> \<longrightarrow> fmlookup \<Gamma> x = Some Unbound \<or> (\<exists>\<tau>'. fmlookup \<Gamma> x = Some (DU \<tau>')))"
+  proof (cases "Ok (Assigns\<^sub>R \<Delta> r) \<in> set (map2 ?f \<Delta>s cases)")
+    case True
+    then obtain \<Delta>\<^sub>i c where zip: "(\<Delta>\<^sub>i, c) \<in> set (zip \<Delta>s cases)" and f: "?f \<Delta>\<^sub>i c = Ok (Assigns\<^sub>R \<Delta> r)" by auto
+    obtain p s where c: "c = (p, s)" by (cases c)
+    from f obtain R' where chk': "check_stmt_at \<Sigma> (\<Gamma> \<otimes> \<Delta>\<^sub>i) \<zeta> s = Ok R'"
+      and eq: "Assigns\<^sub>R \<Delta>\<^sub>i None \<otimes> R' = Assigns\<^sub>R \<Delta> r"
+      unfolding c by (auto simp: bind_sum_Ok)
+    then obtain \<Delta>' r' where "R' = Assigns\<^sub>R \<Delta>' r'" and \<Delta>: "\<Delta> = \<Delta>\<^sub>i \<otimes> \<Delta>'" by (cases R') auto
+    with chk' have chk: "check_stmt_at \<Sigma> (\<Gamma> \<otimes> \<Delta>\<^sub>i) \<zeta> s = Ok (Assigns\<^sub>R \<Delta>' r')" by simp
+    have \<Delta>\<^sub>i: "\<Delta>\<^sub>i \<in> set \<Delta>s" using set_zip_leftD[OF zip] .
+    from match_cases_wf[OF wf_class_table wf\<Gamma> wf\<sigma> mc \<Delta>\<^sub>i] have wf\<^sub>i: "wf_cxt \<Sigma> \<Delta>\<^sub>i" and tv\<^sub>i: "tyvars \<Delta>\<^sub>i \<subseteq> fv \<sigma>" by auto
+    from check_stmt_at_wf_cxt[OF wf_cxt_add[OF wf\<Gamma> wf\<^sub>i] chk] tyvars_add[of \<Gamma> \<Delta>\<^sub>i]
+    have wf': "wf_cxt \<Sigma> \<Delta>'" and tv': "tyvars \<Delta>' \<subseteq> tyvars \<Gamma> \<union> tyvars \<Delta>\<^sub>i" by auto
+    have wf: "wf_cxt \<Sigma> \<Delta> \<and> tyvars \<Delta> \<subseteq> tyvars \<Gamma>"
+      using wf_cxt_add[OF wf\<^sub>i wf'] tyvars_add[of \<Delta>\<^sub>i \<Delta>'] tv\<^sub>i tv' fv\<sigma> unfolding \<Delta> by blast
+    have "fmlookup \<Gamma> x = Some Unbound \<or> (\<exists>\<tau>'. fmlookup \<Gamma> x = Some (DU \<tau>'))" if x: "x |\<in>| fmdom \<Delta>"
+    proof (cases "x |\<in>| fmdom \<Delta>\<^sub>i")
+      case True
+      then show ?thesis using match_cases_unbound[OF mc \<Delta>\<^sub>i] by blast
+    next
+      case False
+      with x have "x |\<in>| fmdom \<Delta>'" unfolding \<Delta> by simp
+      from check_stmt_bound(2)[OF chk this] False show ?thesis by auto
+    qed
+    with wf show ?thesis by blast
+  next
+    case False
+    with mem have "\<Delta> = fmempty" by (auto simp: match_branches_def split: if_splits)
+    then show ?thesis by simp
+  qed
+  then show "wf_cxt \<Sigma> \<Delta> \<and> tyvars \<Delta> \<subseteq> tyvars \<Gamma>"
+    and "x |\<in>| fmdom \<Delta> \<Longrightarrow> fmlookup \<Gamma> x = Some Unbound \<or> (\<exists>\<tau>'. fmlookup \<Gamma> x = Some (DU \<tau>'))"
+    by blast+
+qed
+
 lemma match_sound:
-  "\<lbrakk> sound_expr \<rho> (node e) (Val v) ; dispatch \<rho> v cases = Val (\<rho>', s') ; sound_stmt (\<rho> \<otimes> \<rho>') (node s') o \<rbrakk>
-  \<Longrightarrow> sound_stmt \<rho> (StmtMatch e cases) (assigns\<^sub>o \<rho>' \<otimes> o)"
-  sorry
+  assumes "sound_expr \<rho> (node e) (Val v)" and disp: "dispatch \<rho> v cases = Val (\<rho>', s')"
+    and "sound_stmt (\<rho> \<otimes> \<rho>') (node s') o"
+  shows "sound_stmt \<rho> (StmtMatch e cases) (assigns\<^sub>o \<rho>' \<otimes> o)"
+proof (rule sound_stmtI)
+  fix \<eta> \<Gamma> \<zeta> R
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtMatch e cases) = Ok R"
+  from check_match[OF chk] obtain \<sigma> \<Delta>s \<tau> L where synth: "synth_expr_at \<Sigma> \<Gamma> e = Ok \<sigma>"
+    and mc: "match_cases \<Sigma> \<Gamma> \<sigma> (shapes \<Sigma> \<sigma> {}) (map fst cases) = Ok (\<Delta>s, \<tau>, L)"
+    and merges: "merges \<Sigma> (set (declares (StmtMatch e cases))) (match_branches \<Sigma> \<Gamma> \<zeta> \<Delta>s cases \<tau> L) = Ok R"
+    by blast
+  let ?ms = "match_branches \<Sigma> \<Gamma> \<zeta> \<Delta>s cases \<tau> L"
+  have v: "\<turnstile> v : Ty (inst \<eta> \<sigma>)" using sound_expr_synth_at[OF assms(1) env synth] by simp
+  note wf\<Gamma> = wf_env_wf_cxt[OF env]
+  have wf\<sigma>: "wf_ty \<Sigma> \<sigma>" and fv\<sigma>: "fv \<sigma> \<subseteq> tyvars \<Gamma>" using synth_at_wf_ty[OF wf\<Gamma> synth] synth_at_tyvars[OF wf\<Gamma> synth] by auto
+  have fv\<sigma>': "fv \<sigma> \<subseteq> fst ` set \<eta>" using fv\<sigma> wf_env_tyvars[OF env] by blast
+  have len: "length \<Delta>s = length cases" using match_cases_length[OF mc] by simp
+  from merges_Ok[OF merges] obtain Rs where Rs: "those_sum ?ms = Ok Rs" by blast
+  note member = match_branches_member[OF mc wf\<Gamma> wf\<sigma> fv\<sigma>]
+  have lift: "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (assigns\<^sub>o \<rho>' \<otimes> o) R"
+    if "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (assigns\<^sub>o \<rho>' \<otimes> o) R'" and "Ok R' \<in> set ?ms" for R'
+  proof (rule wf_outcome_merges[OF that merges env])
+    fix \<Delta> r
+    assume "Ok (Assigns\<^sub>R \<Delta> r) \<in> set ?ms"
+    then show "wf_cxt \<Sigma> \<Delta> \<and> tyvars \<Delta> \<subseteq> tyvars \<Gamma>" by (rule member(1))
+  next
+    fix \<Delta> r x
+    assume "Ok (Assigns\<^sub>R \<Delta> r) \<in> set ?ms" and "x |\<in>| fmdom \<Delta>"
+    then show "fmlookup \<Gamma> x = Some Unbound \<or> (\<exists>\<tau>. fmlookup \<Gamma> x = Some (DU \<tau>))" by (rule member(2))
+  qed
+  from dispatch_sound[OF mc env wf\<sigma> fv\<sigma>' v] show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (assigns\<^sub>o \<rho>' \<otimes> o) R"
+  proof (elim disjE exE conjE)
+    fix i \<rho>''
+    assume i: "i < length cases" and disp': "dispatch \<rho> v cases = Val (\<rho>'', snd (cases ! i))"
+      and dom: "fmdom \<rho>'' |\<subseteq>| fmdom (\<Delta>s ! i)" and env': "\<eta> \<turnstile> \<rho> \<otimes> \<rho>'' : \<Gamma> \<otimes> (\<Delta>s ! i)"
+    from disp disp' have \<rho>'': "\<rho>'' = \<rho>'" and s': "s' = snd (cases ! i)" by simp_all
+    let ?f = "\<lambda>\<Delta> (_, s). do { R \<leftarrow> check_stmt_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) \<zeta> s; Ok (Assigns\<^sub>R \<Delta> None \<otimes> R) }"
+    have "map2 ?f \<Delta>s cases ! i = ?f (\<Delta>s ! i) (cases ! i)" using i len by simp
+    moreover have "map2 ?f \<Delta>s cases ! i \<in> set (map2 ?f \<Delta>s cases)" using i len by (intro nth_mem) simp
+    ultimately have "?f (\<Delta>s ! i) (cases ! i) \<in> set ?ms" by (simp add: match_branches_def)
+    with Rs obtain R\<^sub>i where chk\<^sub>i: "check_stmt_at \<Sigma> (\<Gamma> \<otimes> (\<Delta>s ! i)) \<zeta> (snd (cases ! i)) = Ok R\<^sub>i"
+      and mem: "Ok (Assigns\<^sub>R (\<Delta>s ! i) None \<otimes> R\<^sub>i) \<in> set ?ms"
+      using those_sum_eq[OF Rs] by (cases "cases ! i") (auto simp: bind_sum_def split: sum.splits)
+    have o2: "wf_outcome \<eta> (\<rho> \<otimes> \<rho>') (\<Gamma> \<otimes> (\<Delta>s ! i)) \<zeta> o R\<^sub>i"
+      using assms(3) env'[unfolded \<rho>''] ret chk\<^sub>i unfolding s' by (rule sound_stmt_at)
+    obtain vs' \<omega>' where o: "o = (vs', \<omega>')" by (cases o)
+    have "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (assigns\<^sub>o \<rho>' \<otimes> o) (Assigns\<^sub>R (\<Delta>s ! i) None \<otimes> R\<^sub>i)"
+    proof (cases \<omega>')
+      case (Assigns \<rho>\<^sub>2)
+      with o2 o obtain \<Delta>' where "bindings_of R\<^sub>i = Some \<Delta>'" and "fmdom \<rho>\<^sub>2 |\<subseteq>| fmdom \<Delta>'"
+        and "\<eta> \<turnstile> \<rho> \<otimes> \<rho>' \<otimes> \<rho>\<^sub>2 : \<Gamma> \<otimes> (\<Delta>s ! i) \<otimes> \<Delta>'"
+        by auto
+      moreover from this(1) obtain r' where "R\<^sub>i = Assigns\<^sub>R \<Delta>' r'" by (cases R\<^sub>i) auto
+      ultimately show ?thesis using dom unfolding \<rho>'' by (auto simp: o Assigns intro: le_supI1 le_supI2)
+    qed (use o2 in \<open>simp_all add: o\<close>)
+    from lift[OF this mem] show ?thesis .
+  next
+    assume disp': "dispatch \<rho> v cases = Val (fmempty, At no_pos StmtPass)" and v\<tau>: "\<turnstile> v : Ty (inst \<eta> \<tau>)"
+    from disp disp' have \<rho>': "\<rho>' = fmempty" and s': "s' = At no_pos StmtPass" by simp_all
+    have "\<tau> \<noteq> TyPrim Never" using v\<tau> wf_val_never by auto
+    then have mem: "Ok (Assigns\<^sub>R fmempty (if L = [] then Some (MypyCompatibility (Violates RuleMatchPartial (MissingReturnMatchPartial \<tau>))) else None))
+                    \<in> set ?ms"
+      by (simp add: match_branches_def)
+    have "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o (Assigns\<^sub>R fmempty None)"
+      using assms(3) env ret unfolding \<rho>' s' sound_stmt_def by simp
+    then have "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (assigns\<^sub>o \<rho>' \<otimes> o)
+                 (Assigns\<^sub>R fmempty (if L = [] then Some (MypyCompatibility (Violates RuleMatchPartial (MissingReturnMatchPartial \<tau>))) else None))"
+      unfolding \<rho>' by (cases o; cases "snd o") (auto simp: wf_completion_bindings)
+    from lift[OF this mem] show ?thesis .
+  next
+    fix \<kappa>
+    assume "dispatch \<rho> v cases = Aborts \<kappa>"
+    with disp show ?thesis by simp
+  qed
+qed
 
 lemma match_fail_sound: "sound_expr \<rho> (node e) (Aborts \<kappa>) \<Longrightarrow> sound_stmt \<rho> (StmtMatch e cases) (aborts\<^sub>o \<kappa>)"
   unfolding sound_stmt_def by (auto simp: bind_sum_def dest: sound_expr_synth_at split: sum.splits)
 
 lemma match_abort_sound:
-  "\<lbrakk> sound_expr \<rho> (node e) (Val v) ; dispatch \<rho> v cases = Aborts \<kappa> \<rbrakk>
-  \<Longrightarrow> sound_stmt \<rho> (StmtMatch e cases) (aborts\<^sub>o \<kappa>)"
-  sorry
+  assumes "sound_expr \<rho> (node e) (Val v)" and disp: "dispatch \<rho> v cases = Aborts \<kappa>"
+  shows "sound_stmt \<rho> (StmtMatch e cases) (aborts\<^sub>o \<kappa>)"
+proof (rule sound_stmtI)
+  fix \<eta> \<Gamma> \<zeta> R
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtMatch e cases) = Ok R"
+  from check_match[OF chk] obtain \<sigma> \<Delta>s \<tau> L where synth: "synth_expr_at \<Sigma> \<Gamma> e = Ok \<sigma>"
+    and mc: "match_cases \<Sigma> \<Gamma> \<sigma> (shapes \<Sigma> \<sigma> {}) (map fst cases) = Ok (\<Delta>s, \<tau>, L)"
+    and "merges \<Sigma> (set (declares (StmtMatch e cases))) (match_branches \<Sigma> \<Gamma> \<zeta> \<Delta>s cases \<tau> L) = Ok R"
+    by blast
+  have v: "\<turnstile> v : Ty (inst \<eta> \<sigma>)" using sound_expr_synth_at[OF assms(1) env synth] by simp
+  note wf\<Gamma> = wf_env_wf_cxt[OF env]
+  have wf\<sigma>: "wf_ty \<Sigma> \<sigma>" and fv\<sigma>: "fv \<sigma> \<subseteq> fst ` set \<eta>"
+    using synth_at_wf_ty[OF wf\<Gamma> synth] synth_at_tyvars[OF wf\<Gamma> synth] wf_env_tyvars[OF env] by auto
+  from dispatch_sound[OF mc env wf\<sigma> fv\<sigma> v] disp show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (aborts\<^sub>o \<kappa>) R" by auto
+qed
 
 lemma seq_sound:
   assumes "sound_stmt \<rho> (node s) (us, Assigns \<rho>')" and "sound_stmt (\<rho> \<otimes> \<rho>') (node s') o"

@@ -3051,6 +3051,10 @@ subsection \<open>Dispatch over the cases of a match statement\<close>
 lemma match_cases_length: "match_cases \<Sigma> \<Gamma> \<tau> L ps = Ok (\<Delta>s, \<tau>', L') \<Longrightarrow> length \<Delta>s = length ps"
   by (induction ps arbitrary: \<tau> L \<Delta>s) (auto simp: bind_sum_Ok split: prod.splits)
 
+lemma match_cases_Ty:
+  "\<lbrakk> match_cases \<Sigma> \<Gamma> \<tau> L ps = Ok (\<Delta>s, \<tau>', L') ; \<Delta> \<in> set \<Delta>s \<rbrakk> \<Longrightarrow> \<exists>\<Delta>'. \<Delta> = fmmap Ty \<Delta>'"
+  by (induction ps arbitrary: \<tau> L \<Delta>s) (auto simp: bind_sum_Ok split: prod.splits)
+
 (* Dispatch of a value over the cases of a match checked at its type: a case is chosen, binding its variables
    below the bindings of its pattern; or no case matches, and the value is at the remaining type; or an abort
    which is not prevented *)
