@@ -2312,10 +2312,337 @@ next
   qed (use other in \<open>simp_all add: pat_sound_def\<close>)
 next
   case (6 \<Sigma>' \<Gamma> ps \<tau>)
-  then show ?case sorry
+  note \<Sigma>' = "6.prems"(1)
+  note env = "6.prems"(3)
+  note wf\<Gamma> = wf_env_wf_cxt[OF env] and wf\<eta> = wf_env_wf_inst[OF env]
+  note IH = "6.IH"[unfolded \<Sigma>']
+  let ?f = "\<lambda>\<sigma>. case \<sigma> of
+              TyList \<sigma>' \<Rightarrow> Some (pattern_bindings (map (\<lambda>p. check_pat_at \<Sigma> \<Gamma> p \<sigma>') ps))
+            | _ \<Rightarrow> None"
+  from "6.prems"(2)[unfolded \<Sigma>'] obtain u where ens: "by_rule RuleCheckListNone (do {
+      ensure (\<not> has_values \<Sigma> TupleKind \<tau>) (SequenceKindMismatch ListKind \<tau> TupleKind);
+      ensure (\<not> has_values \<Sigma> RangeKind \<tau>) (SequenceKindMismatch ListKind \<tau> RangeKind)
+    }) = Ok u"
+    and cb: "check_bound_once ps = Ok ()" and b: "bindings_at \<Sigma> \<Gamma> (PatList ps) (map ?f (disjuncts \<tau>)) = Ok \<Delta>"
+    by (auto simp: bind_sum_Ok)
+  from ens have no_tuple: "\<not> has_values \<Sigma> TupleKind \<tau>" and no_range: "\<not> has_values \<Sigma> RangeKind \<tau>"
+    by (auto simp: bind_sum_Ok ensure_def split: if_splits)
+  from wf_val_inst_disjunct[OF "6.prems"(6)] obtain \<sigma> where \<sigma>: "\<sigma> \<in> set (disjuncts \<tau>)" and v: "\<turnstile> v : Ty (inst \<eta> \<sigma>)"
+    by blast
+  note nonunion = disjuncts_nonunion[OF \<sigma>]
+  note lift_m = matched_as_lift[OF \<sigma> "6.prems"(2)[unfolded \<Sigma>'] wf\<Gamma> "6.prems"(4) wf\<eta>]
+  note lift_r = remaining_lift[OF \<sigma> "6.prems"(4) wf\<eta>]
+  have wf\<sigma>: "wf_ty \<Sigma> \<sigma>" and fv\<sigma>: "fv \<sigma> \<subseteq> fst ` set \<eta>" using disjuncts_wf[OF "6.prems"(4) \<sigma>] "6.prems"(5) by auto
+  have dom_f: "\<forall>\<sigma>' \<Delta>'. \<sigma>' \<in> set (disjuncts \<tau>) \<and> ?f \<sigma>' = Some (Ok \<Delta>')
+                 \<longrightarrow> fmdom' \<Delta>' = binds (PatList ps) \<and> (\<forall>x \<upsilon>. fmlookup \<Delta>' x = Some \<upsilon> \<longrightarrow> wf_ty \<Sigma> \<upsilon>)"
+  proof (intro allI impI)
+    fix \<sigma>' \<Delta>'
+    assume "\<sigma>' \<in> set (disjuncts \<tau>) \<and> ?f \<sigma>' = Some (Ok \<Delta>')"
+    then obtain \<sigma>\<^sub>1 where \<sigma>': "\<sigma>' = TyList \<sigma>\<^sub>1"
+      and pb: "pattern_bindings (map2 (check_pat_at \<Sigma> \<Gamma>) ps (replicate (length ps) \<sigma>\<^sub>1)) = Ok \<Delta>'"
+      and mem: "\<sigma>' \<in> set (disjuncts \<tau>)"
+      by (auto simp: map2_replicate split: ty.splits)
+    have wf': "wf_ty \<Sigma> \<sigma>\<^sub>1" using disjuncts_wf[OF "6.prems"(4) mem] by (simp add: \<sigma>')
+    have sub: "fmdom' \<Delta>\<^sub>1 = binds (node p) \<and> (\<forall>x \<sigma>\<^sub>2. fmlookup \<Delta>\<^sub>1 x = Some \<sigma>\<^sub>2 \<longrightarrow> wf_ty \<Sigma> \<sigma>\<^sub>2 \<and> fv \<sigma>\<^sub>2 \<subseteq> fv \<sigma>\<^sub>1)"
+      if "(p, \<sigma>\<^sub>2) \<in> set (zip ps (replicate (length ps) \<sigma>\<^sub>1))" and "check_pat_at \<Sigma> \<Gamma> p \<sigma>\<^sub>2 = Ok \<Delta>\<^sub>1"
+      for p \<sigma>\<^sub>2 \<Delta>\<^sub>1
+      using check_pat_wf(2)[OF wf_class_table wf\<Gamma> wf'] that set_zip_rightD[OF that(1)] by auto
+    from pattern_bindings_wf[OF pb _ sub]
+    show "fmdom' \<Delta>' = binds (PatList ps) \<and> (\<forall>x \<upsilon>. fmlookup \<Delta>' x = Some \<upsilon> \<longrightarrow> wf_ty \<Sigma> \<upsilon>)" by auto
+  qed
+  have other: "\<turnstile> v : Ty (inst \<eta> (remaining \<Sigma> \<Gamma> \<tau> (PatList ps)))"
+    using v by (intro lift_r) (simp add: remaining_list[OF nonunion])
+  show ?case
+  proof (cases v)
+    case (VList vs)
+    have "\<exists>\<sigma>'. \<sigma> = TyList \<sigma>'"
+    proof (rule ccontr)
+      assume "\<nexists>\<sigma>'. \<sigma> = TyList \<sigma>'"
+      with list_at_nonlist[OF v[unfolded VList] nonunion] has_values_disjunct[OF \<sigma>] no_tuple show False by auto
+    qed
+    then obtain \<sigma>' where \<sigma>s: "\<sigma> = TyList \<sigma>'" by blast
+    have typed: "\<forall>u \<in> set vs. \<turnstile> u : Ty (inst \<eta> \<sigma>')" using v unfolding VList \<sigma>s by (auto elim: wf_list)
+    show ?thesis
+    proof (cases "length ps = length vs")
+      case False
+      then have "match \<rho> (PatList ps) v = NoMatch" by (simp add: VList)
+      with other show ?thesis by (simp add: pat_sound_def)
+    next
+      case True
+      let ?\<sigma>s = "replicate (length ps) \<sigma>'"
+      from \<sigma> obtain k where k: "k < length (disjuncts \<tau>)" and \<sigma>k: "disjuncts \<tau> ! k = \<sigma>" by (auto simp: in_set_conv_nth)
+      have fk: "?f \<sigma> = Some (pattern_bindings (map2 (check_pat_at \<Sigma> \<Gamma>) ps ?\<sigma>s))" using \<sigma>s by (simp add: map2_replicate)
+      from bindings_at_Ok[OF b] obtain \<Delta>s_all
+        where rel: "list_all2 (\<lambda>m \<Delta>'. case m of Some m' \<Rightarrow> m' = Ok \<Delta>'
+                        | None \<Rightarrow> \<Delta>' = fmconst (binds (PatList ps)) (TyPrim Never)
+                            \<and> (\<forall>x \<in> binds (PatList ps). fmlookup \<Gamma> x = Some Unbound)) (map ?f (disjuncts \<tau>)) \<Delta>s_all"
+        by blast
+      with k \<sigma>k fk obtain \<Delta>\<^sub>d where pb: "pattern_bindings (map2 (check_pat_at \<Sigma> \<Gamma>) ps ?\<sigma>s) = Ok \<Delta>\<^sub>d"
+        by (auto simp: list_all2_conv_all_nth)
+      have fk': "?f (disjuncts \<tau> ! k) = Some (Ok \<Delta>\<^sub>d)" using fk pb \<sigma>k by simp
+      from pattern_bindings_Ok[OF pb] obtain \<Delta>s
+        where chk: "list_all2 (\<lambda>m \<Delta>'. m = Ok \<Delta>') (map2 (check_pat_at \<Sigma> \<Gamma>) ps ?\<sigma>s) \<Delta>s"
+        and \<Delta>\<^sub>d: "\<Delta>\<^sub>d = fold fmadd \<Delta>s fmempty"
+        by blast
+      have len\<Delta>s: "length \<Delta>s = length ps" using list_all2_lengthD[OF chk] by simp
+      have chk_i: "check_pat_at \<Sigma> \<Gamma> (ps ! i) \<sigma>' = Ok (\<Delta>s ! i)" if "i < length ps" for i
+        using chk that by (auto simp: list_all2_conv_all_nth)
+      have sound_i: "pat_sound \<Gamma> \<eta> \<rho> (node (ps ! i)) (?\<sigma>s ! i) (\<Delta>s ! i) (vs ! i)" if i: "i < length ps" for i
+      proof -
+        have mem: "ps ! i \<in> set ps" using i by simp
+        have wfi: "wf_ty \<Sigma> \<sigma>'" and fvi: "fv \<sigma>' \<subseteq> fst ` set \<eta>" using wf\<sigma> fv\<sigma> unfolding \<sigma>s by auto
+        have vi: "\<turnstile> vs ! i : Ty (inst \<eta> \<sigma>')" using typed i True by auto
+        from IH[OF ens cb \<sigma> \<sigma>s mem refl chk_i[OF i] env wfi fvi vi] i show ?thesis by simp
+      qed
+      have dom_i: "fmdom' (\<Delta>s ! i) = binds (node (ps ! i))" if i: "i < length ps" for i
+        using check_pat_wf(2)[OF wf_class_table wf\<Gamma> _ chk_i[OF i]] wf\<sigma> unfolding \<sigma>s by auto
+      have once: "distinct (concat (map (sorted_list_of_set \<circ> binds \<circ> node) ps))" using check_bound_once_Ok[OF cb] .
+      have l1: "length ps = length vs" and l2: "length ps = length \<Delta>s" using True len\<Delta>s by simp_all
+      have sound_all: "\<forall>i < length ps. pat_sound \<Gamma> \<eta> \<rho> (node (ps ! i)) (?\<sigma>s ! i) (\<Delta>s ! i) (vs ! i)"
+        using sound_i by blast
+      have dom_all: "\<forall>i < length ps. fmdom' (\<Delta>s ! i) = binds (node (ps ! i))" using dom_i by blast
+      note seq = match_seq_sound[where pus = "zip ps vs" and fps = ps and us = vs and \<Delta>s = \<Delta>s and fts = ?\<sigma>s,
+          OF refl l1 l2 sound_all dom_all once]
+      have m: "match \<rho> (PatList ps) v
+               = foldr seq_compose_match (map (\<lambda>(p, u). match \<rho> (node p) u) (zip ps vs)) (Match fmempty)"
+        using l1 by (simp add: VList match_all_foldr)
+      have dom\<Delta>: "fmdom' \<Delta> = binds (PatList ps)"
+        using check_pat_wf(1)[OF wf_class_table wf\<Gamma> "6.prems"(4) "6.prems"(2)[unfolded \<Sigma>']] by simp
+      have dom\<Delta>\<^sub>d: "fmdom' \<Delta>\<^sub>d = binds (PatList ps)" using dom_f[rule_format, of \<sigma> \<Delta>\<^sub>d] \<sigma> fk pb by simp
+      show ?thesis
+        unfolding pat_sound_def
+      proof (intro conjI)
+        show "\<forall>\<kappa>. match \<rho> (PatList ps) v = MatchAborts \<kappa> \<longrightarrow> \<not> prevented \<kappa>" using seq(1) unfolding m by blast
+        show "match \<rho> (PatList ps) v = NoMatch \<longrightarrow> \<turnstile> v : Ty (inst \<eta> (remaining \<Sigma> \<Gamma> \<tau> (PatList ps)))"
+          using other by blast
+        show "\<forall>\<rho>'. match \<rho> (PatList ps) v = Match \<rho>' \<longrightarrow> fmdom' \<rho>' = fmdom' \<Delta>
+              \<and> (\<forall>x \<sigma>'. fmlookup \<Delta> x = Some \<sigma>' \<longrightarrow> (\<exists>u. fmlookup \<rho>' x = Some u \<and> \<turnstile> u : Ty (inst \<eta> \<sigma>')))
+              \<and> \<turnstile> v : Ty (inst \<eta> (matched_as \<Sigma> \<Gamma> \<tau> (PatList ps)))"
+        proof (intro allI impI)
+          fix \<rho>'
+          assume "match \<rho> (PatList ps) v = Match \<rho>'"
+          from seq(3)[OF this[unfolded m]] have dom: "fmdom' \<rho>' = fmdom' \<Delta>\<^sub>d"
+            and look: "\<forall>x \<upsilon>. fmlookup \<Delta>\<^sub>d x = Some \<upsilon> \<longrightarrow> (\<exists>u. fmlookup \<rho>' x = Some u \<and> \<turnstile> u : Ty (inst \<eta> \<upsilon>))"
+            unfolding \<Delta>\<^sub>d by auto
+          have "\<exists>u. fmlookup \<rho>' x = Some u \<and> \<turnstile> u : Ty (inst \<eta> \<sigma>\<^sub>1)" if \<sigma>\<^sub>1: "fmlookup \<Delta> x = Some \<sigma>\<^sub>1" for x \<sigma>\<^sub>1
+          proof -
+            from \<sigma>\<^sub>1 have "x \<in> fmdom' \<Delta>\<^sub>d" using dom\<Delta> dom\<Delta>\<^sub>d by (auto simp: fmlookup_dom'_iff)
+            then obtain \<upsilon> where \<upsilon>: "fmlookup \<Delta>\<^sub>d x = Some \<upsilon>" by (auto simp: fmlookup_dom'_iff)
+            with look obtain u where u: "fmlookup \<rho>' x = Some u" and u_typed: "\<turnstile> u : Ty (inst \<eta> \<upsilon>)" by blast
+            have "\<exists>\<sigma>\<^sub>2. fmlookup \<Delta> x = Some \<sigma>\<^sub>2 \<and> \<turnstile> u : Ty (inst \<eta> \<sigma>\<^sub>2)"
+            proof (rule bindings_at_typed[where f = ?f and \<tau> = \<tau> and p = "PatList ps" and k = k and \<Delta>\<^sub>d = \<Delta>\<^sub>d])
+              show "bindings_at \<Sigma> \<Gamma> (PatList ps) (map ?f (disjuncts \<tau>)) = Ok \<Delta>" by (rule b)
+              show "k < length (disjuncts \<tau>)" by (rule k)
+              show "?f (disjuncts \<tau> ! k) = Some (Ok \<Delta>\<^sub>d)" by (rule fk')
+              show "\<forall>\<sigma>' \<Delta>'. \<sigma>' \<in> set (disjuncts \<tau>) \<and> ?f \<sigma>' = Some (Ok \<Delta>')
+                      \<longrightarrow> fmdom' \<Delta>' = binds (PatList ps) \<and> (\<forall>x \<upsilon>. fmlookup \<Delta>' x = Some \<upsilon> \<longrightarrow> wf_ty \<Sigma> \<upsilon>)"
+                by (rule dom_f)
+              show "fmlookup \<Delta>\<^sub>d x = Some \<upsilon>" by (rule \<upsilon>)
+              show "\<turnstile> u : Ty (inst \<eta> \<upsilon>)" by (rule u_typed)
+              show "wf_inst \<Sigma> \<eta>" by (rule wf\<eta>)
+            qed
+            with \<sigma>\<^sub>1 u show ?thesis by auto
+          qed
+          moreover have "\<turnstile> v : Ty (inst \<eta> (matched_as \<Sigma> \<Gamma> \<sigma> (PatList ps)))" using v unfolding \<sigma>s by simp
+          ultimately show "fmdom' \<rho>' = fmdom' \<Delta>
+              \<and> (\<forall>x \<sigma>'. fmlookup \<Delta> x = Some \<sigma>' \<longrightarrow> (\<exists>u. fmlookup \<rho>' x = Some u \<and> \<turnstile> u : Ty (inst \<eta> \<sigma>')))
+              \<and> \<turnstile> v : Ty (inst \<eta> (matched_as \<Sigma> \<Gamma> \<tau> (PatList ps)))"
+            using dom dom\<Delta> dom\<Delta>\<^sub>d lift_m by blast
+        qed
+      qed
+    qed
+  next
+    case (VTuple vs)
+    with v tuple_has_values has_values_disjunct[OF \<sigma>] no_tuple have False by blast
+    then show ?thesis ..
+  next
+    case (VObject D zvs)
+    show ?thesis
+    proof (cases "D = range_class")
+      case True
+      with v VObject range_has_values has_values_disjunct[OF \<sigma>] no_range have False by blast
+      then show ?thesis ..
+    next
+      case False
+      then have "match \<rho> (PatList ps) v = NoMatch" by (simp add: VObject)
+      with other show ?thesis by (simp add: pat_sound_def)
+    qed
+  qed (use other in \<open>simp_all add: pat_sound_def\<close>)
 next
   case (7 \<Sigma>' \<Gamma> kps \<tau>)
-  then show ?case sorry
+  note \<Sigma>' = "7.prems"(1)
+  note env = "7.prems"(3)
+  note wf\<Gamma> = wf_env_wf_cxt[OF env] and wf\<eta> = wf_env_wf_inst[OF env]
+  note IH = "7.IH"[unfolded \<Sigma>']
+  note m2r = map2_replicate[of _ "map snd kps", simplified]
+  let ?ps = "map snd kps"
+  let ?f = "\<lambda>\<sigma>. case \<sigma> of
+              TyDict \<sigma>' \<Rightarrow> Some (pattern_bindings (map (\<lambda>p. check_pat_at \<Sigma> \<Gamma> p \<sigma>') ?ps))
+            | _ \<Rightarrow> if has_dict_values \<Sigma> \<sigma> then Some (Fail (Violates RuleCheckDictNone (DictPatternDictValues \<sigma>)))
+                   else None"
+  from "7.prems"(2)[unfolded \<Sigma>'] have cb: "check_bound_once ?ps = Ok ()"
+    and b: "bindings_at \<Sigma> \<Gamma> (PatDict kps) (map ?f (disjuncts \<tau>)) = Ok \<Delta>"
+    by (auto simp: bind_sum_Ok)
+  from wf_val_inst_disjunct[OF "7.prems"(6)] obtain \<sigma> where \<sigma>: "\<sigma> \<in> set (disjuncts \<tau>)" and v: "\<turnstile> v : Ty (inst \<eta> \<sigma>)"
+    by blast
+  note nonunion = disjuncts_nonunion[OF \<sigma>]
+  note lift_m = matched_as_lift[OF \<sigma> "7.prems"(2)[unfolded \<Sigma>'] wf\<Gamma> "7.prems"(4) wf\<eta>]
+  note lift_r = remaining_lift[OF \<sigma> "7.prems"(4) wf\<eta>]
+  have wf\<sigma>: "wf_ty \<Sigma> \<sigma>" and fv\<sigma>: "fv \<sigma> \<subseteq> fst ` set \<eta>" using disjuncts_wf[OF "7.prems"(4) \<sigma>] "7.prems"(5) by auto
+  from \<sigma> obtain k where k: "k < length (disjuncts \<tau>)" and \<sigma>k: "disjuncts \<tau> ! k = \<sigma>" by (auto simp: in_set_conv_nth)
+  from bindings_at_Ok[OF b] obtain \<Delta>s_all
+    where rel: "list_all2 (\<lambda>m \<Delta>'. case m of Some m' \<Rightarrow> m' = Ok \<Delta>'
+                    | None \<Rightarrow> \<Delta>' = fmconst (binds (PatDict kps)) (TyPrim Never)
+                        \<and> (\<forall>x \<in> binds (PatDict kps). fmlookup \<Gamma> x = Some Unbound)) (map ?f (disjuncts \<tau>)) \<Delta>s_all"
+    by blast
+  (* No disjunct other than a dictionary type has dictionary values *)
+  have no_dict: "\<not> has_dict_values \<Sigma> \<sigma>" if "\<forall>\<sigma>'. \<sigma> \<noteq> TyDict \<sigma>'"
+  proof
+    assume "has_dict_values \<Sigma> \<sigma>"
+    with that have "?f \<sigma> = Some (Fail (Violates RuleCheckDictNone (DictPatternDictValues \<sigma>)))" by (cases \<sigma>) auto
+    with rel k \<sigma>k show False by (auto simp: list_all2_conv_all_nth)
+  qed
+  have dom_f: "\<forall>\<sigma>' \<Delta>'. \<sigma>' \<in> set (disjuncts \<tau>) \<and> ?f \<sigma>' = Some (Ok \<Delta>')
+                 \<longrightarrow> fmdom' \<Delta>' = binds (PatDict kps) \<and> (\<forall>x \<upsilon>. fmlookup \<Delta>' x = Some \<upsilon> \<longrightarrow> wf_ty \<Sigma> \<upsilon>)"
+  proof (intro allI impI)
+    fix \<sigma>' \<Delta>'
+    assume "\<sigma>' \<in> set (disjuncts \<tau>) \<and> ?f \<sigma>' = Some (Ok \<Delta>')"
+    then obtain \<sigma>\<^sub>1 where \<sigma>': "\<sigma>' = TyDict \<sigma>\<^sub>1"
+      and pb: "pattern_bindings (map2 (check_pat_at \<Sigma> \<Gamma>) ?ps (replicate (length ?ps) \<sigma>\<^sub>1)) = Ok \<Delta>'"
+      and mem: "\<sigma>' \<in> set (disjuncts \<tau>)"
+      by (auto simp: m2r split: ty.splits if_splits)
+    have wf': "wf_ty \<Sigma> \<sigma>\<^sub>1" using disjuncts_wf[OF "7.prems"(4) mem] by (simp add: \<sigma>')
+    have sub: "fmdom' \<Delta>\<^sub>1 = binds (node p) \<and> (\<forall>x \<sigma>\<^sub>2. fmlookup \<Delta>\<^sub>1 x = Some \<sigma>\<^sub>2 \<longrightarrow> wf_ty \<Sigma> \<sigma>\<^sub>2 \<and> fv \<sigma>\<^sub>2 \<subseteq> fv \<sigma>\<^sub>1)"
+      if "(p, \<sigma>\<^sub>2) \<in> set (zip ?ps (replicate (length ?ps) \<sigma>\<^sub>1))" and "check_pat_at \<Sigma> \<Gamma> p \<sigma>\<^sub>2 = Ok \<Delta>\<^sub>1"
+      for p \<sigma>\<^sub>2 \<Delta>\<^sub>1
+      using check_pat_wf(2)[OF wf_class_table wf\<Gamma> wf'] that set_zip_rightD[OF that(1)] by auto
+    from pattern_bindings_wf[OF pb _ sub]
+    show "fmdom' \<Delta>' = binds (PatDict kps) \<and> (\<forall>x \<upsilon>. fmlookup \<Delta>' x = Some \<upsilon> \<longrightarrow> wf_ty \<Sigma> \<upsilon>)" by auto
+  qed
+  (* Value other than a dictionary: at the remaining type, the disjunct itself *)
+  have other: "\<turnstile> v : Ty (inst \<eta> (remaining \<Sigma> \<Gamma> \<tau> (PatDict kps)))" if "\<forall>\<delta>. v \<noteq> VDict \<delta>"
+  proof -
+    have "\<forall>\<sigma>'. \<sigma> \<noteq> TyDict \<sigma>'"
+    proof (intro allI notI)
+      fix \<sigma>'
+      assume "\<sigma> = TyDict \<sigma>'"
+      with v have "\<turnstile> v : Ty (TyDict (inst \<eta> \<sigma>'))" by simp
+      from wf_dict[OF this] that show False by blast
+    qed
+    with v have "\<turnstile> v : Ty (inst \<eta> (remaining \<Sigma> \<Gamma> \<sigma> (PatDict kps)))" by (simp add: remaining_dict[OF nonunion])
+    then show ?thesis by (rule lift_r)
+  qed
+  show ?case
+  proof (cases v)
+    case (VDict \<delta>)
+    have "\<exists>\<sigma>'. \<sigma> = TyDict \<sigma>'"
+    proof (rule ccontr)
+      assume "\<nexists>\<sigma>'. \<sigma> = TyDict \<sigma>'"
+      with dict_has_values[OF v[unfolded VDict]] no_dict show False by auto
+    qed
+    then obtain \<sigma>' where \<sigma>s: "\<sigma> = TyDict \<sigma>'" by blast
+    have typed: "\<forall>w u. (w, u) \<in> set \<delta> \<longrightarrow> \<turnstile> u : Ty (inst \<eta> \<sigma>')" using v unfolding VDict \<sigma>s by (auto elim: wf_dict)
+    show ?thesis
+    proof (cases "set (map fst kps) \<subseteq> set (map fst \<delta>)")
+      case False
+      then have no: "match \<rho> (PatDict kps) v = NoMatch" by (simp add: VDict)
+      from False have "kps \<noteq> []" by auto
+      with v have "\<turnstile> v : Ty (inst \<eta> (remaining \<Sigma> \<Gamma> \<sigma> (PatDict kps)))" by (simp add: remaining_dict[OF nonunion])
+      with no lift_r show ?thesis by (simp add: pat_sound_def)
+    next
+      case True
+      let ?us = "map (\<lambda>(w, p). the (map_of \<delta> w)) kps"
+      let ?\<sigma>s = "replicate (length ?ps) \<sigma>'"
+      have us_typed: "\<turnstile> ?us ! i : Ty (inst \<eta> \<sigma>')" if i: "i < length kps" for i
+      proof -
+        obtain w p where kp: "kps ! i = (w, p)" by (cases "kps ! i")
+        with i have "w \<in> set (map fst kps)" by (metis fst_conv image_eqI nth_mem set_map)
+        with True have "w \<in> set (map fst \<delta>)" by blast
+        then obtain u where "map_of \<delta> w = Some u" by (auto dest: weak_map_of_SomeI)
+        with typed map_of_SomeD[OF this] i kp show ?thesis by simp
+      qed
+      have fk: "?f \<sigma> = Some (pattern_bindings (map2 (check_pat_at \<Sigma> \<Gamma>) ?ps ?\<sigma>s))" using \<sigma>s by (simp add: m2r)
+      with rel k \<sigma>k obtain \<Delta>\<^sub>d where pb: "pattern_bindings (map2 (check_pat_at \<Sigma> \<Gamma>) ?ps ?\<sigma>s) = Ok \<Delta>\<^sub>d"
+        by (auto simp: list_all2_conv_all_nth)
+      have fk': "?f (disjuncts \<tau> ! k) = Some (Ok \<Delta>\<^sub>d)" unfolding \<sigma>k fk pb ..
+      from pattern_bindings_Ok[OF pb] obtain \<Delta>s
+        where chk: "list_all2 (\<lambda>m \<Delta>'. m = Ok \<Delta>') (map2 (check_pat_at \<Sigma> \<Gamma>) ?ps ?\<sigma>s) \<Delta>s"
+        and \<Delta>\<^sub>d: "\<Delta>\<^sub>d = fold fmadd \<Delta>s fmempty"
+        by blast
+      have len\<Delta>s: "length \<Delta>s = length kps" using list_all2_lengthD[OF chk] by simp
+      have chk_i: "check_pat_at \<Sigma> \<Gamma> (?ps ! i) \<sigma>' = Ok (\<Delta>s ! i)" if "i < length kps" for i
+        using chk that by (auto simp: list_all2_conv_all_nth)
+      have sound_i: "pat_sound \<Gamma> \<eta> \<rho> (node (?ps ! i)) (?\<sigma>s ! i) (\<Delta>s ! i) (?us ! i)" if i: "i < length kps" for i
+      proof -
+        have mem: "?ps ! i \<in> set ?ps" using i by simp
+        have wfi: "wf_ty \<Sigma> \<sigma>'" and fvi: "fv \<sigma>' \<subseteq> fst ` set \<eta>" using wf\<sigma> fv\<sigma> unfolding \<sigma>s by auto
+        from IH[OF cb \<sigma> \<sigma>s mem refl chk_i[OF i] env wfi fvi us_typed[OF i]] i show ?thesis by simp
+      qed
+      have dom_i: "fmdom' (\<Delta>s ! i) = binds (node (?ps ! i))" if i: "i < length kps" for i
+        using check_pat_wf(2)[OF wf_class_table wf\<Gamma> _ chk_i[OF i]] wf\<sigma> unfolding \<sigma>s by auto
+      have once: "distinct (concat (map (sorted_list_of_set \<circ> binds \<circ> node) ?ps))" using check_bound_once_Ok[OF cb] .
+      have l1: "length ?ps = length ?us" and l2: "length ?ps = length \<Delta>s" using len\<Delta>s by simp_all
+      have sound_all: "\<forall>i < length ?ps. pat_sound \<Gamma> \<eta> \<rho> (node (?ps ! i)) (?\<sigma>s ! i) (\<Delta>s ! i) (?us ! i)"
+        using sound_i by auto
+      have dom_all: "\<forall>i < length ?ps. fmdom' (\<Delta>s ! i) = binds (node (?ps ! i))" using dom_i by auto
+      note seq = match_seq_sound[where pus = "zip ?ps ?us" and fps = ?ps and us = ?us and \<Delta>s = \<Delta>s and fts = ?\<sigma>s,
+          OF refl l1 l2 sound_all dom_all once]
+      have "map (\<lambda>(w, p). match \<rho> (node p) (the (map_of \<delta> w))) kps = map (\<lambda>(p, u). match \<rho> (node p) u) (zip ?ps ?us)"
+        by (induction kps) auto
+      then have m: "match \<rho> (PatDict kps) v
+                    = foldr seq_compose_match (map (\<lambda>(p, u). match \<rho> (node p) u) (zip ?ps ?us)) (Match fmempty)"
+        using True by (simp add: VDict match_dict_foldr)
+      have dom\<Delta>: "fmdom' \<Delta> = binds (PatDict kps)"
+        using check_pat_wf(1)[OF wf_class_table wf\<Gamma> "7.prems"(4) "7.prems"(2)[unfolded \<Sigma>']] by simp
+      have dom\<Delta>\<^sub>d: "fmdom' \<Delta>\<^sub>d = binds (PatDict kps)" using dom_f[rule_format, of \<sigma> \<Delta>\<^sub>d] \<sigma> fk pb by simp
+      show ?thesis
+        unfolding pat_sound_def
+      proof (intro conjI)
+        show "\<forall>\<kappa>. match \<rho> (PatDict kps) v = MatchAborts \<kappa> \<longrightarrow> \<not> prevented \<kappa>" using seq(1) unfolding m by blast
+        show "match \<rho> (PatDict kps) v = NoMatch \<longrightarrow> \<turnstile> v : Ty (inst \<eta> (remaining \<Sigma> \<Gamma> \<tau> (PatDict kps)))"
+        proof
+          assume "match \<rho> (PatDict kps) v = NoMatch"
+          from seq(2)[OF this[unfolded m]] have "kps \<noteq> []" by auto
+          with v have "\<turnstile> v : Ty (inst \<eta> (remaining \<Sigma> \<Gamma> \<sigma> (PatDict kps)))" by (simp add: remaining_dict[OF nonunion])
+          then show "\<turnstile> v : Ty (inst \<eta> (remaining \<Sigma> \<Gamma> \<tau> (PatDict kps)))" by (rule lift_r)
+        qed
+        show "\<forall>\<rho>'. match \<rho> (PatDict kps) v = Match \<rho>' \<longrightarrow> fmdom' \<rho>' = fmdom' \<Delta>
+              \<and> (\<forall>x \<sigma>'. fmlookup \<Delta> x = Some \<sigma>' \<longrightarrow> (\<exists>u. fmlookup \<rho>' x = Some u \<and> \<turnstile> u : Ty (inst \<eta> \<sigma>')))
+              \<and> \<turnstile> v : Ty (inst \<eta> (matched_as \<Sigma> \<Gamma> \<tau> (PatDict kps)))"
+        proof (intro allI impI)
+          fix \<rho>'
+          assume "match \<rho> (PatDict kps) v = Match \<rho>'"
+          from seq(3)[OF this[unfolded m]] have dom: "fmdom' \<rho>' = fmdom' \<Delta>\<^sub>d"
+            and look: "\<forall>x \<upsilon>. fmlookup \<Delta>\<^sub>d x = Some \<upsilon> \<longrightarrow> (\<exists>u. fmlookup \<rho>' x = Some u \<and> \<turnstile> u : Ty (inst \<eta> \<upsilon>))"
+            unfolding \<Delta>\<^sub>d by auto
+          have "\<exists>u. fmlookup \<rho>' x = Some u \<and> \<turnstile> u : Ty (inst \<eta> \<sigma>\<^sub>1)" if \<sigma>\<^sub>1: "fmlookup \<Delta> x = Some \<sigma>\<^sub>1" for x \<sigma>\<^sub>1
+          proof -
+            from \<sigma>\<^sub>1 have "x \<in> fmdom' \<Delta>\<^sub>d" using dom\<Delta> dom\<Delta>\<^sub>d by (auto simp: fmlookup_dom'_iff)
+            then obtain \<upsilon> where \<upsilon>: "fmlookup \<Delta>\<^sub>d x = Some \<upsilon>" by (auto simp: fmlookup_dom'_iff)
+            with look obtain u where u: "fmlookup \<rho>' x = Some u" and u_typed: "\<turnstile> u : Ty (inst \<eta> \<upsilon>)" by blast
+            have "\<exists>\<sigma>\<^sub>2. fmlookup \<Delta> x = Some \<sigma>\<^sub>2 \<and> \<turnstile> u : Ty (inst \<eta> \<sigma>\<^sub>2)"
+            proof (rule bindings_at_typed[where f = ?f and \<tau> = \<tau> and p = "PatDict kps" and k = k and \<Delta>\<^sub>d = \<Delta>\<^sub>d])
+              show "bindings_at \<Sigma> \<Gamma> (PatDict kps) (map ?f (disjuncts \<tau>)) = Ok \<Delta>" by (rule b)
+              show "k < length (disjuncts \<tau>)" by (rule k)
+              show "?f (disjuncts \<tau> ! k) = Some (Ok \<Delta>\<^sub>d)" by (rule fk')
+              show "\<forall>\<sigma>' \<Delta>'. \<sigma>' \<in> set (disjuncts \<tau>) \<and> ?f \<sigma>' = Some (Ok \<Delta>')
+                      \<longrightarrow> fmdom' \<Delta>' = binds (PatDict kps) \<and> (\<forall>x \<upsilon>. fmlookup \<Delta>' x = Some \<upsilon> \<longrightarrow> wf_ty \<Sigma> \<upsilon>)"
+                by (rule dom_f)
+              show "fmlookup \<Delta>\<^sub>d x = Some \<upsilon>" by (rule \<upsilon>)
+              show "\<turnstile> u : Ty (inst \<eta> \<upsilon>)" by (rule u_typed)
+              show "wf_inst \<Sigma> \<eta>" by (rule wf\<eta>)
+            qed
+            with \<sigma>\<^sub>1 u show ?thesis by auto
+          qed
+          moreover have "\<turnstile> v : Ty (inst \<eta> (matched_as \<Sigma> \<Gamma> \<sigma> (PatDict kps)))" using v unfolding \<sigma>s by simp
+          ultimately show "fmdom' \<rho>' = fmdom' \<Delta>
+              \<and> (\<forall>x \<sigma>'. fmlookup \<Delta> x = Some \<sigma>' \<longrightarrow> (\<exists>u. fmlookup \<rho>' x = Some u \<and> \<turnstile> u : Ty (inst \<eta> \<sigma>')))
+              \<and> \<turnstile> v : Ty (inst \<eta> (matched_as \<Sigma> \<Gamma> \<tau> (PatDict kps)))"
+            using dom dom\<Delta> dom\<Delta>\<^sub>d lift_m by blast
+        qed
+      qed
+    qed
+  qed (use other in \<open>simp_all add: pat_sound_def\<close>)
 next
   case (8 \<Sigma>' \<Gamma> q ps kps \<tau>)
   then show ?case sorry
