@@ -3,14 +3,14 @@ theory Statements
   imports Calls
 begin
 
-(* Return type over the type variables bound by \<eta> *)
-fun wf_return :: "(var \<times> ty) list \<Rightarrow> ty option \<Rightarrow> bool"
-where
-"wf_return \<eta> (Some \<tau>) = (fv \<tau> \<subseteq> fst ` set \<eta>)" |
-"wf_return \<eta> None = True"
-
 context evaluation
 begin
+
+(* Return type, well-formed and over the type variables bound by \<eta> *)
+fun wf_return :: "(var \<times> ty) list \<Rightarrow> ty option \<Rightarrow> bool"
+where
+"wf_return \<eta> (Some \<tau>) = (fv \<tau> \<subseteq> fst ` set \<eta> \<and> wf_ty \<Sigma> \<tau>)" |
+"wf_return \<eta> None = True"
 
 (* Completion of a statement checked at \<Gamma> and return type \<zeta> with static outcome R, run in \<rho> *)
 fun wf_completion :: "(var \<times> ty) list \<Rightarrow> env \<Rightarrow> cxt \<Rightarrow> ty option \<Rightarrow> completion \<Rightarrow> static_outcome \<Rightarrow> bool"
@@ -75,7 +75,9 @@ proof (rule sound_stmtI)
     and "fmlookup \<Gamma> x = Some Unbound"
     by (auto simp: bind_sum_def check_unbound_def ensure_def split: sum.splits if_splits)
   with env have "fmlookup \<rho> x = Some VUnbound" by (auto dest!: wf_env_lookup wf_val_unbound wf_val_du)
-  moreover have "fv \<tau> \<subseteq> fst ` set \<eta>" using env resolve_type_tyvars[OF \<tau>] by (rule wf_env_fv)
+  moreover have "fv \<tau> \<subseteq> fst ` set \<eta>"
+    using env resolve_type_tyvars[OF wf_env_wf_cxt[OF env] \<tau>] by (rule wf_env_fv)
+  moreover have "wf_ty \<Sigma> \<tau>" using resolve_type_wf[OF wf_env_wf_cxt[OF env] \<tau>] by simp
   ultimately have "\<eta> \<turnstile> \<rho> : fmupd x (DU \<tau>) \<Gamma>" using env by (intro wf_env_upd_cxt) (auto intro: ValUnbound)
   then show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (assigns\<^sub>o \<epsilon>) R" by (simp add: R)
 qed
@@ -86,21 +88,34 @@ lemma assign_sound:
 proof (rule sound_stmtI)
   fix \<eta> \<Gamma> \<zeta> R
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssign x \<pi> e) = Ok R"
-  from chk obtain \<tau> where chk_e: "check_expr_at \<Sigma> \<Gamma> e \<tau> = Ok ()"
-    and R: "R = Assigns\<^sub>R (fmupd x (Ty \<tau>) fmempty) None" and fv_\<Gamma>: "fv \<tau> \<subseteq> tyvars \<Gamma>"
-    by (cases \<pi>)
-       (auto simp: bind_sum_def check_unbound_def ensure_def
-        split: sum.splits option.splits cxt_entry.splits if_splits dest: tyvars_entry resolve_type_tyvars)
+  have "\<exists>\<tau>. check_expr_at \<Sigma> \<Gamma> e \<tau> = Ok () \<and> R = Assigns\<^sub>R (fmupd x (Ty \<tau>) fmempty) None \<and> fv \<tau> \<subseteq> tyvars \<Gamma>
+    \<and> wf_ty \<Sigma> \<tau>"
+  proof (cases \<pi>)
+    case None
+    with chk obtain \<tau> where "fmlookup \<Gamma> x = Some (DU \<tau>)" and "check_expr_at \<Sigma> \<Gamma> e \<tau> = Ok ()"
+      and "R = Assigns\<^sub>R (fmupd x (Ty \<tau>) fmempty) None"
+      by (auto simp: bind_sum_def split: sum.splits option.splits cxt_entry.splits)
+    with wf_cxt_lookup[OF wf_env_wf_cxt[OF env] this(1)] tyvars_entry[OF this(1)] show ?thesis by auto
+  next
+    case (Some \<psi>)
+    with chk obtain \<tau> where "resolve_type \<Sigma> \<Gamma> \<psi> = Ok \<tau>" and "check_expr_at \<Sigma> \<Gamma> e \<tau> = Ok ()"
+      and "R = Assigns\<^sub>R (fmupd x (Ty \<tau>) fmempty) None"
+      by (auto simp: bind_sum_def check_unbound_def ensure_def split: sum.splits if_splits)
+    with resolve_type_wf[OF wf_env_wf_cxt[OF env] this(1)] show ?thesis by auto
+  qed
+  then obtain \<tau> where chk_e: "check_expr_at \<Sigma> \<Gamma> e \<tau> = Ok ()"
+    and R: "R = Assigns\<^sub>R (fmupd x (Ty \<tau>) fmempty) None" and fv_\<Gamma>: "fv \<tau> \<subseteq> tyvars \<Gamma>" and wf: "wf_ty \<Sigma> \<tau>"
+    by blast
   from env fv_\<Gamma> have fv: "fv \<tau> \<subseteq> fst ` set \<eta>" by (rule wf_env_fv)
   show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (mlet r (\<lambda>v. assigns\<^sub>o (fmupd x v \<epsilon>))) R"
   proof (cases r)
     case (Val v)
-    with assms env chk_e fv have "\<turnstile> v : Ty (inst \<eta> \<tau>)" by (auto dest: sound_expr_check_at)
-    then have "\<eta> \<turnstile> fmupd x v \<rho> : fmupd x (Ty \<tau>) \<Gamma>" using env fv by (intro wf_env_upd) auto
+    with assms env chk_e fv wf have "\<turnstile> v : Ty (inst \<eta> \<tau>)" by (auto dest: sound_expr_check_at)
+    then have "\<eta> \<turnstile> fmupd x v \<rho> : fmupd x (Ty \<tau>) \<Gamma>" using env fv wf by (intro wf_env_upd) auto
     then show ?thesis by (simp add: Val R)
   next
     case (Aborts \<kappa>)
-    with assms env chk_e fv show ?thesis by (auto simp: R dest: sound_expr_check_at)
+    with assms env chk_e fv wf show ?thesis by (auto simp: R dest: sound_expr_check_at)
   qed
 qed
 
@@ -152,61 +167,21 @@ proof (rule sound_stmtI)
   fix \<eta> \<Gamma> \<zeta> R
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtReturn (Some e)) = Ok R"
   from chk obtain \<tau> where \<zeta>: "\<zeta> = Some \<tau>" by (cases \<zeta>) auto
-  with ret have fv: "fv \<tau> \<subseteq> fst ` set \<eta>" by simp
+  with ret have fv: "fv \<tau> \<subseteq> fst ` set \<eta>" and wf: "wf_ty \<Sigma> \<tau>" by simp_all
   from chk \<zeta> have "check_expr_at \<Sigma> \<Gamma> e \<tau> = Ok ()" by (auto simp: bind_sum_def split: sum.splits)
-  with assms env fv have "result_typed r (inst \<eta> \<tau>)" by (auto dest: sound_expr_check_at)
+  with assms env fv wf have "result_typed r (inst \<eta> \<tau>)" by (auto dest: sound_expr_check_at)
   then show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (mlet r returns\<^sub>o) R" by (cases r) (simp_all add: \<zeta>)
 qed
 
 lemma return_none_sound: "sound_stmt \<rho> (StmtReturn None) (returns\<^sub>o (VLit LitNone))"
 proof (rule sound_stmtI)
   fix \<eta> \<Gamma> \<zeta> R
-  assume chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtReturn None) = Ok R"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtReturn None) = Ok R"
   from chk obtain \<tau> where \<zeta>: "\<zeta> = Some \<tau>" by (cases \<zeta>) auto
   with chk have "\<Sigma> \<turnstile> TyPrim NoneType <: \<tau>" by (auto split: if_splits)
-  then have "\<turnstile> VLit LitNone : Ty (inst \<eta> \<tau>)" by (rule wf_none)
+  moreover have "wf_ty \<Sigma> \<tau>" using ret by (simp add: \<zeta>)
+  ultimately have "\<turnstile> VLit LitNone : Ty (inst \<eta> \<tau>)" using wf_env_wf_inst[OF env] by (rule wf_none)
   then show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (returns\<^sub>o (VLit LitNone)) R" by (simp add: \<zeta>)
-qed
-
-(* Free type variables of a function signature, among the type variables of the context *)
-lemma def_signature_fv:
-  assumes "def_signature \<Sigma> \<Gamma> d = Ok \<pi>"
-  shows "fv_scheme \<pi> \<subseteq> tyvars \<Gamma>"
-proof (cases d)
-  case (Def f \<alpha>s xps \<psi> s)
-  let ?\<Gamma>' = "\<Gamma> \<otimes> fmconst (set \<alpha>s) TypeVar"
-  from assms Def obtain \<sigma>s \<tau> where \<sigma>s: "those_sum (map (resolve_type \<Sigma> ?\<Gamma>' \<circ> snd) xps) = Ok \<sigma>s"
-    and \<tau>: "resolve_type \<Sigma> ?\<Gamma>' \<psi> = Ok \<tau>" and \<pi>: "\<pi> = TyScheme \<alpha>s (TyCallable \<sigma>s \<tau>)"
-    by (auto simp: Let_def bind_sum_def split: sum.splits option.splits)
-  have \<Gamma>': "tyvars ?\<Gamma>' \<subseteq> tyvars \<Gamma> \<union> set \<alpha>s" using tyvars_add tyvars_fmconst by blast
-  have "fv \<sigma> \<subseteq> tyvars ?\<Gamma>'" if "\<sigma> \<in> set \<sigma>s" for \<sigma>
-  proof -
-    from that obtain i where "i < length \<sigma>s" and "\<sigma> = \<sigma>s ! i" by (auto simp: in_set_conv_nth)
-    with those_sum_map_Ok[OF \<sigma>s] have "resolve_type \<Sigma> ?\<Gamma>' (snd (xps ! i)) = Ok \<sigma>"
-      by (auto simp: list_all2_conv_all_nth)
-    then show ?thesis by (rule resolve_type_tyvars)
-  qed
-  with resolve_type_tyvars[OF \<tau>] \<Gamma>' show ?thesis by (auto simp: \<pi>)
-qed
-
-(* Type variables of the entries of mutually recursive definitions, among those of the context *)
-lemma defs_tyvars:
-  assumes "those_sum (map (\<lambda>d. locate (pos_of d) (def_signature \<Sigma> \<Gamma> (node d))) ds) = Ok \<pi>s"
-  shows "tyvars (fmap_of_list (zip (map (def_name \<circ> node) ds) (map signature_entry \<pi>s))) \<subseteq> tyvars \<Gamma>"
-proof
-  fix \<alpha>
-  assume "\<alpha> \<in> tyvars (fmap_of_list (zip (map (def_name \<circ> node) ds) (map signature_entry \<pi>s)))"
-  then obtain x \<theta>
-    where look: "fmlookup (fmap_of_list (zip (map (def_name \<circ> node) ds) (map signature_entry \<pi>s))) x = Some \<theta>"
-    and \<alpha>: "\<alpha> \<in> fv_entry \<theta> \<or> \<theta> = TypeVar"
-    by (auto simp: tyvars_def fmlookup_dom'_iff fmlookup_ran'_iff)
-  from look obtain \<pi> where "\<pi> \<in> set \<pi>s" and \<theta>: "\<theta> = signature_entry \<pi>"
-    by (auto simp: fmlookup_of_list dest!: map_of_SomeD set_zip_rightD)
-  then obtain i where i: "i < length \<pi>s" and \<pi>: "\<pi> = \<pi>s ! i" by (auto simp: in_set_conv_nth)
-  with those_sum_map_Ok[OF assms] have sig: "def_signature \<Sigma> \<Gamma> (node (ds ! i)) = Ok \<pi>"
-    by (auto simp: list_all2_conv_all_nth)
-  obtain \<alpha>s \<tau> where "\<pi> = TyScheme \<alpha>s \<tau>" by (cases \<pi>)
-  with def_signature_fv[OF sig] \<alpha> \<theta> show "\<alpha> \<in> tyvars \<Gamma>" by (cases \<alpha>s) auto
 qed
 
 (* Environment of a region of mutually recursive definitions, binding each to its closure *)
@@ -236,7 +211,8 @@ proof -
     using len by (auto simp: vs list_all2_conv_all_nth)
   show ?thesis
   proof (rule wf_env_add[OF env])
-    show "tyvars ?\<Delta> \<subseteq> fst ` set \<eta>" using defs_tyvars[OF sigs] wf_env_tyvars[OF env] by blast
+    show "tyvars ?\<Delta> \<subseteq> fst ` set \<eta>" using defs_wf[OF wf_env_wf_cxt[OF env] sigs] wf_env_tyvars[OF env] by blast
+    show "wf_cxt \<Sigma> ?\<Delta>" using defs_wf[OF wf_env_wf_cxt[OF env] sigs] by blast
     show "fmdom ?\<rho>' |\<subseteq>| fmdom ?\<Delta>" using len by (simp add: vs)
   next
     fix x \<theta>
@@ -246,13 +222,6 @@ proof -
       by (cases "map_of (zip ?xs vs) x") (auto simp: fmlookup_of_list)
     then show "\<exists>v. fmlookup (\<rho> \<otimes> ?\<rho>') x = Some v \<and> \<turnstile> v : inst_entry \<eta> \<theta>"
       using fmdomI[of ?\<rho>' x v] by (simp add: fmlookup_of_list)
-  next
-    fix x \<pi>
-    assume "fmlookup ?\<Delta> x = Some (Scheme \<pi>)"
-    then obtain i where i: "i < length ds" and \<pi>: "Scheme \<pi> = signature_entry (\<pi>s ! i)"
-      using len by (auto simp: fmlookup_of_list in_set_zip dest!: map_of_SomeD)
-    obtain \<alpha>s \<tau> where \<pi>i: "\<pi>s ! i = TyScheme \<alpha>s \<tau>" by (cases "\<pi>s ! i")
-    from def_signatures_callable[OF sigs i \<pi>i] \<pi> \<pi>i show "callable_scheme \<pi>" by (cases \<alpha>s) auto
   qed
 qed
 
@@ -277,7 +246,8 @@ proof (rule sound_stmtI)
     then obtain i where "i < length ds" and \<pi>: "\<pi> = \<pi>s ! i" using len by (auto simp: in_set_conv_nth)
     with those_sum_map_Ok[OF sigs] have "def_signature \<Sigma> \<Gamma> (node (ds ! i)) = Ok \<pi>"
       by (auto simp: list_all2_conv_all_nth)
-    from def_signature_fv[OF this] wf_env_tyvars[OF env] show "fv_scheme \<pi> \<subseteq> fst ` set \<eta>" by blast
+    from def_signature_wf[OF wf_env_wf_cxt[OF env] this] wf_env_tyvars[OF env] show "fv_scheme \<pi> \<subseteq> fst ` set \<eta>"
+      by blast
   qed
   have disjoint: "\<forall>d \<in> set ds. case node d of Def _ \<alpha>s _ _ _ \<Rightarrow> set \<alpha>s \<inter> tyvars \<Gamma> = {}"
   proof
@@ -372,31 +342,68 @@ lemma possibly_unassigned_above: "possibly_unassigned b \<theta> = Some \<theta>
 lemma possibly_unassigned_unbound: "possibly_unassigned b \<theta> = Some \<theta>' \<Longrightarrow> \<turnstile> VUnbound : inst_entry \<eta> \<theta>'"
   by (cases \<theta>) (auto intro: ValPU ValPUScheme)
 
-lemma merge_entry_above:
-  "merge_cxt_entry \<Sigma> b (Some \<theta>) e = Some \<theta>'' \<Longrightarrow> entry_above \<eta> \<theta> \<theta>''"
-  "merge_cxt_entry \<Sigma> b e (Some \<theta>) = Some \<theta>'' \<Longrightarrow> entry_above \<eta> \<theta> \<theta>''"
+(* Merge of two well-formed entries, above each *)
+lemma merge_entry_above_both:
+  assumes wf\<eta>: "wf_inst \<Sigma> \<eta>" and m: "merge_cxt_entry \<Sigma> b (Some \<theta>) (Some \<theta>') = Some \<theta>''"
+    and wf: "wf_entry \<Sigma> \<theta>" "wf_entry \<Sigma> \<theta>'"
+  shows "entry_above \<eta> \<theta> \<theta>'' \<and> entry_above \<eta> \<theta>' \<theta>''"
 proof -
-  have ty: "entry_above \<eta> (Ty \<sigma>) (Ty \<tau>)" if "\<Sigma> \<turnstile> \<sigma> <: \<tau>" for \<sigma> \<tau>
-    using that by (auto simp: entry_above_def intro: wf_val_inst_sub)
+  have ty: "entry_above \<eta> (Ty \<sigma>) (Ty \<tau>)" if "\<Sigma> \<turnstile> \<sigma> <: \<tau>" and "wf_ty \<Sigma> \<tau>" for \<sigma> \<tau>
+    using that by (auto simp: entry_above_def intro: wf_val_inst_sub[OF _ _ _ wf\<eta>])
   have scheme: "entry_above \<eta> \<theta> (PUScheme \<pi> b)" if "scheme_of \<theta> = Some \<pi>" for \<theta> \<pi>
     using scheme_of_Some[OF that]
     by (auto simp: entry_above_def intro!: ValPUScheme dest!: wf_val_puscheme)
-  have var: "entry_above \<eta> \<theta> (PU \<tau> b)" if "var_ty \<theta> = Some \<sigma>" and "\<Sigma> \<turnstile> \<sigma> <: \<tau>" for \<theta> \<sigma> \<tau>
-    using var_ty_Some[OF that(1)] that(2)
-    by (auto simp: entry_above_def intro!: ValPU dest!: wf_val_du wf_val_pu intro: wf_val_inst_sub)
-  show "merge_cxt_entry \<Sigma> b (Some \<theta>) e = Some \<theta>'' \<Longrightarrow> entry_above \<eta> \<theta> \<theta>''"
+  have var: "entry_above \<eta> \<theta> (PU \<tau> b)" if "var_ty \<theta> = Some \<sigma>" and "\<Sigma> \<turnstile> \<sigma> <: \<tau>" and "wf_ty \<Sigma> \<tau>" for \<theta> \<sigma> \<tau>
+    using var_ty_Some[OF that(1)] that(2, 3)
+    by (auto simp: entry_above_def intro!: ValPU dest!: wf_val_du wf_val_pu
+        intro: wf_val_inst_sub[OF _ _ _ wf\<eta>])
+  from merge_cxt_entry_cases[OF m] consider
+      (tys) \<sigma> \<tau> where "\<theta> = Ty \<sigma>" "\<theta>' = Ty \<tau>" "\<theta>'' = Ty (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>)"
+    | (same) "\<theta>'' = \<theta>" "\<theta>' = \<theta>"
+    | (schemes) \<pi> where "scheme_of \<theta> = Some \<pi>" "scheme_of \<theta>' = Some \<pi>" "\<theta>'' = PUScheme \<pi> b"
+    | (vars) \<sigma> \<tau> where "var_ty \<theta> = Some \<sigma>" "var_ty \<theta>' = Some \<tau>" "\<theta>'' = PU (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>) b"
+    by blast
+  then show ?thesis
+  proof cases
+    case tys
+    with wf have "wf_ty \<Sigma> (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>)" by (auto intro: wf_join)
+    with tys show ?thesis by (auto intro: ty join_upper)
+  next
+    case same
+    then show ?thesis by (simp add: entry_above_refl)
+  next
+    case schemes
+    then show ?thesis by (auto intro: scheme)
+  next
+    case vars
+    have "wf_ty \<Sigma> (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>)"
+      using wf_entry_var_ty[OF vars(1) wf(1)] wf_entry_var_ty[OF vars(2) wf(2)] by (rule wf_join)
+    with vars show ?thesis by (auto intro: var join_upper)
+  qed
+qed
+
+lemma merge_entry_above:
+  assumes "wf_inst \<Sigma> \<eta>"
+  shows "\<lbrakk> merge_cxt_entry \<Sigma> b (Some \<theta>) e = Some \<theta>'' ; wf_entry \<Sigma> \<theta> ; \<forall>\<theta>' \<in> set_option e. wf_entry \<Sigma> \<theta>' \<rbrakk>
+      \<Longrightarrow> entry_above \<eta> \<theta> \<theta>''"
+    and "\<lbrakk> merge_cxt_entry \<Sigma> b e (Some \<theta>) = Some \<theta>'' ; wf_entry \<Sigma> \<theta> ; \<forall>\<theta>' \<in> set_option e. wf_entry \<Sigma> \<theta>' \<rbrakk>
+      \<Longrightarrow> entry_above \<eta> \<theta> \<theta>''"
+proof -
+  show "\<lbrakk> merge_cxt_entry \<Sigma> b (Some \<theta>) e = Some \<theta>'' ; wf_entry \<Sigma> \<theta> ; \<forall>\<theta>' \<in> set_option e. wf_entry \<Sigma> \<theta>' \<rbrakk>
+    \<Longrightarrow> entry_above \<eta> \<theta> \<theta>''"
   proof (cases e)
     case (Some \<theta>')
-    assume "merge_cxt_entry \<Sigma> b (Some \<theta>) e = Some \<theta>''"
-    with Some merge_cxt_entry_cases show ?thesis
-      by (blast intro: ty scheme var join_upper entry_above_refl)
+    assume "merge_cxt_entry \<Sigma> b (Some \<theta>) e = Some \<theta>''" and "wf_entry \<Sigma> \<theta>"
+      and "\<forall>\<theta>' \<in> set_option e. wf_entry \<Sigma> \<theta>'"
+    with Some show ?thesis using merge_entry_above_both[OF assms, of b \<theta> \<theta>' \<theta>''] by simp
   qed (auto intro: possibly_unassigned_above)
-  show "merge_cxt_entry \<Sigma> b e (Some \<theta>) = Some \<theta>'' \<Longrightarrow> entry_above \<eta> \<theta> \<theta>''"
+  show "\<lbrakk> merge_cxt_entry \<Sigma> b e (Some \<theta>) = Some \<theta>'' ; wf_entry \<Sigma> \<theta> ; \<forall>\<theta>' \<in> set_option e. wf_entry \<Sigma> \<theta>' \<rbrakk>
+    \<Longrightarrow> entry_above \<eta> \<theta> \<theta>''"
   proof (cases e)
     case (Some \<theta>')
-    assume "merge_cxt_entry \<Sigma> b e (Some \<theta>) = Some \<theta>''"
-    with Some merge_cxt_entry_cases[of \<Sigma> b \<theta>' \<theta> \<theta>''] scheme_of_Some show ?thesis
-      by (auto intro: ty scheme var join_upper entry_above_refl)
+    assume "merge_cxt_entry \<Sigma> b e (Some \<theta>) = Some \<theta>''" and "wf_entry \<Sigma> \<theta>"
+      and "\<forall>\<theta>' \<in> set_option e. wf_entry \<Sigma> \<theta>'"
+    with Some show ?thesis using merge_entry_above_both[OF assms, of b \<theta>' \<theta> \<theta>''] by simp
   qed (auto intro: possibly_unassigned_above)
 qed
 
@@ -444,15 +451,17 @@ proof -
   ultimately show ?thesis using assms unfolding cxt_above_def by (blast intro: order_trans)
 qed
 
-(* Merge of two contexts, above each *)
+(* Merge of two well-formed contexts, above each *)
 lemma merge_above:
-  assumes "merge \<Sigma> X \<Delta> \<Delta>' = Ok \<Delta>''"
+  assumes "merge \<Sigma> X \<Delta> \<Delta>' = Ok \<Delta>''" and wf\<eta>: "wf_inst \<Sigma> \<eta>" and wf: "wf_cxt \<Sigma> \<Delta>" "wf_cxt \<Sigma> \<Delta>'"
   shows "cxt_above \<eta> \<Delta> \<Delta>''" and "cxt_above \<eta> \<Delta>' \<Delta>''"
 proof -
-  have dom: "fmdom \<Delta>'' = fmdom \<Delta> |\<union>| fmdom \<Delta>'" using merge_dom[OF assms] by simp
+  have opt: "\<forall>\<theta> \<in> set_option (fmlookup \<Delta> x). wf_entry \<Sigma> \<theta>" "\<forall>\<theta> \<in> set_option (fmlookup \<Delta>' x). wf_entry \<Sigma> \<theta>" for x
+    using wf by (auto simp: wf_cxt_iff split: option.splits)
+  have dom: "fmdom \<Delta>'' = fmdom \<Delta> |\<union>| fmdom \<Delta>'" using merge_dom[OF assms(1)] by simp
   have lookup: "fmlookup \<Delta>'' x = merge_cxt_entry \<Sigma> (x \<in> X) (fmlookup \<Delta> x) (fmlookup \<Delta>' x)"
     if "x |\<in>| fmdom \<Delta>''" for x
-    using merge_lookup[OF assms] that dom by simp
+    using merge_lookup[OF assms(1)] that dom by simp
   show "cxt_above \<eta> \<Delta> \<Delta>''"
     unfolding cxt_above_def
   proof (intro conjI allI impI)
@@ -460,7 +469,8 @@ proof -
   next
     fix x \<theta> \<theta>''
     assume "fmlookup \<Delta> x = Some \<theta>" and "fmlookup \<Delta>'' x = Some \<theta>''"
-    with lookup[OF fmdomI[OF this(2)]] show "entry_above \<eta> \<theta> \<theta>''" by (auto intro: merge_entry_above(1))
+    with lookup[OF fmdomI[OF this(2)]] wf_cxt_lookup[OF wf(1) this(1)] opt(2)[of x] show "entry_above \<eta> \<theta> \<theta>''"
+      by (auto intro: merge_entry_above(1)[OF wf\<eta>])
   next
     fix x \<theta>''
     assume "fmlookup \<Delta> x = None" and "fmlookup \<Delta>'' x = Some \<theta>''"
@@ -474,7 +484,8 @@ proof -
   next
     fix x \<theta> \<theta>''
     assume "fmlookup \<Delta>' x = Some \<theta>" and "fmlookup \<Delta>'' x = Some \<theta>''"
-    with lookup[OF fmdomI[OF this(2)]] show "entry_above \<eta> \<theta> \<theta>''" by (auto intro: merge_entry_above(2))
+    with lookup[OF fmdomI[OF this(2)]] wf_cxt_lookup[OF wf(2) this(1)] opt(1)[of x] show "entry_above \<eta> \<theta> \<theta>''"
+      by (auto intro: merge_entry_above(2)[OF wf\<eta>])
   next
     fix x \<theta>''
     assume "fmlookup \<Delta>' x = None" and "fmlookup \<Delta>'' x = Some \<theta>''"
@@ -484,7 +495,8 @@ proof -
 qed
 
 lemma merge_outcome_above:
-  assumes "merge_outcome \<Sigma> X R R' = Ok R''"
+  assumes "merge_outcome \<Sigma> X R R' = Ok R''" and wf\<eta>: "wf_inst \<Sigma> \<eta>"
+    and wf: "\<forall>\<Delta> r. R = Assigns\<^sub>R \<Delta> r \<longrightarrow> wf_cxt \<Sigma> \<Delta>" "\<forall>\<Delta> r. R' = Assigns\<^sub>R \<Delta> r \<longrightarrow> wf_cxt \<Sigma> \<Delta>"
   shows "R = Assigns\<^sub>R \<Delta> r \<Longrightarrow> \<exists>\<Delta>'' r''. R'' = Assigns\<^sub>R \<Delta>'' r'' \<and> cxt_above \<eta> \<Delta> \<Delta>''"
     and "R' = Assigns\<^sub>R \<Delta> r \<Longrightarrow> \<exists>\<Delta>'' r''. R'' = Assigns\<^sub>R \<Delta>'' r'' \<and> cxt_above \<eta> \<Delta> \<Delta>''"
 proof -
@@ -499,7 +511,8 @@ proof -
       with R assms obtain \<Delta>'' where m: "merge \<Sigma> X \<Delta>\<^sub>1 \<Delta>\<^sub>2 = Ok \<Delta>''"
         and R'': "R'' = Assigns\<^sub>R \<Delta>'' (if r\<^sub>2 = None then None else r\<^sub>1)"
         by (auto simp: bind_sum_Ok)
-      from merge_above[OF m] R R'' Assigns\<^sub>R show ?thesis by auto
+      from merge_above[OF m wf\<eta> wf(1)[rule_format, OF R] wf(2)[rule_format, OF Assigns\<^sub>R]] R R'' Assigns\<^sub>R
+      show ?thesis by auto
     next
       case Returns\<^sub>R
       with R assms show ?thesis by (auto intro: cxt_above_refl)
@@ -513,28 +526,40 @@ qed
 
 (* Merge of static outcomes, with bindings above those of each outcome which assigns *)
 lemma merges_above:
-  assumes "merges \<Sigma> X ms = Ok R''" and "Ok (Assigns\<^sub>R \<Delta> r) \<in> set ms"
+  assumes "merges \<Sigma> X ms = Ok R''" and "Ok (Assigns\<^sub>R \<Delta> r) \<in> set ms" and wf\<eta>: "wf_inst \<Sigma> \<eta>"
+    and wf: "\<And>\<Delta> r. Ok (Assigns\<^sub>R \<Delta> r) \<in> set ms \<Longrightarrow> wf_cxt \<Sigma> \<Delta>"
   obtains \<Delta>'' r'' where "R'' = Assigns\<^sub>R \<Delta>'' r''" and "cxt_above \<eta> \<Delta> \<Delta>''"
 proof -
   let ?f = "\<lambda>R m. do { R' \<leftarrow> m; merge_outcome \<Sigma> X R R' }"
   from assms(1) obtain Rs where Rs: "those_sum ms = Ok Rs" and fold: "foldr ?f Rs (Ok Returns\<^sub>R) = Ok R''"
     by (auto simp: merges_def bind_sum_Ok)
   from those_sum_eq[OF Rs] assms(2) have "Assigns\<^sub>R \<Delta> r \<in> set Rs" by auto
-  with fold have "\<exists>\<Delta>'' r''. R'' = Assigns\<^sub>R \<Delta>'' r'' \<and> cxt_above \<eta> \<Delta> \<Delta>''"
+  moreover have "\<And>\<Delta>' r'. Assigns\<^sub>R \<Delta>' r' \<in> set Rs \<Longrightarrow> wf_cxt \<Sigma> \<Delta>'" using those_sum_eq[OF Rs] wf by auto
+  ultimately have "\<exists>\<Delta>'' r''. R'' = Assigns\<^sub>R \<Delta>'' r'' \<and> cxt_above \<eta> \<Delta> \<Delta>''" using fold
   proof (induction Rs arbitrary: R'')
     case (Cons R Rs)
-    from Cons.prems(1) obtain R' where R': "foldr ?f Rs (Ok Returns\<^sub>R) = Ok R'"
+    from Cons.prems(3) obtain R' where R': "foldr ?f Rs (Ok Returns\<^sub>R) = Ok R'"
       and m: "merge_outcome \<Sigma> X R R' = Ok R''"
       by (auto simp: bind_sum_Ok)
+    have wfR: "\<forall>\<Delta>' r'. R = Assigns\<^sub>R \<Delta>' r' \<longrightarrow> wf_cxt \<Sigma> \<Delta>'" using Cons.prems(2) by auto
+    have wfR': "\<forall>\<Delta>' r'. R' = Assigns\<^sub>R \<Delta>' r' \<longrightarrow> wf_cxt \<Sigma> \<Delta>'"
+    proof (intro allI impI)
+      fix \<Delta>' r'
+      assume "R' = Assigns\<^sub>R \<Delta>' r'"
+      show "wf_cxt \<Sigma> \<Delta>'"
+        by (rule merge_fold_wf[OF R'[unfolded \<open>R' = Assigns\<^sub>R \<Delta>' r'\<close>]]) (meson Cons.prems(2) list.set_intros(2))
+    qed
     show ?case
     proof (cases "R = Assigns\<^sub>R \<Delta> r")
       case True
-      from merge_outcome_above(1)[OF m True] show ?thesis .
+      from merge_outcome_above(1)[OF m wf\<eta> wfR wfR' True] show ?thesis .
     next
       case False
-      with Cons.prems(2) have "Assigns\<^sub>R \<Delta> r \<in> set Rs" by simp
-      from Cons.IH[OF R' this] obtain \<Delta>' r' where "R' = Assigns\<^sub>R \<Delta>' r'" and "cxt_above \<eta> \<Delta> \<Delta>'" by blast
-      with merge_outcome_above(2)[OF m this(1)] show ?thesis by (blast intro: cxt_above_trans)
+      with Cons.prems(1) have "Assigns\<^sub>R \<Delta> r \<in> set Rs" by simp
+      have "\<exists>\<Delta>' r'. R' = Assigns\<^sub>R \<Delta>' r' \<and> cxt_above \<eta> \<Delta> \<Delta>'"
+        by (rule Cons.IH[OF \<open>Assigns\<^sub>R \<Delta> r \<in> set Rs\<close> _ R']) (meson Cons.prems(2) list.set_intros(2))
+      then obtain \<Delta>' r' where "R' = Assigns\<^sub>R \<Delta>' r'" and "cxt_above \<eta> \<Delta> \<Delta>'" by blast
+      with merge_outcome_above(2)[OF m wf\<eta> wfR wfR' this(1)] show ?thesis by (blast intro: cxt_above_trans)
     qed
   qed simp
   with that show thesis by blast
@@ -543,10 +568,10 @@ qed
 (* Bindings of a branch, typed by the merge of the branches *)
 lemma wf_env_merge:
   assumes env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and env': "\<eta> \<turnstile> \<rho> \<otimes> \<rho>' : \<Gamma> \<otimes> \<Delta>" and dom: "fmdom \<rho>' |\<subseteq>| fmdom \<Delta>"
-    and above: "cxt_above \<eta> \<Delta> \<Delta>'" and tyvars: "tyvars \<Delta>' \<subseteq> fst ` set \<eta>"
+    and above: "cxt_above \<eta> \<Delta> \<Delta>'" and tyvars: "tyvars \<Delta>' \<subseteq> fst ` set \<eta>" and wf: "wf_cxt \<Sigma> \<Delta>'"
     and bound: "\<And>x. x |\<in>| fmdom \<Delta>' \<Longrightarrow> fmlookup \<Gamma> x = Some Unbound \<or> (\<exists>\<tau>. fmlookup \<Gamma> x = Some (DU \<tau>))"
   shows "\<eta> \<turnstile> \<rho> \<otimes> \<rho>' : \<Gamma> \<otimes> \<Delta>'"
-proof (rule wf_env_add[OF env tyvars])
+proof (rule wf_env_add[OF env tyvars _ _ wf])
   show "fmdom \<rho>' |\<subseteq>| fmdom \<Delta>'" using dom above unfolding cxt_above_def by (blast intro: order_trans)
 next
   fix x \<theta>'
@@ -569,27 +594,13 @@ next
     moreover from above None look' have "\<turnstile> VUnbound : inst_entry \<eta> \<theta>'" by (simp add: cxt_above_def)
     ultimately show ?thesis by simp
   qed
-next
-  fix x \<pi>
-  assume look': "fmlookup \<Delta>' x = Some (Scheme \<pi>)"
-  show "callable_scheme \<pi>"
-  proof (cases "fmlookup \<Delta> x")
-    case (Some \<theta>)
-    with above look' have "\<theta> = Scheme \<pi>" by (simp add: cxt_above_def entry_above_def)
-    with Some have "fmlookup (\<Gamma> \<otimes> \<Delta>) x = Some (Scheme \<pi>)" by (simp add: fmdomI)
-    then show ?thesis by (rule wf_env_scheme[OF env'])
-  next
-    case None
-    with above look' have "\<turnstile> VUnbound : inst_entry \<eta> (Scheme \<pi>)" unfolding cxt_above_def by blast
-    then show ?thesis by (auto dest: wf_unbound_scheme)
-  qed
 qed
 
 (* Soundness at one branch carries to the merge of the branches, when the bindings of every branch are over
    the type variables in scope and bind only variables unbound or declared beforehand *)
 lemma wf_outcome_merges:
   assumes "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R" and "Ok R \<in> set ms" and "merges \<Sigma> X ms = Ok R'" and env: "\<eta> \<turnstile> \<rho> : \<Gamma>"
-    and tyvars: "\<And>\<Delta> r. Ok (Assigns\<^sub>R \<Delta> r) \<in> set ms \<Longrightarrow> tyvars \<Delta> \<subseteq> tyvars \<Gamma>"
+    and wf: "\<And>\<Delta> r. Ok (Assigns\<^sub>R \<Delta> r) \<in> set ms \<Longrightarrow> wf_cxt \<Sigma> \<Delta> \<and> tyvars \<Delta> \<subseteq> tyvars \<Gamma>"
     and bound: "\<And>\<Delta> r x. \<lbrakk> Ok (Assigns\<^sub>R \<Delta> r) \<in> set ms ; x |\<in>| fmdom \<Delta> \<rbrakk>
                  \<Longrightarrow> fmlookup \<Gamma> x = Some Unbound \<or> (\<exists>\<tau>. fmlookup \<Gamma> x = Some (DU \<tau>))"
   shows "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R'"
@@ -602,20 +613,13 @@ proof -
       and env': "\<eta> \<turnstile> \<rho> \<otimes> \<rho>' : \<Gamma> \<otimes> \<Delta>"
       by (cases R) auto
     from assms(2) R have mem: "Ok (Assigns\<^sub>R \<Delta> r) \<in> set ms" by simp
-    from merges_above[OF assms(3) mem] obtain \<Delta>' r' where R': "R' = Assigns\<^sub>R \<Delta>' r'"
-      and above: "cxt_above \<eta> \<Delta> \<Delta>'" .
-    have "tyvars \<Delta>' \<subseteq> tyvars \<Gamma>"
-    proof
-      fix \<alpha>
-      assume "\<alpha> \<in> tyvars \<Delta>'"
-      with assms(3) R' obtain \<Delta>'' r'' where "Ok (Assigns\<^sub>R \<Delta>'' r'') \<in> set ms" and "\<alpha> \<in> tyvars \<Delta>''"
-        by (auto elim: merges_tyvars)
-      with tyvars show "\<alpha> \<in> tyvars \<Gamma>" by blast
-    qed
+    obtain \<Delta>' r' where R': "R' = Assigns\<^sub>R \<Delta>' r'" and above: "cxt_above \<eta> \<Delta> \<Delta>'"
+      by (rule merges_above[OF assms(3) mem wf_env_wf_inst[OF env]]) (use wf in blast)
+    from merges_wf[OF assms(3)[unfolded R'] wf] have wf': "wf_cxt \<Sigma> \<Delta>'" and "tyvars \<Delta>' \<subseteq> tyvars \<Gamma>" by auto
     with wf_env_tyvars[OF env] have tyvars': "tyvars \<Delta>' \<subseteq> fst ` set \<eta>" by blast
     have bound': "fmlookup \<Gamma> x = Some Unbound \<or> (\<exists>\<tau>. fmlookup \<Gamma> x = Some (DU \<tau>))" if "x |\<in>| fmdom \<Delta>'" for x
       using assms(3) R' that bound by (auto elim: merges_dom)
-    have "\<eta> \<turnstile> \<rho> \<otimes> \<rho>' : \<Gamma> \<otimes> \<Delta>'" using env env' dom above tyvars' bound' by (rule wf_env_merge)
+    have "\<eta> \<turnstile> \<rho> \<otimes> \<rho>' : \<Gamma> \<otimes> \<Delta>'" using env env' dom above tyvars' wf' bound' by (rule wf_env_merge)
     moreover have "fmdom \<rho>' |\<subseteq>| fmdom \<Delta>'" using dom above unfolding cxt_above_def by (blast intro: order_trans)
     ultimately show ?thesis by (simp add: o Assigns R')
   qed (use assms(1) in \<open>simp_all add: o\<close>)
@@ -635,13 +639,13 @@ next
   assume "Ok (Assigns\<^sub>R \<Delta> r) \<in> set (check_stmt_at \<Sigma> \<Gamma> \<zeta> s # check_elif \<Sigma> \<Gamma> \<zeta> (elifs, else'))"
   then consider s' where "check_stmt_at \<Sigma> \<Gamma> \<zeta> s' = Ok (Assigns\<^sub>R \<Delta> r)" | "\<Delta> = fmempty"
     using check_elif_branch by blast
-  then show "tyvars \<Delta> \<subseteq> tyvars \<Gamma>"
+  then show "wf_cxt \<Sigma> \<Delta> \<and> tyvars \<Delta> \<subseteq> tyvars \<Gamma>"
   proof cases
     case 1
-    then show ?thesis by (rule check_stmt_at_tyvars)
+    then show ?thesis by (rule check_stmt_at_wf_cxt[OF wf_env_wf_cxt[OF assms(5)]])
   next
     case 2
-    then show ?thesis by (auto simp: tyvars_def fmlookup_ran'_iff)
+    then show ?thesis by simp
   qed
 next
   fix \<Delta> r x
@@ -822,16 +826,18 @@ proof (rule call_callable_exprI[OF assms(1, 2)])
       and fv: "\<forall>\<pi> \<in> set \<pi>s. fv_scheme \<pi> \<subseteq> fst ` set \<eta>'"
       and disjoint: "\<forall>d \<in> set ds. case node d of Def _ \<alpha>s _ _ _ \<Rightarrow> set \<alpha>s \<inter> tyvars \<Gamma>' = {}"
       and \<pi>: "\<pi>s ! j = TyScheme \<alpha>s' (TyCallable \<sigma>s\<^sub>d \<tau>\<^sub>d)"
-      and len_\<tau>s: "length \<tau>s = length \<alpha>s'" and closed: "\<forall>\<tau>' \<in> set \<tau>s. fv \<tau>' = {}"
+      and len_\<tau>s: "length \<tau>s = length \<alpha>s'" and closed_wf: "\<forall>\<tau>' \<in> set \<tau>s. fv \<tau>' = {} \<and> wf_ty \<Sigma> \<tau>'"
       and eq: "TyCallable \<sigma>s' \<tau>'' = subst \<tau>s \<alpha>s' (inst (filter (\<lambda>(\<alpha>, _). \<alpha> \<notin> set \<alpha>s') \<eta>') (TyCallable \<sigma>s\<^sub>d \<tau>\<^sub>d))"
       by blast
     let ?\<Delta> = "fmap_of_list (zip ?xs (map signature_entry \<pi>s))"
     let ?\<eta> = "inst_params \<alpha>s \<tau>s \<eta>'"
+    from closed_wf have closed: "\<forall>\<tau>' \<in> set \<tau>s. fv \<tau>' = {}" and wf_\<tau>s: "\<forall>\<tau>' \<in> set \<tau>s. wf_ty \<Sigma> \<tau>'" by blast+
     have len: "length \<pi>s = length ds" using those_sum_map_Ok[OF sigs] by (simp add: list_all2_lengthD)
     have sig: "def_signature \<Sigma> \<Gamma>' (Def f \<alpha>s xps \<psi> s) = Ok (TyScheme \<alpha>s' (TyCallable \<sigma>s\<^sub>d \<tau>\<^sub>d))"
       using those_sum_map_Ok[OF sigs] j by (auto simp: list_all2_conv_all_nth d[symmetric] \<pi>[symmetric])
     from def_signature_Ok[OF this] have \<alpha>s': "\<alpha>s' = \<alpha>s" .
     with \<pi> have \<pi>': "\<pi>s ! j = TyScheme \<alpha>s (TyCallable \<sigma>s\<^sub>d \<tau>\<^sub>d)" by simp
+    have wf_\<tau>\<^sub>d: "wf_ty \<Sigma> \<tau>\<^sub>d" using def_signature_wf[OF wf_env_wf_cxt[OF env'] sig] by (cases \<alpha>s') auto
     from disjoint d j have disjoint_j: "set \<alpha>s \<inter> tyvars \<Gamma>' = {}" by (auto dest!: bspec[OF _ nth_mem])
     from all_sum_map2_Ok[OF defs len[symmetric]] j
     have "check_def_at \<Sigma> (\<Gamma>' \<otimes> ?\<Delta>) (ds ! j) (\<pi>s ! j) = Ok ()" by (auto simp: list_all2_conv_all_nth)
@@ -845,6 +851,7 @@ proof (rule call_callable_exprI[OF assms(1, 2)])
     (* Instantiation of the body: that of the closure, with the type parameters at the type arguments *)
     have closed': "closed_inst \<eta>'" using env' by (rule wf_env_closed)
     have closed_\<eta>: "closed_inst ?\<eta>" using closed' closed by (rule closed_inst_params)
+    have wf_\<eta>: "wf_inst \<Sigma> ?\<eta>" using wf_env_wf_inst[OF env'] wf_\<tau>s by (rule wf_inst_params)
     have fst_\<eta>: "fst ` set ?\<eta> = set \<alpha>s \<union> fst ` set \<eta>'" using len_\<tau>s \<alpha>s' by (simp add: fst_inst_params)
     have inst_\<eta>: "inst ?\<eta> \<sigma> = subst \<tau>s \<alpha>s (inst (filter (\<lambda>(\<alpha>, _). \<alpha> \<notin> set \<alpha>s) \<eta>') \<sigma>)" for \<sigma>
       using closed' len_\<tau>s \<alpha>s' by (simp add: inst_inst_params)
@@ -859,10 +866,10 @@ proof (rule call_callable_exprI[OF assms(1, 2)])
     have env_defs: "\<eta>' \<turnstile> \<rho>' \<otimes> fmap_of_list (zip ?xs vs) : \<Gamma>' \<otimes> ?\<Delta>"
       using env' sigs defs fv disjoint vs by (rule wf_env_defs)
     have "?\<eta> \<turnstile> \<rho>' \<otimes> fmap_of_list (zip ?xs vs) : \<Gamma>' \<otimes> ?\<Delta>"
-    proof (rule wf_env_inst[OF env_defs closed_\<eta>])
+    proof (rule wf_env_inst[OF env_defs closed_\<eta> wf_\<eta>])
       fix \<alpha>
       assume "\<alpha> \<in> tyvars (\<Gamma>' \<otimes> ?\<Delta>)"
-      with tyvars_add defs_tyvars[OF sigs] have "\<alpha> \<in> tyvars \<Gamma>'" by blast
+      with tyvars_add defs_wf[OF wf_env_wf_cxt[OF env'] sigs] have "\<alpha> \<in> tyvars \<Gamma>'" by blast
       with disjoint_j have "\<alpha> \<notin> set \<alpha>s" by blast
       then show "map_of ?\<eta> \<alpha> = map_of \<eta>' \<alpha>" using len_\<tau>s \<alpha>s' by (simp add: map_of_inst_params)
     qed
@@ -878,14 +885,15 @@ proof (rule call_callable_exprI[OF assms(1, 2)])
       using scope_stmt_Some[OF scope] scope_stmt_Some[OF \<Delta>] by (simp add: wf_env_unbound)
     have "wf_outcome ?\<eta> (\<rho>' \<otimes> fmap_of_list (zip ?xs vs) \<otimes> fmap_of_list (zip (map fst xps) us) \<otimes> \<rho>s)
       (\<Gamma>' \<otimes> ?\<Delta> \<otimes> fmconst (set \<alpha>s) TypeVar \<otimes> \<Delta>' \<otimes> \<Delta>) (Some \<tau>\<^sub>d) ([], \<omega>) R"
-      using body env_body fv_\<tau> chk by (intro sound_stmt_at) simp_all
+      using body env_body fv_\<tau> wf_\<tau>\<^sub>d chk by (intro sound_stmt_at) simp_all
     then have "result_typed (result_of \<omega>) \<tau>''"
     proof (cases \<omega>)
       case (Assigns \<rho>'')
       with \<open>wf_outcome _ _ _ _ _ _\<close> R have "\<Sigma> \<turnstile> TyPrim NoneType <: \<tau>\<^sub>d" by (cases R) auto
-      from wf_none[OF this] show ?thesis by (simp add: Assigns \<tau>'')
+      from wf_none[OF this wf_\<tau>\<^sub>d wf_\<eta>] show ?thesis by (simp add: Assigns \<tau>'')
     qed (simp_all add: \<tau>'')
-    with ret show ?thesis by (cases \<omega>) (auto intro: ValSub)
+    moreover have "wf_ty \<Sigma> (inst \<eta> \<tau>')" using wf_val_ty[OF v] by simp
+    ultimately show ?thesis using ret by (cases \<omega>) (auto intro: ValSub)
   qed
 qed simp_all
 

@@ -583,6 +583,11 @@ proof (induction "size \<sigma> + size \<sigma>'" arbitrary: \<sigma> \<sigma>' 
   qed
 qed
 
+lemma binop_overload_operands:
+  "\<lbrakk> binop_overload \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<omega> ; wf_ty \<Sigma> \<sigma>\<^sub>1 ; wf_ty \<Sigma> \<sigma>\<^sub>2 \<rbrakk>
+  \<Longrightarrow> wf_ty \<Sigma> (fst (fst \<omega>)) \<and> wf_ty \<Sigma> (snd (fst \<omega>))"
+  by (induction rule: binop_overload.induct) (auto simp: wf_base_type)
+
 lemma resolve_unop_wf: "resolve_unop \<Sigma> op \<sigma> = Some \<tau> \<Longrightarrow> wf_ty \<Sigma> \<tau> \<and> fv \<tau> = {}"
   by (auto elim!: resolve_unop_overload dest!: unop_overload_types)
 
@@ -1662,7 +1667,8 @@ lemma merge_entry_wf:
   \<Longrightarrow> wf_entry \<Sigma> \<theta>''"
 proof (cases e)
   case (Some \<theta>)
-  show "\<lbrakk> merge_cxt_entry \<Sigma> b e e' = Some \<theta>'' ; \<forall>\<theta> \<in> set_option e. wf_entry \<Sigma> \<theta> ; \<forall>\<theta> \<in> set_option e'. wf_entry \<Sigma> \<theta> \<rbrakk>
+  show "\<lbrakk> merge_cxt_entry \<Sigma> b e e' = Some \<theta>'' ; \<forall>\<theta> \<in> set_option e. wf_entry \<Sigma> \<theta>
+         ; \<forall>\<theta> \<in> set_option e'. wf_entry \<Sigma> \<theta> \<rbrakk>
     \<Longrightarrow> wf_entry \<Sigma> \<theta>''"
   proof (cases e')
     case (Some \<theta>')
@@ -1683,8 +1689,41 @@ proof (rule wf_cxt_iff[THEN iffD2], intro allI impI)
   with look have "merge_cxt_entry \<Sigma> (x \<in> X) (fmlookup \<Gamma> x) (fmlookup \<Gamma>' x) = Some \<theta>''"
     by (simp add: merge_lookup[OF assms(1)])
   then show "wf_entry \<Sigma> \<theta>''"
-    by (rule merge_entry_wf) (auto dest: wf_cxt_lookup[OF assms(2)] wf_cxt_lookup[OF assms(3)] split: option.splits)
+    by (rule merge_entry_wf)
+       (auto dest: wf_cxt_lookup[OF assms(2)] wf_cxt_lookup[OF assms(3)] split: option.splits)
 qed
+
+(* Bindings of the merge of a list of static outcomes, well-formed when those of each outcome are *)
+lemma merge_fold_wf:
+  "\<lbrakk> foldr (\<lambda>R m. do { R' \<leftarrow> m; merge_outcome \<Sigma> X R R' }) Rs (Ok Returns\<^sub>R) = Ok (Assigns\<^sub>R \<Delta> r)
+   ; \<And>\<Delta>' r'. Assigns\<^sub>R \<Delta>' r' \<in> set Rs \<Longrightarrow> wf_cxt \<Sigma> \<Delta>' \<rbrakk>
+  \<Longrightarrow> wf_cxt \<Sigma> \<Delta>"
+proof (induction Rs arbitrary: \<Delta> r)
+  case (Cons R Rs)
+  let ?f = "\<lambda>R m. do { R' \<leftarrow> m; merge_outcome \<Sigma> X R R' }"
+  from Cons.prems(1) obtain R' where R': "foldr ?f Rs (Ok Returns\<^sub>R) = Ok R'"
+    and m: "merge_outcome \<Sigma> X R R' = Ok (Assigns\<^sub>R \<Delta> r)"
+    by (auto simp: bind_sum_Ok)
+  show ?case
+  proof (cases R')
+    case (Assigns\<^sub>R \<Delta>' r')
+    have wf': "wf_cxt \<Sigma> \<Delta>'"
+      by (rule Cons.IH[OF R'[unfolded \<open>R' = Assigns\<^sub>R \<Delta>' r'\<close>]]) (meson Cons.prems(2) list.set_intros(2))
+    show ?thesis
+    proof (cases R)
+      case (Assigns\<^sub>R \<Delta>\<^sub>1 r\<^sub>1)
+      with m \<open>R' = Assigns\<^sub>R \<Delta>' r'\<close> obtain \<Delta>'' where "merge \<Sigma> X \<Delta>\<^sub>1 \<Delta>' = Ok \<Delta>''" and "\<Delta> = \<Delta>''"
+        by (auto simp: bind_sum_Ok)
+      with merge_wf[OF this(1)] Cons.prems(2)[of \<Delta>\<^sub>1 r\<^sub>1] wf' Assigns\<^sub>R show ?thesis by simp
+    next
+      case Returns\<^sub>R
+      with m \<open>R' = Assigns\<^sub>R \<Delta>' r'\<close> wf' show ?thesis by simp
+    qed
+  next
+    case Returns\<^sub>R
+    with m Cons.prems(2) show ?thesis by (cases R) auto
+  qed
+qed simp
 
 (* Bindings of a merge of static outcomes, well-formed and over the given type variables when those of each
    outcome are *)
@@ -1697,37 +1736,8 @@ proof
   from assms(1) obtain Rs where Rs: "those_sum ms = Ok Rs"
     and fold: "foldr ?f Rs (Ok Returns\<^sub>R) = Ok (Assigns\<^sub>R \<Delta> r)"
     by (auto simp: merges_def bind_sum_Ok)
-  have wf: "wf_cxt \<Sigma> \<Delta>"
-    if "foldr ?f Rs (Ok Returns\<^sub>R) = Ok (Assigns\<^sub>R \<Delta> r)" and "\<And>\<Delta>' r'. Assigns\<^sub>R \<Delta>' r' \<in> set Rs \<Longrightarrow> wf_cxt \<Sigma> \<Delta>'"
-    for Rs \<Delta> r
-    using that
-  proof (induction Rs arbitrary: \<Delta> r)
-    case (Cons R Rs)
-    from Cons.prems(1) obtain R' where R': "foldr ?f Rs (Ok Returns\<^sub>R) = Ok R'"
-      and m: "merge_outcome \<Sigma> X R R' = Ok (Assigns\<^sub>R \<Delta> r)"
-      by (auto simp: bind_sum_Ok)
-    show ?case
-    proof (cases R')
-      case (Assigns\<^sub>R \<Delta>' r')
-      have wf': "wf_cxt \<Sigma> \<Delta>'"
-        by (rule Cons.IH[OF R'[unfolded \<open>R' = Assigns\<^sub>R \<Delta>' r'\<close>]]) (meson Cons.prems(2) list.set_intros(2))
-      show ?thesis
-      proof (cases R)
-        case (Assigns\<^sub>R \<Delta>\<^sub>1 r\<^sub>1)
-        with m \<open>R' = Assigns\<^sub>R \<Delta>' r'\<close> obtain \<Delta>'' where "merge \<Sigma> X \<Delta>\<^sub>1 \<Delta>' = Ok \<Delta>''" and "\<Delta> = \<Delta>''"
-          by (auto simp: bind_sum_Ok)
-        with merge_wf[OF this(1)] Cons.prems(2)[of \<Delta>\<^sub>1 r\<^sub>1] wf' Assigns\<^sub>R show ?thesis by simp
-      next
-        case Returns\<^sub>R
-        with m \<open>R' = Assigns\<^sub>R \<Delta>' r'\<close> wf' show ?thesis by simp
-      qed
-    next
-      case Returns\<^sub>R
-      with m Cons.prems(2) show ?thesis by (cases R) auto
-    qed
-  qed simp
   show "wf_cxt \<Sigma> \<Delta>"
-  proof (rule wf[OF fold])
+  proof (rule merge_fold_wf[OF fold])
     fix \<Delta>' r'
     assume "Assigns\<^sub>R \<Delta>' r' \<in> set Rs"
     then have "Ok (Assigns\<^sub>R \<Delta>' r') \<in> set ms" using those_sum_eq[OF Rs] by simp
