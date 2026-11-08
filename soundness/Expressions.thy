@@ -1178,7 +1178,7 @@ proof (intro conjI allI impI)
   from sound_expr_synth_at[OF assms(1) env synth] have "\<turnstile> v : Ty (inst \<eta> \<sigma>)" by simp
   moreover from attr have "object_type (inst \<eta> \<sigma>)"
     by (blast intro: object_type_subst attribute_type_object_type)
-  ultimately show "result_typed (Aborts Excluded) (inst \<eta> \<tau>)" using assms(2) wf_object_type(1) by blast
+  ultimately show "result_typed (Aborts Excluded) (inst \<eta> \<tau>)" using assms(2) wf_object_type by blast
 next
   show "sound_name \<rho> (ExprAttribute e x) (Aborts Excluded)" using assms(1, 3) by (rule sound_name_attr)
 qed

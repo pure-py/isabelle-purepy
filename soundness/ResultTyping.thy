@@ -288,59 +288,6 @@ lemma sound_exprs_abort:
 
 subsection \<open>Canonical forms\<close>
 
-lemma wf_scheme_callable:
-  "\<turnstile> v : \<theta> \<Longrightarrow> \<theta> = Scheme \<pi> \<longrightarrow> (\<exists>\<alpha>s \<sigma>s \<tau>. \<pi> = TyScheme \<alpha>s (TyCallable \<sigma>s \<tau>))"
-  "\<eta> \<turnstile> \<rho> : \<Gamma> \<Longrightarrow> True"
-proof (induction rule: wf_val_wf_env.inducts)
-  case ValDef
-  then show ?case by (auto dest!: def_signatures_callable simp: inst_entry_signature_entry)
-next
-  case ValPrim
-  then show ?case by (auto dest!: prim_entry_callable)
-qed auto
-
-(* Literal at a subtype of a primitive type p other than object and Sized *)
-lemma wf_prim_subtype:
-  assumes "p \<notin> {object, Sized}"
-  shows "\<turnstile> v : \<theta> \<Longrightarrow> \<theta> = Ty \<tau> \<longrightarrow> prim_subtype p \<tau> \<longrightarrow> (\<exists>l. v = VLit l \<and> prim_subtype p (TyLiteral l))"
-    and "\<eta> \<turnstile> \<rho> : \<Gamma> \<Longrightarrow> True"
-proof (induction arbitrary: \<tau> rule: wf_val_wf_env.inducts)
-  case ValDef
-  then show ?case by (auto dest!: def_signatures_callable simp: inst_entry_signature_entry)
-next
-  case ValInst
-  then show ?case by (auto dest!: wf_scheme_callable(1))
-next
-  case ValSub
-  then show ?case using prim_subtype_subty(1)[OF assms] by blast
-next
-  case ValPrim
-  then show ?case by (auto dest!: prim_entry_callable)
-qed (use assms in \<open>auto split: lit.splits\<close>)
-
-lemma wf_prim_lit:
-  assumes "\<turnstile> v : Ty \<tau>" and "\<Sigma> \<turnstile> \<tau> <: TyPrim p" and "p \<notin> {object, Sized}"
-  obtains l where "v = VLit l" and "prim_subtype p (TyLiteral l)"
-proof -
-  have "prim_subtype p \<tau>" using prim_subtype_subty(1)[OF assms(3, 2)] by simp
-  with wf_prim_subtype(1)[OF assms(3, 1)] that show ?thesis by blast
-qed
-
-lemma wf_object_type: "\<turnstile> v : \<theta> \<Longrightarrow> \<theta> = Ty \<tau> \<longrightarrow> object_type \<tau> \<longrightarrow> is_object v" "\<eta> \<turnstile> \<rho> : \<Gamma> \<Longrightarrow> True"
-proof (induction arbitrary: \<tau> rule: wf_val_wf_env.inducts)
-  case ValDef
-  then show ?case by (auto dest!: def_signatures_callable simp: inst_entry_signature_entry)
-next
-  case ValInst
-  then show ?case by (auto dest!: wf_scheme_callable(1))
-next
-  case ValSub
-  then show ?case by (blast dest: object_type_subty)
-next
-  case ValPrim
-  then show ?case by (auto dest!: prim_entry_callable)
-qed auto
-
 (* Typing of a value at \<sigma> by the typing rule for its form, with its components typed *)
 fun intro_typed :: "val \<Rightarrow> ty \<Rightarrow> bool"
 where
@@ -496,6 +443,26 @@ next
   case ValPrim
   from prim_entry_callable[OF ValPrim] ValPrim show ?case by auto (blast intro: SubtyRefl)
 qed auto
+
+lemma wf_class_ty: "\<turnstile> VClass C : Ty \<tau> \<Longrightarrow> False"
+  by (auto dest!: wf_val_intro(1))
+
+(* Literal at a subtype of a primitive type p other than object and Sized *)
+lemma wf_prim_lit:
+  assumes "\<turnstile> v : Ty \<tau>" and "\<Sigma> \<turnstile> \<tau> <: TyPrim p" and "p \<notin> {object, Sized}"
+  obtains l where "v = VLit l" and "prim_subtype p (TyLiteral l)"
+proof -
+  from wf_val_intro(1)[OF assms(1)] obtain \<sigma> where intro: "intro_typed v \<sigma>" and sub: "\<Sigma> \<turnstile> \<sigma> <: \<tau>" by blast
+  have "prim_subtype p \<sigma>" using prim_subtype_subty(1)[OF assms(3) subty_trans'[OF sub assms(2)]] by simp
+  with intro that show thesis by (cases v) (auto split: lit.splits)
+qed
+
+lemma wf_object_type: "\<lbrakk> \<turnstile> v : Ty \<tau> ; object_type \<tau> \<rbrakk> \<Longrightarrow> is_object v"
+proof -
+  assume "\<turnstile> v : Ty \<tau>" and "object_type \<tau>"
+  from wf_val_intro(1)[OF this(1)] obtain \<sigma> where intro: "intro_typed v \<sigma>" and "\<Sigma> \<turnstile> \<sigma> <: \<tau>" by blast
+  from object_type_subty(1)[OF this(2) \<open>object_type \<tau>\<close>] intro show "is_object v" by (cases v) auto
+qed
 
 (* Object of class C, typed at a type above the class at type arguments typing its fields *)
 lemma wf_object:
