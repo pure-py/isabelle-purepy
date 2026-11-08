@@ -577,7 +577,8 @@ proof (induction "size \<sigma> + size \<sigma>'" arbitrary: \<sigma> \<sigma>' 
   next
     case (right \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<tau>\<^sub>1 \<tau>\<^sub>2)
     with less.prems(2) have "wf_ty \<Sigma> \<sigma>\<^sub>1" and "wf_ty \<Sigma> \<sigma>\<^sub>2" by simp_all
-    from less.hyps[OF _ less.prems(1) this(1) right(2)] less.hyps[OF _ less.prems(1) this(2) right(3)] right(1, 4)
+    from less.hyps[OF _ less.prems(1) this(1) right(2)] less.hyps[OF _ less.prems(1) this(2) right(3)]
+      right(1, 4)
     show ?thesis by (auto intro: wf_join dest!: fv_join_elem)
   qed
 qed
@@ -596,7 +597,8 @@ proof (cases q)
   then show ?thesis by (rule tyvars_entry)
 next
   case (Qualified q' x)
-  with lookup_qualified_fv[OF assms(1) resolve_name_lookup[OF assms(2)[unfolded Qualified]]] show ?thesis by simp
+  with lookup_qualified_fv[OF assms(1) resolve_name_lookup[OF assms(2)[unfolded Qualified]]] show ?thesis
+    by simp
 qed
 
 lemma class_of_name_dom: "\<lbrakk> wf_cxt \<Sigma> \<Gamma> ; class_of_name \<Gamma> e = Some C \<rbrakk> \<Longrightarrow> C |\<in>| fmdom \<Sigma>"
@@ -645,7 +647,8 @@ proof -
     and "attr_module q' \<Gamma>' x (Qualified q x) = Ok \<tau>"
     by (rule module_attribute_Ok)
   from lookup_wf[OF assms(1) this(1)] have tv: "tyvars \<Gamma>' = {}" and wf: "wf_cxt \<Sigma> \<Gamma>'" by simp_all
-  from attr_module_Ok[OF tv \<open>attr_module q' \<Gamma>' x (Qualified q x) = Ok \<tau>\<close>] have x: "fmlookup \<Gamma>' x = Some (Ty \<tau>)" .
+  from attr_module_Ok[OF tv \<open>attr_module q' \<Gamma>' x (Qualified q x) = Ok \<tau>\<close>]
+  have x: "fmlookup \<Gamma>' x = Some (Ty \<tau>)" .
   from wf_cxt_lookup[OF wf x] tyvars_entry[OF x] tv show ?thesis by simp
 qed
 
@@ -732,7 +735,8 @@ lemma synth_wf:
   "\<lbrakk> wf_class_table \<Sigma> ; wf_cxt \<Sigma> \<Gamma> \<rbrakk> \<Longrightarrow> \<forall>\<Delta>. quals \<Sigma> \<Gamma> gs = Ok \<Delta> \<longrightarrow> wf_cxt \<Sigma> \<Delta> \<and> tyvars \<Delta> \<subseteq> tyvars \<Gamma>"
 proof (induction \<Sigma> \<Gamma> e and \<Sigma> \<Gamma> e' and \<Sigma> \<Gamma> es and \<Sigma> \<Gamma> e' es and \<Sigma> \<Gamma> e' \<sigma> kws es and \<Sigma> \<Gamma> e \<tau>\<^sub>0
     and \<Sigma> \<Gamma> e' \<tau>\<^sub>0 and \<Sigma> \<Gamma> e \<tau>\<^sub>0 and \<Sigma> \<Gamma> e' kws es \<sigma>s and \<Sigma> \<Gamma> gs
-    rule: synth_expr_synth_expr_at_elements_join_callee_synth_call_check_expr_check_expr_at_check_expr'_check_args_quals.induct)
+    rule:
+      synth_expr_synth_expr_at_elements_join_callee_synth_call_check_expr_check_expr_at_check_expr'_check_args_quals.induct)
   case (1 \<Sigma> \<Gamma> x)
   show ?case
   proof (intro allI impI)
@@ -776,7 +780,8 @@ next
           and cargs: "constructor_args C (FieldScheme (type_params \<Sigma> C) x\<sigma>s) es kws = Ok \<sigma>es"
           and \<tau>: "\<tau> = TyClass C \<tau>s"
           and explicit: "explicit = Some \<tau>s \<or> explicit = None
-            \<and> inferred_type_args \<Sigma> (type_params \<Sigma> C) (map fst \<sigma>es) (map (synth_expr_at \<Sigma> \<Gamma> \<circ> snd) \<sigma>es) = Ok \<tau>s" .
+            \<and> inferred_type_args \<Sigma> (type_params \<Sigma> C) (map fst \<sigma>es) (map (synth_expr_at \<Sigma> \<Gamma> \<circ> snd) \<sigma>es)
+                = Ok \<tau>s" .
         from constructor_class_Ok[OF Some[unfolded m]] "3.prems"(2) have C: "C |\<in>| fmdom \<Sigma>"
           by (auto dest: class_of_name_dom)
         from explicit show ?thesis
@@ -799,7 +804,8 @@ next
         qed
       next
         case cc: None
-        with synth None obtain \<sigma> where callee: "callee \<Sigma> \<Gamma> e es = Ok \<sigma>" and call: "synth_call \<Sigma> \<Gamma> e \<sigma> kws es = Ok \<tau>"
+        with synth None obtain \<sigma> where callee: "callee \<Sigma> \<Gamma> e es = Ok \<sigma>"
+          and call: "synth_call \<Sigma> \<Gamma> e \<sigma> kws es = Ok \<tau>"
           by (auto simp: bind_sum_Ok)
         from "3.IH"(1)[OF None cc "3.prems"] callee have \<sigma>: "wf_ty \<Sigma> \<sigma> \<and> fv \<sigma> \<subseteq> tyvars \<Gamma>" by blast
         from "3.IH"(2)[OF None cc callee] \<sigma> call have "wf_ty \<Sigma> \<tau> \<and> fv \<tau> \<subseteq> fv \<sigma>" by blast
@@ -909,7 +915,8 @@ next
   proof (intro allI impI)
     fix \<tau>
     assume "synth_expr \<Sigma> \<Gamma> (ExprDict kvs) = Ok \<tau>"
-    then obtain \<tau>' where "kvs \<noteq> []" and "all_sum (map (\<lambda>e. check_expr_at \<Sigma> \<Gamma> e (TyPrim str)) (map fst kvs)) = Ok ()"
+    then obtain \<tau>' where "kvs \<noteq> []"
+      and "all_sum (map (\<lambda>e. check_expr_at \<Sigma> \<Gamma> e (TyPrim str)) (map fst kvs)) = Ok ()"
       and "elements_join \<Sigma> \<Gamma> (map snd kvs) = Ok \<tau>'" and "\<tau> = TyDict \<tau>'"
       by (auto simp: bind_sum_Ok split: if_splits)
     with "13.IH"(2)[OF this(1, 2) "13.prems"] show "wf_ty \<Sigma> \<tau> \<and> fv \<tau> \<subseteq> tyvars \<Gamma>" by auto
@@ -1061,5 +1068,197 @@ next
     ultimately show "wf_cxt \<Sigma> \<Delta> \<and> tyvars \<Delta> \<subseteq> tyvars \<Gamma>" ..
   qed
 qed (auto simp: bind_sum_Ok)
+
+
+subsection \<open>Patterns\<close>
+
+lemma disjuncts_wf: "\<lbrakk> wf_ty \<Sigma> \<tau> ; \<sigma> \<in> set (disjuncts \<tau>) \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> \<sigma> \<and> fv \<sigma> \<subseteq> fv \<tau>"
+  by (induction \<tau> rule: disjuncts.induct) auto
+
+lemma has_values_union: "has_values \<Sigma> k (TyUnion \<sigma> \<tau>) \<longleftrightarrow> has_values \<Sigma> k \<sigma> \<or> has_values \<Sigma> k \<tau>"
+  by (cases k) simp_all
+
+lemma those_sum_map_Ok_id [simp]: "those_sum (map Ok xs) = Ok xs"
+  by (induction xs) simp_all
+
+(* Success of a sequence of results, the sequences of a prefix and a suffix succeed *)
+lemma those_sum_append:
+  assumes "those_sum (xs @ ys) = Ok zs"
+  shows "\<exists>zs'. those_sum xs = Ok zs'" and "\<exists>zs'. those_sum ys = Ok zs'"
+  using those_sum_eq[OF assms] by (auto simp: append_eq_map_conv)
+
+(* Bindings at the disjuncts of two types, bindings at the disjuncts of each *)
+lemma bindings_at_append:
+  "bindings_at \<Sigma> \<Gamma> p (ms @ ms') = Ok \<Delta>
+  \<Longrightarrow> (\<exists>\<Delta>'. bindings_at \<Sigma> \<Gamma> p ms = Ok \<Delta>') \<and> (\<exists>\<Delta>'. bindings_at \<Sigma> \<Gamma> p ms' = Ok \<Delta>')"
+  unfolding bindings_at_def bind_sum_Ok map_append by (blast dest: those_sum_append)
+
+(* Pattern checked against a union, checked against each side *)
+lemma check_pat_union:
+  "\<lbrakk> check_pat \<Sigma> \<Gamma> p \<tau> = Ok \<Delta> ; \<tau> = TyUnion \<sigma> \<sigma>' \<rbrakk>
+  \<Longrightarrow> (\<exists>\<Delta>'. check_pat \<Sigma> \<Gamma> p \<sigma> = Ok \<Delta>') \<and> (\<exists>\<Delta>'. check_pat \<Sigma> \<Gamma> p \<sigma>' = Ok \<Delta>')"
+  "\<lbrakk> check_pat_at \<Sigma> \<Gamma> p' \<tau>' = Ok \<Delta>' ; \<tau>' = TyUnion \<sigma> \<sigma>' \<rbrakk>
+  \<Longrightarrow> (\<exists>\<Delta>''. check_pat_at \<Sigma> \<Gamma> p' \<sigma> = Ok \<Delta>'') \<and> (\<exists>\<Delta>''. check_pat_at \<Sigma> \<Gamma> p' \<sigma>' = Ok \<Delta>'')"
+proof (induction \<Sigma> \<Gamma> p \<tau> and \<Sigma> \<Gamma> p' \<tau>' arbitrary: \<Delta> \<sigma> \<sigma>' and \<Delta>' \<sigma> \<sigma>' rule: check_pat_check_pat_at.induct)
+  case (3 \<Sigma> \<Gamma> p x \<tau>)
+  from "3.prems" obtain \<Delta>\<^sub>p where "check_unbound \<Gamma> x = Ok ()" and "check_pat_at \<Sigma> \<Gamma> p \<tau> = Ok \<Delta>\<^sub>p"
+    by (auto simp: bind_sum_Ok)
+  with "3.IH"[OF this "3.prems"(2)] show ?case by (auto simp: bind_sum_Ok)
+next
+  case (5 \<Sigma> \<Gamma> ps \<tau>)
+  then show ?case by (auto simp: bind_sum_Ok ensure_def has_values_union dest!: bindings_at_append split: if_splits)
+next
+  case (6 \<Sigma> \<Gamma> ps \<tau>)
+  then show ?case by (auto simp: bind_sum_Ok ensure_def has_values_union dest!: bindings_at_append split: if_splits)
+next
+  case (7 \<Sigma> \<Gamma> kps \<tau>)
+  then show ?case by (auto dest!: bindings_at_append)
+next
+  case (8 \<Sigma> \<Gamma> q ps kps \<tau>)
+  then show ?case by (auto simp: bind_sum_Ok dest!: bindings_at_append)
+qed (auto simp: bind_sum_Ok)
+
+lemma check_pat_at_node:
+  "check_pat_at \<Sigma> \<Gamma> p \<tau> = Ok \<Delta> \<Longrightarrow> check_pat \<Sigma> \<Gamma> (node p) \<tau> = Ok \<Delta>"
+  by (cases p) simp
+
+(* Class of a constructor pattern checked against a type, in the class table *)
+lemma check_pattern_class_dom:
+  "\<lbrakk> wf_cxt \<Sigma> \<Gamma> ; check_pattern_class \<Gamma> q = Ok C \<rbrakk> \<Longrightarrow> C |\<in>| fmdom \<Sigma> \<and> pattern_class \<Gamma> q = C"
+  by (auto simp: check_pattern_class_def pattern_class_def split: option.splits cxt_entry.splits if_splits
+      dest!: resolve_name_wf)
+
+(* Class C instantiated by well-formed \<tau>, as a well-formed type when C is in the class table *)
+lemma instance_at_class_wf:
+  assumes "wf_class_table \<Sigma>" and "wf_ty \<Sigma> \<tau>" and "instance_at \<Sigma> C \<tau> = Instance \<tau>s" and "C |\<in>| fmdom \<Sigma>"
+  shows "wf_ty \<Sigma> (TyClass C \<tau>s)"
+proof -
+  have len: "length \<tau>s = length (type_params \<Sigma> C)"
+  proof (cases "instance_above \<Sigma> C \<tau>")
+    case (Instance \<tau>s')
+    with assms(3) have \<tau>s': "\<tau>s' = \<tau>s" by (simp add: instance_at_def)
+    show ?thesis
+    proof (cases \<tau>)
+      case (TyClass D \<sigma>s)
+      with Instance have anc: "C \<in> set (ancestors \<Sigma> D)" and "\<tau>s' = instantiated_ancestor \<Sigma> D \<sigma>s C"
+        by (auto split: if_splits)
+      with instantiated_ancestor_wf[OF assms(1) assms(2)[unfolded TyClass] anc] \<tau>s' show ?thesis by simp
+    next
+      case (TyPrim p)
+      with Instance \<tau>s' show ?thesis by (cases p) (auto split: if_splits)
+    qed (use Instance in auto)
+  next
+    case NoInstance
+    with assms(3) have below: "instance_below \<Sigma> C \<tau> = Instance \<tau>s" by (simp add: instance_at_def)
+    show ?thesis
+    proof (cases \<tau>)
+      case (TyClass D \<sigma>s)
+      with below obtain \<tau>ss
+        where "filter (\<lambda>\<tau>s. list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (instantiated_ancestor \<Sigma> C \<tau>s D) \<sigma>s)
+                 (instantiation_candidates \<Sigma> C \<sigma>s) = \<tau>s # \<tau>ss"
+        by (auto split: if_splits list.splits)
+      then have "\<tau>s \<in> set (instantiation_candidates \<Sigma> C \<sigma>s)"
+        by (metis filter_is_subset list.set_intros(1) subsetD)
+      then show ?thesis
+        unfolding instantiation_candidates_def by (auto dest!: in_set_product_lists_length)
+    next
+      case (TyPrim p)
+      with below show ?thesis by (cases p) (auto split: if_splits)
+    qed (use below in auto)
+  next
+    case Undetermined
+    with assms(3) show ?thesis by (simp add: instance_at_def)
+  qed
+  with instance_at_wf[OF assms(1-3)] assms(4) show ?thesis by auto
+qed
+
+(* Type matched by a constructor pattern at a type other than a union *)
+lemma matched_as_constr_wf:
+  assumes "wf_class_table \<Sigma>" and "wf_cxt \<Sigma> \<Gamma>" and "wf_ty \<Sigma> \<tau>" and "check_pat \<Sigma> \<Gamma> (PatConstr q a) \<tau> = Ok \<Delta>"
+    and "\<forall>\<sigma> \<sigma>'. \<tau> \<noteq> TyUnion \<sigma> \<sigma>'"
+  shows "wf_ty \<Sigma> (matched_as \<Sigma> \<Gamma> \<tau> (PatConstr q a)) \<and> fv (matched_as \<Sigma> \<Gamma> \<tau> (PatConstr q a)) \<subseteq> fv \<tau>"
+proof -
+  obtain ps kps where a: "a = (ps, kps)" by (cases a)
+  from assms(4) obtain C where cls: "check_pattern_class \<Gamma> q = Ok C" by (auto simp: a bind_sum_Ok)
+  from check_pattern_class_dom[OF assms(2) cls] have C: "C |\<in>| fmdom \<Sigma>" and pc: "pattern_class \<Gamma> q = C" by auto
+  have eq: "matched_as \<Sigma> \<Gamma> \<tau> (PatConstr q a) =
+    (case instance_at \<Sigma> C \<tau> of Instance \<sigma>s \<Rightarrow> meet \<Sigma> \<tau> (TyClass C \<sigma>s) | _ \<Rightarrow> TyPrim Never)"
+    using assms(5) by (cases \<tau>) (auto simp: Let_def pc)
+  show ?thesis
+  proof (cases "instance_at \<Sigma> C \<tau>")
+    case (Instance \<sigma>s)
+    from instance_at_class_wf[OF assms(1, 3) Instance C] have "wf_ty \<Sigma> (TyClass C \<sigma>s)" .
+    from wf_meet(1)[OF assms(3) this] have wf: "wf_ty \<Sigma> (meet \<Sigma> \<tau> (TyClass C \<sigma>s))" .
+    have "fv (TyClass C \<sigma>s) \<subseteq> fv \<tau>" using instance_at_wf[OF assms(1, 3) Instance] by auto
+    with fv_meet[of \<Sigma> \<tau> "TyClass C \<sigma>s"] have fv: "fv (meet \<Sigma> \<tau> (TyClass C \<sigma>s)) \<subseteq> fv \<tau>" by blast
+    show ?thesis unfolding eq Instance instances.case by (intro conjI wf fv)
+  qed (simp_all add: eq)
+qed
+
+(* Type matched by a pattern at a well-formed type it is checked against: well-formed and over the type variables
+   of the type *)
+lemma matched_as_wf:
+  "\<lbrakk> wf_class_table \<Sigma> ; wf_cxt \<Sigma> \<Gamma> ; wf_ty \<Sigma> \<tau> ; check_pat \<Sigma> \<Gamma> p \<tau> = Ok \<Delta> \<rbrakk>
+  \<Longrightarrow> wf_ty \<Sigma> (matched_as \<Sigma> \<Gamma> \<tau> p) \<and> fv (matched_as \<Sigma> \<Gamma> \<tau> p) \<subseteq> fv \<tau>"
+proof (induction \<Sigma> \<Gamma> \<tau> p arbitrary: \<Delta> rule: matched_as.induct)
+  case (1 \<Sigma> \<Gamma> \<sigma> \<tau> p)
+  from check_pat_union(1)[OF "1.prems"(4) refl] obtain \<Delta>\<^sub>1 \<Delta>\<^sub>2 where "check_pat \<Sigma> \<Gamma> p \<sigma> = Ok \<Delta>\<^sub>1"
+    and "check_pat \<Sigma> \<Gamma> p \<tau> = Ok \<Delta>\<^sub>2"
+    by blast
+  with "1.IH"(1)[OF "1.prems"(1, 2) _ this(1)] "1.IH"(2)[OF "1.prems"(1, 2) _ this(2)] "1.prems"(3)
+  show ?case by (auto intro: wf_join dest!: fv_join_elem)
+next
+  case (7 \<Sigma> \<Gamma> \<tau>s ps)
+  show ?case
+  proof (cases "length \<tau>s = length ps")
+    case True
+    from "7.prems"(4) obtain \<Delta>' where "pattern_bindings (map2 (check_pat_at \<Sigma> \<Gamma>) ps \<tau>s) = Ok \<Delta>'"
+      by (auto simp: bind_sum_Ok bindings_at_def True)
+    then obtain \<Delta>s where "those_sum (map2 (check_pat_at \<Sigma> \<Gamma>) ps \<tau>s) = Ok \<Delta>s"
+      by (auto simp: pattern_bindings_def bind_sum_Ok)
+    then have checked: "\<exists>\<Delta>'. check_pat_at \<Sigma> \<Gamma> p \<sigma> = Ok \<Delta>'" if "(p, \<sigma>) \<in> set (zip ps \<tau>s)" for p \<sigma>
+      using that by (auto simp: list_all2_conv_all_nth in_set_conv_nth dest!: those_sum_Ok)
+    have "wf_ty \<Sigma> (matched_as \<Sigma> \<Gamma> \<sigma> (node p)) \<and> fv (matched_as \<Sigma> \<Gamma> \<sigma> (node p)) \<subseteq> fv \<sigma>"
+      if "(\<sigma>, p) \<in> set (zip \<tau>s ps)" for \<sigma> p
+    proof -
+      from that have "(p, \<sigma>) \<in> set (zip ps \<tau>s)" by (auto simp: in_set_zip)
+      from checked[OF this] obtain \<Delta>' where "check_pat \<Sigma> \<Gamma> (node p) \<sigma> = Ok \<Delta>'" by (auto dest: check_pat_at_node)
+      moreover have "wf_ty \<Sigma> \<sigma>" using "7.prems"(3) set_zip_leftD[OF that] by auto
+      ultimately show ?thesis using "7.IH"[OF True that refl "7.prems"(1, 2)] by blast
+    qed
+    then have elems: "wf_ty \<Sigma> (matched_as \<Sigma> \<Gamma> a (node b))
+        \<and> fv (matched_as \<Sigma> \<Gamma> a (node b)) \<subseteq> \<Union> (fv ` set \<tau>s)"
+      if "(a, b) \<in> set (zip \<tau>s ps)" for a b
+      using that set_zip_leftD[OF that] by blast
+    have wf: "\<forall>\<rho> \<in> set (map2 (\<lambda>\<tau> p. matched_as \<Sigma> \<Gamma> \<tau> (node p)) \<tau>s ps). wf_ty \<Sigma> \<rho>" using elems by auto
+    have fv: "\<Union> (fv ` set (map2 (\<lambda>\<tau> p. matched_as \<Sigma> \<Gamma> \<tau> (node p)) \<tau>s ps)) \<subseteq> \<Union> (fv ` set \<tau>s)"
+      unfolding UN_subset_iff using elems by auto
+    from wf fv True show ?thesis by simp
+  qed (use "7.prems"(3) in simp)
+next
+  case "10_1"
+  from "10_1.prems" show ?case by (rule matched_as_constr_wf) auto
+next
+  case "10_2"
+  from "10_2.prems" show ?case by (rule matched_as_constr_wf) auto
+next
+  case "10_3"
+  from "10_3.prems" show ?case by (rule matched_as_constr_wf) auto
+next
+  case "10_4"
+  from "10_4.prems" show ?case by (rule matched_as_constr_wf) auto
+next
+  case "10_5"
+  from "10_5.prems" show ?case by (rule matched_as_constr_wf) auto
+next
+  case "10_6"
+  from "10_6.prems" show ?case by (rule matched_as_constr_wf) auto
+next
+  case "10_7"
+  from "10_7.prems" show ?case by (rule matched_as_constr_wf) auto
+next
+  case "10_8"
+  from "10_8.prems" show ?case by (rule matched_as_constr_wf) auto
+qed (auto simp: bind_sum_Ok intro: wf_meet(1) dest!: fv_meet[THEN subsetD] check_pat_at_node)
 
 end
