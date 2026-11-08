@@ -64,6 +64,7 @@ where
 "matched_as \<Sigma> \<Gamma> \<tau> (PatVar _) = \<tau>" |
 "matched_as \<Sigma> \<Gamma> \<tau> PatWildcard = \<tau>" |
 "matched_as \<Sigma> \<Gamma> \<tau> (PatAs p _) = matched_as \<Sigma> \<Gamma> \<tau> (node p)" |
+"matched_as \<Sigma> \<Gamma> (TyVar \<alpha>) (PatLiteral _) = TyVar \<alpha>" |
 "matched_as \<Sigma> \<Gamma> \<tau> (PatLiteral (LitFloat _)) = meet \<Sigma> (TyPrim float) \<tau>" |
 "matched_as \<Sigma> \<Gamma> \<tau> (PatLiteral l) = meet \<Sigma> (TyLiteral l) \<tau>" |
 "matched_as \<Sigma> \<Gamma> (TyTuple \<tau>s) (PatTuple ps) =

@@ -1454,4 +1454,226 @@ qed
 
 end
 
+
+subsection \<open>Patterns at a type other than a union\<close>
+
+lemma disjuncts_nonunion: "\<sigma> \<in> set (disjuncts \<tau>) \<Longrightarrow> \<not> is_union \<sigma>"
+  by (induction \<tau>) auto
+
+lemma has_values_disjunct: "\<lbrakk> \<sigma> \<in> set (disjuncts \<tau>) ; has_values \<Sigma> k \<sigma> \<rbrakk> \<Longrightarrow> has_values \<Sigma> k \<tau>"
+  by (induction \<tau>) (auto simp: has_values_union)
+
+lemma has_float_values_disjunct: "\<lbrakk> \<sigma> \<in> set (disjuncts \<tau>) ; has_float_values \<Sigma> \<sigma> \<rbrakk> \<Longrightarrow> has_float_values \<Sigma> \<tau>"
+  by (induction \<tau>) auto
+
+lemma matched_as_as: "matched_as \<Sigma> \<Gamma> \<tau> (PatAs p x) = matched_as \<Sigma> \<Gamma> \<tau> (node p)"
+  by (induction \<tau>) auto
+
+lemma remaining_as: "remaining \<Sigma> \<Gamma> \<tau> (PatAs p x) = remaining \<Sigma> \<Gamma> \<tau> (node p)"
+  by (induction \<tau>) auto
+
+lemma matched_as_var: "\<not> is_union \<tau> \<Longrightarrow> matched_as \<Sigma> \<Gamma> \<tau> (PatVar x) = \<tau>"
+  by (cases \<tau>) auto
+
+lemma matched_as_wild: "\<not> is_union \<tau> \<Longrightarrow> matched_as \<Sigma> \<Gamma> \<tau> PatWildcard = \<tau>"
+  by (cases \<tau>) auto
+
+lemma matched_as_literal:
+  "\<lbrakk> \<not> is_union \<tau> ; \<forall>\<beta>. \<tau> \<noteq> TyVar \<beta> \<rbrakk>
+  \<Longrightarrow> matched_as \<Sigma> \<Gamma> \<tau> (PatLiteral l)
+      = (case l of LitFloat _ \<Rightarrow> meet \<Sigma> (TyPrim float) \<tau> | _ \<Rightarrow> meet \<Sigma> (TyLiteral l) \<tau>)"
+  by (cases \<tau>; cases l) auto
+
+lemma matched_as_constr:
+  "\<not> is_union \<tau> \<Longrightarrow> matched_as \<Sigma> \<Gamma> \<tau> (PatConstr q a)
+    = (case instance_at \<Sigma> (pattern_class \<Gamma> q) \<tau> of
+         Instance \<sigma>s \<Rightarrow> meet \<Sigma> \<tau> (TyClass (pattern_class \<Gamma> q) \<sigma>s) | _ \<Rightarrow> TyPrim Never)"
+  by (cases \<tau>) (auto simp: Let_def)
+
+lemma remaining_var: "\<not> is_union \<tau> \<Longrightarrow> remaining \<Sigma> \<Gamma> \<tau> (PatVar x) = TyPrim Never"
+  by (cases \<tau>) auto
+
+lemma remaining_wild: "\<not> is_union \<tau> \<Longrightarrow> remaining \<Sigma> \<Gamma> \<tau> PatWildcard = TyPrim Never"
+  by (cases \<tau>) auto
+
+lemma remaining_tuple_other: "\<lbrakk> \<not> is_union \<tau> ; \<forall>\<sigma>s. \<tau> \<noteq> TyTuple \<sigma>s \<rbrakk> \<Longrightarrow> remaining \<Sigma> \<Gamma> \<tau> (PatTuple ps) = \<tau>"
+  by (cases \<tau>) auto
+
+lemma remaining_list: "\<not> is_union \<tau> \<Longrightarrow> remaining \<Sigma> \<Gamma> \<tau> (PatList ps) = \<tau>"
+  by (cases \<tau>) auto
+
+lemma remaining_dict: "\<lbrakk> \<not> is_union \<tau> ; kps \<noteq> [] \<or> (\<forall>\<sigma>. \<tau> \<noteq> TyDict \<sigma>) \<rbrakk> \<Longrightarrow> remaining \<Sigma> \<Gamma> \<tau> (PatDict kps) = \<tau>"
+  by (cases \<tau>; cases kps) auto
+
+lemma remaining_constr:
+  "\<not> is_union \<tau> \<Longrightarrow> remaining \<Sigma> \<Gamma> \<tau> (PatConstr q a)
+    = (case instance_at \<Sigma> (pattern_class \<Gamma> q) \<tau> of
+         Instance \<sigma>s \<Rightarrow>
+           if \<Sigma> \<turnstile> \<tau> <: TyClass (pattern_class \<Gamma> q) \<sigma>s
+              \<and> (\<forall>(p, \<sigma>) \<in> set (zip (field_patterns \<Sigma> (pattern_class \<Gamma> q) a)
+                                 (field_types \<Sigma> (pattern_class \<Gamma> q) \<sigma>s)).
+                   remaining \<Sigma> \<Gamma> \<sigma> (node p) = TyPrim Never)
+           then TyPrim Never else \<tau>
+       | _ \<Rightarrow> \<tau>)"
+  by (cases \<tau>) (auto simp: Let_def)
+
+subsection \<open>Field patterns of a constructor pattern\<close>
+
+lemma check_field_map_Ok:
+  "check_field_map a u xs n ys = Ok () \<Longrightarrow> n + length ys = length xs \<and> set ys = set (drop n xs)"
+  by (auto simp: check_field_map_def split: if_splits)
+
+lemma distinct_cover: "\<lbrakk> distinct xs ; n + length ys = length xs ; set ys = set (drop n xs) \<rbrakk> \<Longrightarrow> distinct ys"
+proof -
+  assume "distinct xs" and "n + length ys = length xs" and "set ys = set (drop n xs)"
+  then have "card (set ys) = length ys" using distinct_card[of "drop n xs"] by simp
+  then show "distinct ys" by (rule card_distinct)
+qed
+
+lemma kw_pattern_single:
+  "\<lbrakk> distinct (map fst kps) ; x \<in> set (map fst kps) \<rbrakk>
+  \<Longrightarrow> concat (map (\<lambda>(y, p). if y = x then [p] else []) kps) = [the (map_of kps x)]"
+proof (induction kps)
+  case (Cons kp kps)
+  obtain y p where kp: "kp = (y, p)" by (cases kp)
+  show ?case
+  proof (cases "y = x")
+    case True
+    with Cons.prems kp have "x \<notin> set (map fst kps)" by simp
+    then have "concat (map (\<lambda>(y, p). if y = x then [p] else []) kps) = []" by (induction kps) auto
+    with True kp show ?thesis by simp
+  next
+    case False
+    with Cons kp show ?thesis by simp
+  qed
+qed simp
+
+lemma concat_map_singleton: "(\<And>z. z \<in> set zs \<Longrightarrow> g z = [h z]) \<Longrightarrow> concat (map g zs) = map h zs"
+  by (induction zs) auto
+
+(* Sub-patterns of a constructor pattern with well-formed arguments: the positional ones, then one for each
+   remaining field, by keyword *)
+lemma field_patterns_eq:
+  assumes "distinct (field_names \<Sigma> C)" and "length ps + length kps = length (field_names \<Sigma> C)"
+    and "set (map fst kps) = set (drop (length ps) (field_names \<Sigma> C))"
+  shows "field_patterns \<Sigma> C (ps, kps) = ps @ map (\<lambda>x. the (map_of kps x)) (drop (length ps) (field_names \<Sigma> C))"
+    and "distinct (map fst kps)"
+proof -
+  show dist: "distinct (map fst kps)" using distinct_cover[OF assms(1) _ assms(3)] assms(2) by simp
+  show "field_patterns \<Sigma> C (ps, kps) = ps @ map (\<lambda>x. the (map_of kps x)) (drop (length ps) (field_names \<Sigma> C))"
+    using kw_pattern_single[OF dist] assms(3) by (auto intro!: concat_map_singleton)
+qed
+
+lemma map_of_nth: "\<lbrakk> distinct (map fst xs) ; i < length xs \<rbrakk> \<Longrightarrow> map_of xs (fst (xs ! i)) = Some (snd (xs ! i))"
+  by (metis map_of_is_SomeI nth_mem prod.collapse)
+
+(* Lookups in two association lists with the same keys and related values *)
+lemma map_of_list_all2:
+  "\<lbrakk> map fst xs = map fst ys ; list_all2 R (map snd xs) (map snd ys) ; map_of ys k = Some b \<rbrakk>
+  \<Longrightarrow> \<exists>a. map_of xs k = Some a \<and> R a b"
+proof (induction xs arbitrary: ys)
+  case (Cons x xs)
+  then obtain y ys' where "ys = y # ys'" by (cases ys) auto
+  with Cons show ?case by (cases "fst x = k") auto
+qed simp
+
+lemma field_types_inst:
+  assumes "wf_class_table \<Sigma>" and "C |\<in>| fmdom \<Sigma>" and "length \<sigma>s = length (type_params \<Sigma> C)"
+  shows "field_types \<Sigma> C (map (subst \<tau>s \<alpha>s) \<sigma>s) = map (subst \<tau>s \<alpha>s) (field_types \<Sigma> C \<sigma>s)"
+  unfolding field_types_def instantiate_fields_subst[OF assms] by (simp add: case_prod_beta)
+
+lemma foldr_match_append:
+  "foldr seq_compose_match (xs @ ys) (Match fmempty)
+   = seq_compose_match (foldr seq_compose_match xs (Match fmempty)) (foldr seq_compose_match ys (Match fmempty))"
+proof (induction xs)
+  case (Cons x xs)
+  then show ?case by (cases x; cases "foldr seq_compose_match xs (Match fmempty)";
+                      cases "foldr seq_compose_match ys (Match fmempty)") auto
+qed (cases "foldr seq_compose_match ys (Match fmempty)", auto)
+
+context evaluation
+begin
+
+subsection \<open>Soundness of pattern matching\<close>
+
+(* Match of pattern p, checked at \<tau> with bindings \<Delta>, against value v: aborts are not prevented; a match binds the
+   variables of \<Delta> at instances of their types and v is at the matched type; no match leaves v at the remaining type *)
+definition pat_sound :: "cxt \<Rightarrow> (var \<times> ty) list \<Rightarrow> env \<Rightarrow> pat \<Rightarrow> ty \<Rightarrow> (var, ty) fmap \<Rightarrow> val \<Rightarrow> bool"
+where
+"pat_sound \<Gamma> \<eta> \<rho> p \<tau> \<Delta> v =
+  ((\<forall>\<kappa>. match \<rho> p v = MatchAborts \<kappa> \<longrightarrow> \<not> prevented \<kappa>)
+   \<and> (\<forall>\<rho>'. match \<rho> p v = Match \<rho>' \<longrightarrow> fmdom' \<rho>' = fmdom' \<Delta>
+        \<and> (\<forall>x \<sigma>. fmlookup \<Delta> x = Some \<sigma> \<longrightarrow> (\<exists>u. fmlookup \<rho>' x = Some u \<and> \<turnstile> u : Ty (inst \<eta> \<sigma>)))
+        \<and> \<turnstile> v : Ty (inst \<eta> (matched_as \<Sigma> \<Gamma> \<tau> p)))
+   \<and> (match \<rho> p v = NoMatch \<longrightarrow> \<turnstile> v : Ty (inst \<eta> (remaining \<Sigma> \<Gamma> \<tau> p))))"
+
+lemma match_all_foldr:
+  "length ps = length vs
+  \<Longrightarrow> match_all \<rho> ps vs = foldr seq_compose_match (map (\<lambda>(p, v). match \<rho> (node p) v) (zip ps vs)) (Match fmempty)"
+  by (induction ps vs rule: list_induct2) auto
+
+lemma match_kws_foldr:
+  "match_kws \<rho> kps zvs
+   = foldr seq_compose_match (map (\<lambda>(y, p). match \<rho> (node p) (the (map_of zvs y))) kps) (Match fmempty)"
+  by (induction kps) auto
+
+lemma match_dict_foldr:
+  "match_dict \<rho> kps \<delta>
+   = foldr seq_compose_match (map (\<lambda>(w, p). match \<rho> (node p) (the (map_of \<delta> w))) kps) (Match fmempty)"
+  by (induction kps) auto
+
+(* Sequence of sub-patterns matched against values, each sound against its type: the sequence sound *)
+lemma match_seq_sound:
+  assumes pus: "set pus = set (zip fps us)" and len: "length fps = length us" "length fps = length \<Delta>s"
+    and sound: "\<And>i. i < length fps \<Longrightarrow> pat_sound \<Gamma> \<eta> \<rho> (node (fps ! i)) (fts ! i) (\<Delta>s ! i) (us ! i)"
+    and dom: "\<And>i. i < length fps \<Longrightarrow> fmdom' (\<Delta>s ! i) = binds (node (fps ! i))"
+    and once: "distinct (concat (map (sorted_list_of_set \<circ> binds \<circ> node) fps))"
+  defines "m \<equiv> foldr seq_compose_match (map (\<lambda>(p, u). match \<rho> (node p) u) pus) (Match fmempty)"
+  shows "\<And>\<kappa>. m = MatchAborts \<kappa> \<Longrightarrow> \<not> prevented \<kappa>"
+    and "m = NoMatch \<Longrightarrow> \<exists>i < length fps. match \<rho> (node (fps ! i)) (us ! i) = NoMatch"
+    and "m = Match \<rho>' \<Longrightarrow> fmdom' \<rho>' = fmdom' (fold fmadd \<Delta>s fmempty)
+      \<and> (\<forall>x \<upsilon>. fmlookup (fold fmadd \<Delta>s fmempty) x = Some \<upsilon> \<longrightarrow> (\<exists>u. fmlookup \<rho>' x = Some u \<and> \<turnstile> u : Ty (inst \<eta> \<upsilon>)))
+      \<and> (\<forall>i < length fps. \<exists>\<rho>\<^sub>i. match \<rho> (node (fps ! i)) (us ! i) = Match \<rho>\<^sub>i)"
+  sorry
+
+lemma check_pat_sound_aux:
+  "\<lbrakk> \<Sigma>' = \<Sigma> ; check_pat \<Sigma>' \<Gamma> p \<tau> = Ok \<Delta> ; \<eta> \<turnstile> \<rho> : \<Gamma> ; wf_ty \<Sigma> \<tau> ; fv \<tau> \<subseteq> fst ` set \<eta> ; \<turnstile> v : Ty (inst \<eta> \<tau>) \<rbrakk>
+  \<Longrightarrow> pat_sound \<Gamma> \<eta> \<rho> p \<tau> \<Delta> v"
+  "\<lbrakk> \<Sigma>' = \<Sigma> ; check_pat_at \<Sigma>' \<Gamma> p' \<tau>' = Ok \<Delta>' ; \<eta> \<turnstile> \<rho> : \<Gamma> ; wf_ty \<Sigma> \<tau>' ; fv \<tau>' \<subseteq> fst ` set \<eta>
+   ; \<turnstile> v : Ty (inst \<eta> \<tau>') \<rbrakk>
+  \<Longrightarrow> pat_sound \<Gamma> \<eta> \<rho> (node p') \<tau>' \<Delta>' v"
+proof (induction \<Sigma>' \<Gamma> p \<tau> and \<Sigma>' \<Gamma> p' \<tau>' arbitrary: \<Delta> v and \<Delta>' v rule: check_pat_check_pat_at.induct)
+  case (1 \<Sigma>' \<Gamma> \<tau>)
+  then show ?case sorry
+next
+  case (2 \<Sigma>' \<Gamma> x \<tau>)
+  then show ?case sorry
+next
+  case (3 \<Sigma>' \<Gamma> p x \<tau>)
+  then show ?case sorry
+next
+  case (4 \<Sigma>' \<Gamma> l \<tau>)
+  then show ?case sorry
+next
+  case (5 \<Sigma>' \<Gamma> ps \<tau>)
+  then show ?case sorry
+next
+  case (6 \<Sigma>' \<Gamma> ps \<tau>)
+  then show ?case sorry
+next
+  case (7 \<Sigma>' \<Gamma> kps \<tau>)
+  then show ?case sorry
+next
+  case (8 \<Sigma>' \<Gamma> q ps kps \<tau>)
+  then show ?case sorry
+next
+  case (9 \<Sigma>' \<Gamma> p q \<tau>)
+  from "9.prems"(2) have "check_pat \<Sigma>' \<Gamma> q \<tau> = Ok \<Delta>'" using check_pat_at_node[of \<Sigma>' \<Gamma> "At p q"] by simp
+  with "9.IH" "9.prems" show ?case by simp
+qed
+
+lemmas check_pat_sound = check_pat_sound_aux[OF refl]
+
+end
+
 end

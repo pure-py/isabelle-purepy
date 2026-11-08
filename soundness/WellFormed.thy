@@ -1264,11 +1264,11 @@ proof (induction \<Sigma> \<Gamma> \<tau> p arbitrary: \<Delta> rule: matched_as
   with "1.IH"(1)[OF "1.prems"(1, 2) _ this(1)] "1.IH"(2)[OF "1.prems"(1, 2) _ this(2)] "1.prems"(3)
   show ?case by (auto intro: wf_join dest!: fv_join_elem)
 next
-  case (7 \<Sigma> \<Gamma> \<tau>s ps)
+  case (8 \<Sigma> \<Gamma> \<tau>s ps)
   show ?case
   proof (cases "length \<tau>s = length ps")
     case True
-    from "7.prems"(4) obtain \<Delta>' where "pattern_bindings (map2 (check_pat_at \<Sigma> \<Gamma>) ps \<tau>s) = Ok \<Delta>'"
+    from "8.prems"(4) obtain \<Delta>' where "pattern_bindings (map2 (check_pat_at \<Sigma> \<Gamma>) ps \<tau>s) = Ok \<Delta>'"
       by (auto simp: bind_sum_Ok bindings_at_def True)
     then obtain \<Delta>s where "those_sum (map2 (check_pat_at \<Sigma> \<Gamma>) ps \<tau>s) = Ok \<Delta>s"
       by (auto simp: pattern_bindings_def bind_sum_Ok)
@@ -1279,8 +1279,8 @@ next
     proof -
       from that have "(p, \<sigma>) \<in> set (zip ps \<tau>s)" by (auto simp: in_set_zip)
       from checked[OF this] obtain \<Delta>' where "check_pat \<Sigma> \<Gamma> (node p) \<sigma> = Ok \<Delta>'" by (auto dest: check_pat_at_node)
-      moreover have "wf_ty \<Sigma> \<sigma>" using "7.prems"(3) set_zip_leftD[OF that] by auto
-      ultimately show ?thesis using "7.IH"[OF True that refl "7.prems"(1, 2)] by blast
+      moreover have "wf_ty \<Sigma> \<sigma>" using "8.prems"(3) set_zip_leftD[OF that] by auto
+      ultimately show ?thesis using "8.IH"[OF True that refl "8.prems"(1, 2)] by blast
     qed
     then have elems: "wf_ty \<Sigma> (matched_as \<Sigma> \<Gamma> a (node b))
         \<and> fv (matched_as \<Sigma> \<Gamma> a (node b)) \<subseteq> \<Union> (fv ` set \<tau>s)"
@@ -1290,31 +1290,31 @@ next
     have fv: "\<Union> (fv ` set (map2 (\<lambda>\<tau> p. matched_as \<Sigma> \<Gamma> \<tau> (node p)) \<tau>s ps)) \<subseteq> \<Union> (fv ` set \<tau>s)"
       unfolding UN_subset_iff using elems by auto
     from wf fv True show ?thesis by simp
-  qed (use "7.prems"(3) in simp)
+  qed (use "8.prems"(3) in simp)
 next
-  case "10_1"
-  from "10_1.prems" show ?case by (rule matched_as_constr_wf) auto
+  case "11_1"
+  from "11_1.prems" show ?case by (rule matched_as_constr_wf) auto
 next
-  case "10_2"
-  from "10_2.prems" show ?case by (rule matched_as_constr_wf) auto
+  case "11_2"
+  from "11_2.prems" show ?case by (rule matched_as_constr_wf) auto
 next
-  case "10_3"
-  from "10_3.prems" show ?case by (rule matched_as_constr_wf) auto
+  case "11_3"
+  from "11_3.prems" show ?case by (rule matched_as_constr_wf) auto
 next
-  case "10_4"
-  from "10_4.prems" show ?case by (rule matched_as_constr_wf) auto
+  case "11_4"
+  from "11_4.prems" show ?case by (rule matched_as_constr_wf) auto
 next
-  case "10_5"
-  from "10_5.prems" show ?case by (rule matched_as_constr_wf) auto
+  case "11_5"
+  from "11_5.prems" show ?case by (rule matched_as_constr_wf) auto
 next
-  case "10_6"
-  from "10_6.prems" show ?case by (rule matched_as_constr_wf) auto
+  case "11_6"
+  from "11_6.prems" show ?case by (rule matched_as_constr_wf) auto
 next
-  case "10_7"
-  from "10_7.prems" show ?case by (rule matched_as_constr_wf) auto
+  case "11_7"
+  from "11_7.prems" show ?case by (rule matched_as_constr_wf) auto
 next
-  case "10_8"
-  from "10_8.prems" show ?case by (rule matched_as_constr_wf) auto
+  case "11_8"
+  from "11_8.prems" show ?case by (rule matched_as_constr_wf) auto
 qed (auto simp: bind_sum_Ok intro: wf_meet(1) dest!: fv_meet[THEN subsetD] check_pat_at_node)
 
 
