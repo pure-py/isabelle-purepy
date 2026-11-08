@@ -178,6 +178,11 @@ lemma wf_int_lit: "\<turnstile> VLit (LitInt k) : Ty (TyPrim int)"
 lemma wf_int_float: "\<turnstile> VLit (LitInt k) : Ty (TyPrim float)"
   by (rule ValSub[OF wf_int_lit SubtyIntFloat])
 
+(* None at an instance of a type above NoneType *)
+lemma wf_none: "\<Sigma> \<turnstile> TyPrim NoneType <: \<tau> \<Longrightarrow> \<turnstile> VLit LitNone : Ty (inst \<eta> \<tau>)"
+  by (intro ValSub[OF ValLit] SubtyLiteral)
+     (auto dest: subst_subty'[where \<tau>s = "map snd \<eta>" and \<alpha>s = "map fst \<eta>"])
+
 subsection \<open>Well-scoped types\<close>
 
 (* Types produced by the checker are over the type variables in scope *)

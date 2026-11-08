@@ -164,9 +164,7 @@ proof (rule sound_stmtI)
   assume chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtReturn None) = Ok R"
   from chk obtain \<tau> where \<zeta>: "\<zeta> = Some \<tau>" by (cases \<zeta>) auto
   with chk have "\<Sigma> \<turnstile> TyPrim NoneType <: \<tau>" by (auto split: if_splits)
-  then have "\<turnstile> VLit LitNone : Ty (inst \<eta> \<tau>)"
-    by (intro ValSub[OF ValLit] SubtyLiteral)
-       (auto dest: subst_subty'[where \<tau>s = "map snd \<eta>" and \<alpha>s = "map fst \<eta>"])
+  then have "\<turnstile> VLit LitNone : Ty (inst \<eta> \<tau>)" by (rule wf_none)
   then show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (returns\<^sub>o (VLit LitNone)) R" by (simp add: \<zeta>)
 qed
 
@@ -806,19 +804,17 @@ lemma call_def_sound:
                      \<otimes> fmap_of_list (zip (map fst xps) us) \<otimes> \<rho>s) (node s) ([], \<omega>)"
     and j: "j < length ds"
   shows "sound_expr \<rho> (ExprCall e (es, [])) (result_of \<omega>)"
-  unfolding sound_expr_def
-proof (intro conjI allI impI)
-  fix \<eta> \<Gamma> \<tau>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and typed: "has_type \<Sigma> \<eta> \<Gamma> (ExprCall e (es, [])) \<tau>"
+proof (rule call_callable_exprI[OF assms(1, 2)])
+  fix \<eta> \<Gamma> \<sigma>s \<tau>'
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and v: "\<turnstile> Def(\<rho>', ds, j) : Ty (inst \<eta> (TyCallable \<sigma>s \<tau>'))"
+    and es: "list_all2 (has_type_at \<Sigma> \<eta> \<Gamma>) es \<sigma>s"
   let ?xs = "map (def_name \<circ> node) ds"
-  (* Call through a callee typed at a callable type *)
-  have call: "result_typed (result_of \<omega>) (inst \<eta> \<tau>')"
-    if "\<turnstile> Def(\<rho>', ds, j) : Ty (inst \<eta> (TyCallable \<sigma>s \<tau>'))" and "list_all2 (has_type_at \<Sigma> \<eta> \<Gamma>) es \<sigma>s"
-    for \<sigma>s \<tau>'
+  from v assms(5) env es obtain \<sigma>s' \<tau>''
+    where intro: "intro_typed Def(\<rho>', ds, j) (TyCallable \<sigma>s' \<tau>'')" and us: "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty \<sigma>) us \<sigma>s'"
+    and ret: "\<Sigma> \<turnstile> \<tau>'' <: inst \<eta> \<tau>'"
+    by (rule callable_args)
+  show "result_typed (result_of \<omega>) (inst \<eta> \<tau>')"
   proof -
-    from that(1) obtain \<sigma>s' \<tau>'' where intro: "intro_typed Def(\<rho>', ds, j) (TyCallable \<sigma>s' \<tau>'')"
-      and sub: "\<Sigma> \<turnstile> map (inst \<eta>) \<sigma>s [<:] \<sigma>s'" and ret: "\<Sigma> \<turnstile> \<tau>'' <: inst \<eta> \<tau>'"
-      by (auto elim: wf_callable)
     from intro[unfolded intro_typed.simps] obtain \<eta>' \<Gamma>' \<pi>s \<alpha>s' \<sigma>s\<^sub>d \<tau>\<^sub>d \<tau>s where env': "\<eta>' \<turnstile> \<rho>' : \<Gamma>'"
       and sigs: "those_sum (map (\<lambda>d. locate (pos_of d) (def_signature \<Sigma> \<Gamma>' (node d))) ds) = Ok \<pi>s"
       and defs: "all_sum (map2 (check_def_at \<Sigma> (\<Gamma>' \<otimes> fmap_of_list (zip ?xs (map signature_entry \<pi>s)))) ds \<pi>s)
@@ -872,13 +868,9 @@ proof (intro conjI allI impI)
     qed
     then have env_params: "?\<eta> \<turnstile> \<rho>' \<otimes> fmap_of_list (zip ?xs vs) : \<Gamma>' \<otimes> ?\<Delta> \<otimes> fmconst (set \<alpha>s) TypeVar"
       by (rule wf_env_type_params) (simp add: fst_\<eta>)
-    from sound_exprs_typed[OF assms(5) env that(2)]
-    have args: "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty \<sigma>) us (map (inst \<eta>) \<sigma>s)" by (simp add: list.rel_map)
-    have "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty \<sigma>) us \<sigma>s'"
-      by (rule list_all2_trans[OF _ args sub[unfolded subtys_list_all2]]) (rule ValSub)
-    then have us: "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty (inst ?\<eta> \<sigma>)) us \<sigma>s\<^sub>d" by (simp add: \<sigma>s' list.rel_map)
+    from us have us': "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty (inst ?\<eta> \<sigma>)) us \<sigma>s\<^sub>d" by (simp add: \<sigma>s' list.rel_map)
     have len_xs: "length (map fst xps) = length \<sigma>s\<^sub>d" using len_\<sigma>s by simp
-    from wf_env_params[OF env_params \<Delta>' len_xs us fv_\<sigma>s]
+    from wf_env_params[OF env_params \<Delta>' len_xs us' fv_\<sigma>s]
     have "?\<eta> \<turnstile> \<rho>' \<otimes> fmap_of_list (zip ?xs vs) \<otimes> fmap_of_list (zip (map fst xps) us)
       : \<Gamma>' \<otimes> ?\<Delta> \<otimes> fmconst (set \<alpha>s) TypeVar \<otimes> \<Delta>'" .
     then have env_body: "?\<eta> \<turnstile> \<rho>' \<otimes> fmap_of_list (zip ?xs vs) \<otimes> fmap_of_list (zip (map fst xps) us) \<otimes> \<rho>s
@@ -891,25 +883,11 @@ proof (intro conjI allI impI)
     proof (cases \<omega>)
       case (Assigns \<rho>'')
       with \<open>wf_outcome _ _ _ _ _ _\<close> R have "\<Sigma> \<turnstile> TyPrim NoneType <: \<tau>\<^sub>d" by (cases R) auto
-      then have "\<turnstile> VLit LitNone : Ty (inst ?\<eta> \<tau>\<^sub>d)"
-        by (intro ValSub[OF ValLit] SubtyLiteral)
-           (auto dest: subst_subty'[where \<tau>s = "map snd ?\<eta>" and \<alpha>s = "map fst ?\<eta>"])
-      then show ?thesis by (simp add: Assigns \<tau>'')
+      from wf_none[OF this] show ?thesis by (simp add: Assigns \<tau>'')
     qed (simp_all add: \<tau>'')
     with ret show ?thesis by (cases \<omega>) (auto intro: ValSub)
   qed
-  from assms(2) env typed show "result_typed (result_of \<omega>) (inst \<eta> \<tau>)"
-  proof (cases rule: call_cases)
-    case lambda
-    with assms(1) show ?thesis by (auto elim: LambdaE)
-  next
-    case constructor
-    then show ?thesis by simp
-  next
-    case (callable \<sigma>s \<tau>')
-    from call[OF callable(1, 3)] callable(5) show ?thesis by (rule result_typed_sub)
-  qed
-qed simp
+qed simp_all
 
 end
 
