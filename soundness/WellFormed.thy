@@ -1261,4 +1261,173 @@ next
   from "10_8.prems" show ?case by (rule matched_as_constr_wf) auto
 qed (auto simp: bind_sum_Ok intro: wf_meet(1) dest!: fv_meet[THEN subsetD] check_pat_at_node)
 
+
+(* Type remaining after a pattern at a well-formed type: well-formed and over the type variables of the type *)
+lemma remaining_wf:
+  "wf_ty \<Sigma> \<tau> \<Longrightarrow> wf_ty \<Sigma> (remaining \<Sigma> \<Gamma> \<tau> p) \<and> fv (remaining \<Sigma> \<Gamma> \<tau> p) \<subseteq> fv \<tau>"
+proof (induction \<Sigma> \<Gamma> \<tau> p rule: remaining.induct)
+  case (1 \<Sigma> \<Gamma> \<sigma> \<tau> p)
+  then show ?case by (auto intro: wf_join dest!: fv_join_elem)
+next
+  case (8 \<Sigma> \<Gamma> \<tau>s ps)
+  show ?case
+  proof (cases "length \<tau>s = length ps")
+    case True
+    let ?\<rho>s = "map2 (\<lambda>\<tau> p. remaining \<Sigma> \<Gamma> \<tau> (node p)) \<tau>s ps"
+    have elem: "wf_ty \<Sigma> (?\<rho>s ! i) \<and> fv (?\<rho>s ! i) \<subseteq> fv (\<tau>s ! i)" if "i < length \<tau>s" for i
+    proof -
+      have "(\<tau>s ! i, ps ! i) \<in> set (zip \<tau>s ps)" using that True by (auto simp: in_set_zip)
+      moreover have "wf_ty \<Sigma> (\<tau>s ! i)" using "8.prems" that by auto
+      ultimately show ?thesis using "8.IH"[OF True _ refl, of "\<tau>s ! i" "ps ! i"] that True by simp
+    qed
+    show ?thesis
+    proof (cases "filter (\<lambda>i. ?\<rho>s ! i \<noteq> TyPrim Never) [0..<length ?\<rho>s]")
+      case Nil
+      with True show ?thesis by (simp add: Let_def)
+    next
+      case (Cons i ks)
+      show ?thesis
+      proof (cases ks)
+        case Nil
+        with Cons have f: "filter (\<lambda>i. ?\<rho>s ! i \<noteq> TyPrim Never) [0..<length ?\<rho>s] = [i]" by simp
+        then have "i \<in> set (filter (\<lambda>i. ?\<rho>s ! i \<noteq> TyPrim Never) [0..<length ?\<rho>s])" by simp
+        then have i: "i < length \<tau>s" using True by simp
+        have r: "remaining \<Sigma> \<Gamma> (TyTuple \<tau>s) (PatTuple ps) = TyTuple (\<tau>s[i := ?\<rho>s ! i])"
+          using True f by (simp add: Let_def)
+        have sub: "set (\<tau>s[i := ?\<rho>s ! i]) \<subseteq> insert (?\<rho>s ! i) (set \<tau>s)" by (rule set_update_subset_insert)
+        have fv\<rho>: "fv (?\<rho>s ! i) \<subseteq> fv (TyTuple \<tau>s)" using elem[OF i] nth_mem[OF i] by auto
+        have "wf_ty \<Sigma> \<rho> \<and> fv \<rho> \<subseteq> fv (TyTuple \<tau>s)" if "\<rho> \<in> set (\<tau>s[i := ?\<rho>s ! i])" for \<rho>
+        proof -
+          from that sub consider "\<rho> = ?\<rho>s ! i" | "\<rho> \<in> set \<tau>s" by auto
+          then show ?thesis using elem[OF i] fv\<rho> "8.prems" by cases auto
+        qed
+        then show ?thesis unfolding r by (auto simp: UN_subset_iff)
+      next
+        case (Cons j js)
+        with \<open>filter _ _ = i # ks\<close> True "8.prems" show ?thesis by (simp add: Let_def)
+      qed
+    qed
+  qed (use "8.prems" in simp)
+qed (auto simp: Let_def split: instances.splits if_splits)
+
+subsection \<open>Pattern bindings\<close>
+
+lemma fold_fmadd_lookup:
+  "fmlookup (fold (\<otimes>) \<Delta>s \<Delta>) x = Some \<sigma> \<Longrightarrow> fmlookup \<Delta> x = Some \<sigma> \<or> (\<exists>\<Delta>' \<in> set \<Delta>s. fmlookup \<Delta>' x = Some \<sigma>)"
+proof (induction \<Delta>s arbitrary: \<Delta>)
+  case (Cons a \<Delta>s)
+  from Cons.IH[OF Cons.prems[simplified]] show ?case by (auto split: if_splits)
+qed simp
+
+lemma fmdom'_fold_fmadd: "fmdom' (fold (\<otimes>) \<Delta>s \<Delta>) = fmdom' \<Delta> \<union> \<Union> (fmdom' ` set \<Delta>s)"
+  by (induction \<Delta>s arbitrary: \<Delta>) auto
+
+lemma map2_replicate: "map2 f xs (replicate (length xs) y) = map (\<lambda>x. f x y) xs"
+  by (induction xs) simp_all
+
+(* Bindings of sub-patterns ps checked against types \<sigma>s: the domain the variables of ps, and each type bound
+   well-formed and over V when the bindings of each sub-pattern are *)
+lemma pattern_bindings_wf:
+  assumes "pattern_bindings (map2 (check_pat_at \<Sigma> \<Gamma>) ps \<sigma>s) = Ok \<Delta>" and "length ps = length \<sigma>s"
+    and sub: "\<And>p \<sigma> \<Delta>'. \<lbrakk> (p, \<sigma>) \<in> set (zip ps \<sigma>s) ; check_pat_at \<Sigma> \<Gamma> p \<sigma> = Ok \<Delta>' \<rbrakk>
+      \<Longrightarrow> fmdom' \<Delta>' = binds (node p) \<and> (\<forall>x \<sigma>'. fmlookup \<Delta>' x = Some \<sigma>' \<longrightarrow> wf_ty \<Sigma> \<sigma>' \<and> fv \<sigma>' \<subseteq> V)"
+  shows "fmdom' \<Delta> = \<Union> ((binds \<circ> node) ` set ps) \<and> (\<forall>x \<sigma>'. fmlookup \<Delta> x = Some \<sigma>' \<longrightarrow> wf_ty \<Sigma> \<sigma>' \<and> fv \<sigma>' \<subseteq> V)"
+proof -
+  from assms(1) obtain \<Delta>s where \<Delta>s: "those_sum (map2 (check_pat_at \<Sigma> \<Gamma>) ps \<sigma>s) = Ok \<Delta>s"
+    and \<Delta>: "\<Delta> = fold (\<otimes>) \<Delta>s fmempty"
+    by (auto simp: pattern_bindings_def bind_sum_Ok)
+  from those_sum_map_Ok[OF \<Delta>s]
+  have rel: "list_all2 (\<lambda>z \<Delta>'. check_pat_at \<Sigma> \<Gamma> (fst z) (snd z) = Ok \<Delta>') (zip ps \<sigma>s) \<Delta>s"
+    by (simp add: case_prod_beta)
+  have each: "\<exists>p \<sigma>. (p, \<sigma>) \<in> set (zip ps \<sigma>s) \<and> check_pat_at \<Sigma> \<Gamma> p \<sigma> = Ok \<Delta>'" if "\<Delta>' \<in> set \<Delta>s" for \<Delta>'
+  proof -
+    from that obtain i where i: "i < length \<Delta>s" and \<Delta>': "\<Delta>' = \<Delta>s ! i" by (auto simp: in_set_conv_nth)
+    with rel assms(2) have "check_pat_at \<Sigma> \<Gamma> (ps ! i) (\<sigma>s ! i) = Ok \<Delta>'" and "(ps ! i, \<sigma>s ! i) \<in> set (zip ps \<sigma>s)"
+      by (auto simp: list_all2_conv_all_nth in_set_zip)
+    then show ?thesis by blast
+  qed
+  have doms: "fmdom' \<Delta>' = binds (node p)" if "(p, \<sigma>) \<in> set (zip ps \<sigma>s)" and "check_pat_at \<Sigma> \<Gamma> p \<sigma> = Ok \<Delta>'"
+    for p \<sigma> \<Delta>'
+    using sub[OF that] by blast
+  have "\<Union> (fmdom' ` set \<Delta>s) = \<Union> ((binds \<circ> node) ` set ps)"
+  proof
+    show "\<Union> (fmdom' ` set \<Delta>s) \<subseteq> \<Union> ((binds \<circ> node) ` set ps)"
+      using each doms by (fastforce dest: set_zip_leftD)
+    show "\<Union> ((binds \<circ> node) ` set ps) \<subseteq> \<Union> (fmdom' ` set \<Delta>s)"
+    proof
+      fix x
+      assume "x \<in> \<Union> ((binds \<circ> node) ` set ps)"
+      then obtain i where i: "i < length ps" and x: "x \<in> binds (node (ps ! i))" by (auto simp: in_set_conv_nth)
+      have "(ps ! i, \<sigma>s ! i) \<in> set (zip ps \<sigma>s)" using i assms(2) by (auto simp: in_set_zip)
+      moreover have "check_pat_at \<Sigma> \<Gamma> (ps ! i) (\<sigma>s ! i) = Ok (\<Delta>s ! i)" and "\<Delta>s ! i \<in> set \<Delta>s"
+        using rel i assms(2) by (auto simp: list_all2_conv_all_nth)
+      ultimately show "x \<in> \<Union> (fmdom' ` set \<Delta>s)" using doms x by blast
+    qed
+  qed
+  then have "fmdom' \<Delta> = \<Union> ((binds \<circ> node) ` set ps)" by (simp add: \<Delta> fmdom'_fold_fmadd)
+  moreover have "wf_ty \<Sigma> \<sigma>' \<and> fv \<sigma>' \<subseteq> V" if "fmlookup \<Delta> x = Some \<sigma>'" for x \<sigma>'
+  proof -
+    from fold_fmadd_lookup[OF that[unfolded \<Delta>]] obtain \<Delta>' where "\<Delta>' \<in> set \<Delta>s" and "fmlookup \<Delta>' x = Some \<sigma>'"
+      by auto
+    with each[OF this(1)] sub show ?thesis by blast
+  qed
+  ultimately show ?thesis by blast
+qed
+
+(* Bindings of a pattern at a type, from the bindings at the disjuncts of the type: domain the variables of the
+   pattern, and types bound well-formed and over the type variables of the type when those at each disjunct are *)
+lemma bindings_at_wf:
+  assumes "bindings_at \<Sigma> \<Gamma> p (map f (disjuncts \<tau>)) = Ok \<Delta>"
+    and dom: "\<And>\<sigma> \<Delta>'. \<lbrakk> \<sigma> \<in> set (disjuncts \<tau>) ; f \<sigma> = Some (Ok \<Delta>') \<rbrakk> \<Longrightarrow> fmdom' \<Delta>' = binds p"
+    and wf: "\<And>\<sigma> \<Delta>' x \<sigma>'. \<lbrakk> \<sigma> \<in> set (disjuncts \<tau>) ; f \<sigma> = Some (Ok \<Delta>') ; fmlookup \<Delta>' x = Some \<sigma>' \<rbrakk>
+      \<Longrightarrow> wf_ty \<Sigma> \<sigma>' \<and> fv \<sigma>' \<subseteq> fv \<tau>"
+  shows "fmdom' \<Delta> = binds p \<and> (\<forall>x \<sigma>. fmlookup \<Delta> x = Some \<sigma> \<longrightarrow> wf_ty \<Sigma> \<sigma> \<and> fv \<sigma> \<subseteq> fv \<tau>)"
+proof -
+  let ?g = "\<lambda>m. case m of
+                  Some m' \<Rightarrow> m'
+                | None \<Rightarrow> do {
+                    all_sum (map (check_unbound \<Gamma>) (sorted_list_of_set (binds p)));
+                    Ok (fmconst (binds p) (TyPrim Never))
+                  }"
+  from assms(1) obtain \<Delta>s where \<Delta>s: "those_sum (map ?g (map f (disjuncts \<tau>))) = Ok \<Delta>s"
+    and \<Delta>: "\<Delta> = fmmap_keys (\<lambda>x _. joins \<Sigma> (map (\<lambda>\<Delta>'. the (fmlookup \<Delta>' x)) \<Delta>s)) (hd \<Delta>s)"
+    unfolding bindings_at_def bind_sum_Ok by auto
+  have each: "fmdom' \<Delta>' = binds p \<and> (\<forall>x \<sigma>'. fmlookup \<Delta>' x = Some \<sigma>' \<longrightarrow> wf_ty \<Sigma> \<sigma>' \<and> fv \<sigma>' \<subseteq> fv \<tau>)"
+    if "\<Delta>' \<in> set \<Delta>s" for \<Delta>'
+  proof -
+    from those_sum_map_Ok_elem[OF \<Delta>s that] obtain \<sigma> where \<sigma>: "\<sigma> \<in> set (disjuncts \<tau>)" and g: "?g (f \<sigma>) = Ok \<Delta>'"
+      by auto
+    show ?thesis
+    proof (cases "f \<sigma>")
+      case None
+      with g have "\<Delta>' = fmconst (binds p) (TyPrim Never)" by (auto simp: bind_sum_Ok)
+      then show ?thesis by (auto simp: fmlookup_dom'_iff fmlookup_fmconst[OF finite_binds_pat] split: if_splits)
+    next
+      case (Some m)
+      with g have "f \<sigma> = Some (Ok \<Delta>')" by simp
+      with dom[OF \<sigma> this] wf[OF \<sigma> this] show ?thesis by blast
+    qed
+  qed
+  have "\<Delta>s \<noteq> []" using those_sum_map_Ok[OF \<Delta>s] disjuncts_nonempty[of \<tau>] by (auto dest: list_all2_lengthD)
+  then have hd: "hd \<Delta>s \<in> set \<Delta>s" by simp
+  have dom: "fmdom' \<Delta> = binds p" using each[OF hd] by (simp add: \<Delta> fmdom'_alt_def)
+  moreover have "wf_ty \<Sigma> \<sigma> \<and> fv \<sigma> \<subseteq> fv \<tau>" if look: "fmlookup \<Delta> x = Some \<sigma>" for x \<sigma>
+  proof -
+    let ?\<rho>s = "map (\<lambda>\<Delta>'. the (fmlookup \<Delta>' x)) \<Delta>s"
+    from look have x: "x \<in> fmdom' (hd \<Delta>s)" and \<sigma>: "\<sigma> = joins \<Sigma> ?\<rho>s"
+      by (auto simp: \<Delta> fmlookup_fmmap_keys fmlookup_dom'_iff)
+    have elems: "wf_ty \<Sigma> \<rho> \<and> fv \<rho> \<subseteq> fv \<tau>" if "\<rho> \<in> set ?\<rho>s" for \<rho>
+    proof -
+      from that obtain \<Delta>' where \<Delta>': "\<Delta>' \<in> set \<Delta>s" and \<rho>: "\<rho> = the (fmlookup \<Delta>' x)" by auto
+      from each[OF \<Delta>'] each[OF hd] x have "x \<in> fmdom' \<Delta>'" by simp
+      then obtain \<sigma>' where "fmlookup \<Delta>' x = Some \<sigma>'" by (auto simp: fmlookup_dom'_iff)
+      with each[OF \<Delta>'] \<rho> show ?thesis by simp
+    qed
+    have wf: "\<forall>\<rho> \<in> set ?\<rho>s. wf_ty \<Sigma> \<rho>" using elems by blast
+    have fv: "\<Union> (fv ` set ?\<rho>s) \<subseteq> fv \<tau>" unfolding UN_subset_iff using elems by blast
+    from wf_joins[OF wf] subset_trans[OF fv_joins fv] show ?thesis unfolding \<sigma> by blast
+  qed
+  ultimately show ?thesis by blast
+qed
+
 end
