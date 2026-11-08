@@ -1123,7 +1123,7 @@ next
 next
   case (8 \<Sigma> \<Gamma> q ps kps \<tau>)
   then show ?case by (auto simp: bind_sum_Ok dest!: bindings_at_append)
-qed (auto simp: bind_sum_Ok)
+qed (auto simp: bind_sum_Ok ensure_def)
 
 lemma check_pat_at_node:
   "check_pat_at \<Sigma> \<Gamma> p \<tau> = Ok \<Delta> \<Longrightarrow> check_pat \<Sigma> \<Gamma> (node p) \<tau> = Ok \<Delta>"
@@ -1563,7 +1563,9 @@ next
   case (7 \<Sigma> \<Gamma> kps \<tau>)
   let ?f = "\<lambda>\<sigma>. case \<sigma> of
               TyDict \<sigma>' \<Rightarrow> Some (pattern_bindings (map (\<lambda>p. check_pat_at \<Sigma> \<Gamma> p \<sigma>') (map snd kps)))
-            | _ \<Rightarrow> None"
+            | _ \<Rightarrow>
+                if has_dict_values \<Sigma> \<sigma> then Some (Fail (Violates RuleCheckDictNone (DictPatternDictValues \<sigma>)))
+                else None"
   from "7.prems"(4) have b: "bindings_at \<Sigma> \<Gamma> (PatDict kps) (map ?f (disjuncts \<tau>)) = Ok \<Delta>"
     by (simp only: check_pat.simps)
   have sub: "fmdom' \<Delta>' = binds (PatDict kps) \<and> (\<forall>x \<sigma>'. fmlookup \<Delta>' x = Some \<sigma>' \<longrightarrow> wf_ty \<Sigma> \<sigma>' \<and> fv \<sigma>' \<subseteq> fv \<tau>)"
@@ -1571,7 +1573,7 @@ next
   proof -
     from f obtain \<sigma>' where \<sigma>': "\<sigma> = TyDict \<sigma>'"
       and pb: "pattern_bindings (map2 (check_pat_at \<Sigma> \<Gamma>) (map snd kps) (replicate (length kps) \<sigma>')) = Ok \<Delta>'"
-      by (auto simp: map2_replicate[of _ "map snd kps", simplified] split: ty.splits)
+      by (auto simp: map2_replicate[of _ "map snd kps", simplified] split: ty.splits if_splits)
     from disjuncts_wf[OF "7.prems"(3) \<sigma>] have wf\<sigma>: "wf_ty \<Sigma> \<sigma>'" and fv\<sigma>: "fv \<sigma>' \<subseteq> fv \<tau>" by (auto simp: \<sigma>')
     have "fmdom' \<Delta>'' = binds (node p) \<and> (\<forall>x \<sigma>''. fmlookup \<Delta>'' x = Some \<sigma>'' \<longrightarrow> wf_ty \<Sigma> \<sigma>'' \<and> fv \<sigma>'' \<subseteq> fv \<tau>)"
       if mem: "(p, \<sigma>'') \<in> set (zip (map snd kps) (replicate (length kps) \<sigma>'))"
@@ -1644,7 +1646,7 @@ next
 next
   case (9 \<Sigma> \<Gamma> p q \<tau>)
   then show ?case by simp
-qed auto
+qed (auto simp: bind_sum_Ok)
 
 
 subsection \<open>Statements\<close>

@@ -49,15 +49,18 @@ function (sequential) match :: "env \<Rightarrow> pat \<Rightarrow> val \<Righta
     "env \<Rightarrow> name \<Rightarrow> pat located list \<Rightarrow> (var \<times> pat located) list \<Rightarrow> (var \<times> val) list \<Rightarrow> match_result"
 where
 "match \<rho> (PatLiteral l) v =
-  (if is_bool (VLit l) \<and> is_number v then NoMatch
+  (if is_int_lit l \<and> is_float v then MatchAborts Excluded
+   else if is_bool (VLit l) \<and> is_number v then NoMatch
    else case eq (VLit l) v of Val True \<Rightarrow> Match \<epsilon> | Val False \<Rightarrow> NoMatch | Aborts \<kappa> \<Rightarrow> MatchAborts \<kappa>)" |
 "match \<rho> (PatVar x) v = Match (fmupd x v \<epsilon>)" |
 "match \<rho> PatWildcard v = Match \<epsilon>" |
 "match \<rho> (PatAs p x) v = match \<rho> (node p) v \<otimes> Match (fmupd x v \<epsilon>)" |
 "match \<rho> (PatList ps) (VList vs) = (if length ps = length vs then match_all \<rho> ps vs else NoMatch)" |
 "match \<rho> (PatList ps) (VTuple vs) = MatchAborts Excluded" |
+"match \<rho> (PatList ps) (VObject C xvs) = (if C = range_class then MatchAborts Excluded else NoMatch)" |
 "match \<rho> (PatTuple ps) (VTuple vs) = (if length ps = length vs then match_all \<rho> ps vs else NoMatch)" |
 "match \<rho> (PatTuple ps) (VList vs) = MatchAborts Excluded" |
+"match \<rho> (PatTuple ps) (VObject C xvs) = (if C = range_class then MatchAborts Excluded else NoMatch)" |
 "match \<rho> (PatDict kps) (VDict \<delta>) =
   (if set (map fst kps) \<subseteq> set (map fst \<delta>) then match_dict \<rho> kps \<delta> else NoMatch)" |
 "match \<rho> (PatConstr q (ps, kps)) v =

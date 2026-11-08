@@ -96,6 +96,11 @@ datatype ty =
   | TyClass name "ty list"
   | TyUnion ty ty
 
+fun is_int_lit :: "lit \<Rightarrow> bool"
+where
+"is_int_lit (LitInt _) = True" |
+"is_int_lit _ = False"
+
 datatype sequence_kind = TupleKind | ListKind | RangeKind
 
 datatype ty_scheme = TyScheme "var list" ty

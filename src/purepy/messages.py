@@ -339,6 +339,10 @@ def message(r: Reason) -> str:
             return f"type arguments of '{c}' in pattern not determined by type {unparse_type(tau)}"
         case Reasons.SequenceKindMismatch(kind, tau, other):
             return f"{SEQUENCE_KIND[kind]} pattern at {unparse_type(tau)}, which has {SEQUENCE_KIND[other]} values"
+        case Reasons.IntLiteralFloatValues(tau):
+            return f"int literal pattern at {unparse_type(tau)}, which has float values"
+        case Reasons.DictPatternDictValues(tau):
+            return f"dictionary pattern at {unparse_type(tau)}, which has dictionary values"
         case Reasons.UnreachableCase(p):
             return f"case {unparse_pat(p)} is unreachable"
         case Reasons.MissingReturnMatchPartial(tau):

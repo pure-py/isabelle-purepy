@@ -17,7 +17,8 @@ datatype rule =
   | RuleAssign | RuleDeclareAssign | RuleCallStmt
   | RuleAssert | RuleAssertMsg | RuleAssertFalseMsg | RuleReturnNone | RuleReturn | RuleIf | RuleIfElse
   | RuleSeq | RuleMatchPartial | RuleDefSignature | RuleDefBody
-  | RuleCheckVar | RuleCheckAs | RuleCheckTupleNone | RuleCheckListNone | RuleCheckConstr | RulePatConstr
+  | RuleCheckVar | RuleCheckAs | RuleCheckLiteral | RuleCheckTupleNone | RuleCheckListNone | RuleCheckDictNone
+  | RuleCheckConstr | RulePatConstr
   | RuleInstanceAbove | RuleInstanceBelow
   | RulePatShapes
   | RuleTopSeq | RuleClass | RuleClassExtend | RuleTypeAlias
@@ -53,6 +54,8 @@ datatype reason =
   | RangeBase
   | PatternClassUndetermined var ty
   | SequenceKindMismatch sequence_kind ty sequence_kind
+  | IntLiteralFloatValues ty
+  | DictPatternDictValues ty
   | UnreachableCase "pat located"
   | MissingReturnMatchPartial ty
   | MissingReturnAssertion

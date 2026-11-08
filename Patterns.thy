@@ -42,6 +42,22 @@ where
 "has_values \<Sigma> ListKind \<tau> = (\<Sigma> \<turnstile> TyList (TyPrim object) <: \<tau>)" |
 "has_values \<Sigma> RangeKind \<tau> = (\<Sigma> \<turnstile> TyClass range_class [] <: \<tau>)"
 
+(* Type with float values: float, a float literal type or a type variable, or a type above float *)
+fun has_float_values :: "class_table \<Rightarrow> ty \<Rightarrow> bool"
+where
+"has_float_values \<Sigma> (TyUnion \<sigma> \<tau>) = (has_float_values \<Sigma> \<sigma> \<or> has_float_values \<Sigma> \<tau>)" |
+"has_float_values \<Sigma> (TyVar _) = True" |
+"has_float_values \<Sigma> (TyLiteral (LitFloat _)) = True" |
+"has_float_values \<Sigma> \<tau> = (\<Sigma> \<turnstile> TyPrim float <: \<tau>)"
+
+(* Type with dictionary values: a dictionary type or a type variable, or a type above the dictionary types *)
+fun has_dict_values :: "class_table \<Rightarrow> ty \<Rightarrow> bool"
+where
+"has_dict_values \<Sigma> (TyUnion \<sigma> \<tau>) = (has_dict_values \<Sigma> \<sigma> \<or> has_dict_values \<Sigma> \<tau>)" |
+"has_dict_values \<Sigma> (TyVar _) = True" |
+"has_dict_values \<Sigma> (TyDict _) = True" |
+"has_dict_values \<Sigma> \<tau> = (\<Sigma> \<turnstile> TyDict (TyPrim object) <: \<tau>)"
+
 function (sequential) matched_as :: "class_table \<Rightarrow> cxt \<Rightarrow> ty \<Rightarrow> pat \<Rightarrow> ty"
 where
 "matched_as \<Sigma> \<Gamma> (TyUnion \<sigma> \<tau>) p = matched_as \<Sigma> \<Gamma> \<sigma> p \<squnion>\<^bsub>\<Sigma>\<^esub> matched_as \<Sigma> \<Gamma> \<tau> p" |
@@ -211,7 +227,10 @@ where
     check_unbound \<Gamma> x; \<Delta> \<leftarrow> check_pat_at \<Sigma> \<Gamma> p \<tau>;
     Ok (\<Delta> \<otimes> fmupd x (matched_as \<Sigma> \<Gamma> \<tau> (node p)) fmempty)
   })" |
-"check_pat \<Sigma> \<Gamma> (PatLiteral _) \<tau> = Ok fmempty" |
+"check_pat \<Sigma> \<Gamma> (PatLiteral l) \<tau> =
+  by_rule RuleCheckLiteral (do {
+    ensure (\<not> (is_int_lit l \<and> has_float_values \<Sigma> \<tau>)) (IntLiteralFloatValues \<tau>); Ok fmempty
+  })" |
 "check_pat \<Sigma> \<Gamma> (PatTuple ps) \<tau> = do {
    by_rule RuleCheckTupleNone (do {
      ensure (\<not> has_values \<Sigma> ListKind \<tau>) (SequenceKindMismatch TupleKind \<tau> ListKind);
@@ -240,7 +259,9 @@ where
   bindings_at \<Sigma> \<Gamma> (PatDict kps)
     (map (\<lambda>\<sigma>. case \<sigma> of
                 TyDict \<sigma>' \<Rightarrow> Some (pattern_bindings (map (\<lambda>p. check_pat_at \<Sigma> \<Gamma> p \<sigma>') (map snd kps)))
-              | _ \<Rightarrow> None)
+              | _ \<Rightarrow>
+                  if has_dict_values \<Sigma> \<sigma> then Some (Fail (Violates RuleCheckDictNone (DictPatternDictValues \<sigma>)))
+                  else None)
       (disjuncts \<tau>))" |
 "check_pat \<Sigma> \<Gamma> (PatConstr q (ps, kps)) \<tau> = by_rule RuleCheckConstr (do {
    C \<leftarrow> check_pattern_class \<Gamma> q;
@@ -317,6 +338,6 @@ next
     apply (erule bindings_at_unbound, assumption)
     apply (auto split: instances.splits if_splits elim!: pattern_bindings_map2_dom intro: "8.IH")
     done
-qed auto
+qed (auto simp: bind_sum_Ok)
 
 end

@@ -141,6 +141,11 @@ where
 "is_number (VLit (LitFloat _)) = True" |
 "is_number _ = False"
 
+fun is_float :: "val \<Rightarrow> bool"
+where
+"is_float (VLit (LitFloat _)) = True" |
+"is_float _ = False"
+
 (* Value of a number as an extended real; None for nan or a non-number *)
 fun as_number :: "val \<Rightarrow> ereal option"
 where

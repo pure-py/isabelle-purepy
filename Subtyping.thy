@@ -122,6 +122,7 @@ where
 "instance_above \<Sigma> C (TyClass D \<sigma>s) =
   (if C \<in> set (ancestors \<Sigma> D) then Instance (instantiated_ancestor \<Sigma> D \<sigma>s C) else NoInstance)" |
 "instance_above \<Sigma> C (TyPrim Never) = (if type_params \<Sigma> C = [] then Instance [] else Undetermined)" |
+"instance_above \<Sigma> C (TyVar _) = Undetermined" |
 "instance_above \<Sigma> C _ = NoInstance"
 
 definition instantiation_candidates :: "class_table \<Rightarrow> name \<Rightarrow> ty list \<Rightarrow> ty list list"
