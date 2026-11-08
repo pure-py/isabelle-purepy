@@ -280,12 +280,6 @@ where
 lemma wf_ty_subst: "\<lbrakk> wf_ty \<Sigma> \<sigma> ; \<forall>\<tau> \<in> set \<tau>s. wf_ty \<Sigma> \<tau> \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> (subst \<tau>s \<alpha>s \<sigma>)"
   by (induction \<sigma>) (auto split: option.splits dest!: map_of_SomeD set_zip_rightD)
 
-lemma wf_ty_subterm: "\<lbrakk> wf_ty \<Sigma> \<tau> ; \<sigma> \<in> set (subterms \<tau>) \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> \<sigma>"
-  by (induction \<tau>) auto
-
-lemma fv_subterm: "\<sigma> \<in> set (subterms \<tau>) \<Longrightarrow> fv \<sigma> \<subseteq> fv \<tau>"
-  by (induction \<tau>) auto
-
 (* Well-formed context: types of entries well-formed, classes in the class table, and contexts of checked
    modules and type aliases well-formed with no type variables, the classes of the region of an alias being in
    the class table *)

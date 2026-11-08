@@ -125,23 +125,67 @@ where
 "instance_above \<Sigma> C (TyVar _) = Undetermined" |
 "instance_above \<Sigma> C _ = NoInstance"
 
-definition instantiation_candidates :: "class_table \<Rightarrow> name \<Rightarrow> ty list \<Rightarrow> ty list list"
+(* Types bound to \<alpha>s by \<gamma>; failure if \<gamma> doesn't bind one of them *)
+definition type_args_of :: "(var, ty) fmap \<Rightarrow> var list \<Rightarrow> ty list may_fail"
 where
-"instantiation_candidates \<Sigma> C \<sigma>s =
-  product_lists
-    (replicate (length (type_params \<Sigma> C))
-      (map (joins \<Sigma>) (subseqs (remdups (concat (map subterms \<sigma>s) @ [TyPrim object])))))"
+"type_args_of \<gamma> \<alpha>s =
+  those_sum (map (\<lambda>\<alpha>. or_else (NoTypeArgument \<alpha>) (fmlookup \<gamma> \<alpha>)) \<alpha>s)"
+
+lemma type_args_of_length: "type_args_of \<gamma> \<alpha>s = Ok \<tau>s \<Longrightarrow> length \<tau>s = length \<alpha>s"
+  by (auto simp: type_args_of_def dest!: those_sum_Ok list_all2_lengthD)
+
+(* Outcome of matching the type arguments of an ancestor against those of a type: the type parameters bound at
+   their occurrences outside unions, Indeterminate when a type variable or union meets a type with structure,
+   and Clash when two types with structure differ *)
+datatype arg_match = Matched "(var, ty) fmap" | Indeterminate | Clash
+
+fun merge_match :: "arg_match \<Rightarrow> arg_match \<Rightarrow> arg_match"
+where
+"merge_match Clash _ = Clash" |
+"merge_match _ Clash = Clash" |
+"merge_match Indeterminate _ = Indeterminate" |
+"merge_match _ Indeterminate = Indeterminate" |
+"merge_match (Matched \<gamma>) (Matched \<gamma>') = Matched (\<gamma> ++\<^sub>f \<gamma>')"
+
+(* One-way matching of a type over the type parameters of a class against a type *)
+function (sequential)
+  match_args :: "ty \<Rightarrow> ty \<Rightarrow> arg_match" and match_args_seq :: "ty list \<Rightarrow> ty list \<Rightarrow> arg_match"
+where
+"match_args (TyVar \<alpha>) \<sigma> = Matched (fmupd \<alpha> \<sigma> fmempty)" |
+"match_args (TyUnion _ _) _ = Matched fmempty" |
+"match_args _ (TyVar _) = Indeterminate" |
+"match_args _ (TyUnion _ _) = Indeterminate" |
+"match_args (TyList \<rho>) (TyList \<sigma>) = match_args \<rho> \<sigma>" |
+"match_args (TyDict \<rho>) (TyDict \<sigma>) = match_args \<rho> \<sigma>" |
+"match_args (TyTuple \<rho>s) (TyTuple \<sigma>s) = match_args_seq \<rho>s \<sigma>s" |
+"match_args (TyCallable \<rho>s \<rho>) (TyCallable \<sigma>s \<sigma>) = match_args_seq (\<rho> # \<rho>s) (\<sigma> # \<sigma>s)" |
+"match_args (TyClass C \<rho>s) (TyClass D \<sigma>s) = (if C = D then match_args_seq \<rho>s \<sigma>s else Clash)" |
+"match_args \<rho> \<sigma> = (if \<rho> = \<sigma> then Matched fmempty else Clash)" |
+
+"match_args_seq [] [] = Matched fmempty" |
+"match_args_seq (\<rho> # \<rho>s) (\<sigma> # \<sigma>s) = merge_match (match_args \<rho> \<sigma>) (match_args_seq \<rho>s \<sigma>s)" |
+"match_args_seq _ _ = Clash"
+by pat_completeness auto
+
+termination
+by (relation "measures [
+     \<lambda>x. case x of Inl (\<rho>, _) \<Rightarrow> size \<rho> | Inr (\<rho>s, _) \<Rightarrow> size_list size \<rho>s,
+     \<lambda>x. case x of Inl _ \<Rightarrow> 1 | Inr _ \<Rightarrow> 0]") auto
 
 fun instance_below :: "class_table \<Rightarrow> name \<Rightarrow> ty \<Rightarrow> instances"
 where
 "instance_below \<Sigma> C (TyClass D \<sigma>s) =
   (if D \<in> set (ancestors \<Sigma> C) then
-     (case
-        filter (\<lambda>\<tau>s. list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (instantiated_ancestor \<Sigma> C \<tau>s D) \<sigma>s)
-          (instantiation_candidates \<Sigma> C \<sigma>s) of
-        [] \<Rightarrow> NoInstance
-      | \<tau>s # \<tau>ss \<Rightarrow>
-          if list_all (list_all2 (\<lambda>\<tau> \<tau>'. \<Sigma> \<turnstile> \<tau> \<approx> \<tau>') \<tau>s) \<tau>ss then Instance \<tau>s else Undetermined)
+     let \<alpha>s = type_params \<Sigma> C in
+     case match_args_seq (instantiated_ancestor \<Sigma> C (map TyVar \<alpha>s) D) \<sigma>s of
+       Clash \<Rightarrow> NoInstance
+     | Indeterminate \<Rightarrow> Undetermined
+     | Matched \<gamma> \<Rightarrow>
+         (case type_args_of \<gamma> \<alpha>s of
+            Ok \<tau>s \<Rightarrow>
+              if list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (instantiated_ancestor \<Sigma> C \<tau>s D) \<sigma>s then Instance \<tau>s
+              else Undetermined
+          | Fail _ \<Rightarrow> Undetermined)
    else NoInstance)" |
 "instance_below \<Sigma> C (TyPrim object) = (if type_params \<Sigma> C = [] then Instance [] else Undetermined)" |
 "instance_below \<Sigma> C _ = NoInstance"
@@ -183,15 +227,6 @@ by (relation "measures [
      \<lambda>x. case x of Inl _ \<Rightarrow> 1 | Inr _ \<Rightarrow> 0,
      \<lambda>x. case x of Inl (_, _, _, \<tau>) \<Rightarrow> size \<tau> | Inr _ \<Rightarrow> 0]")
    (auto dest: set_zip_leftD size_list_elem[where f = size])
-
-(* Types bound to \<alpha>s by \<gamma>; failure if \<gamma> doesn't bind one of them *)
-definition type_args_of :: "(var, ty) fmap \<Rightarrow> var list \<Rightarrow> ty list may_fail"
-where
-"type_args_of \<gamma> \<alpha>s =
-  those_sum (map (\<lambda>\<alpha>. or_else (NoTypeArgument \<alpha>) (fmlookup \<gamma> \<alpha>)) \<alpha>s)"
-
-lemma type_args_of_length: "type_args_of \<gamma> \<alpha>s = Ok \<tau>s \<Longrightarrow> length \<tau>s = length \<alpha>s"
-  by (auto simp: type_args_of_def dest!: those_sum_Ok list_all2_lengthD)
 
 (* Type of attribute x of a value of type \<sigma>, which isn't a module *)
 fun attribute_type :: "class_table \<Rightarrow> ty \<Rightarrow> var \<Rightarrow> ty may_fail"

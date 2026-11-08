@@ -255,34 +255,91 @@ qed simp_all
 
 subsection \<open>Instances and type arguments\<close>
 
-lemma product_lists_replicate: "\<lbrakk> xs \<in> set (product_lists (replicate n L)) ; x \<in> set xs \<rbrakk> \<Longrightarrow> x \<in> set L"
-  by (induction n arbitrary: xs) auto
+lemma merge_match_Matched:
+  "merge_match m m' = Matched \<gamma> \<Longrightarrow> \<exists>\<gamma>\<^sub>1 \<gamma>\<^sub>2. m = Matched \<gamma>\<^sub>1 \<and> m' = Matched \<gamma>\<^sub>2 \<and> \<gamma> = \<gamma>\<^sub>1 ++\<^sub>f \<gamma>\<^sub>2"
+  by (cases m; cases m') auto
 
-(* Candidate type argument of class C from the type arguments \<sigma>s of a class, a join of subterms of \<sigma>s and
-   object *)
-lemma instantiation_candidates_wf:
-  assumes "wf_ty \<Sigma> (TyClass D \<sigma>s)" and "\<tau>s \<in> set (instantiation_candidates \<Sigma> C \<sigma>s)" and "\<tau> \<in> set \<tau>s"
-  shows "fv \<tau> \<subseteq> \<Union> (fv ` set \<sigma>s) \<and> wf_ty \<Sigma> \<tau>"
-proof -
-  let ?\<rho>s = "remdups (concat (map subterms \<sigma>s) @ [TyPrim object])"
-  from product_lists_replicate[OF assms(2)[unfolded instantiation_candidates_def] assms(3)]
-  obtain \<rho>s where "\<rho>s \<in> set (subseqs ?\<rho>s)" and \<tau>: "\<tau> = joins \<Sigma> \<rho>s" by auto
-  then have "set \<rho>s \<subseteq> set ?\<rho>s" using subseqs_powset[of ?\<rho>s] by blast
-  then have "fv \<rho> \<subseteq> \<Union> (fv ` set \<sigma>s) \<and> wf_ty \<Sigma> \<rho>" if "\<rho> \<in> set \<rho>s" for \<rho>
-  proof -
-    from that \<open>set \<rho>s \<subseteq> set ?\<rho>s\<close> consider \<sigma> where "\<sigma> \<in> set \<sigma>s" and "\<rho> \<in> set (subterms \<sigma>)"
-      | "\<rho> = TyPrim object"
-      by auto
-    then show ?thesis
-    proof cases
-      case 1
-      with assms(1) have "wf_ty \<Sigma> \<sigma>" by auto
-      with 1 fv_subterm[OF 1(2)] show ?thesis by (auto intro: wf_ty_subterm)
-    qed simp
+(* Types bound by matching a sequence of types against well-formed types, given the property for each of the
+   types matched *)
+lemma match_args_seq_bound_elems:
+  assumes "\<And>\<rho> \<sigma> \<gamma>. \<lbrakk> \<rho> \<in> set \<rho>s ; match_args \<rho> \<sigma> = Matched \<gamma> ; fmlookup \<gamma> \<alpha> = Some \<tau> ; wf_ty \<Sigma> \<sigma> \<rbrakk>
+            \<Longrightarrow> wf_ty \<Sigma> \<tau> \<and> fv \<tau> \<subseteq> fv \<sigma>"
+    and "match_args_seq \<rho>s \<sigma>s = Matched \<gamma>'" and "fmlookup \<gamma>' \<alpha> = Some \<tau>" and "\<forall>\<sigma> \<in> set \<sigma>s. wf_ty \<Sigma> \<sigma>"
+  shows "wf_ty \<Sigma> \<tau> \<and> fv \<tau> \<subseteq> \<Union> (fv ` set \<sigma>s)"
+  using assms
+proof (induction \<rho>s arbitrary: \<sigma>s \<gamma>')
+  case Nil
+  then show ?case by (cases \<sigma>s) auto
+next
+  case (Cons \<rho> \<rho>s)
+  from Cons.prems(2) obtain \<sigma> \<sigma>s' where \<sigma>s: "\<sigma>s = \<sigma> # \<sigma>s'" by (cases \<sigma>s) auto
+  with Cons.prems(2) have "merge_match (match_args \<rho> \<sigma>) (match_args_seq \<rho>s \<sigma>s') = Matched \<gamma>'" by simp
+  from merge_match_Matched[OF this] obtain \<gamma>\<^sub>1 \<gamma>\<^sub>2
+    where m: "match_args \<rho> \<sigma> = Matched \<gamma>\<^sub>1" "match_args_seq \<rho>s \<sigma>s' = Matched \<gamma>\<^sub>2" and "\<gamma>' = \<gamma>\<^sub>1 ++\<^sub>f \<gamma>\<^sub>2"
+    by blast
+  with Cons.prems(3) have "fmlookup \<gamma>\<^sub>1 \<alpha> = Some \<tau> \<or> fmlookup \<gamma>\<^sub>2 \<alpha> = Some \<tau>"
+    by (auto simp: fmlookup_add split: if_splits option.splits)
+  moreover have "wf_ty \<Sigma> \<tau> \<and> fv \<tau> \<subseteq> \<Union> (fv ` set \<sigma>s')" if "fmlookup \<gamma>\<^sub>2 \<alpha> = Some \<tau>"
+  proof (rule Cons.IH[OF _ m(2) that])
+    fix \<rho>' \<sigma>' \<gamma>
+    assume "\<rho>' \<in> set \<rho>s" and "match_args \<rho>' \<sigma>' = Matched \<gamma>" and "fmlookup \<gamma> \<alpha> = Some \<tau>" and "wf_ty \<Sigma> \<sigma>'"
+    then show "wf_ty \<Sigma> \<tau> \<and> fv \<tau> \<subseteq> fv \<sigma>'" by (intro Cons.prems(1)[of \<rho>' \<sigma>' \<gamma>]) simp_all
+  next
+    from Cons.prems(4) show "\<forall>\<sigma> \<in> set \<sigma>s'. wf_ty \<Sigma> \<sigma>" unfolding \<sigma>s by simp
   qed
-  then have wf: "\<forall>\<rho> \<in> set \<rho>s. wf_ty \<Sigma> \<rho>" and fv: "\<Union> (fv ` set \<rho>s) \<subseteq> \<Union> (fv ` set \<sigma>s)" by auto
-  from wf_joins[OF wf] subset_trans[OF fv_joins fv] show ?thesis unfolding \<tau> by blast
+  ultimately show ?case using Cons.prems(1)[OF _ m(1)] Cons.prems(4) unfolding \<sigma>s by auto
 qed
+
+(* Type bound by matching against a well-formed type: well-formed and over its type variables *)
+lemma match_args_bound:
+  "\<lbrakk> match_args \<rho> \<sigma> = Matched \<gamma> ; fmlookup \<gamma> \<alpha> = Some \<tau> ; wf_ty \<Sigma> \<sigma> \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> \<tau> \<and> fv \<tau> \<subseteq> fv \<sigma>"
+proof (induction \<rho> arbitrary: \<sigma> \<gamma>)
+  case (TyList \<rho>)
+  then show ?case by (cases \<sigma>) (auto split: if_splits)
+next
+  case (TyDict \<rho>)
+  then show ?case by (cases \<sigma>) (auto split: if_splits)
+next
+  case (TyTuple \<rho>s)
+  from TyTuple.prems(1) obtain \<sigma>s where \<sigma>: "\<sigma> = TyTuple \<sigma>s" by (cases \<sigma>) (auto split: if_splits)
+  with TyTuple.prems(1) have "match_args_seq \<rho>s \<sigma>s = Matched \<gamma>" by simp
+  from match_args_seq_bound_elems[OF TyTuple.IH this TyTuple.prems(2)] TyTuple.prems(3) show ?case
+    unfolding \<sigma> by auto
+next
+  case (TyCallable \<rho>s \<rho>)
+  from TyCallable.prems(1) obtain \<sigma>s \<sigma>' where \<sigma>: "\<sigma> = TyCallable \<sigma>s \<sigma>'" by (cases \<sigma>) (auto split: if_splits)
+  with TyCallable.prems(1) have seq: "match_args_seq (\<rho> # \<rho>s) (\<sigma>' # \<sigma>s) = Matched \<gamma>" by simp
+  have "wf_ty \<Sigma> \<tau> \<and> fv \<tau> \<subseteq> \<Union> (fv ` set (\<sigma>' # \<sigma>s))"
+  proof (rule match_args_seq_bound_elems[OF _ seq TyCallable.prems(2)])
+    fix \<rho>' \<sigma>'' \<gamma>''
+    assume "\<rho>' \<in> set (\<rho> # \<rho>s)" and "match_args \<rho>' \<sigma>'' = Matched \<gamma>''" and "fmlookup \<gamma>'' \<alpha> = Some \<tau>"
+      and "wf_ty \<Sigma> \<sigma>''"
+    then show "wf_ty \<Sigma> \<tau> \<and> fv \<tau> \<subseteq> fv \<sigma>''"
+      using TyCallable.IH(1)[of \<rho>' \<sigma>'' \<gamma>''] TyCallable.IH(2)[of \<sigma>'' \<gamma>''] by auto
+  next
+    from TyCallable.prems(3) show "\<forall>\<sigma> \<in> set (\<sigma>' # \<sigma>s). wf_ty \<Sigma> \<sigma>" unfolding \<sigma> by auto
+  qed
+  with TyCallable.prems(3) show ?case unfolding \<sigma> by auto
+next
+  case (TyClass C \<rho>s)
+  from TyClass.prems(1) obtain \<sigma>s where \<sigma>: "\<sigma> = TyClass C \<sigma>s" by (cases \<sigma>) (auto split: if_splits)
+  with TyClass.prems(1) have "match_args_seq \<rho>s \<sigma>s = Matched \<gamma>" by (simp split: if_splits)
+  from match_args_seq_bound_elems[OF TyClass.IH this TyClass.prems(2)] TyClass.prems(3) show ?case
+    unfolding \<sigma> by auto
+qed (auto split: if_splits elim!: match_args.elims)
+
+lemma match_args_seq_bound:
+  assumes "match_args_seq \<rho>s \<sigma>s = Matched \<gamma>" and "fmlookup \<gamma> \<alpha> = Some \<tau>" and "\<forall>\<sigma> \<in> set \<sigma>s. wf_ty \<Sigma> \<sigma>"
+  shows "wf_ty \<Sigma> \<tau> \<and> fv \<tau> \<subseteq> \<Union> (fv ` set \<sigma>s)"
+proof (rule match_args_seq_bound_elems[OF _ assms])
+  fix \<rho> \<sigma> \<gamma>
+  assume "match_args \<rho> \<sigma> = Matched \<gamma>" and "fmlookup \<gamma> \<alpha> = Some \<tau>" and "wf_ty \<Sigma> \<sigma>"
+  then show "wf_ty \<Sigma> \<tau> \<and> fv \<tau> \<subseteq> fv \<sigma>" by (rule match_args_bound)
+qed
+
+lemma type_args_of_elem:
+  "\<lbrakk> type_args_of \<gamma> \<alpha>s = Ok \<tau>s ; \<tau> \<in> set \<tau>s \<rbrakk> \<Longrightarrow> \<exists>\<alpha>. fmlookup \<gamma> \<alpha> = Some \<tau>"
+  by (auto simp: type_args_of_def or_else_def dest!: those_sum_map_Ok_elem split: option.splits)
 
 lemma instance_above_wf:
   assumes "wf_class_table \<Sigma>" and "wf_ty \<Sigma> \<tau>" and "instance_above \<Sigma> C \<tau> = Instance \<tau>s"
@@ -303,17 +360,25 @@ lemma instance_below_wf:
   shows "\<forall>\<tau>' \<in> set \<tau>s. fv \<tau>' \<subseteq> fv \<tau> \<and> wf_ty \<Sigma> \<tau>'"
 proof (cases \<tau>)
   case (TyClass D \<sigma>s)
-  with assms(2) obtain \<tau>ss
-    where "filter (\<lambda>\<tau>s. list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (instantiated_ancestor \<Sigma> C \<tau>s D) \<sigma>s)
-             (instantiation_candidates \<Sigma> C \<sigma>s) = \<tau>s # \<tau>ss"
-    by (auto split: if_splits list.splits)
-  then have "\<tau>s \<in> set (instantiation_candidates \<Sigma> C \<sigma>s)"
-    by (metis filter_is_subset list.set_intros(1) subsetD)
-  with instantiation_candidates_wf[OF assms(1)[unfolded TyClass] this] show ?thesis by (simp add: TyClass)
+  with assms(2) obtain \<gamma>
+    where "match_args_seq (instantiated_ancestor \<Sigma> C (map TyVar (type_params \<Sigma> C)) D) \<sigma>s = Matched \<gamma>"
+      and "type_args_of \<gamma> (type_params \<Sigma> C) = Ok \<tau>s"
+    by (auto simp: Let_def split: if_splits arg_match.splits sum.splits)
+  with assms(1) show ?thesis
+    unfolding TyClass by (fastforce dest!: type_args_of_elem dest: match_args_seq_bound)
 next
   case (TyPrim p)
   with assms(2) show ?thesis by (cases p) (auto split: if_splits)
 qed (use assms(2) in auto)
+
+lemma instance_below_length:
+  assumes "instance_below \<Sigma> C \<tau> = Instance \<tau>s"
+  shows "length \<tau>s = length (type_params \<Sigma> C)"
+  using assms
+proof (cases \<tau>)
+  case (TyPrim p)
+  with assms show ?thesis by (cases p) (auto split: if_splits)
+qed (auto simp: Let_def split: if_splits arg_match.splits sum.splits dest: type_args_of_length)
 
 (* Type arguments at which class C is instantiated by a well-formed type \<tau>: well-formed and over the type
    variables of \<tau> *)
@@ -695,10 +760,6 @@ proof -
 qed
 
 subsection \<open>Type arguments inferred from arguments\<close>
-
-lemma type_args_of_elem:
-  "\<lbrakk> type_args_of \<gamma> \<alpha>s = Ok \<tau>s ; \<tau> \<in> set \<tau>s \<rbrakk> \<Longrightarrow> \<exists>\<alpha>. fmlookup \<gamma> \<alpha> = Some \<tau>"
-  by (auto simp: type_args_of_def or_else_def dest!: those_sum_map_Ok_elem split: option.splits)
 
 (* Type arguments inferred from the argument types which synthesise, well-formed and over the type variables V
    when those are *)
@@ -1157,21 +1218,7 @@ proof -
   next
     case NoInstance
     with assms(3) have below: "instance_below \<Sigma> C \<tau> = Instance \<tau>s" by (simp add: instance_at_def)
-    show ?thesis
-    proof (cases \<tau>)
-      case (TyClass D \<sigma>s)
-      with below obtain \<tau>ss
-        where "filter (\<lambda>\<tau>s. list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (instantiated_ancestor \<Sigma> C \<tau>s D) \<sigma>s)
-                 (instantiation_candidates \<Sigma> C \<sigma>s) = \<tau>s # \<tau>ss"
-        by (auto split: if_splits list.splits)
-      then have "\<tau>s \<in> set (instantiation_candidates \<Sigma> C \<sigma>s)"
-        by (metis filter_is_subset list.set_intros(1) subsetD)
-      then show ?thesis
-        unfolding instantiation_candidates_def by (auto dest!: in_set_product_lists_length)
-    next
-      case (TyPrim p)
-      with below show ?thesis by (cases p) (auto split: if_splits)
-    qed (use below in auto)
+    from instance_below_length[OF below] show ?thesis .
   next
     case Undetermined
     with assms(3) show ?thesis by (simp add: instance_at_def)
