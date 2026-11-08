@@ -1,6 +1,6 @@
 (* Soundness of statement evaluation *)
 theory Statements
-  imports Calls
+  imports Dispatch
 begin
 
 context evaluation

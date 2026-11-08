@@ -41,5 +41,6 @@ session "isabelle-purepy-soundness" in "soundness" = "isabelle-purepy" +
     ResultTyping
     Expressions
     Calls
+    Dispatch
     Statements
     Soundness
