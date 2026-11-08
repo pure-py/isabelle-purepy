@@ -37,6 +37,7 @@ session "isabelle-purepy-soundness" in "soundness" = "isabelle-purepy" +
   options [timeout = 1200, quick_and_dirty]
   theories
     WellFormed
+    Extension
     ValueTyping
     ResultTyping
     Expressions
