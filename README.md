@@ -94,6 +94,7 @@ Run the `Release` GitHub Action manually. The version number of a release is tha
 | `Examples.thy`               | Example evaluations                                                                   |
 | `python/Codegen.thy`         | Operator resolution and subtyping in executable form; Python generation               |
 | `soundness/WellFormed.thy`   | Well-formedness and type variables of the types produced by the type checker          |
+| `soundness/Extension.thy`    | Stability of the type checker under extension of the class table                      |
 | `soundness/ValueTyping.thy`  | Value and environment typing                                                          |
 | `soundness/ResultTyping.thy` | Typing of evaluation results; canonical forms of values                               |
 | `soundness/Expressions.thy`  | Soundness of evaluation of expressions other than calls                               |
