@@ -18,23 +18,21 @@ proof (rule sound_exprI)
   with env assms(1) show "result_typed (Val v) (inst \<eta> \<tau>)" by (auto dest!: wf_env_lookup)
 next
   fix \<eta> \<Gamma> \<tau>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "check_expr' \<Sigma> \<Gamma> (ExprVar x) \<tau> = Some (Ok ())" and fv: "fv \<tau> \<subseteq> fst ` set \<eta>"
-    and wf: "wf_ty \<Sigma> \<tau>"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "check_expr' \<Sigma> \<Gamma> (ExprVar x) \<tau> = Some (Ok ())" and wf: "wf_ty \<Sigma> \<tau>"
   then obtain \<alpha>s \<sigma> \<tau>s where \<Gamma>x: "fmlookup \<Gamma> x = Some (Scheme (TyScheme \<alpha>s \<sigma>))"
     and \<tau>s: "Subtyping.type_args_of (type_args \<Sigma> \<alpha>s \<sigma> \<tau>) \<alpha>s = Ok \<tau>s"
     and sub: "\<Sigma> \<turnstile> subst \<tau>s \<alpha>s \<sigma> <: \<tau>"
     by (auto simp: var_scheme_def scheme_of_name_def entry_of_def resolve_name_def bind_sum_def ensure_def
         Let_def split: option.splits cxt_entry.splits ty_scheme.splits if_splits sum.splits)
-  let ?\<eta>' = "filter (\<lambda>(\<alpha>, _). \<alpha> \<notin> set \<alpha>s) \<eta>"
+  let ?\<eta>' = "shadow \<alpha>s \<eta>"
   from env \<Gamma>x assms(1) have v: "\<turnstile> v : Scheme (TyScheme \<alpha>s (inst ?\<eta>' \<sigma>))" by (auto dest!: wf_env_lookup)
   have len: "length \<tau>s = length \<alpha>s" using \<tau>s by (rule type_args_of_length)
-  have closed: "\<forall>\<tau>' \<in> set (map (inst \<eta>) \<tau>s). fv \<tau>' = {}"
-    using type_args_fv[OF wf \<tau>s] fv wf_env_closed[OF env] by (auto intro!: inst_closed)
+  have closed: "\<forall>\<tau>' \<in> set (map (inst \<eta>) \<tau>s). fv \<tau>' = {}" by (simp add: inst_closed[OF wf_env_wf_inst[OF env]])
   have wfs: "\<forall>\<tau>' \<in> set (map (inst \<eta>) \<tau>s). wf_ty \<Sigma> \<tau>'"
-    using type_args_fv[OF wf \<tau>s] wf_env_wf_inst[OF env] by (auto intro: inst_wf)
+    using type_args_wf[OF wf \<tau>s] wf_env_wf_inst[OF env] by (auto intro: inst_wf)
   have "length (map (inst \<eta>) \<tau>s) = length \<alpha>s" by (simp add: len)
   from v this closed wfs have "\<turnstile> v : Ty (subst (map (inst \<eta>) \<tau>s) \<alpha>s (inst ?\<eta>' \<sigma>))" by (rule ValInst)
-  then have "\<turnstile> v : Ty (inst \<eta> (subst \<tau>s \<alpha>s \<sigma>))" by (simp only: inst_subst[OF wf_env_closed[OF env] len])
+  then have "\<turnstile> v : Ty (inst \<eta> (subst \<tau>s \<alpha>s \<sigma>))" by (simp only: inst_subst[OF wf_env_wf_inst[OF env] len])
   then show "result_typed (Val v) (inst \<eta> \<tau>)"
     using sub wf wf_env_wf_inst[OF env] by (auto intro: wf_val_inst_sub)
 next
@@ -126,8 +124,8 @@ proof (rule sound_expr_synthI)
     moreover have "wf_ty \<Sigma> \<tau>''" using unop_overload_types[OF ov] by auto
     ultimately have "\<turnstile> v : Ty \<tau>''"
       using wf_val_inst_sub[OF _ unop_overload_sub[OF ov] _ wf_env_wf_inst[OF env]] closed
-      by (simp add: subst_closed)
-    from unop_meaning_typed[OF this ov] Val closed show ?thesis by (simp add: subst_closed)
+      by (simp add: inst_closed_ty)
+    from unop_meaning_typed[OF this ov] Val closed show ?thesis by (simp add: inst_closed_ty)
   next
     case (Aborts \<kappa>)
     with r show ?thesis by simp
@@ -205,7 +203,7 @@ next
     by (auto elim: wf_list)
   have wf: "wf_ty \<Sigma> (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>)"
     using wf_val_ty[OF OverloadAddList.prems(1)] wf_val_ty[OF OverloadAddList.prems(2)]
-    by (auto intro: wf_join wf_ty_subst_inv)
+    by (auto intro: wf_join wf_ty_inst_inv)
   have "\<forall>v' \<in> set (vs @ us). \<turnstile> v' : Ty (inst \<eta> (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>))"
     using vs us OverloadAddList.prems(3)
     by (auto intro: wf_val_inst_sub[OF _ join_upper(1) wf] wf_val_inst_sub[OF _ join_upper(2) wf])
@@ -268,7 +266,7 @@ lemma binop_union_typed:
 proof (induction "size \<sigma> + size \<sigma>'" arbitrary: \<sigma> \<sigma>' \<tau> v u rule: less_induct)
   case less
   have wf: "wf_ty \<Sigma> \<sigma>" "wf_ty \<Sigma> \<sigma>'"
-    using wf_val_ty[OF less.prems(2)] wf_val_ty[OF less.prems(3)] by (auto intro: wf_ty_subst_inv)
+    using wf_val_ty[OF less.prems(2)] wf_val_ty[OF less.prems(3)] by (auto intro: wf_ty_inst_inv)
   from less.prems(1) show ?case
   proof (cases rule: resolve_binop_union_cases)
     case overload
@@ -367,8 +365,8 @@ lemma or_nonbool_sound:
 
 (* Branches of a conditional typed at subtypes of its type *)
 lemma cond_typed:
-  assumes "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprCond e1 e e2) \<tau>" and "tyvars \<Gamma> \<subseteq> fst ` set \<eta>" and "wf_cxt \<Sigma> \<Gamma>"
-  shows "\<exists>\<sigma>1 \<sigma>2. has_type_at \<Sigma> \<eta> \<Gamma> e1 \<sigma>1 \<and> \<Sigma> \<turnstile> \<sigma>1 <: \<tau> \<and> has_type_at \<Sigma> \<eta> \<Gamma> e2 \<sigma>2 \<and> \<Sigma> \<turnstile> \<sigma>2 <: \<tau>"
+  assumes "typed_by_rule \<Sigma> \<Gamma> (ExprCond e1 e e2) \<tau>" and "wf_cxt \<Sigma> \<Gamma>"
+  shows "\<exists>\<sigma>1 \<sigma>2. has_type_at \<Sigma> \<Gamma> e1 \<sigma>1 \<and> \<Sigma> \<turnstile> \<sigma>1 <: \<tau> \<and> has_type_at \<Sigma> \<Gamma> e2 \<sigma>2 \<and> \<Sigma> \<turnstile> \<sigma>2 <: \<tau>"
   using assms(1) unfolding typed_by_rule_def
 proof
   assume "synth_expr \<Sigma> \<Gamma> (ExprCond e1 e e2) = Ok \<tau>"
@@ -378,15 +376,15 @@ proof
     then show ?thesis by (blast intro: has_type_synth_at join_upper)
   next
     case 2
-    with synth_at_tyvars[OF assms(3) 2(1)] synth_at_wf_ty[OF assms(3) 2(1)] assms(2) show ?thesis
-      by (blast intro: has_type_synth_at has_type_check_at SubtyRefl subset_trans)
+    with synth_at_wf_ty[OF assms(2) 2(1)] show ?thesis
+      by (blast intro: has_type_synth_at has_type_check_at SubtyRefl)
   next
     case 3
-    with synth_at_tyvars[OF assms(3) 3(2)] synth_at_wf_ty[OF assms(3) 3(2)] assms(2) show ?thesis
-      by (blast intro: has_type_synth_at has_type_check_at SubtyRefl subset_trans)
+    with synth_at_wf_ty[OF assms(2) 3(2)] show ?thesis
+      by (blast intro: has_type_synth_at has_type_check_at SubtyRefl)
   qed
 next
-  assume "check_expr' \<Sigma> \<Gamma> (ExprCond e1 e e2) \<tau> = Some (Ok ()) \<and> fv \<tau> \<subseteq> fst ` set \<eta> \<and> wf_ty \<Sigma> \<tau>"
+  assume "check_expr' \<Sigma> \<Gamma> (ExprCond e1 e e2) \<tau> = Some (Ok ()) \<and> wf_ty \<Sigma> \<tau>"
   then show ?thesis by (auto simp: bind_sum_def intro: has_type_check_at SubtyRefl split: sum.splits)
 qed
 
@@ -395,8 +393,8 @@ lemma cond_true_sound:
   shows "sound_expr \<rho> (ExprCond e1 e e2) r"
 proof (rule sound_expr_typedI)
   fix \<eta> \<Gamma> \<tau>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprCond e1 e e2) \<tau>"
-  from cond_typed[OF this(2) wf_env_tyvars[OF env] wf_env_wf_cxt[OF env]]
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<Gamma> (ExprCond e1 e e2) \<tau>"
+  from cond_typed[OF this(2) wf_env_wf_cxt[OF env]]
     typed_by_rule_wf[OF wf_env_wf_cxt[OF env] this(2)] wf_env_wf_inst[OF env]
   show "result_typed r (inst \<eta> \<tau>)" by (blast intro: result_typed_sub sound_expr_has_type_at[OF assms env])
 qed simp_all
@@ -406,8 +404,8 @@ lemma cond_false_sound:
   shows "sound_expr \<rho> (ExprCond e1 e e2) r"
 proof (rule sound_expr_typedI)
   fix \<eta> \<Gamma> \<tau>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprCond e1 e e2) \<tau>"
-  from cond_typed[OF this(2) wf_env_tyvars[OF env] wf_env_wf_cxt[OF env]]
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<Gamma> (ExprCond e1 e e2) \<tau>"
+  from cond_typed[OF this(2) wf_env_wf_cxt[OF env]]
     typed_by_rule_wf[OF wf_env_wf_cxt[OF env] this(2)] wf_env_wf_inst[OF env]
   show "result_typed r (inst \<eta> \<tau>)" by (blast intro: result_typed_sub sound_expr_has_type_at[OF assms env])
 qed simp_all
@@ -421,76 +419,69 @@ lemma cond_nonbool_sound:
 
 (* Elements of a list synthesise subtypes of the join, or check against it *)
 lemma elements_join_Ok:
-  assumes "elements_join \<Sigma> \<Gamma> es = Ok \<tau>" and "tyvars \<Gamma> \<subseteq> fst ` set \<eta>" and "wf_cxt \<Sigma> \<Gamma>"
-  shows "\<exists>\<tau>s. list_all2 (\<lambda>e \<sigma>. has_type_at \<Sigma> \<eta> \<Gamma> e \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>) es \<tau>s"
+  assumes "elements_join \<Sigma> \<Gamma> es = Ok \<tau>" and "wf_cxt \<Sigma> \<Gamma>"
+  shows "\<exists>\<tau>s. list_all2 (\<lambda>e \<sigma>. has_type_at \<Sigma> \<Gamma> e \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>) es \<tau>s"
 proof -
   let ?\<sigma>s = "map (synth_expr_at \<Sigma> \<Gamma>) es"
   from assms(1) have \<tau>: "\<tau> = joins \<Sigma> (map (base_type \<circ> projr) (filter (Not \<circ> isl) ?\<sigma>s))"
     and chk: "all_sum (map (\<lambda>(e, _). check_expr_at \<Sigma> \<Gamma> e \<tau>) (filter (isl \<circ> snd) (zip es ?\<sigma>s))) = Ok ()"
     by (auto simp: elements_join.simps Let_def bind_sum_def split: if_splits sum.splits)
-  have synth: "fv (base_type (projr m)) \<subseteq> fst ` set \<eta> \<and> wf_ty \<Sigma> (base_type (projr m))"
-    if "m \<in> set ?\<sigma>s" and "\<not> isl m" for m
+  have synth: "wf_ty \<Sigma> (base_type (projr m))" if "m \<in> set ?\<sigma>s" and "\<not> isl m" for m
   proof -
     from that(1) obtain e where e: "e \<in> set es" and m: "m = synth_expr_at \<Sigma> \<Gamma> e" by auto
     with that(2) obtain \<sigma> where "synth_expr_at \<Sigma> \<Gamma> e = Ok \<sigma>" by (cases "synth_expr_at \<Sigma> \<Gamma> e") auto
-    with m synth_at_tyvars[OF assms(3)] synth_at_wf_ty[OF assms(3)] assms(2) show ?thesis
-      by (fastforce intro: wf_base_type)
-  qed
-  have fv: "fv \<tau> \<subseteq> fst ` set \<eta>"
-  proof -
-    have "\<Union> (fv ` set (map (base_type \<circ> projr) (filter (Not \<circ> isl) ?\<sigma>s))) \<subseteq> fst ` set \<eta>" using synth by auto
-    then show ?thesis unfolding \<tau> by (rule subset_trans[OF fv_joins])
+    with m synth_at_wf_ty[OF assms(2)] show ?thesis by (fastforce intro: wf_base_type)
   qed
   have wfs: "\<forall>\<tau>' \<in> set (map (base_type \<circ> projr) (filter (Not \<circ> isl) ?\<sigma>s)). wf_ty \<Sigma> \<tau>'" using synth by auto
   have wf: "wf_ty \<Sigma> \<tau>" unfolding \<tau> by (rule wf_joins[OF wfs])
   let ?\<tau> = "\<lambda>e. case synth_expr_at \<Sigma> \<Gamma> e of Ok \<sigma> \<Rightarrow> \<sigma> | Fail _ \<Rightarrow> \<tau>"
-  have "has_type_at \<Sigma> \<eta> \<Gamma> e (?\<tau> e) \<and> \<Sigma> \<turnstile> ?\<tau> e <: \<tau>" if "e \<in> set es" for e
+  have "has_type_at \<Sigma> \<Gamma> e (?\<tau> e) \<and> \<Sigma> \<turnstile> ?\<tau> e <: \<tau>" if "e \<in> set es" for e
   proof (cases "synth_expr_at \<Sigma> \<Gamma> e")
     case (Inl r)
     have "(e, Fail r) \<in> set (filter (isl \<circ> snd) (zip es ?\<sigma>s))"
       using that Inl by (auto simp: zip_map2 zip_same_conv_map)
     with chk have "check_expr_at \<Sigma> \<Gamma> e \<tau> = Ok ()" by (fastforce dest: all_sum_map_Ok)
-    with Inl fv wf show ?thesis by (auto intro: has_type_check_at SubtyRefl)
+    with Inl wf show ?thesis by (auto intro: has_type_check_at SubtyRefl)
   next
     case (Inr \<sigma>)
     then have "base_type \<sigma> \<in> set (map (base_type \<circ> projr) (filter (Not \<circ> isl) ?\<sigma>s))" using that by force
     then have bsub: "\<Sigma> \<turnstile> base_type \<sigma> <: \<tau>" unfolding \<tau> by (rule joins_upper[OF wfs])
-    have wf\<sigma>: "wf_ty \<Sigma> \<sigma>" by (rule synth_at_wf_ty[OF assms(3) Inr])
+    have wf\<sigma>: "wf_ty \<Sigma> \<sigma>" by (rule synth_at_wf_ty[OF assms(2) Inr])
     have "\<Sigma> \<turnstile> \<sigma> <: \<tau>" by (rule subty_trans[OF wf_class_table wf\<sigma> wf_base_type[OF wf\<sigma>] base_type_upper bsub])
     with Inr show ?thesis by (auto intro: has_type_synth_at)
   qed
-  then have "list_all2 (\<lambda>e \<sigma>. has_type_at \<Sigma> \<eta> \<Gamma> e \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>) es (map ?\<tau> es)"
+  then have "list_all2 (\<lambda>e \<sigma>. has_type_at \<Sigma> \<Gamma> e \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>) es (map ?\<tau> es)"
     by (auto simp: list_all2_map2 intro: list.rel_refl_strong)
   then show ?thesis by blast
 qed
 
 (* Elements of a list synthesise subtypes of the element type, or check against it *)
 lemma list_typed:
-  assumes "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprList es) \<tau>" and "tyvars \<Gamma> \<subseteq> fst ` set \<eta>" and "wf_cxt \<Sigma> \<Gamma>"
-  shows "\<exists>\<tau>' \<tau>s. \<tau> = TyList \<tau>' \<and> list_all2 (\<lambda>e \<sigma>. has_type_at \<Sigma> \<eta> \<Gamma> e \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>') es \<tau>s"
+  assumes "typed_by_rule \<Sigma> \<Gamma> (ExprList es) \<tau>" and "wf_cxt \<Sigma> \<Gamma>"
+  shows "\<exists>\<tau>' \<tau>s. \<tau> = TyList \<tau>' \<and> list_all2 (\<lambda>e \<sigma>. has_type_at \<Sigma> \<Gamma> e \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>') es \<tau>s"
   using assms(1) unfolding typed_by_rule_def
 proof
   assume "synth_expr \<Sigma> \<Gamma> (ExprList es) = Ok \<tau>"
   then obtain \<tau>' where "elements_join \<Sigma> \<Gamma> es = Ok \<tau>'" and "\<tau> = TyList \<tau>'"
     by (auto simp: bind_sum_def split: sum.splits if_splits)
-  with elements_join_Ok[OF this(1) assms(2, 3)] show ?thesis by blast
+  with elements_join_Ok[OF this(1) assms(2)] show ?thesis by blast
 next
-  assume "check_expr' \<Sigma> \<Gamma> (ExprList es) \<tau> = Some (Ok ()) \<and> fv \<tau> \<subseteq> fst ` set \<eta> \<and> wf_ty \<Sigma> \<tau>"
+  assume "check_expr' \<Sigma> \<Gamma> (ExprList es) \<tau> = Some (Ok ()) \<and> wf_ty \<Sigma> \<tau>"
   then obtain \<tau>' where \<tau>: "\<tau> = TyList \<tau>'" and "all_sum (map (\<lambda>e. check_expr_at \<Sigma> \<Gamma> e \<tau>') es) = Ok ()"
-    and fv: "fv \<tau>' \<subseteq> fst ` set \<eta>" and wf: "wf_ty \<Sigma> \<tau>'"
+    and wf: "wf_ty \<Sigma> \<tau>'"
     by (auto split: ty.splits)
   then have "\<forall>e \<in> set es. check_expr_at \<Sigma> \<Gamma> e \<tau>' = Ok ()" by (auto dest: all_sum_map_Ok)
-  with fv wf have "list_all2 (\<lambda>e \<sigma>. has_type_at \<Sigma> \<eta> \<Gamma> e \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>') es (replicate (length es) \<tau>')"
+  with wf have "list_all2 (\<lambda>e \<sigma>. has_type_at \<Sigma> \<Gamma> e \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>') es (replicate (length es) \<tau>')"
     by (auto simp: list_all2_conv_all_nth intro: has_type_check_at SubtyRefl)
   with \<tau> show ?thesis by blast
 qed
 
 lemma list_elems:
-  assumes "list_all2 (\<lambda>e \<sigma>. has_type_at \<Sigma> \<eta> \<Gamma> e \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>') es \<tau>s" and "sound_exprs \<rho> es (Val vs)"
+  assumes "list_all2 (\<lambda>e \<sigma>. has_type_at \<Sigma> \<Gamma> e \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>') es \<tau>s" and "sound_exprs \<rho> es (Val vs)"
     and "\<eta> \<turnstile> \<rho> : \<Gamma>" and "wf_ty \<Sigma> \<tau>'"
   shows "\<turnstile> VList vs : Ty (TyList (inst \<eta> \<tau>'))"
 proof -
-  from assms(1) have "list_all2 (has_type_at \<Sigma> \<eta> \<Gamma>) es \<tau>s" and sub: "\<forall>\<sigma> \<in> set \<tau>s. \<Sigma> \<turnstile> \<sigma> <: \<tau>'"
+  from assms(1) have "list_all2 (has_type_at \<Sigma> \<Gamma>) es \<tau>s" and sub: "\<forall>\<sigma> \<in> set \<tau>s. \<Sigma> \<turnstile> \<sigma> <: \<tau>'"
     by (auto simp: list_all2_conv_all_nth in_set_conv_nth)
   with assms(2, 3) have vs: "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty (inst \<eta> \<sigma>)) vs \<tau>s"
     by (simp add: sound_exprs_def list_all2_map2)
@@ -508,8 +499,8 @@ lemma list_sound:
   shows "sound_expr \<rho> (ExprList es) (Val (VList vs))"
 proof (rule sound_expr_typedI)
   fix \<eta> \<Gamma> \<tau>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprList es) \<tau>"
-  with list_typed[OF this(2) wf_env_tyvars[OF env] wf_env_wf_cxt[OF env]]
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<Gamma> (ExprList es) \<tau>"
+  with list_typed[OF this(2) wf_env_wf_cxt[OF env]]
     typed_by_rule_wf[OF wf_env_wf_cxt[OF env] this(2)] assms
   show "result_typed (Val (VList vs)) (inst \<eta> \<tau>)" by (auto intro: list_elems)
 qed simp_all
@@ -519,17 +510,17 @@ lemma list_fail_sound:
   shows "sound_expr \<rho> (ExprList es) (Aborts \<kappa>)"
 proof (rule sound_expr_typedI)
   fix \<eta> \<Gamma> \<tau>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprList es) \<tau>"
-  from list_typed[OF this(2) wf_env_tyvars[OF env] wf_env_wf_cxt[OF env]] obtain \<tau>' \<tau>s
-    where "list_all2 (\<lambda>e \<sigma>. has_type_at \<Sigma> \<eta> \<Gamma> e \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>') es \<tau>s" by blast
-  then have "list_all2 (has_type_at \<Sigma> \<eta> \<Gamma>) es \<tau>s" by (auto simp: list_all2_conv_all_nth)
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<Gamma> (ExprList es) \<tau>"
+  from list_typed[OF this(2) wf_env_wf_cxt[OF env]] obtain \<tau>' \<tau>s
+    where "list_all2 (\<lambda>e \<sigma>. has_type_at \<Sigma> \<Gamma> e \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>') es \<tau>s" by blast
+  then have "list_all2 (has_type_at \<Sigma> \<Gamma>) es \<tau>s" by (auto simp: list_all2_conv_all_nth)
   with assms env show "result_typed (Aborts \<kappa>) (inst \<eta> \<tau>)" by (auto dest: sound_exprs_abort)
 qed simp_all
 
 (* Elements of a tuple synthesise or check against the components of its type *)
 lemma tuple_typed:
-  assumes "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprTuple es) \<tau>"
-  shows "\<exists>\<tau>s. \<tau> = TyTuple \<tau>s \<and> list_all2 (has_type_at \<Sigma> \<eta> \<Gamma>) es \<tau>s"
+  assumes "typed_by_rule \<Sigma> \<Gamma> (ExprTuple es) \<tau>"
+  shows "\<exists>\<tau>s. \<tau> = TyTuple \<tau>s \<and> list_all2 (has_type_at \<Sigma> \<Gamma>) es \<tau>s"
   using assms unfolding typed_by_rule_def
 proof
   assume "synth_expr \<Sigma> \<Gamma> (ExprTuple es) = Ok \<tau>"
@@ -537,10 +528,9 @@ proof
     by (auto simp: bind_sum_def split: sum.splits)
   then show ?thesis by (auto dest!: those_sum_map_Ok intro: list_all2_mono has_type_synth_at)
 next
-  assume "check_expr' \<Sigma> \<Gamma> (ExprTuple es) \<tau> = Some (Ok ()) \<and> fv \<tau> \<subseteq> fst ` set \<eta> \<and> wf_ty \<Sigma> \<tau>"
+  assume "check_expr' \<Sigma> \<Gamma> (ExprTuple es) \<tau> = Some (Ok ()) \<and> wf_ty \<Sigma> \<tau>"
   then obtain \<tau>s where \<tau>: "\<tau> = TyTuple \<tau>s" and "length es = length \<tau>s"
-    and "all_sum (map2 (check_expr_at \<Sigma> \<Gamma>) es \<tau>s) = Ok ()" and "\<forall>\<tau>' \<in> set \<tau>s. fv \<tau>' \<subseteq> fst ` set \<eta>"
-    and "\<forall>\<tau>' \<in> set \<tau>s. wf_ty \<Sigma> \<tau>'"
+    and "all_sum (map2 (check_expr_at \<Sigma> \<Gamma>) es \<tau>s) = Ok ()" and "\<forall>\<tau>' \<in> set \<tau>s. wf_ty \<Sigma> \<tau>'"
     by (auto split: ty.splits if_splits)
   then show ?thesis
     by (auto simp: list_all2_conv_all_nth dest!: all_sum_map2_Ok intro!: has_type_check_at)
@@ -551,7 +541,7 @@ lemma tuple_sound:
   shows "sound_expr \<rho> (ExprTuple es) (Val (VTuple vs))"
 proof (rule sound_expr_typedI)
   fix \<eta> \<Gamma> \<tau>
-  assume "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprTuple es) \<tau>"
+  assume "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<Gamma> (ExprTuple es) \<tau>"
   with tuple_typed[OF this(2)] assms show "result_typed (Val (VTuple vs)) (inst \<eta> \<tau>)"
     by (auto simp: sound_exprs_def ValTuple)
 qed simp_all
@@ -561,16 +551,16 @@ lemma tuple_fail_sound:
   shows "sound_expr \<rho> (ExprTuple es) (Aborts \<kappa>)"
 proof (rule sound_expr_typedI)
   fix \<eta> \<Gamma> \<tau>
-  assume "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprTuple es) \<tau>"
+  assume "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<Gamma> (ExprTuple es) \<tau>"
   with tuple_typed[OF this(2)] assms show "result_typed (Aborts \<kappa>) (inst \<eta> \<tau>)" by (auto dest: sound_exprs_abort)
 qed simp_all
 
 (* Keys of a dictionary display check against str, and values synthesise subtypes of the value type, or check
    against it *)
 lemma dict_typed:
-  assumes "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprDict kes) \<tau>" and "tyvars \<Gamma> \<subseteq> fst ` set \<eta>" and "wf_cxt \<Sigma> \<Gamma>"
+  assumes "typed_by_rule \<Sigma> \<Gamma> (ExprDict kes) \<tau>" and "wf_cxt \<Sigma> \<Gamma>"
   shows "\<exists>\<tau>' \<sigma>s. \<tau> = TyDict \<tau>'
-           \<and> list_all2 (\<lambda>(e, e') \<sigma>. has_type_at \<Sigma> \<eta> \<Gamma> e (TyPrim str) \<and> has_type_at \<Sigma> \<eta> \<Gamma> e' \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>')
+           \<and> list_all2 (\<lambda>(e, e') \<sigma>. has_type_at \<Sigma> \<Gamma> e (TyPrim str) \<and> has_type_at \<Sigma> \<Gamma> e' \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>')
                kes \<sigma>s"
   using assms(1) unfolding typed_by_rule_def
 proof
@@ -578,25 +568,25 @@ proof
   then obtain \<tau>' where keys: "all_sum (map (\<lambda>e. check_expr_at \<Sigma> \<Gamma> e (TyPrim str)) (map fst kes)) = Ok ()"
     and "elements_join \<Sigma> \<Gamma> (map snd kes) = Ok \<tau>'" and \<tau>: "\<tau> = TyDict \<tau>'"
     by (auto simp: bind_sum_def split: sum.splits if_splits)
-  from elements_join_Ok[OF this(2) assms(2, 3)] obtain \<sigma>s
-    where "list_all2 (\<lambda>e \<sigma>. has_type_at \<Sigma> \<eta> \<Gamma> e \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>') (map snd kes) \<sigma>s" by blast
-  then have "list_all2 (\<lambda>(e, e') \<sigma>. has_type_at \<Sigma> \<eta> \<Gamma> e' \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>') kes \<sigma>s"
+  from elements_join_Ok[OF this(2) assms(2)] obtain \<sigma>s
+    where "list_all2 (\<lambda>e \<sigma>. has_type_at \<Sigma> \<Gamma> e \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>') (map snd kes) \<sigma>s" by blast
+  then have "list_all2 (\<lambda>(e, e') \<sigma>. has_type_at \<Sigma> \<Gamma> e' \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>') kes \<sigma>s"
     by (simp add: list_all2_map1 split_def)
-  moreover from keys have "\<forall>(e, e') \<in> set kes. has_type_at \<Sigma> \<eta> \<Gamma> e (TyPrim str)"
+  moreover from keys have "\<forall>(e, e') \<in> set kes. has_type_at \<Sigma> \<Gamma> e (TyPrim str)"
     by (fastforce dest: all_sum_map_Ok intro: has_type_check_at)
-  ultimately have "list_all2 (\<lambda>(e, e') \<sigma>. has_type_at \<Sigma> \<eta> \<Gamma> e (TyPrim str) \<and> has_type_at \<Sigma> \<eta> \<Gamma> e' \<sigma>
+  ultimately have "list_all2 (\<lambda>(e, e') \<sigma>. has_type_at \<Sigma> \<Gamma> e (TyPrim str) \<and> has_type_at \<Sigma> \<Gamma> e' \<sigma>
                      \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>') kes \<sigma>s"
     by (auto elim!: list.rel_mono_strong)
   with \<tau> show ?thesis by blast
 next
-  assume "check_expr' \<Sigma> \<Gamma> (ExprDict kes) \<tau> = Some (Ok ()) \<and> fv \<tau> \<subseteq> fst ` set \<eta> \<and> wf_ty \<Sigma> \<tau>"
-  then obtain \<tau>' where \<tau>: "\<tau> = TyDict \<tau>'" and fv: "fv \<tau>' \<subseteq> fst ` set \<eta>" and wf: "wf_ty \<Sigma> \<tau>'"
+  assume "check_expr' \<Sigma> \<Gamma> (ExprDict kes) \<tau> = Some (Ok ()) \<and> wf_ty \<Sigma> \<tau>"
+  then obtain \<tau>' where \<tau>: "\<tau> = TyDict \<tau>'" and wf: "wf_ty \<Sigma> \<tau>'"
     and keys: "all_sum (map (\<lambda>e. check_expr_at \<Sigma> \<Gamma> e (TyPrim str)) (map fst kes)) = Ok ()"
     and vals: "all_sum (map (\<lambda>e. check_expr_at \<Sigma> \<Gamma> e \<tau>') (map snd kes)) = Ok ()"
     by (auto simp: bind_sum_def split: ty.splits sum.splits)
-  have "has_type_at \<Sigma> \<eta> \<Gamma> e (TyPrim str) \<and> has_type_at \<Sigma> \<eta> \<Gamma> e' \<tau>'" if "(e, e') \<in> set kes" for e e'
-    using that keys vals fv wf by (fastforce dest: all_sum_map_Ok intro: has_type_check_at)
-  then have "list_all2 (\<lambda>(e, e') \<sigma>. has_type_at \<Sigma> \<eta> \<Gamma> e (TyPrim str) \<and> has_type_at \<Sigma> \<eta> \<Gamma> e' \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>')
+  have "has_type_at \<Sigma> \<Gamma> e (TyPrim str) \<and> has_type_at \<Sigma> \<Gamma> e' \<tau>'" if "(e, e') \<in> set kes" for e e'
+    using that keys vals wf by (fastforce dest: all_sum_map_Ok intro: has_type_check_at)
+  then have "list_all2 (\<lambda>(e, e') \<sigma>. has_type_at \<Sigma> \<Gamma> e (TyPrim str) \<and> has_type_at \<Sigma> \<Gamma> e' \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>')
                kes (map (\<lambda>_. \<tau>') kes)"
     by (auto simp: list_all2_map2 intro!: list.rel_refl_strong intro: SubtyRefl)
   with \<tau> show ?thesis by blast
@@ -604,18 +594,18 @@ qed
 
 (* Values of a typed dictionary display: string keys interleaved with values at subtypes of the value type *)
 lemma dict_values_typed:
-  assumes "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprDict kes) \<tau>" and "sound_exprs \<rho> (concat (map (\<lambda>(e, e'). [e, e']) kes)) r"
+  assumes "typed_by_rule \<Sigma> \<Gamma> (ExprDict kes) \<tau>" and "sound_exprs \<rho> (concat (map (\<lambda>(e, e'). [e, e']) kes)) r"
     and "\<eta> \<turnstile> \<rho> : \<Gamma>"
   obtains \<tau>' \<sigma>s where "\<tau> = TyDict \<tau>'" and "\<forall>\<sigma> \<in> set \<sigma>s. \<Sigma> \<turnstile> \<sigma> <: \<tau>'"
     and "results_typed r (concat (map (\<lambda>\<sigma>. [TyPrim str, \<sigma>]) (map (inst \<eta>) \<sigma>s)))"
 proof -
-  from dict_typed[OF assms(1) wf_env_tyvars[OF assms(3)] wf_env_wf_cxt[OF assms(3)]] obtain \<tau>' \<sigma>s
+  from dict_typed[OF assms(1) wf_env_wf_cxt[OF assms(3)]] obtain \<tau>' \<sigma>s
     where \<tau>: "\<tau> = TyDict \<tau>'"
-    and kes: "list_all2 (\<lambda>(e, e') \<sigma>. has_type_at \<Sigma> \<eta> \<Gamma> e (TyPrim str) \<and> has_type_at \<Sigma> \<eta> \<Gamma> e' \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>')
+    and kes: "list_all2 (\<lambda>(e, e') \<sigma>. has_type_at \<Sigma> \<Gamma> e (TyPrim str) \<and> has_type_at \<Sigma> \<Gamma> e' \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>')
                 kes \<sigma>s"
     by blast
   from kes have "\<forall>\<sigma> \<in> set \<sigma>s. \<Sigma> \<turnstile> \<sigma> <: \<tau>'" by (induction rule: list_all2_induct) auto
-  moreover from kes have "list_all2 (has_type_at \<Sigma> \<eta> \<Gamma>) (concat (map (\<lambda>(e, e'). [e, e']) kes))
+  moreover from kes have "list_all2 (has_type_at \<Sigma> \<Gamma>) (concat (map (\<lambda>(e, e'). [e, e']) kes))
                             (concat (map (\<lambda>\<sigma>. [TyPrim str, \<sigma>]) \<sigma>s))"
     by (intro list_all2_interleave) (auto elim: list_all2_mono)
   with assms(2, 3) have "results_typed r (map (inst \<eta>) (concat (map (\<lambda>\<sigma>. [TyPrim str, \<sigma>]) \<sigma>s)))"
@@ -644,12 +634,12 @@ lemma dict_sound:
   shows "sound_expr \<rho> (ExprDict kes) (Val (VDict (update [] \<delta>)))"
 proof (rule sound_expr_typedI)
   fix \<eta> \<Gamma> \<tau>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprDict kes) \<tau>"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<Gamma> (ExprDict kes) \<tau>"
   then obtain \<tau>' \<sigma>s where \<tau>: "\<tau> = TyDict \<tau>'" and sub: "\<forall>\<sigma> \<in> set \<sigma>s. \<Sigma> \<turnstile> \<sigma> <: \<tau>'"
     and typed: "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty \<sigma>) vs (concat (map (\<lambda>\<sigma>. [TyPrim str, \<sigma>]) (map (inst \<eta>) \<sigma>s)))"
     using assms(1) by (auto elim: dict_values_typed)
   have wf: "wf_ty \<Sigma> \<tau>'"
-    using typed_by_rule_wf[OF wf_env_wf_cxt[OF env] \<open>typed_by_rule _ _ _ _ _\<close>] by (simp add: \<tau>)
+    using typed_by_rule_wf[OF wf_env_wf_cxt[OF env] \<open>typed_by_rule _ _ _ _\<close>] by (simp add: \<tau>)
   from dict_entries_typed[OF typed] assms(2) sub wf wf_env_wf_inst[OF env]
   have "\<forall>w v. (w, v) \<in> set \<delta> \<longrightarrow> \<turnstile> v : Ty (inst \<eta> \<tau>')" by (fastforce intro: wf_val_inst_sub)
   then show "result_typed (Val (VDict (update [] \<delta>))) (inst \<eta> \<tau>)"
@@ -665,7 +655,7 @@ lemma dict_nonstr_sound:
   shows "sound_expr \<rho> (ExprDict kes) (Aborts Excluded)"
 proof (rule sound_expr_typedI)
   fix \<eta> \<Gamma> \<tau>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and typed: "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprDict kes) \<tau>"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and typed: "typed_by_rule \<Sigma> \<Gamma> (ExprDict kes) \<tau>"
   show "result_typed (Aborts Excluded) (inst \<eta> \<tau>)"
   proof (rule dict_values_typed[OF typed assms(1) env])
     fix \<tau>' \<sigma>s
@@ -721,7 +711,7 @@ proof (induction \<sigma> arbitrary: \<tau> v)
     and \<tau>2: "subscript_type \<Sigma> \<sigma>2 int_ok str_ok p idx = Ok \<tau>2" and \<tau>: "\<tau> = \<tau>1 \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>2"
     by (auto simp: bind_sum_def split: sum.splits)
   have wf: "wf_ty \<Sigma> \<tau>"
-    using subscript_type_wf[OF wf_ty_subst_inv[OF wf_val_ty[OF TyUnion.prems(2)]] TyUnion.prems(1)] by simp
+    using subscript_type_wf[OF wf_ty_inst_inv[OF wf_val_ty[OF TyUnion.prems(2)]] TyUnion.prems(1)] by simp
   from TyUnion.prems(2) have "\<turnstile> v : Ty (inst \<eta> \<sigma>1) \<or> \<turnstile> v : Ty (inst \<eta> \<sigma>2)" by (auto dest: wf_val_union)
   then show ?case
   proof
@@ -764,7 +754,7 @@ next
   proof (cases "\<iota> = TyPrim int")
     case True
     with TyTuple.prems(1) \<iota> have \<tau>: "\<tau> = joins \<Sigma> \<sigma>s" by (simp add: bind_sum_def)
-    have wfs: "\<forall>\<sigma> \<in> set \<sigma>s. wf_ty \<Sigma> \<sigma>" using wf_ty_subst_inv[OF wf_val_ty[OF TyTuple.prems(2)]] by simp
+    have wfs: "\<forall>\<sigma> \<in> set \<sigma>s. wf_ty \<Sigma> \<sigma>" using wf_ty_inst_inv[OF wf_val_ty[OF TyTuple.prems(2)]] by simp
     have "\<turnstile> u : Ty (inst \<eta> (joins \<Sigma> \<sigma>s))" if "u \<in> set vs" for u
     proof -
       from that obtain k where k: "k < length vs" and u: "u = vs ! k" by (auto simp: in_set_conv_nth)
@@ -865,14 +855,14 @@ qed (auto simp: bind_sum_def var_scheme_None dest: sound_expr_synth_at[OF assms]
 
 (* Element of a list comprehension typed under its qualifiers at a subtype of the element type *)
 lemma list_comp_typed:
-  assumes "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprListComp e gs) \<tau>"
-  shows "\<exists>\<Delta> \<tau>' \<sigma>. \<tau> = TyList \<tau>' \<and> quals \<Sigma> \<Gamma> gs = Ok \<Delta> \<and> has_type_at \<Sigma> \<eta> (\<Gamma> \<otimes> \<Delta>) e \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>'"
+  assumes "typed_by_rule \<Sigma> \<Gamma> (ExprListComp e gs) \<tau>"
+  shows "\<exists>\<Delta> \<tau>' \<sigma>. \<tau> = TyList \<tau>' \<and> quals \<Sigma> \<Gamma> gs = Ok \<Delta> \<and> has_type_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>'"
   using assms unfolding typed_by_rule_def
 proof
   assume "synth_expr \<Sigma> \<Gamma> (ExprListComp e gs) = Ok \<tau>"
   then show ?thesis by (auto simp: bind_sum_def intro: has_type_synth_at base_type_upper split: sum.splits)
 next
-  assume "check_expr' \<Sigma> \<Gamma> (ExprListComp e gs) \<tau> = Some (Ok ()) \<and> fv \<tau> \<subseteq> fst ` set \<eta> \<and> wf_ty \<Sigma> \<tau>"
+  assume "check_expr' \<Sigma> \<Gamma> (ExprListComp e gs) \<tau> = Some (Ok ()) \<and> wf_ty \<Sigma> \<tau>"
   then show ?thesis
     by (auto simp: bind_sum_def intro: has_type_check_at SubtyRefl split: ty.splits sum.splits)
 qed
@@ -882,13 +872,13 @@ lemma list_comp_sound:
   shows "sound_expr \<rho> (ExprListComp e gs) (Val (VList vs))"
 proof (rule sound_expr_typedI)
   fix \<eta> \<Gamma> \<tau>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprListComp e gs) \<tau>"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<Gamma> (ExprListComp e gs) \<tau>"
   from list_comp_typed[OF this(2)] obtain \<Delta> \<tau>' \<sigma> where \<tau>: "\<tau> = TyList \<tau>'" and "quals \<Sigma> \<Gamma> gs = Ok \<Delta>"
-    and e: "has_type_at \<Sigma> \<eta> (\<Gamma> \<otimes> \<Delta>) e \<sigma>" and sub: "\<Sigma> \<turnstile> \<sigma> <: \<tau>'"
+    and e: "has_type_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e \<sigma>" and sub: "\<Sigma> \<turnstile> \<sigma> <: \<tau>'"
     by blast
   with assms(1) env have envs: "\<forall>\<rho>' \<in> set \<rho>s. \<eta> \<turnstile> \<rho>' : \<Gamma> \<otimes> \<Delta>" by (simp add: sound_quals_def)
   have wf: "wf_ty \<Sigma> \<tau>'"
-    using typed_by_rule_wf[OF wf_env_wf_cxt[OF env] \<open>typed_by_rule _ _ _ _ _\<close>] by (simp add: \<tau>)
+    using typed_by_rule_wf[OF wf_env_wf_cxt[OF env] \<open>typed_by_rule _ _ _ _\<close>] by (simp add: \<tau>)
   from sound_compD[OF assms(2) envs e] sub wf wf_env_wf_inst[OF env]
   show "result_typed (Val (VList vs)) (inst \<eta> \<tau>)" by (auto simp: \<tau> intro: ValList wf_val_inst_sub inst_wf)
 qed simp_all
@@ -898,7 +888,7 @@ lemma list_comp_fail_quals_sound:
   shows "sound_expr \<rho> (ExprListComp e gs) (Aborts \<kappa>)"
 proof (rule sound_expr_typedI)
   fix \<eta> \<Gamma> \<tau>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprListComp e gs) \<tau>"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<Gamma> (ExprListComp e gs) \<tau>"
   from list_comp_typed[OF this(2)] assms env show "result_typed (Aborts \<kappa>) (inst \<eta> \<tau>)"
     by (auto simp: sound_quals_def)
 qed simp_all
@@ -908,9 +898,9 @@ lemma list_comp_fail_sound:
   shows "sound_expr \<rho> (ExprListComp e gs) (Aborts \<kappa>)"
 proof (rule sound_expr_typedI)
   fix \<eta> \<Gamma> \<tau>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprListComp e gs) \<tau>"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<Gamma> (ExprListComp e gs) \<tau>"
   from list_comp_typed[OF this(2)] obtain \<Delta> \<sigma> where "quals \<Sigma> \<Gamma> gs = Ok \<Delta>"
-    and e: "has_type_at \<Sigma> \<eta> (\<Gamma> \<otimes> \<Delta>) e \<sigma>"
+    and e: "has_type_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e \<sigma>"
     by blast
   with assms(1) env have "\<forall>\<rho>' \<in> set \<rho>s. \<eta> \<turnstile> \<rho>' : \<Gamma> \<otimes> \<Delta>" by (simp add: sound_quals_def)
   from sound_compD[OF assms(2) this e] show "result_typed (Aborts \<kappa>) (inst \<eta> \<tau>)" by simp
@@ -919,15 +909,15 @@ qed simp_all
 (* Key of a dictionary comprehension checked against str, and its value typed at a subtype of the value type,
    under its qualifiers *)
 lemma dict_comp_typed:
-  assumes "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprDictComp e e' gs) \<tau>"
+  assumes "typed_by_rule \<Sigma> \<Gamma> (ExprDictComp e e' gs) \<tau>"
   shows "\<exists>\<Delta> \<tau>' \<sigma>. \<tau> = TyDict \<tau>' \<and> quals \<Sigma> \<Gamma> gs = Ok \<Delta> \<and> check_expr_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e (TyPrim str) = Ok ()
-           \<and> has_type_at \<Sigma> \<eta> (\<Gamma> \<otimes> \<Delta>) e' \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>'"
+           \<and> has_type_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e' \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>'"
   using assms unfolding typed_by_rule_def
 proof
   assume "synth_expr \<Sigma> \<Gamma> (ExprDictComp e e' gs) = Ok \<tau>"
   then show ?thesis by (auto simp: bind_sum_def intro: has_type_synth_at base_type_upper split: sum.splits)
 next
-  assume "check_expr' \<Sigma> \<Gamma> (ExprDictComp e e' gs) \<tau> = Some (Ok ()) \<and> fv \<tau> \<subseteq> fst ` set \<eta> \<and> wf_ty \<Sigma> \<tau>"
+  assume "check_expr' \<Sigma> \<Gamma> (ExprDictComp e e' gs) \<tau> = Some (Ok ()) \<and> wf_ty \<Sigma> \<tau>"
   then show ?thesis
     by (auto simp: bind_sum_def intro: has_type_check_at SubtyRefl split: ty.splits sum.splits)
 qed
@@ -937,14 +927,14 @@ lemma dict_comp_sound:
   shows "sound_expr \<rho> (ExprDictComp e e' gs) (Val (VDict (update [] \<delta>)))"
 proof (rule sound_expr_typedI)
   fix \<eta> \<Gamma> \<tau>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprDictComp e e' gs) \<tau>"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<Gamma> (ExprDictComp e e' gs) \<tau>"
   from dict_comp_typed[OF this(2)] obtain \<Delta> \<tau>' \<sigma> where \<tau>: "\<tau> = TyDict \<tau>'" and "quals \<Sigma> \<Gamma> gs = Ok \<Delta>"
-    and key: "check_expr_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e (TyPrim str) = Ok ()" and e': "has_type_at \<Sigma> \<eta> (\<Gamma> \<otimes> \<Delta>) e' \<sigma>"
+    and key: "check_expr_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e (TyPrim str) = Ok ()" and e': "has_type_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e' \<sigma>"
     and sub: "\<Sigma> \<turnstile> \<sigma> <: \<tau>'"
     by blast
   with assms(1) env have envs: "\<forall>\<rho>' \<in> set \<rho>s. \<eta> \<turnstile> \<rho>' : \<Gamma> \<otimes> \<Delta>" by (simp add: sound_quals_def)
   have wf: "wf_ty \<Sigma> \<tau>'"
-    using typed_by_rule_wf[OF wf_env_wf_cxt[OF env] \<open>typed_by_rule _ _ _ _ _\<close>] by (simp add: \<tau>)
+    using typed_by_rule_wf[OF wf_env_wf_cxt[OF env] \<open>typed_by_rule _ _ _ _\<close>] by (simp add: \<tau>)
   from sound_entriesD[OF assms(2) envs key e'] sub wf wf_env_wf_inst[OF env]
   have "\<forall>w v. (w, v) \<in> set \<delta> \<longrightarrow> \<turnstile> v : Ty (inst \<eta> \<tau>')" by (auto intro: wf_val_inst_sub)
   then show "result_typed (Val (VDict (update [] \<delta>))) (inst \<eta> \<tau>)"
@@ -956,7 +946,7 @@ lemma dict_comp_fail_quals_sound:
   shows "sound_expr \<rho> (ExprDictComp e e' gs) (Aborts \<kappa>)"
 proof (rule sound_expr_typedI)
   fix \<eta> \<Gamma> \<tau>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprDictComp e e' gs) \<tau>"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<Gamma> (ExprDictComp e e' gs) \<tau>"
   from dict_comp_typed[OF this(2)] assms env show "result_typed (Aborts \<kappa>) (inst \<eta> \<tau>)"
     by (auto simp: sound_quals_def)
 qed simp_all
@@ -966,9 +956,9 @@ lemma dict_comp_fail_sound:
   shows "sound_expr \<rho> (ExprDictComp e e' gs) (Aborts \<kappa>)"
 proof (rule sound_expr_typedI)
   fix \<eta> \<Gamma> \<tau>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<eta> \<Gamma> (ExprDictComp e e' gs) \<tau>"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<Gamma> (ExprDictComp e e' gs) \<tau>"
   from dict_comp_typed[OF this(2)] obtain \<Delta> \<sigma> where "quals \<Sigma> \<Gamma> gs = Ok \<Delta>"
-    and key: "check_expr_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e (TyPrim str) = Ok ()" and e': "has_type_at \<Sigma> \<eta> (\<Gamma> \<otimes> \<Delta>) e' \<sigma>"
+    and key: "check_expr_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e (TyPrim str) = Ok ()" and e': "has_type_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e' \<sigma>"
     by blast
   with assms(1) env have "\<forall>\<rho>' \<in> set \<rho>s. \<eta> \<turnstile> \<rho>' : \<Gamma> \<otimes> \<Delta>" by (simp add: sound_quals_def)
   from sound_entriesD[OF assms(2) this key e'] show "result_typed (Aborts \<kappa>) (inst \<eta> \<tau>)" by simp
@@ -993,9 +983,9 @@ proof (induction \<sigma> arbitrary: \<tau>)
     by simp_all
   have wf\<tau>: "wf_ty \<Sigma> (\<tau>' \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>'')" using wf' by (rule wf_join)
   have sub: "\<Sigma> \<turnstile> inst \<eta> \<tau>' <: inst \<eta> \<tau>"
-    unfolding \<tau> using subst_subty(1)[OF wf_class_table join_upper(1)] wf'(1) wf\<tau> by blast
+    unfolding \<tau> using inst_subty[OF wf_class_table join_upper(1)] wf'(1) wf\<tau> by blast
   have sub'': "\<Sigma> \<turnstile> inst \<eta> \<tau>'' <: inst \<eta> \<tau>"
-    unfolding \<tau> using subst_subty(1)[OF wf_class_table join_upper(2)] wf'(2) wf\<tau> by blast
+    unfolding \<tau> using inst_subty[OF wf_class_table join_upper(2)] wf'(2) wf\<tau> by blast
   have trans: "\<Sigma> \<turnstile> \<sigma>' <: inst \<eta> \<tau>"
     if "map_of (instantiate (fields \<Sigma> C) \<tau>s) x = Some \<sigma>'" and "\<Sigma> \<turnstile> \<sigma>' <: inst \<eta> \<tau>\<^sub>0"
     and "\<Sigma> \<turnstile> inst \<eta> \<tau>\<^sub>0 <: inst \<eta> \<tau>" and "wf_ty \<Sigma> \<tau>\<^sub>0" for \<sigma>' \<tau>\<^sub>0
@@ -1017,10 +1007,16 @@ proof (induction \<sigma> arbitrary: \<tau>)
   qed
 next
   case (TyClass D \<sigma>s)
-  then have "map_of (instantiate (fields \<Sigma> D) \<sigma>s) x = Some \<tau>" by (simp add: or_else_def split: option.splits)
-  then have "map_of (instantiate (fields \<Sigma> D) (map (inst \<eta>) \<sigma>s)) x = Some (inst \<eta> \<tau>)"
-    using TyClass(5) instantiate_fields_subst[OF wf_class_table, of D \<sigma>s "map snd \<eta>" "map fst \<eta>"]
-    by (simp add: map_of_map_snd)
+  then have look: "map_of (instantiate (fields \<Sigma> D) \<sigma>s) x = Some \<tau>"
+    by (simp add: or_else_def split: option.splits)
+  have "finite (\<Union> (fv ` set \<sigma>s) \<union> fv \<tau>)" by (simp add: finite_fv)
+  then obtain \<alpha>s where \<alpha>s: "\<And>\<tau>'. fv \<tau>' \<subseteq> \<Union> (fv ` set \<sigma>s) \<union> fv \<tau> \<Longrightarrow> inst \<eta> \<tau>' = subst (map \<eta> \<alpha>s) \<alpha>s \<tau>'"
+    using inst_subst_cover by blast
+  have \<sigma>s: "map (inst \<eta>) \<sigma>s = map (subst (map \<eta> \<alpha>s) \<alpha>s) \<sigma>s" by (intro map_cong[OF refl] \<alpha>s) auto
+  have \<tau>: "inst \<eta> \<tau> = subst (map \<eta> \<alpha>s) \<alpha>s \<tau>" by (rule \<alpha>s) simp
+  from look have "map_of (instantiate (fields \<Sigma> D) (map (inst \<eta>) \<sigma>s)) x = Some (inst \<eta> \<tau>)"
+    using TyClass(5) instantiate_fields_subst[OF wf_class_table, of D \<sigma>s "map \<eta> \<alpha>s" \<alpha>s]
+    unfolding \<sigma>s \<tau> by (simp add: map_of_map_snd)
   moreover from TyClass(2) have "\<Sigma> \<turnstile> TyClass C \<tau>s <: TyClass D (map (inst \<eta>) \<sigma>s)" by simp
   moreover have "C |\<in>| fmdom \<Sigma>" using TyClass(4) by simp
   ultimately show ?case using subty_class_fields(1)[OF wf_class_table _ refl refl] by blast
@@ -1029,13 +1025,12 @@ qed simp_all
 (* Attribute typed through a checked module, at a member type, member scheme or type variable, or through the
    type synthesised by the object *)
 lemma attr_typed:
-  assumes "has_type \<Sigma> \<eta> \<Gamma> (ExprAttribute e x) \<tau>"
+  assumes "has_type \<Sigma> \<Gamma> (ExprAttribute e x) \<tau>"
   obtains (module_ty) q q' \<Gamma>' \<sigma> where "dotted_name (node e) = Some q" and "lookup \<Gamma> q = Some (ModChecked q' \<Gamma>')"
       and "fmlookup \<Gamma>' x = Some (Ty \<sigma>)" and "\<Sigma> \<turnstile> \<sigma> <: \<tau>"
     | (module_scheme) q q' \<Gamma>' \<alpha>s \<sigma> \<tau>s where "dotted_name (node e) = Some q"
       and "lookup \<Gamma> q = Some (ModChecked q' \<Gamma>')" and "fmlookup \<Gamma>' x = Some (Scheme (TyScheme \<alpha>s \<sigma>))"
       and "Subtyping.type_args_of (type_args \<Sigma> \<alpha>s \<sigma> \<tau>) \<alpha>s = Ok \<tau>s" and "\<Sigma> \<turnstile> subst \<tau>s \<alpha>s \<sigma> <: \<tau>"
-      and "fv \<tau> \<subseteq> fst ` set \<eta>"
     | (module_tyvar) q q' \<Gamma>' where "dotted_name (node e) = Some q" and "lookup \<Gamma> q = Some (ModChecked q' \<Gamma>')"
       and "fmlookup \<Gamma>' x = Some TypeVar"
     | (object) \<sigma> \<sigma>' where "synth_expr_at \<Sigma> \<Gamma> e = Ok \<sigma>" and "attribute_type \<Sigma> \<sigma> x = Ok \<sigma>'" and "\<Sigma> \<turnstile> \<sigma>' <: \<tau>"
@@ -1052,14 +1047,14 @@ proof -
           split: option.splits cxt_entry.splits)
     with that(2) show ?thesis by (blast intro: module_ty module_tyvar)
   qed
-  have scheme: thesis if "var_scheme \<Sigma> \<Gamma> (ExprAttribute e x) \<tau> = Some (Ok ())" and "fv \<tau> \<subseteq> fst ` set \<eta>"
+  have scheme: thesis if "var_scheme \<Sigma> \<Gamma> (ExprAttribute e x) \<tau> = Some (Ok ())"
   proof -
-    from that(1) obtain q q' \<Gamma>' \<alpha>s \<sigma> \<tau>s where "dotted_name (node e) = Some q"
+    from that obtain q q' \<Gamma>' \<alpha>s \<sigma> \<tau>s where "dotted_name (node e) = Some q"
       and "lookup \<Gamma> q = Some (ModChecked q' \<Gamma>')" and "fmlookup \<Gamma>' x = Some (Scheme (TyScheme \<alpha>s \<sigma>))"
       and "Subtyping.type_args_of (type_args \<Sigma> \<alpha>s \<sigma> \<tau>) \<alpha>s = Ok \<tau>s" and "\<Sigma> \<turnstile> subst \<tau>s \<alpha>s \<sigma> <: \<tau>"
       by (auto simp: var_scheme_def scheme_of_name_def entry_of_def resolve_name_def bind_sum_def ensure_def
           Let_def bind_eq_Some_conv split: option.splits cxt_entry.splits ty_scheme.splits if_splits sum.splits)
-    then show ?thesis using that(2) by (rule module_scheme)
+    then show ?thesis by (rule module_scheme)
   qed
   from assms show thesis unfolding has_type_def by (auto dest!: check_expr_cases intro: synth scheme SubtyRefl)
 qed
@@ -1069,14 +1064,14 @@ qed
 lemma sound_expr_module_env:
   assumes "sound_expr \<rho> e (Val v)" and "\<eta> \<turnstile> \<rho> : \<Gamma>" and "dotted_name e = Some q"
     and "lookup \<Gamma> q = Some (ModChecked q' \<Gamma>')"
-  shows "\<exists>\<rho>'. v = VModLoaded q' \<rho>' \<and> [] \<turnstile> \<rho>' : \<Gamma>'"
+  shows "\<exists>\<rho>' \<eta>'. v = VModLoaded q' \<rho>' \<and> \<eta>' \<turnstile> \<rho>' : \<Gamma>'"
   using sound_expr_module[OF assms, unfolded wf_result.simps(1)] by (rule wf_mod_checked)
 
 (* Attribute of an expression with a value which is not a loaded module, typed through the type synthesised by
    the expression *)
 lemma attr_typed_object:
   assumes "sound_expr \<rho> (node e) (Val v)" and "\<not> is_loaded_module v" and "\<eta> \<turnstile> \<rho> : \<Gamma>"
-    and "has_type \<Sigma> \<eta> \<Gamma> (ExprAttribute e x) \<tau>"
+    and "has_type \<Sigma> \<Gamma> (ExprAttribute e x) \<tau>"
   obtains \<sigma> \<sigma>' where "synth_expr_at \<Sigma> \<Gamma> e = Ok \<sigma>" and "attribute_type \<Sigma> \<sigma> x = Ok \<sigma>'" and "\<Sigma> \<turnstile> \<sigma>' <: \<tau>"
   using assms(4)
 proof (cases rule: attr_typed)
@@ -1118,7 +1113,7 @@ proof -
     and fields: "list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) (map snd xvs) (field_types \<Sigma> C \<tau>s)"
     and sub: "\<Sigma> \<turnstile> TyClass C \<tau>s <: inst \<eta> \<sigma>"
     by (rule wf_object)
-  have wf\<sigma>: "wf_ty \<Sigma> \<sigma>" by (rule wf_ty_subst_inv[OF wf_val_ty[OF assms(1)]])
+  have wf\<sigma>: "wf_ty \<Sigma> \<sigma>" by (rule wf_ty_inst_inv[OF wf_val_ty[OF assms(1)]])
   from attribute_field[OF sub assms(2) C wf\<sigma> assms(3)] obtain \<sigma>'
     where field: "map_of (instantiate (fields \<Sigma> C) \<tau>s) x = Some \<sigma>'"
     and sub': "\<Sigma> \<turnstile> \<sigma>' <: inst \<eta> \<tau>"
@@ -1136,7 +1131,7 @@ lemma attr_object_sound:
   unfolding sound_expr_def
 proof (intro conjI allI impI)
   fix \<eta> \<Gamma> \<tau>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and typed: "has_type \<Sigma> \<eta> \<Gamma> (ExprAttribute e x) \<tau>"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and typed: "has_type \<Sigma> \<Gamma> (ExprAttribute e x) \<tau>"
   obtain \<sigma> \<sigma>' where synth: "synth_expr_at \<Sigma> \<Gamma> e = Ok \<sigma>" and attr: "attribute_type \<Sigma> \<sigma> x = Ok \<sigma>'"
     and sub: "\<Sigma> \<turnstile> \<sigma>' <: \<tau>"
     by (rule attr_typed_object[OF assms(1) _ env typed]) simp
@@ -1154,7 +1149,7 @@ lemma attr_object_missing_sound:
   unfolding sound_expr_def
 proof (intro conjI allI impI)
   fix \<eta> \<Gamma> \<tau>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and typed: "has_type \<Sigma> \<eta> \<Gamma> (ExprAttribute e x) \<tau>"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and typed: "has_type \<Sigma> \<Gamma> (ExprAttribute e x) \<tau>"
   obtain \<sigma> \<sigma>' where synth: "synth_expr_at \<Sigma> \<Gamma> e = Ok \<sigma>" and attr: "attribute_type \<Sigma> \<sigma> x = Ok \<sigma>'"
     by (rule attr_typed_object[OF assms(1) _ env typed]) simp
   from sound_expr_synth_at[OF assms(1) env synth] have "\<turnstile> VObject C xvs : Ty (inst \<eta> \<sigma>)" by simp
@@ -1171,15 +1166,16 @@ lemma module_attr_entry:
     and "lookup \<Gamma> q = Some (ModChecked q'' \<Gamma>')" and "fmlookup \<Gamma>' x = Some \<theta>"
   obtains v where "fmlookup \<rho>' x = Some v" and "\<turnstile> v : \<theta>" and "fv_entry \<theta> = {}"
 proof -
-  from sound_expr_module_env[OF assms(1-4)] have env': "[] \<turnstile> \<rho>' : \<Gamma>'" by auto
+  from sound_expr_module_env[OF assms(1-4)] obtain \<eta>' where env': "\<eta>' \<turnstile> \<rho>' : \<Gamma>'" by auto
+  have closed: "tyvars \<Gamma>' = {}" using lookup_wf[OF wf_env_wf_cxt[OF assms(2)] assms(4)] by simp
   with assms(5) have "\<theta> \<noteq> TypeVar" by (auto dest: module_member_TypeVar)
-  from module_member[OF env' assms(5) this] that show thesis by blast
+  from module_member[OF env' closed assms(5) this] that show thesis by blast
 qed
 
 (* Attribute of a loaded module typed at \<tau>, as a member of the module typed at \<tau> *)
 lemma attr_module_typed:
   assumes "sound_expr \<rho> (node e) (Val (VModLoaded q' \<rho>'))" and env: "\<eta> \<turnstile> \<rho> : \<Gamma>"
-    and "has_type \<Sigma> \<eta> \<Gamma> (ExprAttribute e x) \<tau>"
+    and "has_type \<Sigma> \<Gamma> (ExprAttribute e x) \<tau>"
   obtains v where "fmlookup \<rho>' x = Some v" and "\<turnstile> v : Ty (inst \<eta> \<tau>)"
   using assms(3)
 proof (cases rule: attr_typed)
@@ -1187,7 +1183,7 @@ proof (cases rule: attr_typed)
   from module_attr_entry[OF assms(1, 2) module_ty(1-3)] obtain v where lookup: "fmlookup \<rho>' x = Some v"
     and "\<turnstile> v : Ty \<sigma>" and "fv \<sigma> = {}"
     by auto
-  then have "\<turnstile> v : Ty (inst \<eta> \<sigma>)" by (simp add: subst_closed)
+  then have "\<turnstile> v : Ty (inst \<eta> \<sigma>)" by (simp add: inst_closed_ty)
   from that[OF lookup wf_val_inst_sub[OF this module_ty(4) has_type_wf[OF wf_env_wf_cxt[OF env] assms(3)]
       wf_env_wf_inst[OF env]]]
   show thesis .
@@ -1198,18 +1194,17 @@ next
     by auto
   have len: "length \<tau>s = length \<alpha>s" using module_scheme(4) by (rule type_args_of_length)
   have wf: "wf_ty \<Sigma> \<tau>" by (rule has_type_wf[OF wf_env_wf_cxt[OF env] assms(3)])
-  have closed: "\<forall>\<tau>' \<in> set (map (inst \<eta>) \<tau>s). fv \<tau>' = {}"
-    using type_args_fv[OF wf module_scheme(4)] module_scheme(6) wf_env_closed[OF env]
-    by (auto intro!: inst_closed)
+  have closed: "\<forall>\<tau>' \<in> set (map (inst \<eta>) \<tau>s). fv \<tau>' = {}" by (simp add: inst_closed[OF wf_env_wf_inst[OF env]])
   have wfs: "\<forall>\<tau>' \<in> set (map (inst \<eta>) \<tau>s). wf_ty \<Sigma> \<tau>'"
-    using type_args_fv[OF wf module_scheme(4)] wf_env_wf_inst[OF env] by (auto intro: inst_wf)
+    using type_args_wf[OF wf module_scheme(4)] wf_env_wf_inst[OF env] by (auto intro: inst_wf)
   have "length (map (inst \<eta>) \<tau>s) = length \<alpha>s" by (simp add: len)
   from v this closed wfs have "\<turnstile> v : Ty (subst (map (inst \<eta>) \<tau>s) \<alpha>s \<sigma>)" by (rule ValInst)
-  then have "\<turnstile> v : Ty (inst \<eta> (subst \<tau>s \<alpha>s \<sigma>))" by (simp only: subst_subst[OF fv len])
+  then have "\<turnstile> v : Ty (inst \<eta> (subst \<tau>s \<alpha>s \<sigma>))"
+    by (simp only: inst_subst_closed[OF wf_env_wf_inst[OF env] len fv])
   from that[OF lookup wf_val_inst_sub[OF this module_scheme(5) wf wf_env_wf_inst[OF env]]] show thesis .
 next
   case (module_tyvar q q'' \<Gamma>')
-  from sound_expr_module_env[OF assms(1, 2) module_tyvar(1, 2)] module_tyvar(3) show thesis
+  from lookup_wf[OF wf_env_wf_cxt[OF env] module_tyvar(2)] module_tyvar(3) show thesis
     by (auto dest: module_member_TypeVar)
 next
   case (object \<sigma> \<sigma>')
@@ -1238,7 +1233,7 @@ lemma attr_module_sound:
   unfolding sound_expr_def
 proof (intro conjI allI impI)
   fix \<eta> \<Gamma> \<tau>
-  assume "\<eta> \<turnstile> \<rho> : \<Gamma>" and "has_type \<Sigma> \<eta> \<Gamma> (ExprAttribute e x) \<tau>"
+  assume "\<eta> \<turnstile> \<rho> : \<Gamma>" and "has_type \<Sigma> \<Gamma> (ExprAttribute e x) \<tau>"
   from attr_module_typed[OF assms(1) this] assms(2) show "result_typed (Val v) (inst \<eta> \<tau>)" by simp
 next
   show "sound_name \<rho> (ExprAttribute e x) (Val v)" by (rule sound_name_module[OF assms(1)]) (simp add: assms(2))
@@ -1250,7 +1245,7 @@ lemma attr_module_missing_sound:
   unfolding sound_expr_def
 proof (intro conjI allI impI)
   fix \<eta> \<Gamma> \<tau>
-  assume "\<eta> \<turnstile> \<rho> : \<Gamma>" and "has_type \<Sigma> \<eta> \<Gamma> (ExprAttribute e x) \<tau>"
+  assume "\<eta> \<turnstile> \<rho> : \<Gamma>" and "has_type \<Sigma> \<Gamma> (ExprAttribute e x) \<tau>"
   from attr_module_typed[OF assms(1) this] assms(2) show "result_typed (Aborts AttributeError) (inst \<eta> \<tau>)"
     by simp
 next
@@ -1264,12 +1259,12 @@ lemma attr_nonobject_sound:
   unfolding sound_expr_def
 proof (intro conjI allI impI)
   fix \<eta> \<Gamma> \<tau>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and typed: "has_type \<Sigma> \<eta> \<Gamma> (ExprAttribute e x) \<tau>"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and typed: "has_type \<Sigma> \<Gamma> (ExprAttribute e x) \<tau>"
   obtain \<sigma> \<sigma>' where synth: "synth_expr_at \<Sigma> \<Gamma> e = Ok \<sigma>" and attr: "attribute_type \<Sigma> \<sigma> x = Ok \<sigma>'"
     by (rule attr_typed_object[OF assms(1, 3) env typed])
   from sound_expr_synth_at[OF assms(1) env synth] have "\<turnstile> v : Ty (inst \<eta> \<sigma>)" by simp
   moreover from attr have "object_type (inst \<eta> \<sigma>)"
-    by (blast intro: object_type_subst attribute_type_object_type)
+    by (blast intro: object_type_inst attribute_type_object_type)
   ultimately show "result_typed (Aborts Excluded) (inst \<eta> \<tau>)" using assms(2) wf_object_type by blast
 next
   show "sound_name \<rho> (ExprAttribute e x) (Aborts Excluded)" using assms(1, 3) by (rule sound_name_attr)
@@ -1281,7 +1276,7 @@ lemma attr_fail_sound:
   unfolding sound_expr_def sound_name_def
 proof (intro conjI allI impI)
   fix \<eta> \<Gamma> \<tau>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and typed: "has_type \<Sigma> \<eta> \<Gamma> (ExprAttribute e x) \<tau>"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and typed: "has_type \<Sigma> \<Gamma> (ExprAttribute e x) \<tau>"
   from typed show "result_typed (Aborts \<kappa>) (inst \<eta> \<tau>)"
     by (cases rule: attr_typed) (auto dest: sound_expr_module[OF assms env] sound_expr_synth_at[OF assms env])
 next
@@ -1303,9 +1298,9 @@ lemma exprs_cons_sound:
   unfolding sound_exprs_def
 proof (intro allI impI)
   fix \<eta> \<Gamma> \<tau>s
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "list_all2 (has_type_at \<Sigma> \<eta> \<Gamma>) (e # es) \<tau>s"
-  then obtain \<tau> \<tau>s' where \<tau>s: "\<tau>s = \<tau> # \<tau>s'" and e: "has_type_at \<Sigma> \<eta> \<Gamma> e \<tau>"
-    and es: "list_all2 (has_type_at \<Sigma> \<eta> \<Gamma>) es \<tau>s'"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "list_all2 (has_type_at \<Sigma> \<Gamma>) (e # es) \<tau>s"
+  then obtain \<tau> \<tau>s' where \<tau>s: "\<tau>s = \<tau> # \<tau>s'" and e: "has_type_at \<Sigma> \<Gamma> e \<tau>"
+    and es: "list_all2 (has_type_at \<Sigma> \<Gamma>) es \<tau>s'"
     by (auto simp: list_all2_Cons1)
   from assms(1) env e have "\<turnstile> v : Ty (inst \<eta> \<tau>)" by (auto dest: sound_expr_has_type_at)
   moreover from assms(2) env es have "results_typed r (map (inst \<eta>) \<tau>s')" by (simp add: sound_exprs_def)
@@ -1383,9 +1378,9 @@ next
     with TyTuple(4) v obtain i where i: "i < length vs" and u: "u = vs ! i" by (auto simp: in_set_conv_nth)
     with vs have "\<turnstile> u : Ty (inst \<eta> (\<sigma>s ! i))" and "i < length \<sigma>s" by (auto simp: list_all2_conv_all_nth)
     have wfs: "\<forall>\<sigma> \<in> set (map base_type \<sigma>s). wf_ty \<Sigma> \<sigma>"
-      using wf_ty_subst_inv[OF wf_val_ty[OF TyTuple(2)]] by (auto intro: wf_base_type)
+      using wf_ty_inst_inv[OF wf_val_ty[OF TyTuple(2)]] by (auto intro: wf_base_type)
     have wf\<tau>: "wf_ty \<Sigma> \<tau>" unfolding \<tau> by (rule wf_joins[OF wfs])
-    have wf\<sigma>: "wf_ty \<Sigma> (\<sigma>s ! i)" using wf_ty_subst_inv[OF wf_val_ty[OF TyTuple(2)]] \<open>i < length \<sigma>s\<close> by simp
+    have wf\<sigma>: "wf_ty \<Sigma> (\<sigma>s ! i)" using wf_ty_inst_inv[OF wf_val_ty[OF TyTuple(2)]] \<open>i < length \<sigma>s\<close> by simp
     from \<open>i < length \<sigma>s\<close> have "\<Sigma> \<turnstile> base_type (\<sigma>s ! i) <: \<tau>" unfolding \<tau> by (auto intro: joins_upper[OF wfs])
     with base_type_upper have "\<Sigma> \<turnstile> \<sigma>s ! i <: \<tau>"
       by (rule subty_trans[OF wf_class_table wf\<sigma> wf_base_type[OF wf\<sigma>]])
@@ -1398,7 +1393,7 @@ next
     and \<tau>: "\<tau> = \<tau>' \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>''"
     by (auto split: option.splits)
   have wf: "wf_ty \<Sigma> (\<tau>' \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>'')"
-    using wf_ty_subst_inv[OF wf_val_ty[OF TyUnion(3)]] wf_elem_type[OF _ \<tau>'] wf_elem_type[OF _ \<tau>'']
+    using wf_ty_inst_inv[OF wf_val_ty[OF TyUnion(3)]] wf_elem_type[OF _ \<tau>'] wf_elem_type[OF _ \<tau>'']
     by (auto intro: wf_join)
   from wf_val_union[of v "inst \<eta> \<sigma>" "inst \<eta> \<sigma>'"] TyUnion(3) have "\<turnstile> v : Ty (inst \<eta> \<sigma>) \<or> \<turnstile> v : Ty (inst \<eta> \<sigma>')"
     by simp
@@ -1426,10 +1421,8 @@ proof (intro allI impI)
     by (auto simp: bind_sum_def or_else_def ensure_def split: sum.splits option.splits if_splits)
   from sound_expr_synth_at[OF assms(1) env synth] have "\<turnstile> v : Ty (inst \<eta> \<sigma>)" by simp
   from iter_typed[OF this elem assms(2) wf_env_wf_inst[OF env]] have us: "\<forall>u \<in> set us. \<turnstile> u : Ty (inst \<eta> \<tau>)" .
-  have "fv \<tau> \<subseteq> fst ` set \<eta>"
-    using elem_type_fv[OF elem] synth_at_tyvars[OF wf_env_wf_cxt[OF env] synth] wf_env_tyvars[OF env] by blast
-  moreover have "wf_ty \<Sigma> \<tau>" using wf_elem_type[OF synth_at_wf_ty[OF wf_env_wf_cxt[OF env] synth] elem] .
-  ultimately have "wf_envs \<eta> r (\<Gamma> \<otimes> fmupd x (Ty \<tau>) fmempty \<otimes> \<Delta>')"
+  have "wf_ty \<Sigma> \<tau>" using wf_elem_type[OF synth_at_wf_ty[OF wf_env_wf_cxt[OF env] synth] elem] .
+  then have "wf_envs \<eta> r (\<Gamma> \<otimes> fmupd x (Ty \<tau>) fmempty \<otimes> \<Delta>')"
     using assms(3) env us \<Delta>' by (simp add: sound_gen_def)
   with \<Delta> show "wf_envs \<eta> r (\<Gamma> \<otimes> \<Delta>)" by simp
 qed
@@ -1498,12 +1491,11 @@ lemma gen_cons_sound:
   unfolding sound_gen_def
 proof (intro allI impI)
   fix \<eta> \<Gamma> \<tau> \<Delta>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and fv: "fv \<tau> \<subseteq> fst ` set \<eta>" and wf: "wf_ty \<Sigma> \<tau>"
-    and us: "\<forall>u' \<in> set (u # us). \<turnstile> u' : Ty (inst \<eta> \<tau>)"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and wf: "wf_ty \<Sigma> \<tau>" and us: "\<forall>u' \<in> set (u # us). \<turnstile> u' : Ty (inst \<eta> \<tau>)"
     and quals: "quals \<Sigma> (\<Gamma> \<otimes> fmupd x (Ty \<tau>) fmempty) gs = Ok \<Delta>"
-  have "\<eta> \<turnstile> fmupd x u \<rho> : fmupd x (Ty \<tau>) \<Gamma>" using env fv wf us by (intro wf_env_upd) auto
+  have "\<eta> \<turnstile> fmupd x u \<rho> : fmupd x (Ty \<tau>) \<Gamma>" using env wf us by (intro wf_env_upd) auto
   with assms(1) quals have "wf_envs \<eta> (Val \<rho>s) (\<Gamma> \<otimes> fmupd x (Ty \<tau>) fmempty \<otimes> \<Delta>)" by (simp add: sound_quals_def)
-  moreover from assms(2) env fv wf us quals have "wf_envs \<eta> r (\<Gamma> \<otimes> fmupd x (Ty \<tau>) fmempty \<otimes> \<Delta>)"
+  moreover from assms(2) env wf us quals have "wf_envs \<eta> r (\<Gamma> \<otimes> fmupd x (Ty \<tau>) fmempty \<otimes> \<Delta>)"
     by (simp add: sound_gen_def)
   ultimately show "wf_envs \<eta> (mlet r (\<lambda>\<rho>ss. Val (\<rho>s @ \<rho>ss))) (\<Gamma> \<otimes> fmupd x (Ty \<tau>) fmempty \<otimes> \<Delta>)"
     by (cases r) auto
@@ -1515,10 +1507,9 @@ lemma gen_fail_sound:
   unfolding sound_gen_def
 proof (intro allI impI)
   fix \<eta> \<Gamma> \<tau> \<Delta>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and fv: "fv \<tau> \<subseteq> fst ` set \<eta>" and wf: "wf_ty \<Sigma> \<tau>"
-    and us: "\<forall>u' \<in> set (u # us). \<turnstile> u' : Ty (inst \<eta> \<tau>)"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and wf: "wf_ty \<Sigma> \<tau>" and us: "\<forall>u' \<in> set (u # us). \<turnstile> u' : Ty (inst \<eta> \<tau>)"
     and quals: "quals \<Sigma> (\<Gamma> \<otimes> fmupd x (Ty \<tau>) fmempty) gs = Ok \<Delta>"
-  have "\<eta> \<turnstile> fmupd x u \<rho> : fmupd x (Ty \<tau>) \<Gamma>" using env fv wf us by (intro wf_env_upd) auto
+  have "\<eta> \<turnstile> fmupd x u \<rho> : fmupd x (Ty \<tau>) \<Gamma>" using env wf us by (intro wf_env_upd) auto
   with assms quals show "wf_envs \<eta> (Aborts \<kappa>) (\<Gamma> \<otimes> fmupd x (Ty \<tau>) fmempty \<otimes> \<Delta>)" by (simp add: sound_quals_def)
 qed
 
@@ -1531,7 +1522,7 @@ lemma comp_cons_sound:
   unfolding sound_comp_def
 proof (intro allI impI)
   fix \<eta> \<Gamma> \<tau>
-  assume envs: "\<forall>\<rho> \<in> set (\<rho> # \<rho>s). \<eta> \<turnstile> \<rho> : \<Gamma>" and e: "has_type_at \<Sigma> \<eta> \<Gamma> e \<tau>"
+  assume envs: "\<forall>\<rho> \<in> set (\<rho> # \<rho>s). \<eta> \<turnstile> \<rho> : \<Gamma>" and e: "has_type_at \<Sigma> \<Gamma> e \<tau>"
   from assms(1) envs e have "\<turnstile> v : Ty (inst \<eta> \<tau>)" by (auto dest: sound_expr_has_type_at)
   moreover from envs have "\<forall>\<rho> \<in> set \<rho>s. \<eta> \<turnstile> \<rho> : \<Gamma>" by simp
   with assms(2) e have "wf_elems r (inst \<eta> \<tau>)" by (blast intro: sound_compD)
@@ -1551,7 +1542,7 @@ lemma entries_cons_sound:
 proof (intro allI impI)
   fix \<eta> \<Gamma> \<tau>
   assume envs: "\<forall>\<rho> \<in> set (\<rho> # \<rho>s). \<eta> \<turnstile> \<rho> : \<Gamma>" and key: "check_expr_at \<Sigma> \<Gamma> e (TyPrim str) = Ok ()"
-    and e': "has_type_at \<Sigma> \<eta> \<Gamma> e' \<tau>"
+    and e': "has_type_at \<Sigma> \<Gamma> e' \<tau>"
   from assms(1) envs e' have "\<turnstile> v : Ty (inst \<eta> \<tau>)" by (auto dest: sound_expr_has_type_at)
   moreover from envs have "\<forall>\<rho> \<in> set \<rho>s. \<eta> \<turnstile> \<rho> : \<Gamma>" by simp
   with assms(2) key e' have "wf_entries r (inst \<eta> \<tau>)" by (blast intro: sound_entriesD)

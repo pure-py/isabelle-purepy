@@ -31,31 +31,27 @@ where
    (\<exists>\<sigma>. callee \<Sigma> \<Gamma> e es = Ok \<sigma> \<and> check_call_stmt \<Sigma> \<Gamma> e \<sigma> kws es = Ok ()))" |
 "call_stmt \<Sigma> \<Gamma> _ = False"
 
-(* Typing of e at \<tau>: by synthesis, by checking when \<tau> is well-formed and \<eta> binds its type variables, or at
-   type object if e is a call statement *)
-definition has_type :: "class_table \<Rightarrow> (var \<times> ty) list \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> bool"
+(* Typing of e at \<tau>: by synthesis, by checking when \<tau> is well-formed, or at type object if e is a call
+   statement *)
+definition has_type :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> bool"
 where
-"has_type \<Sigma> \<eta> \<Gamma> e \<tau> =
-  (synth_expr \<Sigma> \<Gamma> e = Ok \<tau> \<or> check_expr \<Sigma> \<Gamma> e \<tau> = Ok () \<and> fv \<tau> \<subseteq> fst ` set \<eta> \<and> wf_ty \<Sigma> \<tau> \<or>
-   call_stmt \<Sigma> \<Gamma> e \<and> \<tau> = TyPrim object)"
+"has_type \<Sigma> \<Gamma> e \<tau> =
+  (synth_expr \<Sigma> \<Gamma> e = Ok \<tau> \<or> check_expr \<Sigma> \<Gamma> e \<tau> = Ok () \<and> wf_ty \<Sigma> \<tau> \<or> call_stmt \<Sigma> \<Gamma> e \<and> \<tau> = TyPrim object)"
 
-fun has_type_at :: "class_table \<Rightarrow> (var \<times> ty) list \<Rightarrow> cxt \<Rightarrow> expr located \<Rightarrow> ty \<Rightarrow> bool"
+fun has_type_at :: "class_table \<Rightarrow> cxt \<Rightarrow> expr located \<Rightarrow> ty \<Rightarrow> bool"
 where
-"has_type_at \<Sigma> \<eta> \<Gamma> (At p e) \<tau> = has_type \<Sigma> \<eta> \<Gamma> e \<tau>"
+"has_type_at \<Sigma> \<Gamma> (At p e) \<tau> = has_type \<Sigma> \<Gamma> e \<tau>"
 
-lemma has_type_synth_at: "synth_expr_at \<Sigma> \<Gamma> e = Ok \<tau> \<Longrightarrow> has_type_at \<Sigma> \<eta> \<Gamma> e \<tau>"
+lemma has_type_synth_at: "synth_expr_at \<Sigma> \<Gamma> e = Ok \<tau> \<Longrightarrow> has_type_at \<Sigma> \<Gamma> e \<tau>"
   by (cases e) (simp add: has_type_def)
 
-lemma has_type_check_at:
-  "\<lbrakk> check_expr_at \<Sigma> \<Gamma> e \<tau> = Ok () ; fv \<tau> \<subseteq> fst ` set \<eta> ; wf_ty \<Sigma> \<tau> \<rbrakk> \<Longrightarrow> has_type_at \<Sigma> \<eta> \<Gamma> e \<tau>"
+lemma has_type_check_at: "\<lbrakk> check_expr_at \<Sigma> \<Gamma> e \<tau> = Ok () ; wf_ty \<Sigma> \<tau> \<rbrakk> \<Longrightarrow> has_type_at \<Sigma> \<Gamma> e \<tau>"
   by (cases e) (simp add: has_type_def)
 
-(* Typing of e at \<tau> by its synthesis or checking rule, when \<tau> is well-formed and \<eta> binds its type
-   variables *)
-definition typed_by_rule :: "class_table \<Rightarrow> (var \<times> ty) list \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> bool"
+(* Typing of e at \<tau> by its synthesis or checking rule, when \<tau> is well-formed *)
+definition typed_by_rule :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<Rightarrow> ty \<Rightarrow> bool"
 where
-"typed_by_rule \<Sigma> \<eta> \<Gamma> e \<tau> =
-  (synth_expr \<Sigma> \<Gamma> e = Ok \<tau> \<or> check_expr' \<Sigma> \<Gamma> e \<tau> = Some (Ok ()) \<and> fv \<tau> \<subseteq> fst ` set \<eta> \<and> wf_ty \<Sigma> \<tau>)"
+"typed_by_rule \<Sigma> \<Gamma> e \<tau> = (synth_expr \<Sigma> \<Gamma> e = Ok \<tau> \<or> check_expr' \<Sigma> \<Gamma> e \<tau> = Some (Ok ()) \<and> wf_ty \<Sigma> \<tau>)"
 
 context evaluation
 begin
@@ -91,14 +87,14 @@ where
 definition sound_expr :: "env \<Rightarrow> expr \<Rightarrow> val result \<Rightarrow> bool"
 where
 "sound_expr \<rho> e r =
-  ((\<forall>\<eta> \<Gamma> \<tau>. \<eta> \<turnstile> \<rho> : \<Gamma> \<longrightarrow> has_type \<Sigma> \<eta> \<Gamma> e \<tau> \<longrightarrow> result_typed r (inst \<eta> \<tau>)) \<and> sound_name \<rho> e r)"
+  ((\<forall>\<eta> \<Gamma> \<tau>. \<eta> \<turnstile> \<rho> : \<Gamma> \<longrightarrow> has_type \<Sigma> \<Gamma> e \<tau> \<longrightarrow> result_typed r (inst \<eta> \<tau>)) \<and> sound_name \<rho> e r)"
 
 definition sound_exprs :: "env \<Rightarrow> expr located list \<Rightarrow> val list result \<Rightarrow> bool"
 where
 "sound_exprs \<rho> es rs =
-  (\<forall>\<eta> \<Gamma> \<tau>s. \<eta> \<turnstile> \<rho> : \<Gamma> \<longrightarrow> list_all2 (has_type_at \<Sigma> \<eta> \<Gamma>) es \<tau>s \<longrightarrow> results_typed rs (map (inst \<eta>) \<tau>s))"
+  (\<forall>\<eta> \<Gamma> \<tau>s. \<eta> \<turnstile> \<rho> : \<Gamma> \<longrightarrow> list_all2 (has_type_at \<Sigma> \<Gamma>) es \<tau>s \<longrightarrow> results_typed rs (map (inst \<eta>) \<tau>s))"
 
-abbreviation wf_envs :: "(var \<times> ty) list \<Rightarrow> env list result \<Rightarrow> cxt \<Rightarrow> bool"
+abbreviation wf_envs :: "(var \<Rightarrow> ty) \<Rightarrow> env list result \<Rightarrow> cxt \<Rightarrow> bool"
 where "wf_envs \<eta> r \<Gamma> \<equiv> wf_result (\<lambda>\<rho>s. \<forall>\<rho> \<in> set \<rho>s. \<eta> \<turnstile> \<rho> : \<Gamma>) r"
 
 definition sound_quals :: "env \<Rightarrow> qualifier located list \<Rightarrow> env list result \<Rightarrow> bool"
@@ -108,7 +104,7 @@ where
 definition sound_gen :: "env \<Rightarrow> var \<Rightarrow> val list \<Rightarrow> qualifier located list \<Rightarrow> env list result \<Rightarrow> bool"
 where
 "sound_gen \<rho> x us gs r =
-  (\<forall>\<eta> \<Gamma> \<tau> \<Delta>. \<eta> \<turnstile> \<rho> : \<Gamma> \<longrightarrow> fv \<tau> \<subseteq> fst ` set \<eta> \<longrightarrow> wf_ty \<Sigma> \<tau> \<longrightarrow> (\<forall>u \<in> set us. \<turnstile> u : Ty (inst \<eta> \<tau>))
+  (\<forall>\<eta> \<Gamma> \<tau> \<Delta>. \<eta> \<turnstile> \<rho> : \<Gamma> \<longrightarrow> wf_ty \<Sigma> \<tau> \<longrightarrow> (\<forall>u \<in> set us. \<turnstile> u : Ty (inst \<eta> \<tau>))
      \<longrightarrow> quals \<Sigma> (\<Gamma> \<otimes> fmupd x (Ty \<tau>) fmempty) gs = Ok \<Delta>
      \<longrightarrow> wf_envs \<eta> r (\<Gamma> \<otimes> fmupd x (Ty \<tau>) fmempty \<otimes> \<Delta>))"
 
@@ -118,7 +114,7 @@ where "wf_elems r \<tau> \<equiv> wf_result (\<lambda>vs. \<forall>v \<in> set v
 definition sound_comp :: "env list \<Rightarrow> expr located \<Rightarrow> val list result \<Rightarrow> bool"
 where
 "sound_comp \<rho>s e r =
-  (\<forall>\<eta> \<Gamma> \<tau>. (\<forall>\<rho> \<in> set \<rho>s. \<eta> \<turnstile> \<rho> : \<Gamma>) \<longrightarrow> has_type_at \<Sigma> \<eta> \<Gamma> e \<tau> \<longrightarrow> wf_elems r (inst \<eta> \<tau>))"
+  (\<forall>\<eta> \<Gamma> \<tau>. (\<forall>\<rho> \<in> set \<rho>s. \<eta> \<turnstile> \<rho> : \<Gamma>) \<longrightarrow> has_type_at \<Sigma> \<Gamma> e \<tau> \<longrightarrow> wf_elems r (inst \<eta> \<tau>))"
 
 abbreviation wf_entries :: "(str \<times> val) list result \<Rightarrow> ty \<Rightarrow> bool"
 where "wf_entries r \<tau> \<equiv> wf_result (\<lambda>\<delta>. \<forall>w v. (w, v) \<in> set \<delta> \<longrightarrow> \<turnstile> v : Ty \<tau>) r"
@@ -127,19 +123,19 @@ definition sound_entries :: "env list \<Rightarrow> expr located \<Rightarrow> e
 where
 "sound_entries \<rho>s e e' r =
   (\<forall>\<eta> \<Gamma> \<tau>. (\<forall>\<rho> \<in> set \<rho>s. \<eta> \<turnstile> \<rho> : \<Gamma>) \<longrightarrow> check_expr_at \<Sigma> \<Gamma> e (TyPrim str) = Ok ()
-     \<longrightarrow> has_type_at \<Sigma> \<eta> \<Gamma> e' \<tau> \<longrightarrow> wf_entries r (inst \<eta> \<tau>))"
+     \<longrightarrow> has_type_at \<Sigma> \<Gamma> e' \<tau> \<longrightarrow> wf_entries r (inst \<eta> \<tau>))"
 
 lemma sound_name_None [simp]:
   "\<lbrakk> dotted_name e = None ; \<forall>e' e''. e \<noteq> ExprSubscript e' e'' \<rbrakk> \<Longrightarrow> sound_name \<rho> e r"
   by (cases e) (simp_all add: sound_name_def expr_entry_def entry_of_def)
 
 lemma sound_compD:
-  "\<lbrakk> sound_comp \<rho>s e r ; \<forall>\<rho> \<in> set \<rho>s. \<eta> \<turnstile> \<rho> : \<Gamma> ; has_type_at \<Sigma> \<eta> \<Gamma> e \<tau> \<rbrakk> \<Longrightarrow> wf_elems r (inst \<eta> \<tau>)"
+  "\<lbrakk> sound_comp \<rho>s e r ; \<forall>\<rho> \<in> set \<rho>s. \<eta> \<turnstile> \<rho> : \<Gamma> ; has_type_at \<Sigma> \<Gamma> e \<tau> \<rbrakk> \<Longrightarrow> wf_elems r (inst \<eta> \<tau>)"
   unfolding sound_comp_def by blast
 
 lemma sound_entriesD:
   "\<lbrakk> sound_entries \<rho>s e e' r ; \<forall>\<rho> \<in> set \<rho>s. \<eta> \<turnstile> \<rho> : \<Gamma> ; check_expr_at \<Sigma> \<Gamma> e (TyPrim str) = Ok ()
-   ; has_type_at \<Sigma> \<eta> \<Gamma> e' \<tau> \<rbrakk>
+   ; has_type_at \<Sigma> \<Gamma> e' \<tau> \<rbrakk>
   \<Longrightarrow> wf_entries r (inst \<eta> \<tau>)"
   unfolding sound_entries_def by blast
 
@@ -166,8 +162,8 @@ lemma wf_val_inst_sub:
   assumes "\<turnstile> v : Ty (inst \<eta> \<sigma>)" and "\<Sigma> \<turnstile> \<sigma> <: \<tau>" and "wf_ty \<Sigma> \<tau>" and "wf_inst \<Sigma> \<eta>"
   shows "\<turnstile> v : Ty (inst \<eta> \<tau>)"
 proof -
-  have "wf_ty \<Sigma> \<sigma>" using wf_val_ty[OF assms(1)] by (rule wf_ty_subst_inv)
-  with subst_subty(1)[OF wf_class_table assms(2)] assms(3) have "\<Sigma> \<turnstile> inst \<eta> \<sigma> <: inst \<eta> \<tau>" by simp
+  have "wf_ty \<Sigma> \<sigma>" using wf_val_ty[OF assms(1)] by (rule wf_ty_inst_inv)
+  with inst_subty[OF wf_class_table assms(2)] assms(3) have "\<Sigma> \<turnstile> inst \<eta> \<sigma> <: inst \<eta> \<tau>" by simp
   from ValSub[OF assms(1) this inst_wf[OF assms(4, 3)]] show ?thesis .
 qed
 
@@ -193,7 +189,7 @@ lemma wf_none:
   shows "\<turnstile> VLit LitNone : Ty (inst \<eta> \<tau>)"
 proof -
   have "\<Sigma> \<turnstile> inst \<eta> (TyPrim NoneType) <: inst \<eta> \<tau>"
-    using subst_subty(1)[OF wf_class_table assms(1)] assms(2) by simp
+    using inst_subty[OF wf_class_table assms(1)] assms(2) by simp
   then have "\<Sigma> \<turnstile> TyLiteral LitNone <: inst \<eta> \<tau>" by (auto intro: SubtyLiteral)
   from ValSub[OF ValLit this inst_wf[OF assms(3, 2)]] show ?thesis .
 qed
@@ -202,20 +198,15 @@ subsection \<open>Well-formed types produced by the checker\<close>
 
 (* Types produced by the checker in a well-formed context: well-formed and over the type variables in scope *)
 lemma synth_wf_ty: "\<lbrakk> wf_cxt \<Sigma> \<Gamma> ; synth_expr \<Sigma> \<Gamma> e = Ok \<tau> \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> \<tau>"
-  and synth_tyvars: "\<lbrakk> wf_cxt \<Sigma> \<Gamma> ; synth_expr \<Sigma> \<Gamma> e = Ok \<tau> \<rbrakk> \<Longrightarrow> fv \<tau> \<subseteq> tyvars \<Gamma>"
-  using synth_wf(1)[OF wf_class_table] by blast+
+  using synth_wf(1)[OF wf_class_table] by blast
 
 lemma synth_at_wf_ty: "\<lbrakk> wf_cxt \<Sigma> \<Gamma> ; synth_expr_at \<Sigma> \<Gamma> e = Ok \<tau> \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> \<tau>"
   and synth_at_tyvars: "\<lbrakk> wf_cxt \<Sigma> \<Gamma> ; synth_expr_at \<Sigma> \<Gamma> e = Ok \<tau> \<rbrakk> \<Longrightarrow> fv \<tau> \<subseteq> tyvars \<Gamma>"
   using synth_wf(2)[OF wf_class_table] by blast+
 
-lemma resolve_type_tyvars: "\<lbrakk> wf_cxt \<Sigma> \<Gamma> ; resolve_type \<Sigma> \<Gamma> \<psi> = Ok \<tau> \<rbrakk> \<Longrightarrow> fv \<tau> \<subseteq> tyvars \<Gamma>"
-  using resolve_type_wf by blast
-
-(* Type arguments matched against well-formed \<tau>: well-formed and over the type variables of \<tau> *)
-lemma type_args_fv:
-  "\<lbrakk> wf_ty \<Sigma> \<tau> ; Subtyping.type_args_of (type_args \<Sigma> \<alpha>s \<sigma> \<tau>) \<alpha>s = Ok \<tau>s \<rbrakk>
-  \<Longrightarrow> \<forall>\<tau>' \<in> set \<tau>s. wf_ty \<Sigma> \<tau>' \<and> fv \<tau>' \<subseteq> fv \<tau>"
+(* Type arguments matched against well-formed \<tau>, well-formed *)
+lemma type_args_wf:
+  "\<lbrakk> wf_ty \<Sigma> \<tau> ; Subtyping.type_args_of (type_args \<Sigma> \<alpha>s \<sigma> \<tau>) \<alpha>s = Ok \<tau>s \<rbrakk> \<Longrightarrow> \<forall>\<tau>' \<in> set \<tau>s. wf_ty \<Sigma> \<tau>'"
   using type_args_range(1)[OF wf_class_table] by (blast dest: type_args_of_elem)
 
 lemma inferred_type_args_fv:
@@ -240,13 +231,13 @@ proof -
 qed
 
 (* Type at which an expression is typed in a well-formed context, well-formed *)
-lemma has_type_wf: "\<lbrakk> wf_cxt \<Sigma> \<Gamma> ; has_type \<Sigma> \<eta> \<Gamma> e \<tau> \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> \<tau>"
+lemma has_type_wf: "\<lbrakk> wf_cxt \<Sigma> \<Gamma> ; has_type \<Sigma> \<Gamma> e \<tau> \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> \<tau>"
   by (auto simp: has_type_def dest: synth_wf_ty)
 
-lemma has_type_at_wf: "\<lbrakk> wf_cxt \<Sigma> \<Gamma> ; has_type_at \<Sigma> \<eta> \<Gamma> e \<tau> \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> \<tau>"
+lemma has_type_at_wf: "\<lbrakk> wf_cxt \<Sigma> \<Gamma> ; has_type_at \<Sigma> \<Gamma> e \<tau> \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> \<tau>"
   by (cases e) (auto dest: has_type_wf)
 
-lemma typed_by_rule_wf: "\<lbrakk> wf_cxt \<Sigma> \<Gamma> ; typed_by_rule \<Sigma> \<eta> \<Gamma> e \<tau> \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> \<tau>"
+lemma typed_by_rule_wf: "\<lbrakk> wf_cxt \<Sigma> \<Gamma> ; typed_by_rule \<Sigma> \<Gamma> e \<tau> \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> \<tau>"
   by (auto simp: typed_by_rule_def dest: synth_wf_ty)
 
 subsection \<open>Checking\<close>
@@ -254,8 +245,7 @@ subsection \<open>Checking\<close>
 lemma sound_exprI:
   assumes synth: "\<And>\<eta> \<Gamma> \<tau>. \<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; synth_expr \<Sigma> \<Gamma> e = Ok \<tau> \<rbrakk> \<Longrightarrow> result_typed r (inst \<eta> \<tau>)"
   and check:
-    "\<And>\<eta> \<Gamma> \<tau>. \<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; check_expr' \<Sigma> \<Gamma> e \<tau> = Some (Ok ()) ; fv \<tau> \<subseteq> fst ` set \<eta> ; wf_ty \<Sigma> \<tau> \<rbrakk>
-      \<Longrightarrow> result_typed r (inst \<eta> \<tau>)"
+    "\<And>\<eta> \<Gamma> \<tau>. \<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; check_expr' \<Sigma> \<Gamma> e \<tau> = Some (Ok ()) ; wf_ty \<Sigma> \<tau> \<rbrakk> \<Longrightarrow> result_typed r (inst \<eta> \<tau>)"
   and call: "\<And>\<eta> \<Gamma>. \<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; call_stmt \<Sigma> \<Gamma> e \<rbrakk> \<Longrightarrow> result_typed r (inst \<eta> (TyPrim object))"
   and name: "sound_name \<rho> e r"
   shows "sound_expr \<rho> e r"
@@ -276,7 +266,7 @@ qed (simp_all add: assms(2-5))
 
 (* Expression without a call statement rule *)
 lemma sound_expr_typedI:
-  assumes "\<And>\<eta> \<Gamma> \<tau>. \<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; typed_by_rule \<Sigma> \<eta> \<Gamma> e \<tau> \<rbrakk> \<Longrightarrow> result_typed r (inst \<eta> \<tau>)"
+  assumes "\<And>\<eta> \<Gamma> \<tau>. \<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; typed_by_rule \<Sigma> \<Gamma> e \<tau> \<rbrakk> \<Longrightarrow> result_typed r (inst \<eta> \<tau>)"
     and "\<And>\<Gamma>. \<not> call_stmt \<Sigma> \<Gamma> e" and "dotted_name e = None" and "\<forall>e' e''. e \<noteq> ExprSubscript e' e''"
   shows "sound_expr \<rho> e r"
   by (rule sound_exprI) (auto intro: assms(1) simp: typed_by_rule_def assms(2-4))
@@ -286,12 +276,12 @@ lemma sound_expr_synth_at:
   by (cases e) (auto simp: sound_expr_def has_type_def)
 
 lemma sound_expr_check_at:
-  "\<lbrakk> sound_expr \<rho> (node e) r ; \<eta> \<turnstile> \<rho> : \<Gamma> ; check_expr_at \<Sigma> \<Gamma> e \<tau> = Ok () ; fv \<tau> \<subseteq> fst ` set \<eta> ; wf_ty \<Sigma> \<tau> \<rbrakk>
+  "\<lbrakk> sound_expr \<rho> (node e) r ; \<eta> \<turnstile> \<rho> : \<Gamma> ; check_expr_at \<Sigma> \<Gamma> e \<tau> = Ok () ; wf_ty \<Sigma> \<tau> \<rbrakk>
   \<Longrightarrow> result_typed r (inst \<eta> \<tau>)"
   by (cases e) (auto simp: sound_expr_def has_type_def)
 
 lemma sound_expr_has_type_at:
-  "\<lbrakk> sound_expr \<rho> (node e) r ; \<eta> \<turnstile> \<rho> : \<Gamma> ; has_type_at \<Sigma> \<eta> \<Gamma> e \<tau> \<rbrakk> \<Longrightarrow> result_typed r (inst \<eta> \<tau>)"
+  "\<lbrakk> sound_expr \<rho> (node e) r ; \<eta> \<turnstile> \<rho> : \<Gamma> ; has_type_at \<Sigma> \<Gamma> e \<tau> \<rbrakk> \<Longrightarrow> result_typed r (inst \<eta> \<tau>)"
   by (cases e) (auto simp: sound_expr_def)
 
 lemma sound_expr_name:
@@ -314,7 +304,7 @@ lemma sound_expr_class:
   using sound_expr_name[OF assms] by (auto dest: wf_type_entry)
 
 lemma sound_exprs_abort:
-  "\<lbrakk> sound_exprs \<rho> es (Aborts \<kappa>) ; \<eta> \<turnstile> \<rho> : \<Gamma> ; list_all2 (has_type_at \<Sigma> \<eta> \<Gamma>) es \<tau>s \<rbrakk> \<Longrightarrow> \<not> prevented \<kappa>"
+  "\<lbrakk> sound_exprs \<rho> es (Aborts \<kappa>) ; \<eta> \<turnstile> \<rho> : \<Gamma> ; list_all2 (has_type_at \<Sigma> \<Gamma>) es \<tau>s \<rbrakk> \<Longrightarrow> \<not> prevented \<kappa>"
   by (fastforce simp: sound_exprs_def)
 
 subsection \<open>Canonical forms\<close>
@@ -332,19 +322,18 @@ where
      \<and> list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) (map snd xvs) (field_types \<Sigma> C \<tau>s))" |
 "intro_typed Lam(\<rho>, xs, e) \<sigma> =
   (\<exists>\<eta> \<Gamma> \<sigma>s \<tau> \<Delta>. \<eta> \<turnstile> \<rho> : \<Gamma> \<and> length xs = length \<sigma>s \<and> params_cxt xs \<sigma>s = Ok \<Delta>
-     \<and> check_expr_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e \<tau> = Ok () \<and> fv (TyCallable \<sigma>s \<tau>) \<subseteq> fst ` set \<eta>
-     \<and> wf_ty \<Sigma> (TyCallable \<sigma>s \<tau>) \<and> \<sigma> = inst \<eta> (TyCallable \<sigma>s \<tau>))" |
+     \<and> check_expr_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e \<tau> = Ok () \<and> wf_ty \<Sigma> (TyCallable \<sigma>s \<tau>)
+     \<and> \<sigma> = inst \<eta> (TyCallable \<sigma>s \<tau>))" |
 "intro_typed Def(\<rho>, ds, i) \<sigma> =
   (\<exists>\<eta> \<Gamma> \<pi>s \<alpha>s \<sigma>s \<tau> \<tau>s. \<eta> \<turnstile> \<rho> : \<Gamma>
      \<and> those_sum (map (\<lambda>d. locate (pos_of d) (def_signature \<Sigma> \<Gamma> (node d))) ds) = Ok \<pi>s
      \<and> all_sum
          (map2 (check_def_at \<Sigma> (\<Gamma> \<otimes> fmap_of_list (zip (map (def_name \<circ> node) ds) (map signature_entry \<pi>s))))
            ds \<pi>s) = Ok ()
-     \<and> (\<forall>\<pi> \<in> set \<pi>s. fv_scheme \<pi> \<subseteq> fst ` set \<eta>)
      \<and> (\<forall>d \<in> set ds. case node d of Def _ \<alpha>s _ _ _ \<Rightarrow> set \<alpha>s \<inter> tyvars \<Gamma> = {})
      \<and> i < length ds \<and> \<pi>s ! i = TyScheme \<alpha>s (TyCallable \<sigma>s \<tau>)
      \<and> length \<tau>s = length \<alpha>s \<and> (\<forall>\<tau>' \<in> set \<tau>s. fv \<tau>' = {} \<and> wf_ty \<Sigma> \<tau>')
-     \<and> \<sigma> = subst \<tau>s \<alpha>s (inst (filter (\<lambda>(\<alpha>, _). \<alpha> \<notin> set \<alpha>s) \<eta>) (TyCallable \<sigma>s \<tau>)))" |
+     \<and> \<sigma> = subst \<tau>s \<alpha>s (inst (shadow \<alpha>s \<eta>) (TyCallable \<sigma>s \<tau>)))" |
 "intro_typed (VPrim f) \<sigma> =
   ((\<exists>\<A> q \<rho> x \<Gamma>. fmlookup (\<E> \<A>) q = Some \<rho> \<and> fmlookup \<rho> x = Some (VPrim f) \<and> fmlookup \<P> q = Some \<Gamma>
       \<and> fmlookup \<Gamma> x = Some (Ty \<sigma>))
@@ -356,23 +345,22 @@ lemma intro_def_wf:
     and "all_sum
            (map2 (check_def_at \<Sigma> (\<Gamma> \<otimes> fmap_of_list (zip (map (def_name \<circ> node) ds) (map signature_entry \<pi>s))))
              ds \<pi>s) = Ok ()"
-    and "\<forall>\<pi> \<in> set \<pi>s. fv_scheme \<pi> \<subseteq> fst ` set \<eta>"
     and "\<forall>d \<in> set ds. case node d of Def _ \<alpha>s _ _ _ \<Rightarrow> set \<alpha>s \<inter> tyvars \<Gamma> = {}"
     and "i < length ds" and "\<pi>s ! i = TyScheme \<alpha>s \<tau>" and "length \<tau>s = length \<alpha>s"
     and "\<forall>\<tau>' \<in> set \<tau>s. fv \<tau>' = {} \<and> wf_ty \<Sigma> \<tau>'"
-  shows "\<turnstile> Def(\<rho>, ds, i) : Ty (subst \<tau>s \<alpha>s (inst (filter (\<lambda>(\<alpha>, _). \<alpha> \<notin> set \<alpha>s) \<eta>) \<tau>))"
+  shows "\<turnstile> Def(\<rho>, ds, i) : Ty (subst \<tau>s \<alpha>s (inst (shadow \<alpha>s \<eta>) \<tau>))"
 proof -
   have def: "\<turnstile> Def(\<rho>, ds, i) : inst_entry \<eta> (signature_entry (TyScheme \<alpha>s \<tau>))"
-    by (rule ValDef[OF assms(1, 2) refl assms(3-7)])
+    by (rule ValDef[OF assms(1, 2) refl assms(3-6)])
   show ?thesis
   proof (cases "\<alpha>s = []")
     case True
-    with def assms(8) show ?thesis by simp
+    with def assms(7) show ?thesis by simp
   next
     case False
-    with def have "\<turnstile> Def(\<rho>, ds, i) : Scheme (TyScheme \<alpha>s (inst (filter (\<lambda>(\<alpha>, _). \<alpha> \<notin> set \<alpha>s) \<eta>) \<tau>))"
+    with def have "\<turnstile> Def(\<rho>, ds, i) : Scheme (TyScheme \<alpha>s (inst (shadow \<alpha>s \<eta>) \<tau>))"
       by (simp add: inst_entry_signature_entry)
-    from ValInst[OF this assms(8)] assms(9) show ?thesis by blast
+    from ValInst[OF this assms(7)] assms(8) show ?thesis by blast
   qed
 qed
 
@@ -408,7 +396,7 @@ proof (induction arbitrary: \<alpha>s \<sigma> \<tau>s rule: wf_val_wf_env.induc
   case (ValDef \<eta> \<rho> \<Gamma> ds \<pi>s \<Delta> i \<alpha>s' \<tau>)
   have "\<exists>\<sigma>s \<tau>'. \<tau> = TyCallable \<sigma>s \<tau>'" using ValDef by (blast intro: def_signatures_callable)
   then obtain \<sigma>s \<tau>' where \<tau>: "\<tau> = TyCallable \<sigma>s \<tau>'" by blast
-  from ValDef(10) have "\<alpha>s' = \<alpha>s" and "\<sigma> = inst (filter (\<lambda>(\<alpha>, _). \<alpha> \<notin> set \<alpha>s) \<eta>) \<tau>"
+  from ValDef(9) have "\<alpha>s' = \<alpha>s" and "\<sigma> = inst (shadow \<alpha>s \<eta>) \<tau>"
     by (auto simp: inst_entry_signature_entry split: if_splits)
   with ValDef \<tau> show ?case by simp blast
 next

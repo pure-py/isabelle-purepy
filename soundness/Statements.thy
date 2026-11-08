@@ -6,21 +6,21 @@ begin
 context evaluation
 begin
 
-(* Return type, well-formed and over the type variables bound by \<eta> *)
-fun wf_return :: "(var \<times> ty) list \<Rightarrow> ty option \<Rightarrow> bool"
+(* Return type, well-formed *)
+fun wf_return :: "ty option \<Rightarrow> bool"
 where
-"wf_return \<eta> (Some \<tau>) = (fv \<tau> \<subseteq> fst ` set \<eta> \<and> wf_ty \<Sigma> \<tau>)" |
-"wf_return \<eta> None = True"
+"wf_return (Some \<tau>) = wf_ty \<Sigma> \<tau>" |
+"wf_return None = True"
 
 (* Completion of a statement checked at \<Gamma> and return type \<zeta> with static outcome R, run in \<rho> *)
-fun wf_completion :: "(var \<times> ty) list \<Rightarrow> env \<Rightarrow> cxt \<Rightarrow> ty option \<Rightarrow> completion \<Rightarrow> static_outcome \<Rightarrow> bool"
+fun wf_completion :: "(var \<Rightarrow> ty) \<Rightarrow> env \<Rightarrow> cxt \<Rightarrow> ty option \<Rightarrow> completion \<Rightarrow> static_outcome \<Rightarrow> bool"
 where
 "wf_completion \<eta> \<rho> \<Gamma> \<zeta> (Assigns \<rho>') R =
   (\<exists>\<Delta>. bindings_of R = Some \<Delta> \<and> fmdom \<rho>' |\<subseteq>| fmdom \<Delta> \<and> \<eta> \<turnstile> \<rho> \<otimes> \<rho>' : \<Gamma> \<otimes> \<Delta>)" |
 "wf_completion \<eta> \<rho> \<Gamma> \<zeta> (Returns v) R = (\<forall>\<tau>. \<zeta> = Some \<tau> \<longrightarrow> \<turnstile> v : Ty (inst \<eta> \<tau>))" |
 "wf_completion \<eta> \<rho> \<Gamma> \<zeta> (Aborts\<^sub>\<omega> \<kappa>) R = (\<not> prevented \<kappa>)"
 
-fun wf_outcome :: "(var \<times> ty) list \<Rightarrow> env \<Rightarrow> cxt \<Rightarrow> ty option \<Rightarrow> outcome \<Rightarrow> static_outcome \<Rightarrow> bool"
+fun wf_outcome :: "(var \<Rightarrow> ty) \<Rightarrow> env \<Rightarrow> cxt \<Rightarrow> ty option \<Rightarrow> outcome \<Rightarrow> static_outcome \<Rightarrow> bool"
 where
 "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (vs, \<omega>) R = wf_completion \<eta> \<rho> \<Gamma> \<zeta> \<omega> R"
 
@@ -31,17 +31,17 @@ lemma wf_completion_bindings:
 definition sound_stmt :: "env \<Rightarrow> stmt \<Rightarrow> outcome \<Rightarrow> bool"
 where
 "sound_stmt \<rho> s o =
-  (\<forall>\<eta> \<Gamma> \<zeta> R. \<eta> \<turnstile> \<rho> : \<Gamma> \<longrightarrow> wf_return \<eta> \<zeta> \<longrightarrow> check_stmt \<Sigma> \<Gamma> \<zeta> s = Ok R
+  (\<forall>\<eta> \<Gamma> \<zeta> R. \<eta> \<turnstile> \<rho> : \<Gamma> \<longrightarrow> wf_return \<zeta> \<longrightarrow> check_stmt \<Sigma> \<Gamma> \<zeta> s = Ok R
      \<longrightarrow> wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R)"
 
 definition sound_elif :: "env \<Rightarrow> elif_block \<Rightarrow> outcome \<Rightarrow> bool"
 where
 "sound_elif \<rho> eb o =
-  (\<forall>\<eta> \<Gamma> \<zeta> Rs. \<eta> \<turnstile> \<rho> : \<Gamma> \<longrightarrow> wf_return \<eta> \<zeta> \<longrightarrow> those_sum (check_elif \<Sigma> \<Gamma> \<zeta> eb) = Ok Rs
+  (\<forall>\<eta> \<Gamma> \<zeta> Rs. \<eta> \<turnstile> \<rho> : \<Gamma> \<longrightarrow> wf_return \<zeta> \<longrightarrow> those_sum (check_elif \<Sigma> \<Gamma> \<zeta> eb) = Ok Rs
      \<longrightarrow> (\<exists>R \<in> set Rs. wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R))"
 
 lemma sound_stmt_at:
-  assumes "sound_stmt \<rho> (node s) o" and "\<eta> \<turnstile> \<rho> : \<Gamma>" and "wf_return \<eta> \<zeta>"
+  assumes "sound_stmt \<rho> (node s) o" and "\<eta> \<turnstile> \<rho> : \<Gamma>" and "wf_return \<zeta>"
     and "check_stmt_at \<Sigma> \<Gamma> \<zeta> s = Ok R"
   shows "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R"
 proof -
@@ -52,12 +52,12 @@ proof -
 qed
 
 lemma sound_stmtI:
-  assumes "\<And>\<eta> \<Gamma> \<zeta> R. \<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; wf_return \<eta> \<zeta> ; check_stmt \<Sigma> \<Gamma> \<zeta> s = Ok R \<rbrakk> \<Longrightarrow> wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R"
+  assumes "\<And>\<eta> \<Gamma> \<zeta> R. \<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; wf_return \<zeta> ; check_stmt \<Sigma> \<Gamma> \<zeta> s = Ok R \<rbrakk> \<Longrightarrow> wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R"
   shows "sound_stmt \<rho> s o"
   unfolding sound_stmt_def using assms by blast
 
 lemma sound_elifI:
-  assumes "\<And>\<eta> \<Gamma> \<zeta> Rs. \<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; wf_return \<eta> \<zeta> ; those_sum (check_elif \<Sigma> \<Gamma> \<zeta> eb) = Ok Rs \<rbrakk>
+  assumes "\<And>\<eta> \<Gamma> \<zeta> Rs. \<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; wf_return \<zeta> ; those_sum (check_elif \<Sigma> \<Gamma> \<zeta> eb) = Ok Rs \<rbrakk>
             \<Longrightarrow> \<exists>R \<in> set Rs. wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R"
   shows "sound_elif \<rho> eb o"
   unfolding sound_elif_def using assms by blast
@@ -75,8 +75,6 @@ proof (rule sound_stmtI)
     and "fmlookup \<Gamma> x = Some Unbound"
     by (auto simp: bind_sum_def check_unbound_def ensure_def split: sum.splits if_splits)
   with env have "fmlookup \<rho> x = Some VUnbound" by (auto dest!: wf_env_lookup wf_val_unbound wf_val_du)
-  moreover have "fv \<tau> \<subseteq> fst ` set \<eta>"
-    using env resolve_type_tyvars[OF wf_env_wf_cxt[OF env] \<tau>] by (rule wf_env_fv)
   moreover have "wf_ty \<Sigma> \<tau>" using resolve_type_wf[OF wf_env_wf_cxt[OF env] \<tau>] by simp
   ultimately have "\<eta> \<turnstile> \<rho> : fmupd x (DU \<tau>) \<Gamma>" using env by (intro wf_env_upd_cxt) (auto intro: ValUnbound)
   then show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (assigns\<^sub>o \<epsilon>) R" by (simp add: R)
@@ -88,14 +86,13 @@ lemma assign_sound:
 proof (rule sound_stmtI)
   fix \<eta> \<Gamma> \<zeta> R
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtAssign x \<pi> e) = Ok R"
-  have "\<exists>\<tau>. check_expr_at \<Sigma> \<Gamma> e \<tau> = Ok () \<and> R = Assigns\<^sub>R (fmupd x (Ty \<tau>) fmempty) None \<and> fv \<tau> \<subseteq> tyvars \<Gamma>
-    \<and> wf_ty \<Sigma> \<tau>"
+  have "\<exists>\<tau>. check_expr_at \<Sigma> \<Gamma> e \<tau> = Ok () \<and> R = Assigns\<^sub>R (fmupd x (Ty \<tau>) fmempty) None \<and> wf_ty \<Sigma> \<tau>"
   proof (cases \<pi>)
     case None
     with chk obtain \<tau> where "fmlookup \<Gamma> x = Some (DU \<tau>)" and "check_expr_at \<Sigma> \<Gamma> e \<tau> = Ok ()"
       and "R = Assigns\<^sub>R (fmupd x (Ty \<tau>) fmempty) None"
       by (auto simp: bind_sum_def split: sum.splits option.splits cxt_entry.splits)
-    with wf_cxt_lookup[OF wf_env_wf_cxt[OF env] this(1)] tyvars_entry[OF this(1)] show ?thesis by auto
+    with wf_cxt_lookup[OF wf_env_wf_cxt[OF env] this(1)] show ?thesis by auto
   next
     case (Some \<psi>)
     with chk obtain \<tau> where "resolve_type \<Sigma> \<Gamma> \<psi> = Ok \<tau>" and "check_expr_at \<Sigma> \<Gamma> e \<tau> = Ok ()"
@@ -104,25 +101,24 @@ proof (rule sound_stmtI)
     with resolve_type_wf[OF wf_env_wf_cxt[OF env] this(1)] show ?thesis by auto
   qed
   then obtain \<tau> where chk_e: "check_expr_at \<Sigma> \<Gamma> e \<tau> = Ok ()"
-    and R: "R = Assigns\<^sub>R (fmupd x (Ty \<tau>) fmempty) None" and fv_\<Gamma>: "fv \<tau> \<subseteq> tyvars \<Gamma>" and wf: "wf_ty \<Sigma> \<tau>"
+    and R: "R = Assigns\<^sub>R (fmupd x (Ty \<tau>) fmempty) None" and wf: "wf_ty \<Sigma> \<tau>"
     by blast
-  from env fv_\<Gamma> have fv: "fv \<tau> \<subseteq> fst ` set \<eta>" by (rule wf_env_fv)
   show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (mlet r (\<lambda>v. assigns\<^sub>o (fmupd x v \<epsilon>))) R"
   proof (cases r)
     case (Val v)
-    with assms env chk_e fv wf have "\<turnstile> v : Ty (inst \<eta> \<tau>)" by (auto dest: sound_expr_check_at)
-    then have "\<eta> \<turnstile> fmupd x v \<rho> : fmupd x (Ty \<tau>) \<Gamma>" using env fv wf by (intro wf_env_upd) auto
+    with assms env chk_e wf have "\<turnstile> v : Ty (inst \<eta> \<tau>)" by (auto dest: sound_expr_check_at)
+    then have "\<eta> \<turnstile> fmupd x v \<rho> : fmupd x (Ty \<tau>) \<Gamma>" using env wf by (intro wf_env_upd) auto
     then show ?thesis by (simp add: Val R)
   next
     case (Aborts \<kappa>)
-    with assms env chk_e fv wf show ?thesis by (auto simp: R dest: sound_expr_check_at)
+    with assms env chk_e wf show ?thesis by (auto simp: R dest: sound_expr_check_at)
   qed
 qed
 
 (* An expression statement synthesises or is a call statement *)
 lemma check_expr_stmt:
   assumes "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtExpr e) = Ok R"
-  shows "R = Assigns\<^sub>R fmempty None \<and> (\<exists>\<tau>. has_type_at \<Sigma> \<eta> \<Gamma> e \<tau>)"
+  shows "R = Assigns\<^sub>R fmempty None \<and> (\<exists>\<tau>. has_type_at \<Sigma> \<Gamma> e \<tau>)"
 proof (cases e)
   case (At p e')
   show ?thesis
@@ -142,7 +138,7 @@ lemma expr_stmt_sound:
 proof (rule sound_stmtI)
   fix \<eta> \<Gamma> \<zeta> R
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtExpr e) = Ok R"
-  from check_expr_stmt[OF chk] obtain \<tau> where R: "R = Assigns\<^sub>R fmempty None" and "has_type_at \<Sigma> \<eta> \<Gamma> e \<tau>"
+  from check_expr_stmt[OF chk] obtain \<tau> where R: "R = Assigns\<^sub>R fmempty None" and "has_type_at \<Sigma> \<Gamma> e \<tau>"
     by blast
   with assms env have "result_typed r (inst \<eta> \<tau>)" by (auto dest: sound_expr_has_type_at)
   then show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (mlet r (\<lambda>v. assigns\<^sub>o \<epsilon>)) R" using env by (cases r) (simp_all add: R)
@@ -165,18 +161,18 @@ lemma return_sound:
   shows "sound_stmt \<rho> (StmtReturn (Some e)) (mlet r returns\<^sub>o)"
 proof (rule sound_stmtI)
   fix \<eta> \<Gamma> \<zeta> R
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtReturn (Some e)) = Ok R"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtReturn (Some e)) = Ok R"
   from chk obtain \<tau> where \<zeta>: "\<zeta> = Some \<tau>" by (cases \<zeta>) auto
-  with ret have fv: "fv \<tau> \<subseteq> fst ` set \<eta>" and wf: "wf_ty \<Sigma> \<tau>" by simp_all
+  with ret have wf: "wf_ty \<Sigma> \<tau>" by simp
   from chk \<zeta> have "check_expr_at \<Sigma> \<Gamma> e \<tau> = Ok ()" by (auto simp: bind_sum_def split: sum.splits)
-  with assms env fv wf have "result_typed r (inst \<eta> \<tau>)" by (auto dest: sound_expr_check_at)
+  with assms env wf have "result_typed r (inst \<eta> \<tau>)" by (auto dest: sound_expr_check_at)
   then show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (mlet r returns\<^sub>o) R" by (cases r) (simp_all add: \<zeta>)
 qed
 
 lemma return_none_sound: "sound_stmt \<rho> (StmtReturn None) (returns\<^sub>o (VLit LitNone))"
 proof (rule sound_stmtI)
   fix \<eta> \<Gamma> \<zeta> R
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtReturn None) = Ok R"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtReturn None) = Ok R"
   from chk obtain \<tau> where \<zeta>: "\<zeta> = Some \<tau>" by (cases \<zeta>) auto
   with chk have "\<Sigma> \<turnstile> TyPrim NoneType <: \<tau>" by (auto split: if_splits)
   moreover have "wf_ty \<Sigma> \<tau>" using ret by (simp add: \<zeta>)
@@ -191,7 +187,6 @@ lemma wf_env_defs:
     and defs:
       "all_sum (map2 (check_def_at \<Sigma> (\<Gamma> \<otimes> fmap_of_list (zip (map (def_name \<circ> node) ds)
                                                      (map signature_entry \<pi>s)))) ds \<pi>s) = Ok ()"
-    and fv: "\<forall>\<pi> \<in> set \<pi>s. fv_scheme \<pi> \<subseteq> fst ` set \<eta>"
     and disjoint: "\<forall>d \<in> set ds. case node d of Def _ \<alpha>s _ _ _ \<Rightarrow> set \<alpha>s \<inter> tyvars \<Gamma> = {}"
     and vs: "vs = map (\<lambda>i. Def(\<rho>, ds, i)) [0..<length ds]"
   shows "\<eta> \<turnstile> \<rho> \<otimes> fmap_of_list (zip (map (def_name \<circ> node) ds) vs)
@@ -205,13 +200,12 @@ proof -
   have entry: "\<turnstile> Def(\<rho>, ds, i) : inst_entry \<eta> (signature_entry (\<pi>s ! i))" if "i < length ds" for i
   proof -
     obtain \<alpha>s \<tau> where \<pi>: "\<pi>s ! i = TyScheme \<alpha>s \<tau>" by (cases "\<pi>s ! i")
-    from ValDef[OF env sigs refl defs fv disjoint that \<pi>] \<pi> show ?thesis by simp
+    from ValDef[OF env sigs refl defs disjoint that \<pi>] \<pi> show ?thesis by simp
   qed
   then have typed: "list_all2 (\<lambda>v \<theta>. \<turnstile> v : inst_entry \<eta> \<theta>) vs (map signature_entry \<pi>s)"
     using len by (auto simp: vs list_all2_conv_all_nth)
   show ?thesis
   proof (rule wf_env_add[OF env])
-    show "tyvars ?\<Delta> \<subseteq> fst ` set \<eta>" using defs_wf[OF wf_env_wf_cxt[OF env] sigs] wf_env_tyvars[OF env] by blast
     show "wf_cxt \<Sigma> ?\<Delta>" using defs_wf[OF wf_env_wf_cxt[OF env] sigs] by blast
     show "fmdom ?\<rho>' |\<subseteq>| fmdom ?\<Delta>" using len by (simp add: vs)
   next
@@ -239,16 +233,6 @@ proof (rule sound_stmtI)
     and R: "R = Assigns\<^sub>R (fmap_of_list (zip ?xs (map signature_entry \<pi>s))) None"
     by (auto simp: Let_def bind_sum_def split: sum.splits option.splits)
   have len: "length \<pi>s = length ds" using those_sum_map_Ok[OF sigs] by (simp add: list_all2_lengthD)
-  have fv: "\<forall>\<pi> \<in> set \<pi>s. fv_scheme \<pi> \<subseteq> fst ` set \<eta>"
-  proof
-    fix \<pi>
-    assume "\<pi> \<in> set \<pi>s"
-    then obtain i where "i < length ds" and \<pi>: "\<pi> = \<pi>s ! i" using len by (auto simp: in_set_conv_nth)
-    with those_sum_map_Ok[OF sigs] have "def_signature \<Sigma> \<Gamma> (node (ds ! i)) = Ok \<pi>"
-      by (auto simp: list_all2_conv_all_nth)
-    from def_signature_wf[OF wf_env_wf_cxt[OF env] this] wf_env_tyvars[OF env] show "fv_scheme \<pi> \<subseteq> fst ` set \<eta>"
-      by blast
-  qed
   have disjoint: "\<forall>d \<in> set ds. case node d of Def _ \<alpha>s _ _ _ \<Rightarrow> set \<alpha>s \<inter> tyvars \<Gamma> = {}"
   proof
     fix d
@@ -258,7 +242,7 @@ proof (rule sound_stmtI)
       by (auto simp: list_all2_conv_all_nth)
     then show "case node d of Def _ \<alpha>s _ _ _ \<Rightarrow> set \<alpha>s \<inter> tyvars \<Gamma> = {}" by (rule def_signature_disjoint)
   qed
-  from wf_env_defs[OF env sigs defs fv disjoint vs] len
+  from wf_env_defs[OF env sigs defs disjoint vs] len
   show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (assigns\<^sub>o (fmap_of_list (zip ?xs vs))) R" by (simp add: R vs)
 qed
 
@@ -324,7 +308,7 @@ qed
 
 (* Entry \<theta>' above \<theta>: the values of \<theta> are values of \<theta>', and \<theta>' is a type scheme or a type variable only if \<theta> is
    the same *)
-definition entry_above :: "(var \<times> ty) list \<Rightarrow> cxt_entry \<Rightarrow> cxt_entry \<Rightarrow> bool"
+definition entry_above :: "(var \<Rightarrow> ty) \<Rightarrow> cxt_entry \<Rightarrow> cxt_entry \<Rightarrow> bool"
 where
 "entry_above \<eta> \<theta> \<theta>' =
   ((\<forall>v. \<turnstile> v : inst_entry \<eta> \<theta> \<longrightarrow> \<turnstile> v : inst_entry \<eta> \<theta>') \<and> (\<forall>\<pi>. \<theta>' = Scheme \<pi> \<longrightarrow> \<theta> = Scheme \<pi>)
@@ -414,7 +398,7 @@ lemma merge_entry_unbound:
 
 (* Context \<Delta>' above \<Delta>: every entry of \<Delta> below the entry of \<Delta>', and a variable of \<Delta>' absent from \<Delta> possibly
    unassigned *)
-definition cxt_above :: "(var \<times> ty) list \<Rightarrow> cxt \<Rightarrow> cxt \<Rightarrow> bool"
+definition cxt_above :: "(var \<Rightarrow> ty) \<Rightarrow> cxt \<Rightarrow> cxt \<Rightarrow> bool"
 where
 "cxt_above \<eta> \<Delta> \<Delta>' =
   (fmdom \<Delta> |\<subseteq>| fmdom \<Delta>'
@@ -568,10 +552,10 @@ qed
 (* Bindings of a branch, typed by the merge of the branches *)
 lemma wf_env_merge:
   assumes env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and env': "\<eta> \<turnstile> \<rho> \<otimes> \<rho>' : \<Gamma> \<otimes> \<Delta>" and dom: "fmdom \<rho>' |\<subseteq>| fmdom \<Delta>"
-    and above: "cxt_above \<eta> \<Delta> \<Delta>'" and tyvars: "tyvars \<Delta>' \<subseteq> fst ` set \<eta>" and wf: "wf_cxt \<Sigma> \<Delta>'"
+    and above: "cxt_above \<eta> \<Delta> \<Delta>'" and wf: "wf_cxt \<Sigma> \<Delta>'"
     and bound: "\<And>x. x |\<in>| fmdom \<Delta>' \<Longrightarrow> fmlookup \<Gamma> x = Some Unbound \<or> (\<exists>\<tau>. fmlookup \<Gamma> x = Some (DU \<tau>))"
   shows "\<eta> \<turnstile> \<rho> \<otimes> \<rho>' : \<Gamma> \<otimes> \<Delta>'"
-proof (rule wf_env_add[OF env tyvars _ _ wf])
+proof (rule wf_env_add[OF env _ _ wf])
   show "fmdom \<rho>' |\<subseteq>| fmdom \<Delta>'" using dom above unfolding cxt_above_def by (blast intro: order_trans)
 next
   fix x \<theta>'
@@ -615,11 +599,10 @@ proof -
     from assms(2) R have mem: "Ok (Assigns\<^sub>R \<Delta> r) \<in> set ms" by simp
     obtain \<Delta>' r' where R': "R' = Assigns\<^sub>R \<Delta>' r'" and above: "cxt_above \<eta> \<Delta> \<Delta>'"
       by (rule merges_above[OF assms(3) mem wf_env_wf_inst[OF env]]) (use wf in blast)
-    from merges_wf[OF assms(3)[unfolded R'] wf] have wf': "wf_cxt \<Sigma> \<Delta>'" and "tyvars \<Delta>' \<subseteq> tyvars \<Gamma>" by auto
-    with wf_env_tyvars[OF env] have tyvars': "tyvars \<Delta>' \<subseteq> fst ` set \<eta>" by blast
+    from merges_wf[OF assms(3)[unfolded R'] wf] have wf': "wf_cxt \<Sigma> \<Delta>'" by auto
     have bound': "fmlookup \<Gamma> x = Some Unbound \<or> (\<exists>\<tau>. fmlookup \<Gamma> x = Some (DU \<tau>))" if "x |\<in>| fmdom \<Delta>'" for x
       using assms(3) R' that bound by (auto elim: merges_dom)
-    have "\<eta> \<turnstile> \<rho> \<otimes> \<rho>' : \<Gamma> \<otimes> \<Delta>'" using env env' dom above tyvars' wf' bound' by (rule wf_env_merge)
+    have "\<eta> \<turnstile> \<rho> \<otimes> \<rho>' : \<Gamma> \<otimes> \<Delta>'" using env env' dom above wf' bound' by (rule wf_env_merge)
     moreover have "fmdom \<rho>' |\<subseteq>| fmdom \<Delta>'" using dom above unfolding cxt_above_def by (blast intro: order_trans)
     ultimately show ?thesis by (simp add: o Assigns R')
   qed (use assms(1) in \<open>simp_all add: o\<close>)
@@ -660,7 +643,7 @@ lemma if_true_sound:
   shows "sound_stmt \<rho> (StmtIf e s elifs else') o"
 proof (rule sound_stmtI)
   fix \<eta> \<Gamma> \<zeta> R
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtIf e s elifs else') = Ok R"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtIf e s elifs else') = Ok R"
   from check_if[OF chk] obtain Rs
     where Rs: "those_sum (check_stmt_at \<Sigma> \<Gamma> \<zeta> s # check_elif \<Sigma> \<Gamma> \<zeta> (elifs, else')) = Ok Rs"
     and R: "merges \<Sigma> (set (declares (StmtIf e s elifs else')))
@@ -677,7 +660,7 @@ lemma if_false_sound:
   shows "sound_stmt \<rho> (StmtIf e s elifs else') o"
 proof (rule sound_stmtI)
   fix \<eta> \<Gamma> \<zeta> R
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtIf e s elifs else') = Ok R"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtIf e s elifs else') = Ok R"
   from check_if[OF chk] obtain Rs
     where Rs: "those_sum (check_stmt_at \<Sigma> \<Gamma> \<zeta> s # check_elif \<Sigma> \<Gamma> \<zeta> (elifs, else')) = Ok Rs"
     and R: "merges \<Sigma> (set (declares (StmtIf e s elifs else')))
@@ -752,7 +735,7 @@ lemma match_sound:
   shows "sound_stmt \<rho> (StmtMatch e cases) (assigns\<^sub>o \<rho>' \<otimes> o)"
 proof (rule sound_stmtI)
   fix \<eta> \<Gamma> \<zeta> R
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtMatch e cases) = Ok R"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtMatch e cases) = Ok R"
   from check_match[OF chk] obtain \<sigma> \<Delta>s \<tau> L where synth: "synth_expr_at \<Sigma> \<Gamma> e = Ok \<sigma>"
     and mc: "match_cases \<Sigma> \<Gamma> \<sigma> (shapes \<Sigma> \<sigma> {}) (map fst cases) = Ok (\<Delta>s, \<tau>, L)"
     and merges: "merges \<Sigma> (set (declares (StmtMatch e cases))) (match_branches \<Sigma> \<Gamma> \<zeta> \<Delta>s cases \<tau> L) = Ok R"
@@ -761,7 +744,6 @@ proof (rule sound_stmtI)
   have v: "\<turnstile> v : Ty (inst \<eta> \<sigma>)" using sound_expr_synth_at[OF assms(1) env synth] by simp
   note wf\<Gamma> = wf_env_wf_cxt[OF env]
   have wf\<sigma>: "wf_ty \<Sigma> \<sigma>" and fv\<sigma>: "fv \<sigma> \<subseteq> tyvars \<Gamma>" using synth_at_wf_ty[OF wf\<Gamma> synth] synth_at_tyvars[OF wf\<Gamma> synth] by auto
-  have fv\<sigma>': "fv \<sigma> \<subseteq> fst ` set \<eta>" using fv\<sigma> wf_env_tyvars[OF env] by blast
   have len: "length \<Delta>s = length cases" using match_cases_length[OF mc] by simp
   from merges_Ok[OF merges] obtain Rs where Rs: "those_sum ?ms = Ok Rs" by blast
   note member = match_branches_member[OF mc wf\<Gamma> wf\<sigma> fv\<sigma>]
@@ -776,7 +758,7 @@ proof (rule sound_stmtI)
     assume "Ok (Assigns\<^sub>R \<Delta> r) \<in> set ?ms" and "x |\<in>| fmdom \<Delta>"
     then show "fmlookup \<Gamma> x = Some Unbound \<or> (\<exists>\<tau>. fmlookup \<Gamma> x = Some (DU \<tau>))" by (rule member(2))
   qed
-  from dispatch_sound[OF mc env wf\<sigma> fv\<sigma>' v] show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (assigns\<^sub>o \<rho>' \<otimes> o) R"
+  from dispatch_sound[OF mc env wf\<sigma> v] show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (assigns\<^sub>o \<rho>' \<otimes> o) R"
   proof (elim disjE exE conjE)
     fix i \<rho>''
     assume i: "i < length cases" and disp': "dispatch \<rho> v cases = Val (\<rho>'', snd (cases ! i))"
@@ -837,9 +819,8 @@ proof (rule sound_stmtI)
     by blast
   have v: "\<turnstile> v : Ty (inst \<eta> \<sigma>)" using sound_expr_synth_at[OF assms(1) env synth] by simp
   note wf\<Gamma> = wf_env_wf_cxt[OF env]
-  have wf\<sigma>: "wf_ty \<Sigma> \<sigma>" and fv\<sigma>: "fv \<sigma> \<subseteq> fst ` set \<eta>"
-    using synth_at_wf_ty[OF wf\<Gamma> synth] synth_at_tyvars[OF wf\<Gamma> synth] wf_env_tyvars[OF env] by auto
-  from dispatch_sound[OF mc env wf\<sigma> fv\<sigma> v] disp show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (aborts\<^sub>o \<kappa>) R" by auto
+  have wf\<sigma>: "wf_ty \<Sigma> \<sigma>" using synth_at_wf_ty[OF wf\<Gamma> synth] .
+  from dispatch_sound[OF mc env wf\<sigma> v] disp show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (aborts\<^sub>o \<kappa>) R" by auto
 qed
 
 lemma seq_sound:
@@ -847,7 +828,7 @@ lemma seq_sound:
   shows "sound_stmt \<rho> (StmtSeq s s') ((us, Assigns \<rho>') \<otimes> o)"
 proof (rule sound_stmtI)
   fix \<eta> \<Gamma> \<zeta> R
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtSeq s s') = Ok R"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtSeq s s') = Ok R"
   from check_seq[OF chk] obtain \<Delta> r R' where chk1: "check_stmt_at \<Sigma> \<Gamma> \<zeta> s = Ok (Assigns\<^sub>R \<Delta> r)"
     and chk2: "check_stmt_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) \<zeta> s' = Ok R'" and R: "R = Assigns\<^sub>R \<Delta> r \<otimes> R'" by blast
   have o1: "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (us, Assigns \<rho>') (Assigns\<^sub>R \<Delta> r)"
@@ -871,7 +852,7 @@ lemma seq_exit_sound:
   shows "sound_stmt \<rho> (StmtSeq s s') (us, \<omega>)"
 proof (rule sound_stmtI)
   fix \<eta> \<Gamma> \<zeta> R
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtSeq s s') = Ok R"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<zeta>" and chk: "check_stmt \<Sigma> \<Gamma> \<zeta> (StmtSeq s s') = Ok R"
   from check_seq[OF chk] obtain \<Delta> r where "check_stmt_at \<Sigma> \<Gamma> \<zeta> s = Ok (Assigns\<^sub>R \<Delta> r)" by blast
   with assms(1) env ret have "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (us, \<omega>) (Assigns\<^sub>R \<Delta> r)" by (rule sound_stmt_at)
   then show "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (us, \<omega>) R" using assms(2) by (cases \<omega>) (simp_all, blast)
@@ -885,7 +866,7 @@ lemma else_sound:
   shows "sound_elif \<rho> ([], Some s) o"
 proof (rule sound_elifI)
   fix \<eta> \<Gamma> \<zeta> Rs
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>" and chk: "those_sum (check_elif \<Sigma> \<Gamma> \<zeta> ([], Some s)) = Ok Rs"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<zeta>" and chk: "those_sum (check_elif \<Sigma> \<Gamma> \<zeta> ([], Some s)) = Ok Rs"
   from chk obtain R where "check_stmt_at \<Sigma> \<Gamma> \<zeta> s = Ok R" and "Rs = [R]"
     by (auto simp: bind_sum_def split: sum.splits)
   with assms env ret show "\<exists>R \<in> set Rs. wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R" by (auto intro: sound_stmt_at)
@@ -896,7 +877,7 @@ lemma elif_true_sound:
   shows "sound_elif \<rho> ((e, s) # elifs, else') o"
 proof (rule sound_elifI)
   fix \<eta> \<Gamma> \<zeta> Rs
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<zeta>"
     and chk: "those_sum (check_elif \<Sigma> \<Gamma> \<zeta> ((e, s) # elifs, else')) = Ok Rs"
   from chk obtain R Rs' where R: "check_stmt_at \<Sigma> \<Gamma> \<zeta> s = Ok R" and Rs: "Rs = R # Rs'"
     by (auto simp: bind_sum_def split: sum.splits)
@@ -909,7 +890,7 @@ lemma elif_false_sound:
   shows "sound_elif \<rho> ((e, s) # elifs, else') o"
 proof (rule sound_elifI)
   fix \<eta> \<Gamma> \<zeta> Rs
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<eta> \<zeta>"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and ret: "wf_return \<zeta>"
     and chk: "those_sum (check_elif \<Sigma> \<Gamma> \<zeta> ((e, s) # elifs, else')) = Ok Rs"
   from chk obtain R Rs' where "those_sum (check_elif \<Sigma> \<Gamma> \<zeta> (elifs, else')) = Ok Rs'" and "Rs = R # Rs'"
     by (auto simp: bind_sum_def split: sum.splits)
@@ -940,7 +921,7 @@ lemma call_def_sound:
 proof (rule call_callable_exprI[OF assms(1, 2)])
   fix \<eta> \<Gamma> \<sigma>s \<tau>'
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and v: "\<turnstile> Def(\<rho>', ds, j) : Ty (inst \<eta> (TyCallable \<sigma>s \<tau>'))"
-    and es: "list_all2 (has_type_at \<Sigma> \<eta> \<Gamma>) es \<sigma>s"
+    and es: "list_all2 (has_type_at \<Sigma> \<Gamma>) es \<sigma>s"
   let ?xs = "map (def_name \<circ> node) ds"
   from v assms(5) env es obtain \<sigma>s' \<tau>''
     where intro: "intro_typed Def(\<rho>', ds, j) (TyCallable \<sigma>s' \<tau>'')" and us: "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty \<sigma>) us \<sigma>s'"
@@ -952,15 +933,13 @@ proof (rule call_callable_exprI[OF assms(1, 2)])
       and sigs: "those_sum (map (\<lambda>d. locate (pos_of d) (def_signature \<Sigma> \<Gamma>' (node d))) ds) = Ok \<pi>s"
       and defs: "all_sum (map2 (check_def_at \<Sigma> (\<Gamma>' \<otimes> fmap_of_list (zip ?xs (map signature_entry \<pi>s)))) ds \<pi>s)
                   = Ok ()"
-      and fv: "\<forall>\<pi> \<in> set \<pi>s. fv_scheme \<pi> \<subseteq> fst ` set \<eta>'"
       and disjoint: "\<forall>d \<in> set ds. case node d of Def _ \<alpha>s _ _ _ \<Rightarrow> set \<alpha>s \<inter> tyvars \<Gamma>' = {}"
       and \<pi>: "\<pi>s ! j = TyScheme \<alpha>s' (TyCallable \<sigma>s\<^sub>d \<tau>\<^sub>d)"
       and len_\<tau>s: "length \<tau>s = length \<alpha>s'" and closed_wf: "\<forall>\<tau>' \<in> set \<tau>s. fv \<tau>' = {} \<and> wf_ty \<Sigma> \<tau>'"
-      and eq: "TyCallable \<sigma>s' \<tau>'' = subst \<tau>s \<alpha>s' (inst (filter (\<lambda>(\<alpha>, _). \<alpha> \<notin> set \<alpha>s') \<eta>') (TyCallable \<sigma>s\<^sub>d \<tau>\<^sub>d))"
+      and eq: "TyCallable \<sigma>s' \<tau>'' = subst \<tau>s \<alpha>s' (inst (shadow \<alpha>s' \<eta>') (TyCallable \<sigma>s\<^sub>d \<tau>\<^sub>d))"
       by blast
     let ?\<Delta> = "fmap_of_list (zip ?xs (map signature_entry \<pi>s))"
     let ?\<eta> = "inst_params \<alpha>s \<tau>s \<eta>'"
-    from closed_wf have closed: "\<forall>\<tau>' \<in> set \<tau>s. fv \<tau>' = {}" and wf_\<tau>s: "\<forall>\<tau>' \<in> set \<tau>s. wf_ty \<Sigma> \<tau>'" by blast+
     have len: "length \<pi>s = length ds" using those_sum_map_Ok[OF sigs] by (simp add: list_all2_lengthD)
     have sig: "def_signature \<Sigma> \<Gamma>' (Def f \<alpha>s xps \<psi> s) = Ok (TyScheme \<alpha>s' (TyCallable \<sigma>s\<^sub>d \<tau>\<^sub>d))"
       using those_sum_map_Ok[OF sigs] j by (auto simp: list_all2_conv_all_nth d[symmetric] \<pi>[symmetric])
@@ -978,35 +957,26 @@ proof (rule call_callable_exprI[OF assms(1, 2)])
       and R: "R = Returns\<^sub>R \<or> (\<exists>\<Delta>'' r. R = Assigns\<^sub>R \<Delta>'' r \<and> \<Sigma> \<turnstile> \<tau>\<^sub>d \<approx> TyPrim NoneType)"
       by (rule check_def_Ok)
     (* Instantiation of the body: that of the closure, with the type parameters at the type arguments *)
-    have closed': "closed_inst \<eta>'" using env' by (rule wf_env_closed)
-    have closed_\<eta>: "closed_inst ?\<eta>" using closed' closed by (rule closed_inst_params)
-    have wf_\<eta>: "wf_inst \<Sigma> ?\<eta>" using wf_env_wf_inst[OF env'] wf_\<tau>s by (rule wf_inst_params)
-    have fst_\<eta>: "fst ` set ?\<eta> = set \<alpha>s \<union> fst ` set \<eta>'" using len_\<tau>s \<alpha>s' by (simp add: fst_inst_params)
-    have inst_\<eta>: "inst ?\<eta> \<sigma> = subst \<tau>s \<alpha>s (inst (filter (\<lambda>(\<alpha>, _). \<alpha> \<notin> set \<alpha>s) \<eta>') \<sigma>)" for \<sigma>
-      using closed' len_\<tau>s \<alpha>s' by (simp add: inst_inst_params)
+    have wf_\<eta>: "wf_inst \<Sigma> ?\<eta>" using wf_env_wf_inst[OF env'] closed_wf by (rule wf_inst_params)
+    have inst_\<eta>: "inst ?\<eta> \<sigma> = subst \<tau>s \<alpha>s (inst (shadow \<alpha>s \<eta>') \<sigma>)" for \<sigma>
+      using wf_env_wf_inst[OF env'] len_\<tau>s \<alpha>s' by (simp add: inst_inst_params)
     from eq have \<sigma>s': "\<sigma>s' = map (inst ?\<eta>) \<sigma>s\<^sub>d" and \<tau>'': "\<tau>'' = inst ?\<eta> \<tau>\<^sub>d" by (simp_all add: \<alpha>s' inst_\<eta>)
-    from len j have "\<pi>s ! j \<in> set \<pi>s" by simp
-    with fv have "fv_scheme (\<pi>s ! j) \<subseteq> fst ` set \<eta>'" by blast
-    then have "fv (TyCallable \<sigma>s\<^sub>d \<tau>\<^sub>d) - set \<alpha>s \<subseteq> fst ` set \<eta>'" by (simp add: \<pi>')
-    then have "fv (TyCallable \<sigma>s\<^sub>d \<tau>\<^sub>d) \<subseteq> fst ` set ?\<eta>" unfolding fst_\<eta> by blast
-    then have fv_\<sigma>s: "\<forall>\<sigma> \<in> set \<sigma>s\<^sub>d. fv \<sigma> \<subseteq> fst ` set ?\<eta>" and fv_\<tau>: "fv \<tau>\<^sub>d \<subseteq> fst ` set ?\<eta>"
-      by (auto simp: UN_subset_iff)
     (* Environment of the body *)
     have env_defs: "\<eta>' \<turnstile> \<rho>' \<otimes> fmap_of_list (zip ?xs vs) : \<Gamma>' \<otimes> ?\<Delta>"
-      using env' sigs defs fv disjoint vs by (rule wf_env_defs)
+      using env' sigs defs disjoint vs by (rule wf_env_defs)
     have "?\<eta> \<turnstile> \<rho>' \<otimes> fmap_of_list (zip ?xs vs) : \<Gamma>' \<otimes> ?\<Delta>"
-    proof (rule wf_env_inst[OF env_defs closed_\<eta> wf_\<eta>])
+    proof (rule wf_env_inst[OF env_defs wf_\<eta>])
       fix \<alpha>
       assume "\<alpha> \<in> tyvars (\<Gamma>' \<otimes> ?\<Delta>)"
       with tyvars_add defs_wf[OF wf_env_wf_cxt[OF env'] sigs] have "\<alpha> \<in> tyvars \<Gamma>'" by blast
       with disjoint_j have "\<alpha> \<notin> set \<alpha>s" by blast
-      then show "map_of ?\<eta> \<alpha> = map_of \<eta>' \<alpha>" using len_\<tau>s \<alpha>s' by (simp add: map_of_inst_params)
+      then show "?\<eta> \<alpha> = \<eta>' \<alpha>" by simp
     qed
     then have env_params: "?\<eta> \<turnstile> \<rho>' \<otimes> fmap_of_list (zip ?xs vs) : \<Gamma>' \<otimes> ?\<Delta> \<otimes> fmconst (set \<alpha>s) TypeVar"
-      by (rule wf_env_type_params) (simp add: fst_\<eta>)
+      by (rule wf_env_type_params)
     from us have us': "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty (inst ?\<eta> \<sigma>)) us \<sigma>s\<^sub>d" by (simp add: \<sigma>s' list.rel_map)
     have len_xs: "length (map fst xps) = length \<sigma>s\<^sub>d" using len_\<sigma>s by simp
-    from wf_env_params[OF env_params \<Delta>' len_xs us' fv_\<sigma>s]
+    from wf_env_params[OF env_params \<Delta>' len_xs us']
     have "?\<eta> \<turnstile> \<rho>' \<otimes> fmap_of_list (zip ?xs vs) \<otimes> fmap_of_list (zip (map fst xps) us)
       : \<Gamma>' \<otimes> ?\<Delta> \<otimes> fmconst (set \<alpha>s) TypeVar \<otimes> \<Delta>'" .
     then have env_body: "?\<eta> \<turnstile> \<rho>' \<otimes> fmap_of_list (zip ?xs vs) \<otimes> fmap_of_list (zip (map fst xps) us) \<otimes> \<rho>s
@@ -1014,7 +984,7 @@ proof (rule call_callable_exprI[OF assms(1, 2)])
       using scope_stmt_Some[OF scope] scope_stmt_Some[OF \<Delta>] by (simp add: wf_env_unbound)
     have "wf_outcome ?\<eta> (\<rho>' \<otimes> fmap_of_list (zip ?xs vs) \<otimes> fmap_of_list (zip (map fst xps) us) \<otimes> \<rho>s)
       (\<Gamma>' \<otimes> ?\<Delta> \<otimes> fmconst (set \<alpha>s) TypeVar \<otimes> \<Delta>' \<otimes> \<Delta>) (Some \<tau>\<^sub>d) ([], \<omega>) R"
-      using body env_body fv_\<tau> wf_\<tau>\<^sub>d chk by (intro sound_stmt_at) simp_all
+      using body env_body wf_\<tau>\<^sub>d chk by (intro sound_stmt_at) simp_all
     then have "result_typed (result_of \<omega>) \<tau>''"
     proof (cases \<omega>)
       case (Assigns \<rho>'')

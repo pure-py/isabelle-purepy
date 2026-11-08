@@ -255,6 +255,22 @@ proof -
   ultimately show ?thesis by (simp add: instantiated_ancestor_def map_of_map)
 qed
 
+lemma instantiated_ancestor_inst:
+  assumes "wf_class_table \<Sigma>" and "wf_ty \<Sigma> (TyClass C \<tau>s)" and "D \<in> set (ancestors \<Sigma> C)"
+  shows "instantiated_ancestor \<Sigma> C (map (inst \<eta>) \<tau>s) D = map (inst \<eta>) (instantiated_ancestor \<Sigma> C \<tau>s D)"
+proof -
+  have "finite (\<Union> (fv ` set \<tau>s))" by (simp add: finite_fv)
+  then obtain \<alpha>s where \<alpha>s: "\<And>\<tau>. fv \<tau> \<subseteq> \<Union> (fv ` set \<tau>s) \<Longrightarrow> inst \<eta> \<tau> = subst (map \<eta> \<alpha>s) \<alpha>s \<tau>"
+    using inst_subst_cover by blast
+  have \<tau>s: "map (inst \<eta>) \<tau>s = map (subst (map \<eta> \<alpha>s) \<alpha>s) \<tau>s" by (intro map_cong[OF refl] \<alpha>s) auto
+  have anc: "map (subst (map \<eta> \<alpha>s) \<alpha>s) (instantiated_ancestor \<Sigma> C \<tau>s D)
+             = map (inst \<eta>) (instantiated_ancestor \<Sigma> C \<tau>s D)"
+    using instantiated_ancestor_wf[OF assms] by (intro map_cong[OF refl]) (auto simp: \<alpha>s)
+  have "C |\<in>| fmdom \<Sigma>" and "length \<tau>s = length (type_params \<Sigma> C)" using assms(2) by simp_all
+  from instantiated_ancestor_subst[OF assms(1) this assms(3), of "map \<eta> \<alpha>s" \<alpha>s] show ?thesis
+    unfolding \<tau>s by (simp add: anc)
+qed
+
 (* Type arguments of ancestor D of class C at \<tau>s, as the substitution of \<tau>s into those at the type parameters *)
 lemma instantiated_ancestor_params:
   assumes "wf_class_table \<Sigma>" and "C |\<in>| fmdom \<Sigma>" and "length \<tau>s = length (type_params \<Sigma> C)"
@@ -1096,7 +1112,7 @@ proof (induction \<tau> arbitrary: \<Delta>)
   have "\<turnstile> v : Ty (inst \<eta> ?m\<^sub>1) \<or> \<turnstile> v : Ty (inst \<eta> ?m\<^sub>2)"
     using TyUnion.prems(1, 6) TyUnion.IH(1)[OF _ c\<^sub>1] TyUnion.IH(2)[OF _ c\<^sub>2] TyUnion.prems(3-5) by auto
   moreover have "\<Sigma> \<turnstile> inst \<eta> ?m\<^sub>1 <: inst \<eta> (?m\<^sub>1 \<squnion>\<^bsub>\<Sigma>\<^esub> ?m\<^sub>2)" and "\<Sigma> \<turnstile> inst \<eta> ?m\<^sub>2 <: inst \<eta> (?m\<^sub>1 \<squnion>\<^bsub>\<Sigma>\<^esub> ?m\<^sub>2)"
-    using subst_subty(1)[OF wf_class_table join_upper(1)] subst_subty(1)[OF wf_class_table join_upper(2)]
+    using inst_subty[OF wf_class_table join_upper(1)] inst_subty[OF wf_class_table join_upper(2)]
       wf\<^sub>1 wf\<^sub>2 wf_join[OF wf\<^sub>1 wf\<^sub>2]
     by blast+
   ultimately show ?case using inst_wf[OF TyUnion.prems(5) wf_join[OF wf\<^sub>1 wf\<^sub>2]] by (auto intro: ValSub)
@@ -1112,7 +1128,7 @@ proof (induction \<tau>)
   have "\<turnstile> v : Ty (inst \<eta> ?r\<^sub>1) \<or> \<turnstile> v : Ty (inst \<eta> ?r\<^sub>2)"
     using TyUnion.prems TyUnion.IH by auto
   moreover have "\<Sigma> \<turnstile> inst \<eta> ?r\<^sub>1 <: inst \<eta> (?r\<^sub>1 \<squnion>\<^bsub>\<Sigma>\<^esub> ?r\<^sub>2)" and "\<Sigma> \<turnstile> inst \<eta> ?r\<^sub>2 <: inst \<eta> (?r\<^sub>1 \<squnion>\<^bsub>\<Sigma>\<^esub> ?r\<^sub>2)"
-    using subst_subty(1)[OF wf_class_table join_upper(1)] subst_subty(1)[OF wf_class_table join_upper(2)]
+    using inst_subty[OF wf_class_table join_upper(1)] inst_subty[OF wf_class_table join_upper(2)]
       wf\<^sub>1 wf\<^sub>2 wf_join[OF wf\<^sub>1 wf\<^sub>2]
     by blast+
   ultimately show ?case using inst_wf[OF TyUnion.prems(3) wf_join[OF wf\<^sub>1 wf\<^sub>2]] by (auto intro: ValSub)
@@ -1301,7 +1317,7 @@ qed
 lemma instance_at_sub:
   assumes inst: "instance_at \<Sigma> C \<sigma> = Instance \<sigma>s" and nonunion: "\<not> is_union \<sigma>" and wf: "wf_ty \<Sigma> \<sigma>"
     and C: "C |\<in>| fmdom \<Sigma>" and sub: "\<Sigma> \<turnstile> TyClass D \<upsilon>s <: inst \<eta> \<sigma>" and wfD: "wf_ty \<Sigma> (TyClass D \<upsilon>s)"
-    and anc: "C \<in> set (ancestors \<Sigma> D)" and closed: "closed_inst \<eta>"
+    and anc: "C \<in> set (ancestors \<Sigma> D)"
   shows "\<Sigma> \<turnstile> TyClass D \<upsilon>s <: inst \<eta> (TyClass C \<sigma>s)"
 proof -
   let ?\<alpha>s = "type_params \<Sigma> C" and ?\<tau>s' = "instantiated_ancestor \<Sigma> D \<upsilon>s C"
@@ -1335,8 +1351,9 @@ proof -
         using instantiated_ancestor_params[OF wf_class_table E len\<^sub>D CE] .
       finally have \<tau>s': "?\<tau>s' = map (subst (instantiated_ancestor \<Sigma> D \<upsilon>s E) ?\<beta>s)
                                 (instantiated_ancestor \<Sigma> E (map TyVar ?\<beta>s) C)" .
+      have wfE: "wf_ty \<Sigma> (TyClass E \<sigma>s\<^sub>E)" using wf unfolding TyClass .
       have "map (inst \<eta>) \<sigma>s = instantiated_ancestor \<Sigma> E (map (inst \<eta>) \<sigma>s\<^sub>E) C"
-        unfolding \<sigma>s using instantiated_ancestor_subst[OF wf_class_table E len\<^sub>E CE] by simp
+        unfolding \<sigma>s by (simp add: instantiated_ancestor_inst[OF wf_class_table wfE CE])
       also have "\<dots> = map (subst (map (inst \<eta>) \<sigma>s\<^sub>E) ?\<beta>s) (instantiated_ancestor \<Sigma> E (map TyVar ?\<beta>s) C)"
         using instantiated_ancestor_params[OF wf_class_table E _ CE, of "map (inst \<eta>) \<sigma>s\<^sub>E"] len\<^sub>E by simp
       finally show ?thesis
@@ -1375,9 +1392,12 @@ proof -
           and mj: "match_args (?\<rho>s ! j) (\<sigma>s\<^sub>E ! j) = Matched \<gamma>'" and lookj: "fmlookup \<gamma>' \<alpha> = Some (\<sigma>s ! i)"
           and len: "length ?\<rho>s = length \<sigma>s\<^sub>E"
           by blast
-        have "\<Sigma> \<turnstile> subst ?\<tau>s' ?\<alpha>s (?\<rho>s ! j) \<approx> inst \<eta> (\<sigma>s\<^sub>E ! j)" using equiv' j by (auto simp: list_all2_conv_all_nth)
-        from match_args_unique[OF wf_class_table mj lookj _ _ this] wf\<rho>s wf\<sigma>s\<^sub>E j len
-        have "\<Sigma> \<turnstile> subst ?\<tau>s' ?\<alpha>s (TyVar \<alpha>) \<approx> inst \<eta> (\<sigma>s ! i)" by auto
+        have eq: "\<Sigma> \<turnstile> subst ?\<tau>s' ?\<alpha>s (?\<rho>s ! j) \<approx> inst \<eta> (\<sigma>s\<^sub>E ! j)" using equiv' j by (auto simp: list_all2_conv_all_nth)
+        obtain \<beta>s where e1: "inst \<eta> (\<sigma>s\<^sub>E ! j) = subst (map \<eta> \<beta>s) \<beta>s (\<sigma>s\<^sub>E ! j)"
+          and e2: "inst \<eta> (\<sigma>s ! i) = subst (map \<eta> \<beta>s) \<beta>s (\<sigma>s ! i)"
+          by (rule inst_as_subst_pair)
+        from match_args_unique[OF wf_class_table mj lookj _ _ eq[unfolded e1]] wf\<rho>s wf\<sigma>s\<^sub>E j len
+        have "\<Sigma> \<turnstile> subst ?\<tau>s' ?\<alpha>s (TyVar \<alpha>) \<approx> inst \<eta> (\<sigma>s ! i)" unfolding e2 by auto
         moreover have "subst (map (inst \<eta>) \<sigma>s) ?\<alpha>s (TyVar \<alpha>) = inst \<eta> (\<sigma>s ! i)"
           using i len\<sigma>s distinct by (simp add: \<alpha>i map_of_zip_nth)
         ultimately show ?thesis by simp
@@ -1438,9 +1458,10 @@ proof -
     next
       assume "\<exists>i < length ?\<rho>s. match_args (?\<rho>s ! i) (\<sigma>s\<^sub>E ! i) = Clash"
       then obtain i where i: "i < length ?\<rho>s" and clash_i: "match_args (?\<rho>s ! i) (\<sigma>s\<^sub>E ! i) = Clash" by blast
-      with equiv' have "\<Sigma> \<turnstile> subst ?\<tau>s' ?\<alpha>s (?\<rho>s ! i) \<approx> inst \<eta> (\<sigma>s\<^sub>E ! i)" and "i < length \<sigma>s\<^sub>E"
+      with equiv' have eq: "\<Sigma> \<turnstile> subst ?\<tau>s' ?\<alpha>s (?\<rho>s ! i) \<approx> inst \<eta> (\<sigma>s\<^sub>E ! i)" and "i < length \<sigma>s\<^sub>E"
         by (auto simp: list_all2_conv_all_nth)
-      with match_args_clash[OF wf_class_table clash_i] wf\<rho>s wf\<sigma>s\<^sub>E i show False by auto
+      obtain \<beta>s where "inst \<eta> (\<sigma>s\<^sub>E ! i) = subst (map \<eta> \<beta>s) \<beta>s (\<sigma>s\<^sub>E ! i)" by (rule inst_as_subst)
+      with match_args_clash[OF wf_class_table clash_i] wf\<rho>s wf\<sigma>s\<^sub>E i \<open>i < length \<sigma>s\<^sub>E\<close> eq show False by auto
     qed
   next
     case (TyPrim p)
@@ -1582,6 +1603,20 @@ lemma field_types_inst:
   shows "field_types \<Sigma> C (map (subst \<tau>s \<alpha>s) \<sigma>s) = map (subst \<tau>s \<alpha>s) (field_types \<Sigma> C \<sigma>s)"
   unfolding field_types_def instantiate_fields_subst[OF assms] by (simp add: case_prod_beta)
 
+lemma inst_field_types:
+  assumes "wf_class_table \<Sigma>" and "wf_ty \<Sigma> (TyClass C \<sigma>s)"
+  shows "field_types \<Sigma> C (map (inst \<eta>) \<sigma>s) = map (inst \<eta>) (field_types \<Sigma> C \<sigma>s)"
+proof -
+  have "finite (\<Union> (fv ` set \<sigma>s))" by (simp add: finite_fv)
+  then obtain \<alpha>s where \<alpha>s: "\<And>\<tau>. fv \<tau> \<subseteq> \<Union> (fv ` set \<sigma>s) \<Longrightarrow> inst \<eta> \<tau> = subst (map \<eta> \<alpha>s) \<alpha>s \<tau>"
+    using inst_subst_cover by blast
+  have \<sigma>s: "map (inst \<eta>) \<sigma>s = map (subst (map \<eta> \<alpha>s) \<alpha>s) \<sigma>s" by (intro map_cong[OF refl] \<alpha>s) auto
+  have C: "C |\<in>| fmdom \<Sigma>" and len: "length \<sigma>s = length (type_params \<Sigma> C)" using assms(2) by simp_all
+  show ?thesis
+    unfolding \<sigma>s field_types_inst[OF assms(1) C len, of "map \<eta> \<alpha>s" \<alpha>s]
+    by (intro map_cong[OF refl]) (simp add: \<alpha>s[symmetric] field_types_fv[OF assms])
+qed
+
 lemma remaining_literal_literal:
   "remaining \<Sigma> \<Gamma> (TyLiteral l') (PatLiteral l) = (if l' = l then TyPrim Never else TyLiteral l')"
   by simp
@@ -1700,7 +1735,7 @@ subsection \<open>Soundness of pattern matching\<close>
 
 (* Match of pattern p, checked at \<tau> with bindings \<Delta>, against value v: aborts are not prevented; a match binds the
    variables of \<Delta> at instances of their types and v is at the matched type; no match leaves v at the remaining type *)
-definition pat_sound :: "cxt \<Rightarrow> (var \<times> ty) list \<Rightarrow> env \<Rightarrow> pat \<Rightarrow> ty \<Rightarrow> (var, ty) fmap \<Rightarrow> val \<Rightarrow> bool"
+definition pat_sound :: "cxt \<Rightarrow> (var \<Rightarrow> ty) \<Rightarrow> env \<Rightarrow> pat \<Rightarrow> ty \<Rightarrow> (var, ty) fmap \<Rightarrow> val \<Rightarrow> bool"
 where
 "pat_sound \<Gamma> \<eta> \<rho> p \<tau> \<Delta> v =
   ((\<forall>\<kappa>. match \<rho> p v = MatchAborts \<kappa> \<longrightarrow> \<not> prevented \<kappa>)
@@ -1810,7 +1845,7 @@ proof -
     and wf: "wf_ty \<Sigma> \<sigma>'"
     by blast
   have "wf_ty \<Sigma> \<upsilon>" using dom[rule_format, of "disjuncts \<tau> ! k" \<Delta>\<^sub>d] k fk look by auto
-  with subst_subty(1)[OF wf_class_table sub] wf have "\<Sigma> \<turnstile> inst \<eta> \<upsilon> <: inst \<eta> \<sigma>'" by blast
+  with inst_subty[OF wf_class_table sub] wf have "\<Sigma> \<turnstile> inst \<eta> \<upsilon> <: inst \<eta> \<sigma>'" by blast
   with u inst_wf[OF wf\<eta> wf] \<sigma>' show ?thesis by (auto intro: ValSub)
 qed
 
@@ -1939,16 +1974,15 @@ proof -
 qed
 
 lemma check_pat_sound_aux:
-  "\<lbrakk> \<Sigma>' = \<Sigma> ; check_pat \<Sigma>' \<Gamma> p \<tau> = Ok \<Delta> ; \<eta> \<turnstile> \<rho> : \<Gamma> ; wf_ty \<Sigma> \<tau> ; fv \<tau> \<subseteq> fst ` set \<eta> ; \<turnstile> v : Ty (inst \<eta> \<tau>) \<rbrakk>
+  "\<lbrakk> \<Sigma>' = \<Sigma> ; check_pat \<Sigma>' \<Gamma> p \<tau> = Ok \<Delta> ; \<eta> \<turnstile> \<rho> : \<Gamma> ; wf_ty \<Sigma> \<tau> ; \<turnstile> v : Ty (inst \<eta> \<tau>) \<rbrakk>
   \<Longrightarrow> pat_sound \<Gamma> \<eta> \<rho> p \<tau> \<Delta> v"
-  "\<lbrakk> \<Sigma>' = \<Sigma> ; check_pat_at \<Sigma>' \<Gamma> p' \<tau>' = Ok \<Delta>' ; \<eta> \<turnstile> \<rho> : \<Gamma> ; wf_ty \<Sigma> \<tau>' ; fv \<tau>' \<subseteq> fst ` set \<eta>
-   ; \<turnstile> v : Ty (inst \<eta> \<tau>') \<rbrakk>
+  "\<lbrakk> \<Sigma>' = \<Sigma> ; check_pat_at \<Sigma>' \<Gamma> p' \<tau>' = Ok \<Delta>' ; \<eta> \<turnstile> \<rho> : \<Gamma> ; wf_ty \<Sigma> \<tau>' ; \<turnstile> v : Ty (inst \<eta> \<tau>') \<rbrakk>
   \<Longrightarrow> pat_sound \<Gamma> \<eta> \<rho> (node p') \<tau>' \<Delta>' v"
 proof (induction \<Sigma>' \<Gamma> p \<tau> and \<Sigma>' \<Gamma> p' \<tau>' arbitrary: \<Delta> v and \<Delta>' v rule: check_pat_check_pat_at.induct)
   case (1 \<Sigma>' \<Gamma> \<tau>)
   note env = "1.prems"(3)
   from "1.prems"(2) have \<Delta>: "\<Delta> = fmempty" by simp
-  from wf_val_inst_disjunct[OF "1.prems"(6)] obtain \<sigma> where \<sigma>: "\<sigma> \<in> set (disjuncts \<tau>)" and v: "\<turnstile> v : Ty (inst \<eta> \<sigma>)"
+  from wf_val_inst_disjunct[OF "1.prems"(5)] obtain \<sigma> where \<sigma>: "\<sigma> \<in> set (disjuncts \<tau>)" and v: "\<turnstile> v : Ty (inst \<eta> \<sigma>)"
     by blast
   have "\<turnstile> v : Ty (inst \<eta> (matched_as \<Sigma> \<Gamma> \<tau> PatWildcard))"
     using matched_as_lift[OF \<sigma> "1.prems"(2)[unfolded "1.prems"(1)] wf_env_wf_cxt[OF env] "1.prems"(4) wf_env_wf_inst[OF env]]
@@ -1959,13 +1993,13 @@ next
   case (2 \<Sigma>' \<Gamma> x \<tau>)
   note env = "2.prems"(3)
   from "2.prems"(2) have \<Delta>: "\<Delta> = fmupd x \<tau> fmempty" by (auto simp: bind_sum_Ok)
-  from wf_val_inst_disjunct[OF "2.prems"(6)] obtain \<sigma> where \<sigma>: "\<sigma> \<in> set (disjuncts \<tau>)" and v: "\<turnstile> v : Ty (inst \<eta> \<sigma>)"
+  from wf_val_inst_disjunct[OF "2.prems"(5)] obtain \<sigma> where \<sigma>: "\<sigma> \<in> set (disjuncts \<tau>)" and v: "\<turnstile> v : Ty (inst \<eta> \<sigma>)"
     by blast
   have "\<turnstile> v : Ty (inst \<eta> (matched_as \<Sigma> \<Gamma> \<tau> (PatVar x)))"
     using matched_as_lift[OF \<sigma> "2.prems"(2)[unfolded "2.prems"(1)] wf_env_wf_cxt[OF env] "2.prems"(4) wf_env_wf_inst[OF env]]
       v matched_as_var[OF disjuncts_nonunion[OF \<sigma>]]
     by simp
-  with "2.prems"(6) show ?case by (simp add: pat_sound_def \<Delta>)
+  with "2.prems"(5) show ?case by (simp add: pat_sound_def \<Delta>)
 next
   case (3 \<Sigma>' \<Gamma> p x \<tau>)
   note env = "3.prems"(3)
@@ -1975,7 +2009,7 @@ next
     and \<Delta>: "\<Delta> = \<Delta>\<^sub>p ++\<^sub>f fmupd x (matched_as \<Sigma>' \<Gamma> \<tau> (node p)) fmempty"
     by (auto simp: bind_sum_Ok)
   from once have x: "x \<notin> binds (node p)" by (simp add: ensure_def split: if_splits)
-  note IH = "3.IH"[OF unb once "3.prems"(1) chk "3.prems"(3-6), unfolded pat_sound_def]
+  note IH = "3.IH"[OF unb once "3.prems"(1) chk "3.prems"(3-5), unfolded pat_sound_def]
   have dom\<^sub>p: "fmdom' \<Delta>\<^sub>p = binds (node p)"
     using check_pat_wf(2)[OF wf_class_table wf_env_wf_cxt[OF env] "3.prems"(4) chk[unfolded "3.prems"(1)]] by simp
   show ?case
@@ -2009,7 +2043,7 @@ next
   note env = "4.prems"(3)
   from "4.prems"(2) have \<Delta>: "\<Delta> = fmempty" and no_float: "\<not> (is_int_lit l \<and> has_float_values \<Sigma> \<tau>)"
     by (auto simp: bind_sum_Ok ensure_def "4.prems"(1) split: if_splits)
-  from wf_val_inst_disjunct[OF "4.prems"(6)] obtain \<sigma> where \<sigma>: "\<sigma> \<in> set (disjuncts \<tau>)" and v: "\<turnstile> v : Ty (inst \<eta> \<sigma>)"
+  from wf_val_inst_disjunct[OF "4.prems"(5)] obtain \<sigma> where \<sigma>: "\<sigma> \<in> set (disjuncts \<tau>)" and v: "\<turnstile> v : Ty (inst \<eta> \<sigma>)"
     by blast
   note nonunion = disjuncts_nonunion[OF \<sigma>]
   note lift_m = matched_as_lift[OF \<sigma> "4.prems"(2)[unfolded "4.prems"(1)] wf_env_wf_cxt[OF env] "4.prems"(4)
@@ -2146,12 +2180,12 @@ next
     by (auto simp: bind_sum_Ok)
   from ens have no_list: "\<not> has_values \<Sigma> ListKind \<tau>" and no_range: "\<not> has_values \<Sigma> RangeKind \<tau>"
     by (auto simp: bind_sum_Ok ensure_def split: if_splits)
-  from wf_val_inst_disjunct[OF "5.prems"(6)] obtain \<sigma> where \<sigma>: "\<sigma> \<in> set (disjuncts \<tau>)" and v: "\<turnstile> v : Ty (inst \<eta> \<sigma>)"
+  from wf_val_inst_disjunct[OF "5.prems"(5)] obtain \<sigma> where \<sigma>: "\<sigma> \<in> set (disjuncts \<tau>)" and v: "\<turnstile> v : Ty (inst \<eta> \<sigma>)"
     by blast
   note nonunion = disjuncts_nonunion[OF \<sigma>]
   note lift_m = matched_as_lift[OF \<sigma> "5.prems"(2)[unfolded \<Sigma>'] wf\<Gamma> "5.prems"(4) wf\<eta>]
   note lift_r = remaining_lift[OF \<sigma> "5.prems"(4) wf\<eta>]
-  have wf\<sigma>: "wf_ty \<Sigma> \<sigma>" and fv\<sigma>: "fv \<sigma> \<subseteq> fst ` set \<eta>" using disjuncts_wf[OF "5.prems"(4) \<sigma>] "5.prems"(5) by auto
+  have wf\<sigma>: "wf_ty \<Sigma> \<sigma>" using disjuncts_wf[OF "5.prems"(4) \<sigma>] by simp
   have dom_f: "\<forall>\<sigma>' \<Delta>'. \<sigma>' \<in> set (disjuncts \<tau>) \<and> ?f \<sigma>' = Some (Ok \<Delta>')
                  \<longrightarrow> fmdom' \<Delta>' = binds (PatTuple ps) \<and> (\<forall>x \<upsilon>. fmlookup \<Delta>' x = Some \<upsilon> \<longrightarrow> wf_ty \<Sigma> \<upsilon>)"
   proof (intro allI impI)
@@ -2225,10 +2259,9 @@ next
       proof -
         have mem: "(ps ! i, \<sigma>s ! i) \<in> set (zip ps \<sigma>s)" using i True by (auto simp: in_set_zip)
         have mem_i: "\<sigma>s ! i \<in> set \<sigma>s" using i True by simp
-        have wfi: "wf_ty \<Sigma> (\<sigma>s ! i)" and fvi: "fv (\<sigma>s ! i) \<subseteq> fst ` set \<eta>"
-          using wf\<sigma> fv\<sigma> mem_i unfolding \<sigma>s by auto
+        have wfi: "wf_ty \<Sigma> (\<sigma>s ! i)" using wf\<sigma> mem_i unfolding \<sigma>s by auto
         have vi: "\<turnstile> vs ! i : Ty (inst \<eta> (\<sigma>s ! i))" using typed i True by (auto simp: list_all2_conv_all_nth)
-        from IH[OF ens cb \<sigma> \<sigma>s True mem refl refl chk_i[OF i] env wfi fvi vi] show ?thesis .
+        from IH[OF ens cb \<sigma> \<sigma>s True mem refl refl chk_i[OF i] env wfi vi] show ?thesis .
       qed
       have dom_i: "fmdom' (\<Delta>s ! i) = binds (node (ps ! i))" if i: "i < length ps" for i
         using check_pat_wf(2)[OF wf_class_table wf\<Gamma> _ chk_i[OF i]] wf\<sigma> i True unfolding \<sigma>s by auto
@@ -2369,12 +2402,12 @@ next
     by (auto simp: bind_sum_Ok)
   from ens have no_tuple: "\<not> has_values \<Sigma> TupleKind \<tau>" and no_range: "\<not> has_values \<Sigma> RangeKind \<tau>"
     by (auto simp: bind_sum_Ok ensure_def split: if_splits)
-  from wf_val_inst_disjunct[OF "6.prems"(6)] obtain \<sigma> where \<sigma>: "\<sigma> \<in> set (disjuncts \<tau>)" and v: "\<turnstile> v : Ty (inst \<eta> \<sigma>)"
+  from wf_val_inst_disjunct[OF "6.prems"(5)] obtain \<sigma> where \<sigma>: "\<sigma> \<in> set (disjuncts \<tau>)" and v: "\<turnstile> v : Ty (inst \<eta> \<sigma>)"
     by blast
   note nonunion = disjuncts_nonunion[OF \<sigma>]
   note lift_m = matched_as_lift[OF \<sigma> "6.prems"(2)[unfolded \<Sigma>'] wf\<Gamma> "6.prems"(4) wf\<eta>]
   note lift_r = remaining_lift[OF \<sigma> "6.prems"(4) wf\<eta>]
-  have wf\<sigma>: "wf_ty \<Sigma> \<sigma>" and fv\<sigma>: "fv \<sigma> \<subseteq> fst ` set \<eta>" using disjuncts_wf[OF "6.prems"(4) \<sigma>] "6.prems"(5) by auto
+  have wf\<sigma>: "wf_ty \<Sigma> \<sigma>" using disjuncts_wf[OF "6.prems"(4) \<sigma>] by simp
   have dom_f: "\<forall>\<sigma>' \<Delta>'. \<sigma>' \<in> set (disjuncts \<tau>) \<and> ?f \<sigma>' = Some (Ok \<Delta>')
                  \<longrightarrow> fmdom' \<Delta>' = binds (PatList ps) \<and> (\<forall>x \<upsilon>. fmlookup \<Delta>' x = Some \<upsilon> \<longrightarrow> wf_ty \<Sigma> \<upsilon>)"
   proof (intro allI impI)
@@ -2432,9 +2465,9 @@ next
       have sound_i: "pat_sound \<Gamma> \<eta> \<rho> (node (ps ! i)) (?\<sigma>s ! i) (\<Delta>s ! i) (vs ! i)" if i: "i < length ps" for i
       proof -
         have mem: "ps ! i \<in> set ps" using i by simp
-        have wfi: "wf_ty \<Sigma> \<sigma>'" and fvi: "fv \<sigma>' \<subseteq> fst ` set \<eta>" using wf\<sigma> fv\<sigma> unfolding \<sigma>s by auto
+        have wfi: "wf_ty \<Sigma> \<sigma>'" using wf\<sigma> unfolding \<sigma>s by simp
         have vi: "\<turnstile> vs ! i : Ty (inst \<eta> \<sigma>')" using typed i True by auto
-        from IH[OF ens cb \<sigma> \<sigma>s mem refl chk_i[OF i] env wfi fvi vi] i show ?thesis by simp
+        from IH[OF ens cb \<sigma> \<sigma>s mem refl chk_i[OF i] env wfi vi] i show ?thesis by simp
       qed
       have dom_i: "fmdom' (\<Delta>s ! i) = binds (node (ps ! i))" if i: "i < length ps" for i
         using check_pat_wf(2)[OF wf_class_table wf\<Gamma> _ chk_i[OF i]] wf\<sigma> unfolding \<sigma>s by auto
@@ -2525,12 +2558,12 @@ next
   from "7.prems"(2)[unfolded \<Sigma>'] have cb: "check_bound_once ?ps = Ok ()"
     and b: "bindings_at \<Sigma> \<Gamma> (PatDict kps) (map ?f (disjuncts \<tau>)) = Ok \<Delta>"
     by (auto simp: bind_sum_Ok)
-  from wf_val_inst_disjunct[OF "7.prems"(6)] obtain \<sigma> where \<sigma>: "\<sigma> \<in> set (disjuncts \<tau>)" and v: "\<turnstile> v : Ty (inst \<eta> \<sigma>)"
+  from wf_val_inst_disjunct[OF "7.prems"(5)] obtain \<sigma> where \<sigma>: "\<sigma> \<in> set (disjuncts \<tau>)" and v: "\<turnstile> v : Ty (inst \<eta> \<sigma>)"
     by blast
   note nonunion = disjuncts_nonunion[OF \<sigma>]
   note lift_m = matched_as_lift[OF \<sigma> "7.prems"(2)[unfolded \<Sigma>'] wf\<Gamma> "7.prems"(4) wf\<eta>]
   note lift_r = remaining_lift[OF \<sigma> "7.prems"(4) wf\<eta>]
-  have wf\<sigma>: "wf_ty \<Sigma> \<sigma>" and fv\<sigma>: "fv \<sigma> \<subseteq> fst ` set \<eta>" using disjuncts_wf[OF "7.prems"(4) \<sigma>] "7.prems"(5) by auto
+  have wf\<sigma>: "wf_ty \<Sigma> \<sigma>" using disjuncts_wf[OF "7.prems"(4) \<sigma>] by simp
   from \<sigma> obtain k where k: "k < length (disjuncts \<tau>)" and \<sigma>k: "disjuncts \<tau> ! k = \<sigma>" by (auto simp: in_set_conv_nth)
   from bindings_at_Ok[OF b] obtain \<Delta>s_all
     where rel: "list_all2 (\<lambda>m \<Delta>'. case m of Some m' \<Rightarrow> m' = Ok \<Delta>'
@@ -2617,8 +2650,8 @@ next
       have sound_i: "pat_sound \<Gamma> \<eta> \<rho> (node (?ps ! i)) (?\<sigma>s ! i) (\<Delta>s ! i) (?us ! i)" if i: "i < length kps" for i
       proof -
         have mem: "?ps ! i \<in> set ?ps" using i by simp
-        have wfi: "wf_ty \<Sigma> \<sigma>'" and fvi: "fv \<sigma>' \<subseteq> fst ` set \<eta>" using wf\<sigma> fv\<sigma> unfolding \<sigma>s by auto
-        from IH[OF cb \<sigma> \<sigma>s mem refl chk_i[OF i] env wfi fvi us_typed[OF i]] i show ?thesis by simp
+        have wfi: "wf_ty \<Sigma> \<sigma>'" using wf\<sigma> unfolding \<sigma>s by simp
+        from IH[OF cb \<sigma> \<sigma>s mem refl chk_i[OF i] env wfi us_typed[OF i]] i show ?thesis by simp
       qed
       have dom_i: "fmdom' (\<Delta>s ! i) = binds (node (?ps ! i))" if i: "i < length kps" for i
         using check_pat_wf(2)[OF wf_class_table wf\<Gamma> _ chk_i[OF i]] wf\<sigma> unfolding \<sigma>s by auto
@@ -2738,12 +2771,12 @@ next
   have set_fps: "set ?fps = set ps \<union> set (map snd kps)"
     using field_patterns_cover(2)[OF distinct_xs len_kps keys] by simp
   have n_le: "?n \<le> length ?xs" using len_kps by simp
-  from wf_val_inst_disjunct[OF "8.prems"(6)] obtain \<sigma> where \<sigma>: "\<sigma> \<in> set (disjuncts \<tau>)" and v: "\<turnstile> v : Ty (inst \<eta> \<sigma>)"
+  from wf_val_inst_disjunct[OF "8.prems"(5)] obtain \<sigma> where \<sigma>: "\<sigma> \<in> set (disjuncts \<tau>)" and v: "\<turnstile> v : Ty (inst \<eta> \<sigma>)"
     by blast
   note nonunion = disjuncts_nonunion[OF \<sigma>]
   note lift_m = matched_as_lift[OF \<sigma> "8.prems"(2)[unfolded \<Sigma>'] wf\<Gamma> "8.prems"(4) wf\<eta>]
   note lift_r = remaining_lift[OF \<sigma> "8.prems"(4) wf\<eta>]
-  have wf\<sigma>: "wf_ty \<Sigma> \<sigma>" and fv\<sigma>: "fv \<sigma> \<subseteq> fst ` set \<eta>" using disjuncts_wf[OF "8.prems"(4) \<sigma>] "8.prems"(5) by auto
+  have wf\<sigma>: "wf_ty \<Sigma> \<sigma>" using disjuncts_wf[OF "8.prems"(4) \<sigma>] by simp
   from \<sigma> obtain k where k: "k < length (disjuncts \<tau>)" and \<sigma>k: "disjuncts \<tau> ! k = \<sigma>" by (auto simp: in_set_conv_nth)
   from bindings_at_Ok[OF b] obtain \<Delta>s_all
     where rel: "list_all2 (\<lambda>m \<Delta>'. case m of Some m' \<Rightarrow> m' = Ok \<Delta>'
@@ -2794,7 +2827,7 @@ next
     for \<sigma>s D zvs
   proof -
     have wfC: "wf_ty \<Sigma> (TyClass C \<sigma>s)" by (rule instance_at_class_wf[OF wf_class_table wf\<sigma> inst C])
-    from subst_subty(1)[OF wf_class_table sub] wf\<sigma> wfC have "\<Sigma> \<turnstile> inst \<eta> \<sigma> <: inst \<eta> (TyClass C \<sigma>s)" by blast
+    from inst_subty[OF wf_class_table sub] wf\<sigma> wfC have "\<Sigma> \<turnstile> inst \<eta> \<sigma> <: inst \<eta> (TyClass C \<sigma>s)" by blast
     with v inst_wf[OF wf\<eta> wfC] have "\<turnstile> v : Ty (TyClass C (map (inst \<eta>) \<sigma>s))" by (auto intro: ValSub)
     from wf_object[OF this[unfolded vD]] obtain \<upsilon>s where "\<Sigma> \<turnstile> TyClass D \<upsilon>s <: TyClass C (map (inst \<eta>) \<sigma>s)"
       and "wf_ty \<Sigma> (TyClass D \<upsilon>s)"
@@ -2808,7 +2841,7 @@ next
             \<and> (\<forall>(p, \<sigma>') \<in> set (zip ?fps (field_types \<Sigma> C \<sigma>s)). remaining \<Sigma> \<Gamma> \<sigma>' (node p) = TyPrim Never)"
     then obtain \<sigma>s where inst: "instance_at \<Sigma> C \<sigma> = Instance \<sigma>s" and sub: "\<Sigma> \<turnstile> \<sigma> <: TyClass C \<sigma>s" by blast
     have wfC: "wf_ty \<Sigma> (TyClass C \<sigma>s)" by (rule instance_at_class_wf[OF wf_class_table wf\<sigma> inst C])
-    from subst_subty(1)[OF wf_class_table sub] wf\<sigma> wfC have "\<Sigma> \<turnstile> inst \<eta> \<sigma> <: inst \<eta> (TyClass C \<sigma>s)" by blast
+    from inst_subty[OF wf_class_table sub] wf\<sigma> wfC have "\<Sigma> \<turnstile> inst \<eta> \<sigma> <: inst \<eta> (TyClass C \<sigma>s)" by blast
     with v inst_wf[OF wf\<eta> wfC] have "\<turnstile> v : Ty (TyClass C (map (inst \<eta>) \<sigma>s))" by (auto intro: ValSub)
     from wf_object_type[OF this] that show False by simp
   qed
@@ -2841,7 +2874,7 @@ next
       let ?fts = "field_types \<Sigma> C \<sigma>s"
       have len_fts: "length ?fts = length ?xs" by (rule length_field_types)
       have below: "\<Sigma> \<turnstile> TyClass D \<upsilon>s <: inst \<eta> (TyClass C \<sigma>s)"
-        by (rule instance_at_sub[OF inst nonunion wf\<sigma> C subD wfD True wf_env_closed[OF env]])
+        by (rule instance_at_sub[OF inst nonunion wf\<sigma> C subD wfD True])
       have wfC\<eta>: "wf_ty \<Sigma> (TyClass C (map (inst \<eta>) \<sigma>s))" using inst_wf[OF wf\<eta> wfC] by simp
       have vC: "\<turnstile> v : Ty (inst \<eta> (TyClass C \<sigma>s))" using vD below wfC\<eta> by (auto intro: ValSub)
       (* Field names of C: the first fields of D *)
@@ -2869,7 +2902,7 @@ next
         moreover have "snd (?instC ! i) = inst \<eta> (?fts ! i)"
         proof -
           have eq: "map snd ?instC = map (inst \<eta>) ?fts"
-            using field_types_inst[OF wf_class_table C len\<sigma>s, of "map snd \<eta>" "map fst \<eta>"] by (simp add: field_types_def)
+            using inst_field_types[OF wf_class_table wfC] by (simp add: field_types_def)
           have "snd (?instC ! i) = map snd ?instC ! i" using i len_inst by (simp add: nth_map)
           also have "\<dots> = map (inst \<eta>) ?fts ! i" unfolding eq ..
           also have "\<dots> = inst \<eta> (?fts ! i)" using i len_fts by (simp add: nth_map)
@@ -2900,17 +2933,12 @@ next
       have len\<Delta>s: "length \<Delta>s = length ?xs" using list_all2_lengthD[OF chk] len_fps len_fts by simp
       have chk_i: "check_pat_at \<Sigma> \<Gamma> (?fps ! i) (?fts ! i) = Ok (\<Delta>s ! i)" if "i < length ?xs" for i
         using chk that len_fps len_fts by (auto simp: list_all2_conv_all_nth)
-      have fts_wf: "wf_ty \<Sigma> (?fts ! i)" and fts_fv: "fv (?fts ! i) \<subseteq> fst ` set \<eta>" if i: "i < length ?xs" for i
-      proof -
-        have mem': "?fts ! i \<in> set ?fts" using i len_fts by simp
-        show "wf_ty \<Sigma> (?fts ! i)" using field_types_wf[OF wf_class_table wfC mem'] .
-        have "\<Union> (fv ` set \<sigma>s) \<subseteq> fv \<sigma>" using instance_at_wf[OF wf_class_table wf\<sigma> inst] by auto
-        with field_types_fv[OF wf_class_table wfC mem'] fv\<sigma> show "fv (?fts ! i) \<subseteq> fst ` set \<eta>" by blast
-      qed
+      have fts_wf: "wf_ty \<Sigma> (?fts ! i)" if i: "i < length ?xs" for i
+        using field_types_wf[OF wf_class_table wfC] i len_fts by simp
       have sound_i: "pat_sound \<Gamma> \<eta> \<rho> (node (?fps ! i)) (?fts ! i) (\<Delta>s ! i) (?us ! i)" if i: "i < length ?xs" for i
       proof -
         have mem: "(?fps ! i, ?fts ! i) \<in> set (zip ?fps ?fts)" using i len_fps len_fts by (auto simp: in_set_zip)
-        from IH[OF cls fm cb \<sigma> inst mem refl refl chk_i[OF i] env fts_wf[OF i] fts_fv[OF i] us_typed[OF i]]
+        from IH[OF cls fm cb \<sigma> inst mem refl refl chk_i[OF i] env fts_wf[OF i] us_typed[OF i]]
         show ?thesis .
       qed
       have dom_i: "fmdom' (\<Delta>s ! i) = binds (node (?fps ! i))" if i: "i < length ?xs" for i
@@ -3058,8 +3086,7 @@ lemma match_cases_Ty:
    below the bindings of its pattern; or no case matches, and the value is at the remaining type; or an abort
    which is not prevented *)
 lemma dispatch_sound:
-  "\<lbrakk> match_cases \<Sigma> \<Gamma> \<tau> L (map fst cases) = Ok (\<Delta>s, \<tau>', L') ; \<eta> \<turnstile> \<rho> : \<Gamma> ; wf_ty \<Sigma> \<tau> ; fv \<tau> \<subseteq> fst ` set \<eta>
-   ; \<turnstile> v : Ty (inst \<eta> \<tau>) \<rbrakk>
+  "\<lbrakk> match_cases \<Sigma> \<Gamma> \<tau> L (map fst cases) = Ok (\<Delta>s, \<tau>', L') ; \<eta> \<turnstile> \<rho> : \<Gamma> ; wf_ty \<Sigma> \<tau> ; \<turnstile> v : Ty (inst \<eta> \<tau>) \<rbrakk>
   \<Longrightarrow> (\<exists>i < length cases. \<exists>\<rho>'. dispatch \<rho> v cases = Val (\<rho>', snd (cases ! i))
          \<and> fmdom \<rho>' |\<subseteq>| fmdom (\<Delta>s ! i) \<and> \<eta> \<turnstile> \<rho> \<otimes> \<rho>' : \<Gamma> \<otimes> (\<Delta>s ! i))
       \<or> (dispatch \<rho> v cases = Val (fmempty, At no_pos StmtPass) \<and> \<turnstile> v : Ty (inst \<eta> \<tau>'))
@@ -3074,9 +3101,9 @@ next
     and mc: "match_cases \<Sigma> \<Gamma> (remaining \<Sigma> \<Gamma> \<tau> (node p)) L\<^sub>1 (map fst cases) = Ok (\<Delta>s', \<tau>', L')"
     and \<Delta>s: "\<Delta>s = fmmap Ty \<Delta> # \<Delta>s'"
     unfolding c by (auto simp: bind_sum_Ok split: prod.splits)
-  note sound = check_pat_sound(2)[OF chk Cons.prems(2-5), unfolded pat_sound_def]
+  note sound = check_pat_sound(2)[OF chk Cons.prems(2-4), unfolded pat_sound_def]
   from match_cases_wf[OF wf_class_table wf_env_wf_cxt[OF Cons.prems(2)] Cons.prems(3) Cons.prems(1), of "fmmap Ty \<Delta>"]
-  have wf\<Delta>: "wf_cxt \<Sigma> (fmmap Ty \<Delta>)" and tyvars: "tyvars (fmmap Ty \<Delta>) \<subseteq> fv \<tau>" by (simp_all add: \<Delta>s)
+  have wf\<Delta>: "wf_cxt \<Sigma> (fmmap Ty \<Delta>)" by (simp add: \<Delta>s)
   show ?case
   proof (cases "match \<rho> (node p) v")
     case (Match \<rho>')
@@ -3086,7 +3113,6 @@ next
     have dom': "fmdom \<rho>' = fmdom \<Delta>" using dom by (simp add: fmdom'_alt_def fset_inject)
     have "\<eta> \<turnstile> \<rho> \<otimes> \<rho>' : \<Gamma> \<otimes> fmmap Ty \<Delta>"
     proof (rule wf_env_add[OF Cons.prems(2)])
-      show "tyvars (fmmap Ty \<Delta>) \<subseteq> fst ` set \<eta>" using tyvars Cons.prems(4) by blast
       show "fmdom \<rho>' |\<subseteq>| fmdom (fmmap Ty \<Delta>)" using dom' by simp
       show "wf_cxt \<Sigma> (fmmap Ty \<Delta>)" by (rule wf\<Delta>)
       fix x \<theta>
@@ -3099,9 +3125,8 @@ next
   next
     case NoMatch
     with sound have v': "\<turnstile> v : Ty (inst \<eta> (remaining \<Sigma> \<Gamma> \<tau> (node p)))" by auto
-    have wf': "wf_ty \<Sigma> (remaining \<Sigma> \<Gamma> \<tau> (node p))" and fv': "fv (remaining \<Sigma> \<Gamma> \<tau> (node p)) \<subseteq> fst ` set \<eta>"
-      using remaining_wf[OF Cons.prems(3), of \<Gamma> "node p"] Cons.prems(4) by auto
-    from Cons.IH[OF mc Cons.prems(2) wf' fv' v'] show ?thesis
+    have wf': "wf_ty \<Sigma> (remaining \<Sigma> \<Gamma> \<tau> (node p))" using remaining_wf[OF Cons.prems(3), of \<Gamma> "node p"] by simp
+    from Cons.IH[OF mc Cons.prems(2) wf' v'] show ?thesis
     proof (elim disjE exE conjE)
       fix i \<rho>'
       assume "i < length cases" and "dispatch \<rho> v cases = Val (\<rho>', snd (cases ! i))"
