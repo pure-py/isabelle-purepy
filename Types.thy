@@ -83,7 +83,7 @@ where
 
 (* A holds the aliases being resolved, so that a cyclic alias is rejected; n bounds the nesting of alias
    resolution, and the number of alias definitions reachable from the context suffices, since the aliases in A
-   are distinct *)
+   are distinct, so the bound is exhausted only by a cyclic alias, rejected by the check of A first *)
 fun resolve_type' :: "class_table \<Rightarrow> cxt \<Rightarrow> (name \<times> var) list \<Rightarrow> nat \<Rightarrow> ty_expr \<Rightarrow> ty may_fail"
 where
 "resolve_type' \<Sigma> \<Gamma> A n (TyExprPrim \<nu>) = do { check_type_head \<Gamma> (prim_name \<nu>); Ok (TyPrim \<nu>) }" |
@@ -104,7 +104,7 @@ where
             ensure ((q', x) \<notin> set A) (Violates RuleTypeAlias (CyclicTypeAlias x));
             \<tau> \<leftarrow> (case n of
                    Suc n' \<Rightarrow> resolve_type' \<Sigma> (type_context \<Gamma>' q' \<chi>s i) ((q', x) # A) n' \<psi>
-                 | 0 \<Rightarrow> undefined);
+                 | 0 \<Rightarrow> Fail (Violates RuleTypeAlias (CyclicTypeAlias x)));
             Ok (subst \<sigma>s \<alpha>s \<tau>)
           })
         | _ \<Rightarrow> undefined)
@@ -280,6 +280,185 @@ where
 lemma wf_ty_subst: "\<lbrakk> wf_ty \<Sigma> \<sigma> ; \<forall>\<tau> \<in> set \<tau>s. wf_ty \<Sigma> \<tau> \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> (subst \<tau>s \<alpha>s \<sigma>)"
   by (induction \<sigma>) (auto split: option.splits dest!: map_of_SomeD set_zip_rightD)
 
+lemma wf_ty_subterm: "\<lbrakk> wf_ty \<Sigma> \<tau> ; \<sigma> \<in> set (subterms \<tau>) \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> \<sigma>"
+  by (induction \<tau>) auto
+
+lemma fv_subterm: "\<sigma> \<in> set (subterms \<tau>) \<Longrightarrow> fv \<sigma> \<subseteq> fv \<tau>"
+  by (induction \<tau>) auto
+
+(* Well-formed context: types of entries well-formed, classes in the class table, and contexts of checked
+   modules and type aliases well-formed with no type variables, the classes of the region of an alias being in
+   the class table *)
+function (sequential) wf_entry :: "class_table \<Rightarrow> cxt_entry \<Rightarrow> bool" and wf_cxt :: "class_table \<Rightarrow> cxt \<Rightarrow> bool"
+where
+"wf_entry \<Sigma> (Ty \<tau>) = wf_ty \<Sigma> \<tau>" |
+"wf_entry \<Sigma> (DU \<tau>) = wf_ty \<Sigma> \<tau>" |
+"wf_entry \<Sigma> (PU \<tau> _) = wf_ty \<Sigma> \<tau>" |
+"wf_entry \<Sigma> (Scheme (TyScheme _ \<tau>)) = wf_ty \<Sigma> \<tau>" |
+"wf_entry \<Sigma> (PUScheme (TyScheme _ \<tau>) _) = wf_ty \<Sigma> \<tau>" |
+"wf_entry \<Sigma> (Type C) = (C |\<in>| fmdom \<Sigma>)" |
+"wf_entry \<Sigma> (ModChecked _ \<Gamma>) = (tyvars \<Gamma> = {} \<and> wf_cxt \<Sigma> \<Gamma>)" |
+"wf_entry \<Sigma> (TypeAlias \<Gamma> q \<chi>s i) =
+  (tyvars \<Gamma> = {} \<and> wf_cxt \<Sigma> \<Gamma> \<and> i < length \<chi>s \<and> (\<exists>x \<alpha>s \<psi>. node (\<chi>s ! i) = TypeStmt x \<alpha>s \<psi>)
+   \<and> (\<forall>\<chi> \<in> set \<chi>s. \<forall>c \<alpha>s b \<phi>. node \<chi> = Dataclass c \<alpha>s b \<phi> \<longrightarrow> Qualified q c |\<in>| fmdom \<Sigma>))" |
+"wf_entry \<Sigma> _ = True" |
+"wf_cxt \<Sigma> \<Gamma> = list_all (\<lambda>(_, \<theta>). wf_entry \<Sigma> \<theta>) (sorted_list_of_fmap \<Gamma>)"
+by pat_completeness auto
+
+termination
+by (relation "measure (\<lambda>p. case p of Inl (_, \<theta>) \<Rightarrow> size \<theta> | Inr (_, \<Gamma>) \<Rightarrow> size_fmap (\<lambda>_. 0) size \<Gamma>)")
+   (auto dest!: sorted_list_of_fmap_lookup simp: size_fmap_lookup simp del: size_fmap_def)
+
+declare wf_cxt.simps [simp del]
+
+lemma sorted_list_of_fmap_lookupI: "fmlookup m k = Some v \<Longrightarrow> (k, v) \<in> set (sorted_list_of_fmap m)"
+  unfolding sorted_list_of_fmap_def by (force simp: fmlookup_dom_iff)
+
+lemma wf_cxt_iff: "wf_cxt \<Sigma> \<Gamma> \<longleftrightarrow> (\<forall>x \<theta>. fmlookup \<Gamma> x = Some \<theta> \<longrightarrow> wf_entry \<Sigma> \<theta>)"
+  unfolding wf_cxt.simps list_all_iff
+  by (auto simp: case_prod_beta dest: sorted_list_of_fmap_lookup) (force dest: sorted_list_of_fmap_lookupI)
+
+lemma wf_cxt_lookup: "\<lbrakk> wf_cxt \<Sigma> \<Gamma> ; fmlookup \<Gamma> x = Some \<theta> \<rbrakk> \<Longrightarrow> wf_entry \<Sigma> \<theta>"
+  by (simp add: wf_cxt_iff)
+
+lemma wf_cxt_empty [simp]: "wf_cxt \<Sigma> fmempty"
+  by (simp add: wf_cxt_iff)
+
+lemma wf_cxt_add: "\<lbrakk> wf_cxt \<Sigma> \<Gamma> ; wf_cxt \<Sigma> \<Delta> \<rbrakk> \<Longrightarrow> wf_cxt \<Sigma> (\<Gamma> \<otimes> \<Delta>)"
+  by (auto simp: wf_cxt_iff split: if_splits)
+
+lemma wf_cxt_upd: "\<lbrakk> wf_cxt \<Sigma> \<Gamma> ; wf_entry \<Sigma> \<theta> \<rbrakk> \<Longrightarrow> wf_cxt \<Sigma> (fmupd x \<theta> \<Gamma>)"
+  by (auto simp: wf_cxt_iff split: if_splits)
+
+lemma wf_cxt_fmconst: "wf_entry \<Sigma> \<theta> \<Longrightarrow> wf_cxt \<Sigma> (fmconst A \<theta>)"
+  by (auto simp: wf_cxt_iff dest: fmconst_entry)
+
+lemma wf_cxt_of_list: "\<forall>(x, \<theta>) \<in> set x\<theta>s. wf_entry \<Sigma> \<theta> \<Longrightarrow> wf_cxt \<Sigma> (fmap_of_list x\<theta>s)"
+  by (auto simp: wf_cxt_iff fmlookup_of_list dest!: map_of_SomeD)
+
+lemma lookup_wf: "\<lbrakk> wf_cxt \<Sigma> \<Gamma> ; lookup \<Gamma> q = Some \<theta> \<rbrakk> \<Longrightarrow> wf_entry \<Sigma> \<theta>"
+  by (induction q arbitrary: \<theta>) (auto split: option.splits cxt_entry.splits dest: wf_cxt_lookup)
+
+(* Entry of a member of a checked module, closed since the context of the module has no type variables *)
+lemma lookup_qualified_fv:
+  assumes "wf_cxt \<Sigma> \<Gamma>" and "lookup \<Gamma> (Qualified q x) = Some \<theta>"
+  shows "fv_entry \<theta> = {}"
+proof -
+  from assms(2) obtain q' \<Gamma>' where "lookup \<Gamma> q = Some (ModChecked q' \<Gamma>')" and x: "fmlookup \<Gamma>' x = Some \<theta>"
+    by (auto split: option.splits cxt_entry.splits)
+  from lookup_wf[OF assms(1) this(1)] have "tyvars \<Gamma>' = {}" by simp
+  with tyvars_entry[OF x] show ?thesis by simp
+qed
+
+lemma resolve_name_wf: "\<lbrakk> wf_cxt \<Sigma> \<Gamma> ; resolve_name \<Gamma> q = Some \<theta> \<rbrakk> \<Longrightarrow> wf_entry \<Sigma> \<theta>"
+  by (auto dest: lookup_wf resolve_name_lookup)
+
+lemma tyvars_empty: "(\<And>x \<theta>. fmlookup \<Delta> x = Some \<theta> \<Longrightarrow> \<theta> \<noteq> TypeVar \<and> fv_entry \<theta> = {}) \<Longrightarrow> tyvars \<Delta> = {}"
+  by (auto simp: tyvars_def fmlookup_dom'_iff fmlookup_ran'_iff)
+
+(* Context in which the body of alias i of a type region is resolved: well-formed, with the type parameters of
+   the alias as its type variables *)
+lemma type_context_alias:
+  assumes "wf_entry \<Sigma> (TypeAlias \<Gamma> q \<chi>s i)" and "node (\<chi>s ! i) = TypeStmt x \<alpha>s \<psi>"
+  shows "wf_cxt \<Sigma> (type_context \<Gamma> q \<chi>s i)" and "tyvars (type_context \<Gamma> q \<chi>s i) \<subseteq> set \<alpha>s"
+proof -
+  let ?\<Delta> = "fmap_of_list (map (\<lambda>j. (type_def_name (node (\<chi>s ! j)), type_entry \<Gamma> q \<chi>s j)) [0..<length \<chi>s])"
+  have entry: "wf_entry \<Sigma> (type_entry \<Gamma> q \<chi>s j) \<and> type_entry \<Gamma> q \<chi>s j \<noteq> TypeVar
+    \<and> fv_entry (type_entry \<Gamma> q \<chi>s j) = {}" if "j < length \<chi>s" for j
+  proof (cases "node (\<chi>s ! j)")
+    case (Dataclass c \<alpha>s b \<phi>)
+    with assms(1) nth_mem[OF that] have "Qualified q c |\<in>| fmdom \<Sigma>" by simp
+    with Dataclass show ?thesis by (simp add: type_entry_def)
+  next
+    case (TypeStmt x \<alpha>s \<psi>)
+    with assms(1) that show ?thesis by (simp add: type_entry_def)
+  qed
+  then have \<Delta>: "wf_cxt \<Sigma> ?\<Delta>" by (auto simp: wf_cxt_iff fmlookup_of_list dest!: map_of_SomeD)
+  have "tyvars ?\<Delta> = {}"
+  proof (rule tyvars_empty)
+    fix x \<theta>
+    assume "fmlookup ?\<Delta> x = Some \<theta>"
+    then obtain j where "j < length \<chi>s" and "\<theta> = type_entry \<Gamma> q \<chi>s j"
+      by (auto simp: fmlookup_of_list dest!: map_of_SomeD)
+    with entry[OF this(1)] show "\<theta> \<noteq> TypeVar \<and> fv_entry \<theta> = {}" by simp
+  qed
+  have cxt: "type_context \<Gamma> q \<chi>s i = \<Gamma> \<otimes> ?\<Delta> \<otimes> fmconst (set \<alpha>s) TypeVar"
+    by (simp add: type_context_def assms(2) Let_def)
+  from assms(1) \<Delta> show "wf_cxt \<Sigma> (type_context \<Gamma> q \<chi>s i)"
+    unfolding cxt by (intro wf_cxt_add wf_cxt_fmconst) simp_all
+  have "tyvars \<Gamma> = {}" using assms(1) by simp
+  with \<open>tyvars ?\<Delta> = {}\<close> show "tyvars (type_context \<Gamma> q \<chi>s i) \<subseteq> set \<alpha>s"
+    unfolding cxt
+    using tyvars_add[of "\<Gamma> \<otimes> ?\<Delta>" "fmconst (set \<alpha>s) TypeVar"] tyvars_add[of \<Gamma> ?\<Delta>] tyvars_fmconst[of \<alpha>s]
+    by auto
+qed
+
+(* Types resolved in a well-formed context: well-formed and over the type variables of the context *)
+lemma resolve_type'_wf:
+  "\<lbrakk> wf_class_table \<Sigma> ; wf_cxt \<Sigma> \<Gamma> ; resolve_type' \<Sigma> \<Gamma> A n \<psi> = Ok \<tau> \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> \<tau> \<and> fv \<tau> \<subseteq> tyvars \<Gamma>"
+proof (induction n arbitrary: \<Gamma> A \<psi> \<tau> rule: less_induct)
+  case (less n)
+  from less.prems(2, 3) show ?case
+  proof (induction \<psi> arbitrary: \<tau>)
+    case (TyExprName q \<psi>s)
+    have args: "\<forall>\<tau>' \<in> set \<tau>s. wf_ty \<Sigma> \<tau>' \<and> fv \<tau>' \<subseteq> tyvars \<Gamma>"
+      if "those_sum (map (resolve_type' \<Sigma> \<Gamma> A n) \<psi>s) = Ok \<tau>s" for \<tau>s
+      using TyExprName.IH TyExprName.prems(1) by (fastforce dest!: those_sum_map_Ok_elem[OF that])
+    show ?case
+    proof (cases "\<psi>s = [] \<and> (case q of Simple x \<Rightarrow> fmlookup \<Gamma> x = Some TypeVar | Qualified _ _ \<Rightarrow> False)")
+      case True
+      with TyExprName.prems(2) obtain x where "fmlookup \<Gamma> x = Some TypeVar" and "\<tau> = TyVar x"
+        by (cases q) auto
+      then show ?thesis by (auto simp: tyvars_def fmlookup_dom'_iff)
+    next
+      case False
+      with TyExprName.prems(2) obtain \<theta> where \<theta>: "resolve_name \<Gamma> q = Some \<theta>" by (auto split: option.splits)
+      note wf\<theta> = resolve_name_wf[OF TyExprName.prems(1) \<theta>]
+      show ?thesis
+      proof (cases \<theta>)
+        case (Type C)
+        with False \<theta> TyExprName.prems(2) obtain \<tau>s
+          where \<tau>s: "those_sum (map (resolve_type' \<Sigma> \<Gamma> A n) \<psi>s) = Ok \<tau>s"
+          and "length \<tau>s = length (type_params \<Sigma> C)" and "\<tau> = TyClass C \<tau>s"
+          by (auto simp: bind_sum_Ok Let_def split: if_splits)
+        with args[OF \<tau>s] wf\<theta> Type show ?thesis by auto
+      next
+        case (TypeAlias \<Gamma>' q' \<chi>s i)
+        with wf\<theta> obtain x \<alpha>s \<psi>' where \<chi>: "node (\<chi>s ! i) = TypeStmt x \<alpha>s \<psi>'" by auto
+        with False \<theta> TypeAlias TyExprName.prems(2) obtain \<sigma>s n' \<tau>'
+          where \<sigma>s: "those_sum (map (resolve_type' \<Sigma> \<Gamma> A n) \<psi>s) = Ok \<sigma>s" and len: "length \<sigma>s = length \<alpha>s"
+          and n: "n = Suc n'" and \<tau>': "resolve_type' \<Sigma> (type_context \<Gamma>' q' \<chi>s i) ((q', x) # A) n' \<psi>' = Ok \<tau>'"
+          and \<tau>: "\<tau> = subst \<sigma>s \<alpha>s \<tau>'"
+          by (auto simp: bind_sum_Ok ensure_def split: if_splits nat.splits)
+        from wf\<theta> have wf': "wf_entry \<Sigma> (TypeAlias \<Gamma>' q' \<chi>s i)" by (simp add: TypeAlias)
+        note cxt = type_context_alias(1)[OF wf' \<chi>] and tyvars = type_context_alias(2)[OF wf' \<chi>]
+        from less.IH[OF _ less.prems(1) cxt \<tau>'] n tyvars have "wf_ty \<Sigma> \<tau>'" and "fv \<tau>' \<subseteq> set \<alpha>s" by auto
+        with args[OF \<sigma>s] fv_subst[OF this(2) len] show ?thesis unfolding \<tau> by (fastforce intro: wf_ty_subst)
+      qed (use False \<theta> TyExprName.prems(2) in auto)
+    qed
+  next
+    case (TyExprTuple \<psi>s)
+    then obtain \<tau>s where \<tau>s: "those_sum (map (resolve_type' \<Sigma> \<Gamma> A n) \<psi>s) = Ok \<tau>s" and \<tau>: "\<tau> = TyTuple \<tau>s"
+      by (auto simp: bind_sum_Ok)
+    have "wf_ty \<Sigma> \<tau>' \<and> fv \<tau>' \<subseteq> tyvars \<Gamma>" if "\<tau>' \<in> set \<tau>s" for \<tau>'
+      using those_sum_map_Ok_elem[OF \<tau>s that] TyExprTuple.IH TyExprTuple.prems(1) by blast
+    then show ?case unfolding \<tau> by auto
+  next
+    case (TyExprCallable \<psi>s \<psi>)
+    then obtain \<sigma>s \<tau>' where \<sigma>s: "those_sum (map (resolve_type' \<Sigma> \<Gamma> A n) \<psi>s) = Ok \<sigma>s"
+      and \<tau>': "resolve_type' \<Sigma> \<Gamma> A n \<psi> = Ok \<tau>'" and \<tau>: "\<tau> = TyCallable \<sigma>s \<tau>'"
+      by (auto simp: bind_sum_Ok)
+    have "wf_ty \<Sigma> \<sigma> \<and> fv \<sigma> \<subseteq> tyvars \<Gamma>" if "\<sigma> \<in> set \<sigma>s" for \<sigma>
+      using those_sum_map_Ok_elem[OF \<sigma>s that] TyExprCallable.IH TyExprCallable.prems(1) by blast
+    moreover have "wf_ty \<Sigma> \<tau>' \<and> fv \<tau>' \<subseteq> tyvars \<Gamma>" using TyExprCallable.IH TyExprCallable.prems(1) \<tau>' by blast
+    ultimately show ?case unfolding \<tau> by auto
+  qed (auto simp: bind_sum_Ok)
+qed
+
+lemma resolve_type_wf:
+  "\<lbrakk> wf_class_table \<Sigma> ; wf_cxt \<Sigma> \<Gamma> ; resolve_type \<Sigma> \<Gamma> \<psi> = Ok \<tau> \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> \<tau> \<and> fv \<tau> \<subseteq> tyvars \<Gamma>"
+  by (simp add: resolve_type_def resolve_type'_wf)
+
 fun instantiate :: "field_scheme \<Rightarrow> ty list \<Rightarrow> (var \<times> ty) list"
 where
 "instantiate (FieldScheme \<alpha>s x\<sigma>s) \<tau>s = map (\<lambda>(x, \<sigma>). (x, subst \<tau>s \<alpha>s \<sigma>)) x\<sigma>s"
@@ -341,8 +520,8 @@ where
 "inherits_within (Suc n) \<Sigma> C = (case base \<Sigma> C of None \<Rightarrow> True | Some (D, _) \<Rightarrow> inherits_within n \<Sigma> D)"
 
 (* Class table of dataclasses, each with fewer classes in its chain of base classes than the table has, a base
-   class other than range which is a well-formed type over its type parameters, declared fields with types over
-   them, and distinct field names *)
+   class other than range which is a well-formed type over its type parameters, declared fields with
+   well-formed types over them, and distinct field names *)
 definition wf_class_table :: "class_table \<Rightarrow> bool"
 where
 "wf_class_table \<Sigma> =
@@ -351,7 +530,8 @@ where
      \<and> inherits_within (fcard (fmdom \<Sigma>)) \<Sigma> C
      \<and> (\<forall>D \<sigma>s. base \<Sigma> C = Some (D, \<sigma>s)
           \<longrightarrow> D \<noteq> range_class \<and> wf_ty \<Sigma> (TyClass D \<sigma>s) \<and> (\<forall>\<sigma> \<in> set \<sigma>s. fv \<sigma> \<subseteq> set (type_params \<Sigma> C)))
-     \<and> (\<forall>(x, \<sigma>) \<in> set (declared_fields \<Sigma> C (map TyVar (type_params \<Sigma> C))). fv \<sigma> \<subseteq> set (type_params \<Sigma> C))
+     \<and> (\<forall>(x, \<sigma>) \<in> set (declared_fields \<Sigma> C (map TyVar (type_params \<Sigma> C))).
+          wf_ty \<Sigma> \<sigma> \<and> fv \<sigma> \<subseteq> set (type_params \<Sigma> C))
      \<and> distinct (field_names \<Sigma> C))"
 
 lemma wf_class_table_dataclass:
@@ -380,6 +560,11 @@ lemma wf_class_table_baseD:
 lemma wf_class_table_declared_fields:
   "\<lbrakk> wf_class_table \<Sigma> ; C |\<in>| fmdom \<Sigma> ; (x, \<sigma>) \<in> set (declared_fields \<Sigma> C (map TyVar (type_params \<Sigma> C))) \<rbrakk>
   \<Longrightarrow> fv \<sigma> \<subseteq> set (type_params \<Sigma> C)"
+  unfolding wf_class_table_def by fast
+
+lemma wf_class_table_declared_fields_wf:
+  "\<lbrakk> wf_class_table \<Sigma> ; C |\<in>| fmdom \<Sigma> ; (x, \<sigma>) \<in> set (declared_fields \<Sigma> C (map TyVar (type_params \<Sigma> C))) \<rbrakk>
+  \<Longrightarrow> wf_ty \<Sigma> \<sigma>"
   unfolding wf_class_table_def by fast
 
 lemma wf_class_table_distinct: "\<lbrakk> wf_class_table \<Sigma> ; C |\<in>| fmdom \<Sigma> \<rbrakk> \<Longrightarrow> distinct (field_names \<Sigma> C)"
@@ -499,6 +684,78 @@ lemma fields_fv:
   shows "\<forall>(x, \<sigma>) \<in> set (instantiate (fields \<Sigma> C) (map TyVar (type_params \<Sigma> C))). fv \<sigma> \<subseteq> set (type_params \<Sigma> C)"
   unfolding instantiate_fields[OF assms]
   using ancestor_fields_subst[OF assms(1, 2) wf_class_table_inherits[OF assms]] by (rule conjunct2)
+
+(* Field of class C at type arguments \<sigma>s, over the type variables of \<sigma>s *)
+lemma fields_fv_inst:
+  assumes "wf_class_table \<Sigma>" and "wf_ty \<Sigma> (TyClass C \<sigma>s)" and "(x, \<tau>) \<in> set (instantiate (fields \<Sigma> C) \<sigma>s)"
+  shows "fv \<tau> \<subseteq> \<Union> (fv ` set \<sigma>s)"
+proof -
+  have C: "C |\<in>| fmdom \<Sigma>" and len: "length \<sigma>s = length (type_params \<Sigma> C)" using assms(2) by simp_all
+  obtain x\<sigma>s where fields: "fields \<Sigma> C = FieldScheme (type_params \<Sigma> C) x\<sigma>s"
+    by (simp add: fields_ancestor_fields)
+  with assms(3) obtain \<sigma> where "(x, \<sigma>) \<in> set x\<sigma>s" and \<tau>: "\<tau> = subst \<sigma>s (type_params \<Sigma> C) \<sigma>" by auto
+  with fields_fv[OF assms(1) C] fields have "fv \<sigma> \<subseteq> set (type_params \<Sigma> C)" by auto
+  from fv_subst[OF this len] show ?thesis unfolding \<tau> .
+qed
+
+(* Field types of the ancestors of class C at well-formed type arguments, well-formed *)
+lemma ancestor_fields_wf:
+  assumes "wf_class_table \<Sigma>"
+  shows "\<lbrakk> C |\<in>| fmdom \<Sigma> ; inherits_within n \<Sigma> C ; wf_ty \<Sigma> (TyClass C \<tau>s)
+          ; (x, \<sigma>) \<in> set (ancestor_fields n \<Sigma> C \<tau>s) \<rbrakk>
+    \<Longrightarrow> wf_ty \<Sigma> \<sigma>"
+proof (induction n arbitrary: C \<tau>s)
+  case (Suc n)
+  have declared: "wf_ty \<Sigma> \<sigma>" if "(x, \<sigma>) \<in> set (declared_fields \<Sigma> C \<tau>s)"
+  proof -
+    from that obtain \<sigma>' where "(x, \<sigma>') \<in> set (declared_fields \<Sigma> C (map TyVar (type_params \<Sigma> C)))"
+      and "\<sigma> = subst \<tau>s (type_params \<Sigma> C) \<sigma>'"
+      unfolding declared_fields_subst[OF assms Suc.prems(1), of \<tau>s] by auto
+    with wf_class_table_declared_fields_wf[OF assms Suc.prems(1)] Suc.prems(3) show ?thesis
+      by (auto intro: wf_ty_subst)
+  qed
+  show ?case
+  proof (cases "base \<Sigma> C")
+    case None
+    with Suc.prems(4) show ?thesis by (auto intro: declared)
+  next
+    case (Some D\<sigma>s)
+    then obtain D \<sigma>s where base: "base \<Sigma> C = Some (D, \<sigma>s)" by (cases D\<sigma>s) simp
+    from Suc.prems(4) base
+    consider "(x, \<sigma>) \<in> set (ancestor_fields n \<Sigma> D (map (subst \<tau>s (type_params \<Sigma> C)) \<sigma>s))"
+      | "(x, \<sigma>) \<in> set (declared_fields \<Sigma> C \<tau>s)"
+      by auto
+    then show ?thesis
+    proof cases
+      case 1
+      from wf_class_table_baseD[OF assms Suc.prems(1) base] have D: "D |\<in>| fmdom \<Sigma>" by auto
+      from Suc.prems(2) base have "inherits_within n \<Sigma> D" by simp
+      from Suc.IH[OF D this wf_class_table_base[OF assms Suc.prems(3) base] 1] show ?thesis .
+    qed (rule declared)
+  qed
+qed simp
+
+lemma fields_wf:
+  assumes "wf_class_table \<Sigma>" and "wf_ty \<Sigma> (TyClass C \<tau>s)" and "(x, \<sigma>) \<in> set (instantiate (fields \<Sigma> C) \<tau>s)"
+  shows "wf_ty \<Sigma> \<sigma>"
+proof -
+  have C: "C |\<in>| fmdom \<Sigma>" using assms(2) by simp
+  from assms(3) show ?thesis
+    unfolding instantiate_fields[OF assms(1) C]
+    by (rule ancestor_fields_wf[OF assms(1) C wf_class_table_inherits[OF assms(1) C] assms(2)])
+qed
+
+lemma field_types_wf:
+  "\<lbrakk> wf_class_table \<Sigma> ; wf_ty \<Sigma> (TyClass C \<tau>s) ; \<sigma> \<in> set (field_types \<Sigma> C \<tau>s) \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> \<sigma>"
+  by (auto simp: field_types_def intro: fields_wf)
+
+lemma field_types_fv:
+  assumes "wf_class_table \<Sigma>" and "wf_ty \<Sigma> (TyClass C \<tau>s)" and "\<sigma> \<in> set (field_types \<Sigma> C \<tau>s)"
+  shows "fv \<sigma> \<subseteq> \<Union> (fv ` set \<tau>s)"
+proof -
+  from assms(3) obtain x where "(x, \<sigma>) \<in> set (instantiate (fields \<Sigma> C) \<tau>s)" by (auto simp: field_types_def)
+  from fields_fv_inst[OF assms(1, 2) this] show ?thesis .
+qed
 
 lemma instantiate_fields_subst:
   assumes "wf_class_table \<Sigma>" and "C |\<in>| fmdom \<Sigma>" and "length \<sigma>s = length (type_params \<Sigma> C)"

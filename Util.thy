@@ -168,6 +168,9 @@ lemma those_sum_eq: "those_sum ms = Ok xs \<Longrightarrow> ms = map Ok xs"
 lemma those_sum_map_Ok: "those_sum (map f xs) = Ok ys \<Longrightarrow> list_all2 (\<lambda>x y. f x = Ok y) xs ys"
   by (auto dest: those_sum_Ok simp: list_all2_map1)
 
+lemma those_sum_map_Ok_elem: "\<lbrakk> those_sum (map f xs) = Ok ys ; y \<in> set ys \<rbrakk> \<Longrightarrow> \<exists>x \<in> set xs. f x = Ok y"
+  by (auto dest!: those_sum_map_Ok simp: list_all2_conv_all_nth in_set_conv_nth) (metis nth_mem)
+
 (* First failure in the list, otherwise success *)
 definition all_sum :: "('e + unit) list \<Rightarrow> 'e + unit"
 where
