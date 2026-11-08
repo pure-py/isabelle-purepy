@@ -1167,7 +1167,9 @@ lemma check_pat_union:
   \<Longrightarrow> (\<exists>\<Delta>''. check_pat_at \<Sigma> \<Gamma> p' \<sigma> = Ok \<Delta>'') \<and> (\<exists>\<Delta>''. check_pat_at \<Sigma> \<Gamma> p' \<sigma>' = Ok \<Delta>'')"
 proof (induction \<Sigma> \<Gamma> p \<tau> and \<Sigma> \<Gamma> p' \<tau>' arbitrary: \<Delta> \<sigma> \<sigma>' and \<Delta>' \<sigma> \<sigma>' rule: check_pat_check_pat_at.induct)
   case (3 \<Sigma> \<Gamma> p x \<tau>)
-  from "3.prems" obtain \<Delta>\<^sub>p where "check_unbound \<Gamma> x = Ok ()" and "check_pat_at \<Sigma> \<Gamma> p \<tau> = Ok \<Delta>\<^sub>p"
+  from "3.prems" obtain \<Delta>\<^sub>p where "check_unbound \<Gamma> x = Ok ()"
+    and "ensure (x \<notin> binds (node p)) (SelectsNoRule JudgementCheckPattern (PatternBindsTwice x)) = Ok ()"
+    and "check_pat_at \<Sigma> \<Gamma> p \<tau> = Ok \<Delta>\<^sub>p"
     by (auto simp: bind_sum_Ok)
   with "3.IH"[OF this "3.prems"(2)] show ?case by (auto simp: bind_sum_Ok)
 next
@@ -1180,7 +1182,7 @@ next
     by (auto simp: bind_sum_Ok ensure_def has_values_union dest!: bindings_at_append split: if_splits)
 next
   case (7 \<Sigma> \<Gamma> kps \<tau>)
-  then show ?case by (auto dest!: bindings_at_append)
+  then show ?case by (auto simp: bind_sum_Ok dest!: bindings_at_append)
 next
   case (8 \<Sigma> \<Gamma> q ps kps \<tau>)
   then show ?case by (auto simp: bind_sum_Ok dest!: bindings_at_append)
@@ -1544,10 +1546,12 @@ proof (induction \<Sigma> \<Gamma> p \<tau> and \<Sigma> \<Gamma> p' \<tau>' arb
   then show ?case by (auto simp: bind_sum_Ok split: if_splits)
 next
   case (3 \<Sigma> \<Gamma> p x \<tau>)
-  from "3.prems"(4) obtain \<Delta>\<^sub>p where unb: "check_unbound \<Gamma> x = Ok ()" and p: "check_pat_at \<Sigma> \<Gamma> p \<tau> = Ok \<Delta>\<^sub>p"
+  from "3.prems"(4) obtain \<Delta>\<^sub>p where unb: "check_unbound \<Gamma> x = Ok ()"
+    and once: "ensure (x \<notin> binds (node p)) (SelectsNoRule JudgementCheckPattern (PatternBindsTwice x)) = Ok ()"
+    and p: "check_pat_at \<Sigma> \<Gamma> p \<tau> = Ok \<Delta>\<^sub>p"
     and \<Delta>: "\<Delta> = \<Delta>\<^sub>p \<otimes> fmupd x (matched_as \<Sigma> \<Gamma> \<tau> (node p)) fmempty"
     by (auto simp: bind_sum_Ok)
-  from matched_as_wf[OF "3.prems"(1-3) check_pat_at_node[OF p]] "3.IH"[OF unb "3.prems"(1-3) p] show ?case
+  from matched_as_wf[OF "3.prems"(1-3) check_pat_at_node[OF p]] "3.IH"[OF unb once "3.prems"(1-3) p] show ?case
     by (auto simp: \<Delta> split: if_splits)
 next
   case (5 \<Sigma> \<Gamma> ps \<tau>)
@@ -1560,7 +1564,7 @@ next
       ensure (\<not> has_values \<Sigma> ListKind \<tau>) (SequenceKindMismatch TupleKind \<tau> ListKind);
       ensure (\<not> has_values \<Sigma> RangeKind \<tau>) (SequenceKindMismatch TupleKind \<tau> RangeKind)
     }) = Ok u"
-    and b: "bindings_at \<Sigma> \<Gamma> (PatTuple ps) (map ?f (disjuncts \<tau>)) = Ok \<Delta>"
+    and cb: "check_bound_once ps = Ok ()" and b: "bindings_at \<Sigma> \<Gamma> (PatTuple ps) (map ?f (disjuncts \<tau>)) = Ok \<Delta>"
     by (auto simp: bind_sum_Ok)
   have sub: "fmdom' \<Delta>' = binds (PatTuple ps) \<and> (\<forall>x \<sigma>'. fmlookup \<Delta>' x = Some \<sigma>' \<longrightarrow> wf_ty \<Sigma> \<sigma>' \<and> fv \<sigma>' \<subseteq> fv \<tau>)"
     if \<sigma>: "\<sigma> \<in> set (disjuncts \<tau>)" and f: "?f \<sigma> = Some (Ok \<Delta>')" for \<sigma> \<Delta>'
@@ -1573,7 +1577,7 @@ next
       if mem: "(p, \<sigma>') \<in> set (zip ps \<sigma>s)" and chk: "check_pat_at \<Sigma> \<Gamma> p \<sigma>' = Ok \<Delta>''" for p \<sigma>' \<Delta>''
     proof -
       have wf\<sigma>': "wf_ty \<Sigma> \<sigma>'" and fv\<sigma>': "fv \<sigma>' \<subseteq> fv \<sigma>" using wf\<sigma> set_zip_rightD[OF mem] by (auto simp: \<sigma>s)
-      from "5.IH"[OF ens \<sigma> \<sigma>s len mem refl "5.prems"(1, 2) wf\<sigma>' chk] fv\<sigma>' fv\<sigma> show ?thesis by blast
+      from "5.IH"[OF ens cb \<sigma> \<sigma>s len mem refl "5.prems"(1, 2) wf\<sigma>' chk] fv\<sigma>' fv\<sigma> show ?thesis by blast
     qed
     from pattern_bindings_wf[OF pb len[symmetric] this] show ?thesis by auto
   qed
@@ -1587,7 +1591,7 @@ next
       ensure (\<not> has_values \<Sigma> TupleKind \<tau>) (SequenceKindMismatch ListKind \<tau> TupleKind);
       ensure (\<not> has_values \<Sigma> RangeKind \<tau>) (SequenceKindMismatch ListKind \<tau> RangeKind)
     }) = Ok u"
-    and b: "bindings_at \<Sigma> \<Gamma> (PatList ps) (map ?f (disjuncts \<tau>)) = Ok \<Delta>"
+    and cb: "check_bound_once ps = Ok ()" and b: "bindings_at \<Sigma> \<Gamma> (PatList ps) (map ?f (disjuncts \<tau>)) = Ok \<Delta>"
     by (auto simp: bind_sum_Ok)
   have sub: "fmdom' \<Delta>' = binds (PatList ps) \<and> (\<forall>x \<sigma>'. fmlookup \<Delta>' x = Some \<sigma>' \<longrightarrow> wf_ty \<Sigma> \<sigma>' \<and> fv \<sigma>' \<subseteq> fv \<tau>)"
     if \<sigma>: "\<sigma> \<in> set (disjuncts \<tau>)" and f: "?f \<sigma> = Some (Ok \<Delta>')" for \<sigma> \<Delta>'
@@ -1601,7 +1605,7 @@ next
       for p \<sigma>'' \<Delta>''
     proof -
       from mem have p: "p \<in> set ps" and "\<sigma>'' = \<sigma>'" by (auto dest: set_zip_leftD set_zip_rightD)
-      from "6.IH"[OF ens \<sigma> \<sigma>' p "6.prems"(1, 2) wf\<sigma> chk[unfolded this(2)]] fv\<sigma> this(2) show ?thesis by blast
+      from "6.IH"[OF ens cb \<sigma> \<sigma>' p "6.prems"(1, 2) wf\<sigma> chk[unfolded this(2)]] fv\<sigma> this(2) show ?thesis by blast
     qed
     from pattern_bindings_wf[OF pb _ this] show ?thesis by auto
   qed
@@ -1613,8 +1617,9 @@ next
             | _ \<Rightarrow>
                 if has_dict_values \<Sigma> \<sigma> then Some (Fail (Violates RuleCheckDictNone (DictPatternDictValues \<sigma>)))
                 else None"
-  from "7.prems"(4) have b: "bindings_at \<Sigma> \<Gamma> (PatDict kps) (map ?f (disjuncts \<tau>)) = Ok \<Delta>"
-    by (simp only: check_pat.simps)
+  from "7.prems"(4) have cb: "check_bound_once (map snd kps) = Ok ()"
+    and b: "bindings_at \<Sigma> \<Gamma> (PatDict kps) (map ?f (disjuncts \<tau>)) = Ok \<Delta>"
+    by (auto simp: bind_sum_Ok)
   have sub: "fmdom' \<Delta>' = binds (PatDict kps) \<and> (\<forall>x \<sigma>'. fmlookup \<Delta>' x = Some \<sigma>' \<longrightarrow> wf_ty \<Sigma> \<sigma>' \<and> fv \<sigma>' \<subseteq> fv \<tau>)"
     if \<sigma>: "\<sigma> \<in> set (disjuncts \<tau>)" and f: "?f \<sigma> = Some (Ok \<Delta>')" for \<sigma> \<Delta>'
   proof -
@@ -1627,7 +1632,7 @@ next
       and chk: "check_pat_at \<Sigma> \<Gamma> p \<sigma>'' = Ok \<Delta>''" for p \<sigma>'' \<Delta>''
     proof -
       from mem have p: "p \<in> set (map snd kps)" and "\<sigma>'' = \<sigma>'" by (auto dest: set_zip_leftD set_zip_rightD)
-      from "7.IH"[OF \<sigma> \<sigma>' p "7.prems"(1, 2) wf\<sigma> chk[unfolded this(2)]] fv\<sigma> this(2) show ?thesis by blast
+      from "7.IH"[OF cb \<sigma> \<sigma>' p "7.prems"(1, 2) wf\<sigma> chk[unfolded this(2)]] fv\<sigma> this(2) show ?thesis by blast
     qed
     from pattern_bindings_wf[OF pb _ this] show ?thesis by auto
   qed
@@ -1637,6 +1642,7 @@ next
   from "8.prems"(4) obtain C where cls: "check_pattern_class \<Gamma> q = Ok C"
     and fm: "check_field_map (PatternArityMismatch (short_name C)) (UnknownFieldInPattern (short_name C))
                (field_names \<Sigma> C) (length ps) (map fst kps) = Ok ()"
+    and cb: "check_bound_once (ps @ map snd kps) = Ok ()"
     and b: "bindings_at \<Sigma> \<Gamma> (PatConstr q (ps, kps))
               (map (\<lambda>\<sigma>. case instance_at \<Sigma> C \<sigma> of
                           Instance \<sigma>s \<Rightarrow>
@@ -1684,7 +1690,7 @@ next
     proof -
       from set_zip_rightD[OF mem] have wf\<sigma>': "wf_ty \<Sigma> \<sigma>'" and fv\<sigma>': "fv \<sigma>' \<subseteq> \<Union> (fv ` set \<sigma>s)"
         using field_types_wf[OF "8.prems"(1) wfC] field_types_fv[OF "8.prems"(1) wfC] by auto
-      from "8.IH"[OF cls fm \<sigma> inst mem refl "8.prems"(1, 2) wf\<sigma>' chk] fv\<sigma>' fv\<sigma>s fv\<sigma> show ?thesis by blast
+      from "8.IH"[OF cls fm cb \<sigma> inst mem refl "8.prems"(1, 2) wf\<sigma>' chk] fv\<sigma>' fv\<sigma>s fv\<sigma> show ?thesis by blast
     qed
     from pattern_bindings_wf[OF pb _ this] len_fp length_field_types[of \<Sigma> C \<sigma>s] set_fp show ?thesis
       by auto

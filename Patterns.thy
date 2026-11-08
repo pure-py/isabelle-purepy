@@ -216,6 +216,18 @@ proof -
   from that[OF p this(2)[symmetric] x] show thesis .
 qed
 
+(* Check that no variable is bound by two of the patterns ps, whose bindings compose by disjoint union *)
+definition check_bound_once :: "pat located list \<Rightarrow> unit may_fail"
+where
+"check_bound_once ps =
+  (case redeclared id {} (concat (map (sorted_list_of_set \<circ> binds \<circ> node) ps)) of
+     Some x \<Rightarrow> Fail (SelectsNoRule JudgementCheckPattern (PatternBindsTwice x))
+   | None \<Rightarrow> Ok ())"
+
+lemma check_bound_once_Ok:
+  "check_bound_once ps = Ok () \<Longrightarrow> distinct (concat (map (sorted_list_of_set \<circ> binds \<circ> node) ps))"
+  by (auto simp: check_bound_once_def dest: redeclared_None split: option.splits)
+
 function
   check_pat :: "class_table \<Rightarrow> cxt \<Rightarrow> pat \<Rightarrow> ty \<Rightarrow> (var, ty) fmap may_fail" and
   check_pat_at :: "class_table \<Rightarrow> cxt \<Rightarrow> pat located \<Rightarrow> ty \<Rightarrow> (var, ty) fmap may_fail"
@@ -224,7 +236,9 @@ where
 "check_pat \<Sigma> \<Gamma> (PatVar x) \<tau> = by_rule RuleCheckVar (do { check_unbound \<Gamma> x; Ok (fmupd x \<tau> fmempty) })" |
 "check_pat \<Sigma> \<Gamma> (PatAs p x) \<tau> =
   by_rule RuleCheckAs (do {
-    check_unbound \<Gamma> x; \<Delta> \<leftarrow> check_pat_at \<Sigma> \<Gamma> p \<tau>;
+    check_unbound \<Gamma> x;
+    ensure (x \<notin> binds (node p)) (SelectsNoRule JudgementCheckPattern (PatternBindsTwice x));
+    \<Delta> \<leftarrow> check_pat_at \<Sigma> \<Gamma> p \<tau>;
     Ok (\<Delta> \<otimes> fmupd x (matched_as \<Sigma> \<Gamma> \<tau> (node p)) fmempty)
   })" |
 "check_pat \<Sigma> \<Gamma> (PatLiteral l) \<tau> =
@@ -236,6 +250,7 @@ where
      ensure (\<not> has_values \<Sigma> ListKind \<tau>) (SequenceKindMismatch TupleKind \<tau> ListKind);
      ensure (\<not> has_values \<Sigma> RangeKind \<tau>) (SequenceKindMismatch TupleKind \<tau> RangeKind)
    });
+   check_bound_once ps;
    bindings_at \<Sigma> \<Gamma> (PatTuple ps)
      (map (\<lambda>\<sigma>. case \<sigma> of
                  TyTuple \<sigma>s \<Rightarrow>
@@ -249,24 +264,28 @@ where
      ensure (\<not> has_values \<Sigma> TupleKind \<tau>) (SequenceKindMismatch ListKind \<tau> TupleKind);
      ensure (\<not> has_values \<Sigma> RangeKind \<tau>) (SequenceKindMismatch ListKind \<tau> RangeKind)
    });
+   check_bound_once ps;
    bindings_at \<Sigma> \<Gamma> (PatList ps)
      (map (\<lambda>\<sigma>. case \<sigma> of
                  TyList \<sigma>' \<Rightarrow> Some (pattern_bindings (map (\<lambda>p. check_pat_at \<Sigma> \<Gamma> p \<sigma>') ps))
                | _ \<Rightarrow> None)
        (disjuncts \<tau>))
  }" |
-"check_pat \<Sigma> \<Gamma> (PatDict kps) \<tau> =
-  bindings_at \<Sigma> \<Gamma> (PatDict kps)
-    (map (\<lambda>\<sigma>. case \<sigma> of
-                TyDict \<sigma>' \<Rightarrow> Some (pattern_bindings (map (\<lambda>p. check_pat_at \<Sigma> \<Gamma> p \<sigma>') (map snd kps)))
-              | _ \<Rightarrow>
-                  if has_dict_values \<Sigma> \<sigma> then Some (Fail (Violates RuleCheckDictNone (DictPatternDictValues \<sigma>)))
-                  else None)
-      (disjuncts \<tau>))" |
+"check_pat \<Sigma> \<Gamma> (PatDict kps) \<tau> = do {
+   check_bound_once (map snd kps);
+   bindings_at \<Sigma> \<Gamma> (PatDict kps)
+     (map (\<lambda>\<sigma>. case \<sigma> of
+                 TyDict \<sigma>' \<Rightarrow> Some (pattern_bindings (map (\<lambda>p. check_pat_at \<Sigma> \<Gamma> p \<sigma>') (map snd kps)))
+               | _ \<Rightarrow>
+                   if has_dict_values \<Sigma> \<sigma> then Some (Fail (Violates RuleCheckDictNone (DictPatternDictValues \<sigma>)))
+                   else None)
+       (disjuncts \<tau>))
+ }" |
 "check_pat \<Sigma> \<Gamma> (PatConstr q (ps, kps)) \<tau> = by_rule RuleCheckConstr (do {
    C \<leftarrow> check_pattern_class \<Gamma> q;
    check_field_map (PatternArityMismatch (short_name C)) (UnknownFieldInPattern (short_name C))
      (field_names \<Sigma> C) (length ps) (map fst kps);
+   check_bound_once (ps @ map snd kps);
    bindings_at \<Sigma> \<Gamma> (PatConstr q (ps, kps))
      (map (\<lambda>\<sigma>. case instance_at \<Sigma> C \<sigma> of
                  Instance \<sigma>s \<Rightarrow>
@@ -318,13 +337,14 @@ next
     done
 next
   case (7 \<Sigma> \<Gamma> kps \<tau>)
+  from "7.prems"(1) have cb: "check_bound_once (map snd kps) = Ok ()" by (auto simp: bind_sum_Ok)
   have IH: "fmlookup \<Gamma> x = Some Unbound"
     if "TyDict \<sigma> \<in> set (disjuncts \<tau>)" and "(w, p) \<in> set kps" and "check_pat_at \<Sigma> \<Gamma> p \<sigma> = Ok \<Delta>'"
       and "x |\<in>| fmdom \<Delta>'"
     for \<sigma> w p \<Delta>'
   proof -
     from that(2) have "p \<in> set (map snd kps)" by (auto intro: rev_image_eqI)
-    from "7.IH"[OF that(1) refl this that(3, 4)] show ?thesis .
+    from "7.IH"[OF cb that(1) refl this that(3, 4)] show ?thesis .
   qed
   from "7.prems" show ?case
     apply (clarsimp simp: bind_sum_Ok)

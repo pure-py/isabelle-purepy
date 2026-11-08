@@ -515,7 +515,7 @@ where
 
 (* Class table of dataclasses, each with fewer classes in its chain of base classes than the table has, a base
    class other than range which is a well-formed type over its type parameters, declared fields with
-   well-formed types over them, and distinct field names *)
+   well-formed types over them, and distinct type parameters and field names *)
 definition wf_class_table :: "class_table \<Rightarrow> bool"
 where
 "wf_class_table \<Sigma> =
@@ -526,7 +526,7 @@ where
           \<longrightarrow> D \<noteq> range_class \<and> wf_ty \<Sigma> (TyClass D \<sigma>s) \<and> (\<forall>\<sigma> \<in> set \<sigma>s. fv \<sigma> \<subseteq> set (type_params \<Sigma> C)))
      \<and> (\<forall>(x, \<sigma>) \<in> set (declared_fields \<Sigma> C (map TyVar (type_params \<Sigma> C))).
           wf_ty \<Sigma> \<sigma> \<and> fv \<sigma> \<subseteq> set (type_params \<Sigma> C))
-     \<and> distinct (field_names \<Sigma> C))"
+     \<and> distinct (type_params \<Sigma> C) \<and> distinct (field_names \<Sigma> C))"
 
 lemma wf_class_table_dataclass:
   assumes "wf_class_table \<Sigma>" and "C |\<in>| fmdom \<Sigma>"
@@ -562,6 +562,10 @@ lemma wf_class_table_declared_fields_wf:
   unfolding wf_class_table_def by fast
 
 lemma wf_class_table_distinct: "\<lbrakk> wf_class_table \<Sigma> ; C |\<in>| fmdom \<Sigma> \<rbrakk> \<Longrightarrow> distinct (field_names \<Sigma> C)"
+  unfolding wf_class_table_def by blast
+
+lemma wf_class_table_distinct_params:
+  "\<lbrakk> wf_class_table \<Sigma> ; C |\<in>| fmdom \<Sigma> \<rbrakk> \<Longrightarrow> distinct (type_params \<Sigma> C)"
   unfolding wf_class_table_def by blast
 
 lemma wf_class_table_base:

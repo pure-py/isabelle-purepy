@@ -33,6 +33,7 @@ datatype judgement =
 (* Reasons for ill-formedness *)
 datatype reason =
     DuplicateField var var
+  | DuplicateTypeParameter var var
   | InheritedField var var var
   | UndefinedVariable var
   | UnassignedVariable var
@@ -50,6 +51,7 @@ datatype reason =
   | UnknownConstructorKeyword var "var list"
   | PatternArityMismatch var nat nat
   | UnknownFieldInPattern var "var list"
+  | PatternBindsTwice var
   | RangePattern
   | RangeBase
   | PatternClassUndetermined var ty

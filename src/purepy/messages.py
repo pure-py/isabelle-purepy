@@ -298,6 +298,8 @@ def message(r: Reason) -> str:
     match unwrapped(r):
         case Reasons.DuplicateField(x, c):
             return f"duplicate field '{x}' in class '{c}'"
+        case Reasons.DuplicateTypeParameter(a, c):
+            return f"duplicate type parameter '{a}' in class '{c}'"
         case Reasons.InheritedField(x, c, d):
             return f"field '{x}' of class '{c}' is also a field of base class '{d}'"
         case Reasons.UndefinedVariable(x):
@@ -331,6 +333,8 @@ def message(r: Reason) -> str:
             return f"pattern for '{c}' expects {m} sub-patterns, got {n}"
         case Reasons.UnknownFieldInPattern(c, xs):
             return f"pattern keywords for '{c}' must be {', '.join(xs)}"
+        case Reasons.PatternBindsTwice(x):
+            return f"pattern binds '{x}' twice"
         case Reasons.RangePattern():
             return "'range' not permitted in a constructor pattern"
         case Reasons.RangeBase():

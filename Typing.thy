@@ -783,6 +783,7 @@ where
 "check_type_def \<Sigma> \<Gamma> (At p (Dataclass c \<alpha>s b \<phi>)) =
   locate p (by_rule (if b = None then RuleClass else RuleClassExtend) (do {
    check_predefined \<Gamma> (var ''dataclass'');
+   (case redeclared id {} \<alpha>s of Some \<alpha> \<Rightarrow> Fail (DuplicateTypeParameter \<alpha> c) | None \<Rightarrow> Ok ());
    those_sum (map (resolve_type \<Sigma> \<Gamma> \<circ> snd) \<phi>);
    base_class \<leftarrow>
      (case b of
