@@ -884,4 +884,300 @@ qed
 
 end
 
+
+subsection \<open>Bindings of sub-patterns\<close>
+
+lemma distinct_concat_nth:
+  "\<lbrakk> distinct (concat xss) ; i < length xss ; j < length xss ; i \<noteq> j \<rbrakk> \<Longrightarrow> set (xss ! i) \<inter> set (xss ! j) = {}"
+proof (induction xss arbitrary: i j)
+  case (Cons xs xss)
+  then show ?case by (cases i; cases j) (auto dest!: nth_mem)
+qed simp
+
+lemma fold_fmadd_dom': "fmdom' (fold fmadd \<Delta>s \<Delta>) = fmdom' \<Delta> \<union> \<Union> (fmdom' ` set \<Delta>s)"
+  by (induction \<Delta>s arbitrary: \<Delta>) auto
+
+lemma foldr_fmadd_dom': "fmdom' (foldr fmadd \<Delta>s \<Delta>) = fmdom' \<Delta> \<union> \<Union> (fmdom' ` set \<Delta>s)"
+  by (induction \<Delta>s) auto
+
+lemma fold_fmadd_lookup_notin: "x \<notin> \<Union> (fmdom' ` set \<Delta>s) \<Longrightarrow> fmlookup (fold fmadd \<Delta>s \<Delta>) x = fmlookup \<Delta> x"
+  by (induction \<Delta>s arbitrary: \<Delta>) (auto simp: fmdom'_alt_def fmlookup_dom_iff)
+
+(* Variable in the domain of one map of a list only: in none of the others *)
+lemma notin_others:
+  "\<lbrakk> \<forall>j < Suc (length \<Delta>s). j \<noteq> 0 \<longrightarrow> x \<notin> fmdom' ((\<Delta>' # \<Delta>s) ! j) \<rbrakk> \<Longrightarrow> x \<notin> \<Union> (fmdom' ` set \<Delta>s)"
+proof
+  assume all: "\<forall>j < Suc (length \<Delta>s). j \<noteq> 0 \<longrightarrow> x \<notin> fmdom' ((\<Delta>' # \<Delta>s) ! j)" and "x \<in> \<Union> (fmdom' ` set \<Delta>s)"
+  then obtain i where "i < length \<Delta>s" and "x \<in> fmdom' (\<Delta>s ! i)" by (auto simp: in_set_conv_nth)
+  with all[rule_format, of "Suc i"] show False by simp
+qed
+
+(* Lookup in a fold of maps, at a variable in the domain of one of them only *)
+lemma fold_fmadd_lookup:
+  "\<lbrakk> i < length \<Delta>s ; x \<in> fmdom' (\<Delta>s ! i) ; \<forall>j < length \<Delta>s. j \<noteq> i \<longrightarrow> x \<notin> fmdom' (\<Delta>s ! j) ; x \<notin> fmdom' \<Delta> \<rbrakk>
+  \<Longrightarrow> fmlookup (fold fmadd \<Delta>s \<Delta>) x = fmlookup (\<Delta>s ! i) x"
+proof (induction \<Delta>s arbitrary: i \<Delta>)
+  case (Cons \<Delta>' \<Delta>s)
+  show ?case
+  proof (cases i)
+    case 0
+    with Cons.prems have "x \<notin> \<Union> (fmdom' ` set \<Delta>s)" by (intro notin_others) simp
+    with Cons.prems 0 show ?thesis by (simp add: fold_fmadd_lookup_notin fmdom'_alt_def)
+  next
+    case (Suc i')
+    with Cons.prems have "x \<notin> fmdom' \<Delta>'" by fastforce
+    with Cons.prems Suc show ?thesis by (auto intro!: Cons.IH simp: fmdom'_alt_def)
+  qed
+qed simp
+
+lemma foldr_fmadd_lookup:
+  "\<lbrakk> i < length \<Delta>s ; x \<in> fmdom' (\<Delta>s ! i) ; \<forall>j < length \<Delta>s. j \<noteq> i \<longrightarrow> x \<notin> fmdom' (\<Delta>s ! j) ; x \<notin> fmdom' \<Delta> \<rbrakk>
+  \<Longrightarrow> fmlookup (foldr fmadd \<Delta>s \<Delta>) x = fmlookup (\<Delta>s ! i) x"
+proof (induction \<Delta>s arbitrary: i)
+  case (Cons \<Delta>' \<Delta>s)
+  show ?case
+  proof (cases i)
+    case 0
+    with Cons.prems have "x \<notin> \<Union> (fmdom' ` set \<Delta>s)" by (intro notin_others) simp
+    with Cons.prems have "x \<notin> fmdom' (foldr fmadd \<Delta>s \<Delta>)" by (simp add: foldr_fmadd_dom')
+    with 0 show ?thesis by (simp add: fmdom'_alt_def)
+  next
+    case (Suc i')
+    with Cons.prems have "x \<notin> fmdom' \<Delta>'" by fastforce
+    moreover from Cons.prems Suc have "fmlookup (foldr fmadd \<Delta>s \<Delta>) x = fmlookup (\<Delta>s ! i') x" by (auto intro!: Cons.IH)
+    moreover from Cons.prems Suc have "x \<in> fmdom' (foldr fmadd \<Delta>s \<Delta>)" by (auto simp: foldr_fmadd_dom')
+    ultimately show ?thesis using Suc by (simp add: fmdom'_alt_def)
+  qed
+qed simp
+
+(* Bindings of sub-patterns from the checks of each of them *)
+lemma pattern_bindings_Ok:
+  "pattern_bindings ms = Ok \<Delta> \<Longrightarrow> \<exists>\<Delta>s. list_all2 (\<lambda>m \<Delta>'. m = Ok \<Delta>') ms \<Delta>s \<and> \<Delta> = fold fmadd \<Delta>s fmempty"
+  by (auto simp: pattern_bindings_def bind_sum_Ok dest!: those_sum_Ok)
+
+(* Bindings of a pattern at the disjuncts of a type, from the bindings at each disjunct *)
+lemma bindings_at_Ok:
+  assumes "bindings_at \<Sigma> \<Gamma> p ms = Ok \<Delta>"
+  obtains \<Delta>s where "list_all2 (\<lambda>m \<Delta>'. case m of Some m' \<Rightarrow> m' = Ok \<Delta>'
+                               | None \<Rightarrow> \<Delta>' = fmconst (binds p) (TyPrim Never)
+                                   \<and> (\<forall>x \<in> binds p. fmlookup \<Gamma> x = Some Unbound)) ms \<Delta>s"
+    and "\<Delta> = fmmap_keys (\<lambda>x _. joins \<Sigma> (map (\<lambda>\<Delta>'. the (fmlookup \<Delta>' x)) \<Delta>s)) (hd \<Delta>s)"
+proof -
+  let ?g = "\<lambda>m. case m of
+                  Some m' \<Rightarrow> m'
+                | None \<Rightarrow> do {
+                    all_sum (map (check_unbound \<Gamma>) (sorted_list_of_set (binds p)));
+                    Ok (fmconst (binds p) (TyPrim Never))
+                  }"
+  from assms obtain \<Delta>s where \<Delta>s: "those_sum (map ?g ms) = Ok \<Delta>s"
+    and \<Delta>: "\<Delta> = fmmap_keys (\<lambda>x _. joins \<Sigma> (map (\<lambda>\<Delta>'. the (fmlookup \<Delta>' x)) \<Delta>s)) (hd \<Delta>s)"
+    unfolding bindings_at_def bind_sum_Ok by auto
+  have "case m of Some m' \<Rightarrow> m' = Ok \<Delta>'
+        | None \<Rightarrow> \<Delta>' = fmconst (binds p) (TyPrim Never) \<and> (\<forall>x \<in> binds p. fmlookup \<Gamma> x = Some Unbound)"
+    if "?g m = Ok \<Delta>'" for m \<Delta>'
+    using that finite_binds_pat[of p]
+    by (auto simp: bind_sum_Ok intro: check_unbound_Ok dest!: all_sum_map_Ok[where x = "x" for x] split: option.splits)
+  with those_sum_map_Ok[OF \<Delta>s] \<Delta> that show thesis by (blast intro: list_all2_mono)
+qed
+
+subsection \<open>Outcomes of matching sequences of patterns\<close>
+
+lemma foldr_match_Match:
+  "foldr seq_compose_match ms (Match fmempty) = Match \<rho>'
+  \<Longrightarrow> \<exists>\<rho>s. list_all2 (\<lambda>m \<rho>. m = Match \<rho>) ms \<rho>s \<and> \<rho>' = foldr fmadd \<rho>s fmempty"
+proof (induction ms arbitrary: \<rho>')
+  case (Cons m ms)
+  from Cons.prems obtain \<rho>\<^sub>1 \<rho>\<^sub>2 where "m = Match \<rho>\<^sub>1" and rest: "foldr seq_compose_match ms (Match fmempty) = Match \<rho>\<^sub>2"
+    and "\<rho>' = \<rho>\<^sub>1 ++\<^sub>f \<rho>\<^sub>2"
+    by (cases m; cases "foldr seq_compose_match ms (Match fmempty)") auto
+  from Cons.IH[OF rest] obtain \<rho>s where "list_all2 (\<lambda>m \<rho>. m = Match \<rho>) ms \<rho>s" and "\<rho>\<^sub>2 = foldr fmadd \<rho>s fmempty"
+    by blast
+  with \<open>m = Match \<rho>\<^sub>1\<close> \<open>\<rho>' = \<rho>\<^sub>1 ++\<^sub>f \<rho>\<^sub>2\<close> show ?case by (auto intro!: exI[of _ "\<rho>\<^sub>1 # \<rho>s"])
+qed simp
+
+lemma foldr_match_NoMatch: "foldr seq_compose_match ms (Match fmempty) = NoMatch \<Longrightarrow> NoMatch \<in> set ms"
+proof (induction ms)
+  case (Cons m ms)
+  then show ?case by (cases m; cases "foldr seq_compose_match ms (Match fmempty)") auto
+qed simp
+
+lemma foldr_match_Aborts:
+  "foldr seq_compose_match ms (Match fmempty) = MatchAborts \<kappa> \<Longrightarrow> MatchAborts \<kappa> \<in> set ms"
+proof (induction ms)
+  case (Cons m ms)
+  then show ?case by (cases m; cases "foldr seq_compose_match ms (Match fmempty)") auto
+qed simp
+
+subsection \<open>Fields of a class at an ancestor\<close>
+
+lemma map_fst_instantiate: "map fst (instantiate (fields \<Sigma> C) \<tau>s) = field_names \<Sigma> C"
+  by (cases "fields \<Sigma> C") (auto simp: field_names_def comp_def case_prod_beta)
+
+(* Fields of a class: those of each ancestor, at the type arguments of the ancestor, first *)
+lemma instantiate_fields_upto:
+  assumes "wf_class_table \<Sigma>"
+  shows "\<lbrakk> D |\<in>| fmdom \<Sigma> ; inherits_within n \<Sigma> D ; (C, \<sigma>s) \<in> set (instantiated_ancestors_upto n \<Sigma> D \<upsilon>s) \<rbrakk>
+    \<Longrightarrow> \<exists>rest. instantiate (fields \<Sigma> D) \<upsilon>s = instantiate (fields \<Sigma> C) \<sigma>s @ rest"
+proof (induction n arbitrary: D \<upsilon>s)
+  case (Suc n)
+  show ?case
+  proof (cases "(C, \<sigma>s) = (D, \<upsilon>s)")
+    case True
+    then show ?thesis by auto
+  next
+    case False
+    with Suc.prems obtain E \<rho>s where base: "base \<Sigma> D = Some (E, \<rho>s)"
+      and mem: "(C, \<sigma>s) \<in> set (instantiated_ancestors_upto n \<Sigma> E (map (subst \<upsilon>s (type_params \<Sigma> D)) \<rho>s))"
+      by (auto split: option.splits)
+    from wf_class_table_baseD[OF assms Suc.prems(1) base] have E: "E |\<in>| fmdom \<Sigma>" by simp
+    from Suc.prems(2) base have "inherits_within n \<Sigma> E" by simp
+    from Suc.IH[OF E this mem] obtain rest
+      where "instantiate (fields \<Sigma> E) (map (subst \<upsilon>s (type_params \<Sigma> D)) \<rho>s) = instantiate (fields \<Sigma> C) \<sigma>s @ rest"
+      by blast
+    with instantiate_fields_base[OF assms Suc.prems(1) base] show ?thesis by auto
+  qed
+qed simp
+
+lemma instantiate_fields_ancestor:
+  assumes "wf_class_table \<Sigma>" and "D |\<in>| fmdom \<Sigma>" and "C \<in> set (ancestors \<Sigma> D)"
+  shows "\<exists>rest. instantiate (fields \<Sigma> D) \<upsilon>s = instantiate (fields \<Sigma> C) (instantiated_ancestor \<Sigma> D \<upsilon>s C) @ rest"
+  using instantiate_fields_upto[OF assms(1, 2) wf_class_table_inherits[OF assms(1, 2)]
+      instantiated_ancestor_mem[OF assms, of \<upsilon>s, unfolded instantiated_ancestors_def]] .
+
+subsection \<open>Meets with a literal, float or class type\<close>
+
+lemma meet_literal:
+  "\<not> is_union \<tau> \<Longrightarrow> meet \<Sigma> (TyLiteral l) \<tau>
+    = (if \<Sigma> \<turnstile> TyLiteral l <: \<tau> then TyLiteral l else if \<Sigma> \<turnstile> \<tau> <: TyLiteral l then \<tau> else TyPrim Never)"
+  by (cases \<tau>) auto
+
+lemma meet_float:
+  "\<not> is_union \<tau> \<Longrightarrow> meet \<Sigma> (TyPrim float) \<tau>
+    = (if \<Sigma> \<turnstile> TyPrim float <: \<tau> then TyPrim float else if \<Sigma> \<turnstile> \<tau> <: TyPrim float then \<tau> else TyPrim Never)"
+  by (cases \<tau>) auto
+
+lemma meet_class:
+  "\<not> is_union \<sigma> \<Longrightarrow> meet \<Sigma> \<sigma> (TyClass C \<tau>s)
+    = (if \<Sigma> \<turnstile> \<sigma> <: TyClass C \<tau>s then \<sigma> else if \<Sigma> \<turnstile> TyClass C \<tau>s <: \<sigma> then TyClass C \<tau>s else TyPrim Never)"
+  by (cases \<sigma>) auto
+
+(* Pattern checked at a type: checked at each disjunct *)
+lemma check_pat_disjunct:
+  "\<lbrakk> check_pat \<Sigma> \<Gamma> p \<tau> = Ok \<Delta> ; \<sigma> \<in> set (disjuncts \<tau>) \<rbrakk> \<Longrightarrow> \<exists>\<Delta>'. check_pat \<Sigma> \<Gamma> p \<sigma> = Ok \<Delta>'"
+proof (induction \<tau> arbitrary: \<Delta>)
+  case (TyUnion \<sigma>\<^sub>1 \<sigma>\<^sub>2)
+  from check_pat_union(1)[OF TyUnion.prems(1) refl] obtain \<Delta>\<^sub>1 \<Delta>\<^sub>2 where "check_pat \<Sigma> \<Gamma> p \<sigma>\<^sub>1 = Ok \<Delta>\<^sub>1"
+    and "check_pat \<Sigma> \<Gamma> p \<sigma>\<^sub>2 = Ok \<Delta>\<^sub>2"
+    by blast
+  with TyUnion.IH TyUnion.prems(2) show ?case by auto
+qed auto
+
+context evaluation
+begin
+
+subsection \<open>Matched and remaining types at a disjunct\<close>
+
+lemma matched_as_lift:
+  "\<lbrakk> \<sigma> \<in> set (disjuncts \<tau>) ; check_pat \<Sigma> \<Gamma> p \<tau> = Ok \<Delta> ; wf_cxt \<Sigma> \<Gamma> ; wf_ty \<Sigma> \<tau> ; wf_inst \<Sigma> \<eta>
+   ; \<turnstile> v : Ty (inst \<eta> (matched_as \<Sigma> \<Gamma> \<sigma> p)) \<rbrakk>
+  \<Longrightarrow> \<turnstile> v : Ty (inst \<eta> (matched_as \<Sigma> \<Gamma> \<tau> p))"
+proof (induction \<tau> arbitrary: \<Delta>)
+  case (TyUnion \<sigma>\<^sub>1 \<sigma>\<^sub>2)
+  from check_pat_union(1)[OF TyUnion.prems(2) refl] obtain \<Delta>\<^sub>1 \<Delta>\<^sub>2 where c\<^sub>1: "check_pat \<Sigma> \<Gamma> p \<sigma>\<^sub>1 = Ok \<Delta>\<^sub>1"
+    and c\<^sub>2: "check_pat \<Sigma> \<Gamma> p \<sigma>\<^sub>2 = Ok \<Delta>\<^sub>2"
+    by blast
+  let ?m\<^sub>1 = "matched_as \<Sigma> \<Gamma> \<sigma>\<^sub>1 p" and ?m\<^sub>2 = "matched_as \<Sigma> \<Gamma> \<sigma>\<^sub>2 p"
+  have wf\<^sub>1: "wf_ty \<Sigma> ?m\<^sub>1" and wf\<^sub>2: "wf_ty \<Sigma> ?m\<^sub>2"
+    using matched_as_wf[OF wf_class_table TyUnion.prems(3) _ c\<^sub>1] matched_as_wf[OF wf_class_table TyUnion.prems(3) _ c\<^sub>2]
+      TyUnion.prems(4)
+    by auto
+  have "\<turnstile> v : Ty (inst \<eta> ?m\<^sub>1) \<or> \<turnstile> v : Ty (inst \<eta> ?m\<^sub>2)"
+    using TyUnion.prems(1, 6) TyUnion.IH(1)[OF _ c\<^sub>1] TyUnion.IH(2)[OF _ c\<^sub>2] TyUnion.prems(3-5) by auto
+  moreover have "\<Sigma> \<turnstile> inst \<eta> ?m\<^sub>1 <: inst \<eta> (?m\<^sub>1 \<squnion>\<^bsub>\<Sigma>\<^esub> ?m\<^sub>2)" and "\<Sigma> \<turnstile> inst \<eta> ?m\<^sub>2 <: inst \<eta> (?m\<^sub>1 \<squnion>\<^bsub>\<Sigma>\<^esub> ?m\<^sub>2)"
+    using subst_subty(1)[OF wf_class_table join_upper(1)] subst_subty(1)[OF wf_class_table join_upper(2)]
+      wf\<^sub>1 wf\<^sub>2 wf_join[OF wf\<^sub>1 wf\<^sub>2]
+    by blast+
+  ultimately show ?case using inst_wf[OF TyUnion.prems(5) wf_join[OF wf\<^sub>1 wf\<^sub>2]] by (auto intro: ValSub)
+qed auto
+
+lemma remaining_lift:
+  "\<lbrakk> \<sigma> \<in> set (disjuncts \<tau>) ; wf_ty \<Sigma> \<tau> ; wf_inst \<Sigma> \<eta> ; \<turnstile> v : Ty (inst \<eta> (remaining \<Sigma> \<Gamma> \<sigma> p)) \<rbrakk>
+  \<Longrightarrow> \<turnstile> v : Ty (inst \<eta> (remaining \<Sigma> \<Gamma> \<tau> p))"
+proof (induction \<tau>)
+  case (TyUnion \<sigma>\<^sub>1 \<sigma>\<^sub>2)
+  let ?r\<^sub>1 = "remaining \<Sigma> \<Gamma> \<sigma>\<^sub>1 p" and ?r\<^sub>2 = "remaining \<Sigma> \<Gamma> \<sigma>\<^sub>2 p"
+  have wf\<^sub>1: "wf_ty \<Sigma> ?r\<^sub>1" and wf\<^sub>2: "wf_ty \<Sigma> ?r\<^sub>2" using remaining_wf TyUnion.prems(2) by auto
+  have "\<turnstile> v : Ty (inst \<eta> ?r\<^sub>1) \<or> \<turnstile> v : Ty (inst \<eta> ?r\<^sub>2)"
+    using TyUnion.prems TyUnion.IH by auto
+  moreover have "\<Sigma> \<turnstile> inst \<eta> ?r\<^sub>1 <: inst \<eta> (?r\<^sub>1 \<squnion>\<^bsub>\<Sigma>\<^esub> ?r\<^sub>2)" and "\<Sigma> \<turnstile> inst \<eta> ?r\<^sub>2 <: inst \<eta> (?r\<^sub>1 \<squnion>\<^bsub>\<Sigma>\<^esub> ?r\<^sub>2)"
+    using subst_subty(1)[OF wf_class_table join_upper(1)] subst_subty(1)[OF wf_class_table join_upper(2)]
+      wf\<^sub>1 wf\<^sub>2 wf_join[OF wf\<^sub>1 wf\<^sub>2]
+    by blast+
+  ultimately show ?case using inst_wf[OF TyUnion.prems(3) wf_join[OF wf\<^sub>1 wf\<^sub>2]] by (auto intro: ValSub)
+qed auto
+
+subsection \<open>Canonical forms of literals\<close>
+
+lemma wf_val_literal: "\<turnstile> v : Ty (TyLiteral l) \<Longrightarrow> v = VLit l"
+proof -
+  assume "\<turnstile> v : Ty (TyLiteral l)"
+  from wf_val_intro(1)[OF this] obtain \<sigma> where intro: "intro_typed v \<sigma>" and "\<Sigma> \<turnstile> \<sigma> <: TyLiteral l" by blast
+  with intro_typed_nonunion[OF intro] subty_literal_inv' have "\<sigma> = TyLiteral l" by blast
+  with intro show "v = VLit l" by (cases v) auto
+qed
+
+lemma wf_val_bool: "\<turnstile> v : Ty (TyPrim bool) \<Longrightarrow> \<exists>b. v = VLit (LitBool b)"
+  by (erule wf_prim_lit[OF _ SubtyRefl]) (auto elim: base_type_lit.elims split: if_splits)
+
+lemma wf_val_none: "\<turnstile> v : Ty (TyPrim NoneType) \<Longrightarrow> v = VLit LitNone"
+  by (erule wf_prim_lit[OF _ SubtyRefl]) (auto elim: base_type_lit.elims split: if_splits)
+
+lemma wf_val_float: "\<turnstile> v : Ty (TyPrim float) \<Longrightarrow> \<exists>l. v = VLit l \<and> is_number (VLit l)"
+  by (erule wf_prim_lit[OF _ SubtyRefl]) (auto elim: base_type_lit.elims split: if_splits)
+
+subsection \<open>Values at a disjunct of another kind\<close>
+
+lemma tuple_at_nontuple:
+  assumes "\<turnstile> VTuple vs : Ty (inst \<eta> \<sigma>)" and "\<not> is_union \<sigma>" and "\<forall>\<sigma>s. \<sigma> \<noteq> TyTuple \<sigma>s"
+  shows "has_values \<Sigma> ListKind \<sigma>"
+proof (cases \<sigma>)
+  case (TyPrim p)
+  with wf_tuple_sub[OF assms(1)] obtain \<upsilon>s where "\<Sigma> \<turnstile> TyTuple \<upsilon>s <: TyPrim p" by auto
+  then show ?thesis unfolding TyPrim by (cases p) (auto simp: subty_prim_iff intro: SubtyObject SubtySized)
+qed (use assms in \<open>auto dest!: wf_tuple_sub subty_structured_inv\<close>)
+
+lemma list_at_nonlist:
+  assumes "\<turnstile> VList vs : Ty (inst \<eta> \<sigma>)" and "\<not> is_union \<sigma>" and "\<forall>\<sigma>'. \<sigma> \<noteq> TyList \<sigma>'"
+  shows "has_values \<Sigma> TupleKind \<sigma>"
+proof (cases \<sigma>)
+  case (TyPrim p)
+  with wf_list_sub[OF assms(1)] obtain \<upsilon> where "\<Sigma> \<turnstile> TyList \<upsilon> <: TyPrim p" by auto
+  then show ?thesis unfolding TyPrim by (cases p) (auto simp: subty_prim_iff intro: SubtyObject SubtySized)
+qed (use assms in \<open>auto dest!: wf_list_sub subty_structured_inv\<close>)
+
+(* Range: an ancestor of no other class *)
+lemma range_not_ancestor_upto:
+  "\<lbrakk> inherits_within n \<Sigma> C ; C |\<in>| fmdom \<Sigma> ; C \<noteq> range_class
+   ; range_class \<in> set (map fst (instantiated_ancestors_upto n \<Sigma> C \<tau>s)) \<rbrakk> \<Longrightarrow> False"
+proof (induction n arbitrary: C \<tau>s)
+  case (Suc n)
+  show ?case
+  proof (cases "base \<Sigma> C")
+    case None
+    with Suc.prems show ?thesis by simp
+  next
+    case (Some E\<rho>s)
+    then obtain E \<rho>s where base: "base \<Sigma> C = Some (E, \<rho>s)" by (cases E\<rho>s) simp
+    from wf_class_table_baseD[OF wf_class_table Suc.prems(2) base] have "E |\<in>| fmdom \<Sigma>" and "E \<noteq> range_class"
+      by auto
+    with Suc.prems base Suc.IH show ?thesis by auto
+  qed
+qed simp
+
+lemma range_not_ancestor: "\<lbrakk> C |\<in>| fmdom \<Sigma> ; C \<noteq> range_class \<rbrakk> \<Longrightarrow> range_class \<notin> set (ancestors \<Sigma> C)"
+  unfolding ancestors_def instantiated_ancestors_def
+  using range_not_ancestor_upto[OF wf_class_table_inherits[OF wf_class_table]] by blast
+
+end
+
 end
