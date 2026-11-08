@@ -1487,10 +1487,9 @@ lemma matched_as_literal:
   by (cases \<tau>; cases l) auto
 
 lemma matched_as_constr:
-  "\<not> is_union \<tau> \<Longrightarrow> matched_as \<Sigma> \<Gamma> \<tau> (PatConstr q a)
-    = (case instance_at \<Sigma> (pattern_class \<Gamma> q) \<tau> of
-         Instance \<sigma>s \<Rightarrow> meet \<Sigma> \<tau> (TyClass (pattern_class \<Gamma> q) \<sigma>s) | _ \<Rightarrow> TyPrim Never)"
-  by (cases \<tau>) (auto simp: Let_def)
+  "\<lbrakk> \<not> is_union \<tau> ; resolve_name \<Gamma> q = Some (Type C) \<rbrakk> \<Longrightarrow> matched_as \<Sigma> \<Gamma> \<tau> (PatConstr q a)
+    = (case instance_at \<Sigma> C \<tau> of Instance \<sigma>s \<Rightarrow> meet \<Sigma> \<tau> (TyClass C \<sigma>s) | _ \<Rightarrow> TyPrim Never)"
+  by (cases \<tau>) auto
 
 lemma remaining_var: "\<not> is_union \<tau> \<Longrightarrow> remaining \<Sigma> \<Gamma> \<tau> (PatVar x) = TyPrim Never"
   by (cases \<tau>) auto
@@ -1508,16 +1507,15 @@ lemma remaining_dict: "\<lbrakk> \<not> is_union \<tau> ; kps \<noteq> [] \<or> 
   by (cases \<tau>; cases kps) auto
 
 lemma remaining_constr:
-  "\<not> is_union \<tau> \<Longrightarrow> remaining \<Sigma> \<Gamma> \<tau> (PatConstr q a)
-    = (case instance_at \<Sigma> (pattern_class \<Gamma> q) \<tau> of
+  "\<lbrakk> \<not> is_union \<tau> ; resolve_name \<Gamma> q = Some (Type C) \<rbrakk> \<Longrightarrow> remaining \<Sigma> \<Gamma> \<tau> (PatConstr q a)
+    = (case instance_at \<Sigma> C \<tau> of
          Instance \<sigma>s \<Rightarrow>
-           if \<Sigma> \<turnstile> \<tau> <: TyClass (pattern_class \<Gamma> q) \<sigma>s
-              \<and> (\<forall>(p, \<sigma>) \<in> set (zip (field_patterns \<Sigma> (pattern_class \<Gamma> q) a)
-                                 (field_types \<Sigma> (pattern_class \<Gamma> q) \<sigma>s)).
+           if \<Sigma> \<turnstile> \<tau> <: TyClass C \<sigma>s
+              \<and> (\<forall>(p, \<sigma>) \<in> set (zip (field_patterns \<Sigma> C a) (field_types \<Sigma> C \<sigma>s)).
                    remaining \<Sigma> \<Gamma> \<sigma> (node p) = TyPrim Never)
            then TyPrim Never else \<tau>
        | _ \<Rightarrow> \<tau>)"
-  by (cases \<tau>) (auto simp: Let_def)
+  by (cases \<tau>) auto
 
 subsection \<open>Field patterns of a constructor pattern\<close>
 
@@ -2719,7 +2717,8 @@ next
                   (if instance_above \<Sigma> C \<sigma> = Undetermined then RuleInstanceAbove else RuleInstanceBelow)
                   (PatternClassUndetermined (short_name C) \<sigma>)))"
   let ?xs = "field_names \<Sigma> C" and ?n = "length ps" and ?fps = "field_patterns \<Sigma> C (ps, kps)"
-  from check_pattern_class_dom[OF wf\<Gamma> cls] have C: "C |\<in>| fmdom \<Sigma>" and pc: "pattern_class \<Gamma> q = C" by auto
+  from check_pattern_class_dom[OF wf\<Gamma> cls] have C: "C |\<in>| fmdom \<Sigma>" and rn: "resolve_name \<Gamma> q = Some (Type C)"
+    by auto
   from pattern_class_value[OF env cls] have range: "C \<noteq> range_class" by blast
   have cls_ok: "(do {
       u \<leftarrow> or_else NameError (fmlookup \<rho> (root q));
@@ -2788,7 +2787,7 @@ next
   have remaining_other: "\<turnstile> v : Ty (inst \<eta> (remaining \<Sigma> \<Gamma> \<tau> (PatConstr q (ps, kps))))"
     if "\<not> (\<exists>\<sigma>s. instance_at \<Sigma> C \<sigma> = Instance \<sigma>s \<and> \<Sigma> \<turnstile> \<sigma> <: TyClass C \<sigma>s
              \<and> (\<forall>(p, \<sigma>') \<in> set (zip ?fps (field_types \<Sigma> C \<sigma>s)). remaining \<Sigma> \<Gamma> \<sigma>' (node p) = TyPrim Never))"
-    using v that by (intro lift_r) (auto simp: remaining_constr[OF nonunion] pc split: instances.splits)
+    using v that by (intro lift_r) (auto simp: remaining_constr[OF nonunion rn] split: instances.splits)
   (* Object below the instance: its class has C as ancestor *)
   have object_below: "C \<in> set (ancestors \<Sigma> D)"
     if inst: "instance_at \<Sigma> C \<sigma> = Instance \<sigma>s" and sub: "\<Sigma> \<turnstile> \<sigma> <: TyClass C \<sigma>s" and vD: "v = VObject D zvs"
@@ -3028,7 +3027,7 @@ next
             from instance_at_comparable[OF inst nonunion wf\<sigma> C]
             have "meet \<Sigma> \<sigma> (TyClass C \<sigma>s) = \<sigma> \<or> meet \<Sigma> \<sigma> (TyClass C \<sigma>s) = TyClass C \<sigma>s"
               by (auto simp: meet_class[OF nonunion])
-            with v vC show ?thesis by (auto simp: matched_as_constr[OF nonunion] pc inst)
+            with v vC show ?thesis by (auto simp: matched_as_constr[OF nonunion rn] inst)
           qed
           ultimately show "fmdom' \<rho>' = fmdom' \<Delta>
               \<and> (\<forall>x \<sigma>'. fmlookup \<Delta> x = Some \<sigma>' \<longrightarrow> (\<exists>u. fmlookup \<rho>' x = Some u \<and> \<turnstile> u : Ty (inst \<eta> \<sigma>')))

@@ -513,7 +513,8 @@ where
 "inherits_within 0 \<Sigma> C = False" |
 "inherits_within (Suc n) \<Sigma> C = (case base \<Sigma> C of None \<Rightarrow> True | Some (D, _) \<Rightarrow> inherits_within n \<Sigma> D)"
 
-(* Class table of dataclasses, each with fewer classes in its chain of base classes than the table has, a base
+(* Class table of dataclasses, each defined in a well-formed context without type variables and in a region
+   whose classes are in the table, with fewer classes in its chain of base classes than the table has, a base
    class other than range which is a well-formed type over its type parameters, declared fields with
    well-formed types over them, and distinct type parameters and field names *)
 definition wf_class_table :: "class_table \<Rightarrow> bool"
@@ -521,6 +522,9 @@ where
 "wf_class_table \<Sigma> =
   (\<forall>C. C |\<in>| fmdom \<Sigma> \<longrightarrow>
      (\<exists>\<Gamma> q \<chi>s i c \<alpha>s b \<phi>. fmlookup \<Sigma> C = Some (ClassDef \<Gamma> q \<chi>s i) \<and> node (\<chi>s ! i) = Dataclass c \<alpha>s b \<phi>)
+     \<and> (\<forall>\<Gamma> q \<chi>s i. fmlookup \<Sigma> C = Some (ClassDef \<Gamma> q \<chi>s i)
+          \<longrightarrow> tyvars \<Gamma> = {} \<and> wf_cxt \<Sigma> \<Gamma> \<and> i < length \<chi>s
+            \<and> (\<forall>\<chi> \<in> set \<chi>s. \<forall>c \<alpha>s b \<phi>. node \<chi> = Dataclass c \<alpha>s b \<phi> \<longrightarrow> Qualified q c |\<in>| fmdom \<Sigma>))
      \<and> inherits_within (fcard (fmdom \<Sigma>)) \<Sigma> C
      \<and> (\<forall>D \<sigma>s. base \<Sigma> C = Some (D, \<sigma>s)
           \<longrightarrow> D \<noteq> range_class \<and> wf_ty \<Sigma> (TyClass D \<sigma>s) \<and> (\<forall>\<sigma> \<in> set \<sigma>s. fv \<sigma> \<subseteq> set (type_params \<Sigma> C)))

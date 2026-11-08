@@ -11,10 +11,6 @@ where
    | Some PredefName \<Rightarrow> Fail (SelectsNoRule JudgementCheckPattern (PredefinedNameAsPattern q))
    | _ \<Rightarrow> Fail (SelectsNoRule JudgementCheckPattern (NotClass q)))"
 
-definition pattern_class :: "cxt \<Rightarrow> name \<Rightarrow> name"
-where
-"pattern_class \<Gamma> q = (case resolve_name \<Gamma> q of Some (Type C) \<Rightarrow> C | _ \<Rightarrow> undefined)"
-
 (* Sub-patterns of a constructor pattern for class C with arguments a, in the order of the fields of C *)
 fun field_patterns :: "class_table \<Rightarrow> name \<Rightarrow> pat located args \<Rightarrow> pat located list"
 where
@@ -73,8 +69,10 @@ where
 "matched_as \<Sigma> \<Gamma> (TyList \<tau>) (PatList _) = TyList \<tau>" |
 "matched_as \<Sigma> \<Gamma> (TyDict \<tau>) (PatDict _) = TyDict \<tau>" |
 "matched_as \<Sigma> \<Gamma> \<tau> (PatConstr q _) =
-  (let C = pattern_class \<Gamma> q in
-   case instance_at \<Sigma> C \<tau> of Instance \<sigma>s \<Rightarrow> meet \<Sigma> \<tau> (TyClass C \<sigma>s) | _ \<Rightarrow> TyPrim Never)" |
+  (case resolve_name \<Gamma> q of
+     Some (Type C) \<Rightarrow>
+       (case instance_at \<Sigma> C \<tau> of Instance \<sigma>s \<Rightarrow> meet \<Sigma> \<tau> (TyClass C \<sigma>s) | _ \<Rightarrow> TyPrim Never)
+   | _ \<Rightarrow> TyPrim Never)" |
 "matched_as \<Sigma> \<Gamma> _ _ = TyPrim Never"
 by pat_completeness auto
 
@@ -101,14 +99,16 @@ where
    else TyTuple \<tau>s)" |
 "remaining \<Sigma> \<Gamma> (TyDict _) (PatDict []) = TyPrim Never" |
 "remaining \<Sigma> \<Gamma> \<tau> (PatConstr q a) =
-  (let C = pattern_class \<Gamma> q in
-   case instance_at \<Sigma> C \<tau> of
-     Instance \<sigma>s \<Rightarrow>
-       if \<Sigma> \<turnstile> \<tau> <: TyClass C \<sigma>s
-          \<and> (\<forall>(p, \<sigma>) \<in> set (zip (field_patterns \<Sigma> C a) (field_types \<Sigma> C \<sigma>s)).
-               remaining \<Sigma> \<Gamma> \<sigma> (node p) = TyPrim Never)
-       then TyPrim Never
-       else \<tau>
+  (case resolve_name \<Gamma> q of
+     Some (Type C) \<Rightarrow>
+       (case instance_at \<Sigma> C \<tau> of
+          Instance \<sigma>s \<Rightarrow>
+            if \<Sigma> \<turnstile> \<tau> <: TyClass C \<sigma>s
+               \<and> (\<forall>(p, \<sigma>) \<in> set (zip (field_patterns \<Sigma> C a) (field_types \<Sigma> C \<sigma>s)).
+                    remaining \<Sigma> \<Gamma> \<sigma> (node p) = TyPrim Never)
+            then TyPrim Never
+            else \<tau>
+        | _ \<Rightarrow> \<tau>)
    | _ \<Rightarrow> \<tau>)" |
 "remaining \<Sigma> \<Gamma> \<tau> _ = \<tau>"
 by pat_completeness auto

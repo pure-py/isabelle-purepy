@@ -1194,9 +1194,8 @@ lemma check_pat_at_node:
 
 (* Class of a constructor pattern checked against a type, in the class table *)
 lemma check_pattern_class_dom:
-  "\<lbrakk> wf_cxt \<Sigma> \<Gamma> ; check_pattern_class \<Gamma> q = Ok C \<rbrakk> \<Longrightarrow> C |\<in>| fmdom \<Sigma> \<and> pattern_class \<Gamma> q = C"
-  by (auto simp: check_pattern_class_def pattern_class_def split: option.splits cxt_entry.splits if_splits
-      dest!: resolve_name_wf)
+  "\<lbrakk> wf_cxt \<Sigma> \<Gamma> ; check_pattern_class \<Gamma> q = Ok C \<rbrakk> \<Longrightarrow> C |\<in>| fmdom \<Sigma> \<and> resolve_name \<Gamma> q = Some (Type C)"
+  by (auto simp: check_pattern_class_def split: option.splits cxt_entry.splits if_splits dest!: resolve_name_wf)
 
 (* Class C instantiated by well-formed \<tau>, as a well-formed type when C is in the class table *)
 lemma instance_at_class_wf:
@@ -1236,10 +1235,11 @@ lemma matched_as_constr_wf:
 proof -
   obtain ps kps where a: "a = (ps, kps)" by (cases a)
   from assms(4) obtain C where cls: "check_pattern_class \<Gamma> q = Ok C" by (auto simp: a bind_sum_Ok)
-  from check_pattern_class_dom[OF assms(2) cls] have C: "C |\<in>| fmdom \<Sigma>" and pc: "pattern_class \<Gamma> q = C" by auto
+  from check_pattern_class_dom[OF assms(2) cls] have C: "C |\<in>| fmdom \<Sigma>" and rn: "resolve_name \<Gamma> q = Some (Type C)"
+    by auto
   have eq: "matched_as \<Sigma> \<Gamma> \<tau> (PatConstr q a) =
     (case instance_at \<Sigma> C \<tau> of Instance \<sigma>s \<Rightarrow> meet \<Sigma> \<tau> (TyClass C \<sigma>s) | _ \<Rightarrow> TyPrim Never)"
-    using assms(5) by (cases \<tau>) (auto simp: Let_def pc)
+    using assms(5) by (cases \<tau>) (auto simp: rn)
   show ?thesis
   proof (cases "instance_at \<Sigma> C \<tau>")
     case (Instance \<sigma>s)
@@ -1364,7 +1364,7 @@ next
       qed
     qed
   qed (use "8.prems" in simp)
-qed (auto simp: Let_def split: instances.splits if_splits)
+qed (auto simp: Let_def split: instances.splits if_splits option.splits cxt_entry.splits)
 
 subsection \<open>Pattern bindings\<close>
 
