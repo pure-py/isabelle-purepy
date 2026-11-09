@@ -1,6 +1,6 @@
 (* Value and environment typing *)
 theory ValueTyping
-  imports WellFormed "isabelle-purepy.Determinism"
+  imports WellFormedStatements "isabelle-purepy.Determinism"
 begin
 
 subsection \<open>Instantiation of type variables\<close>

@@ -1,6 +1,6 @@
 (* Stability of the type checker under extension of the class table *)
 theory Extension
-  imports WellFormed
+  imports WellFormedStatements
 begin
 
 declare meet.simps [simp del] needs_eq_class.simps [simp del]

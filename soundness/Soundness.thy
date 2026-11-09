@@ -1,6 +1,6 @@
 (* Type soundness *)
 theory Soundness
-  imports Expressions Calls Statements
+  imports Attributes Comprehensions Calls Statements
 begin
 
 context evaluation

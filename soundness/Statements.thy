@@ -6,62 +6,6 @@ begin
 context evaluation
 begin
 
-(* Return type, well-formed *)
-fun wf_return :: "ty option \<Rightarrow> bool"
-where
-"wf_return (Some \<tau>) = wf_ty \<Sigma> \<tau>" |
-"wf_return None = True"
-
-(* Completion of a statement checked at \<Gamma> and return type \<zeta> with static outcome R, run in \<rho> *)
-fun wf_completion :: "(var \<Rightarrow> ty) \<Rightarrow> env \<Rightarrow> cxt \<Rightarrow> ty option \<Rightarrow> completion \<Rightarrow> static_outcome \<Rightarrow> bool"
-where
-"wf_completion \<eta> \<rho> \<Gamma> \<zeta> (Assigns \<rho>') R =
-  (\<exists>\<Delta>. bindings_of R = Some \<Delta> \<and> fmdom \<rho>' |\<subseteq>| fmdom \<Delta> \<and> \<eta> \<turnstile> \<rho> \<otimes> \<rho>' : \<Gamma> \<otimes> \<Delta>)" |
-"wf_completion \<eta> \<rho> \<Gamma> \<zeta> (Returns v) R = (\<forall>\<tau>. \<zeta> = Some \<tau> \<longrightarrow> \<turnstile> v : Ty (inst \<eta> \<tau>))" |
-"wf_completion \<eta> \<rho> \<Gamma> \<zeta> (Aborts\<^sub>\<omega> \<kappa>) R = (\<not> prevented \<kappa>)"
-
-fun wf_outcome :: "(var \<Rightarrow> ty) \<Rightarrow> env \<Rightarrow> cxt \<Rightarrow> ty option \<Rightarrow> outcome \<Rightarrow> static_outcome \<Rightarrow> bool"
-where
-"wf_outcome \<eta> \<rho> \<Gamma> \<zeta> (vs, \<omega>) R = wf_completion \<eta> \<rho> \<Gamma> \<zeta> \<omega> R"
-
-lemma wf_completion_bindings:
-  "bindings_of R = bindings_of R' \<Longrightarrow> wf_completion \<eta> \<rho> \<Gamma> \<zeta> \<omega> R = wf_completion \<eta> \<rho> \<Gamma> \<zeta> \<omega> R'"
-  by (cases \<omega>) simp_all
-
-definition sound_stmt :: "env \<Rightarrow> stmt \<Rightarrow> outcome \<Rightarrow> bool"
-where
-"sound_stmt \<rho> s o =
-  (\<forall>\<eta> \<Gamma> \<zeta> R. \<eta> \<turnstile> \<rho> : \<Gamma> \<longrightarrow> wf_return \<zeta> \<longrightarrow> check_stmt \<Sigma> \<Gamma> \<zeta> s = Ok R
-     \<longrightarrow> wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R)"
-
-definition sound_elif :: "env \<Rightarrow> elif_block \<Rightarrow> outcome \<Rightarrow> bool"
-where
-"sound_elif \<rho> eb o =
-  (\<forall>\<eta> \<Gamma> \<zeta> Rs. \<eta> \<turnstile> \<rho> : \<Gamma> \<longrightarrow> wf_return \<zeta> \<longrightarrow> those_sum (check_elif \<Sigma> \<Gamma> \<zeta> eb) = Ok Rs
-     \<longrightarrow> (\<exists>R \<in> set Rs. wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R))"
-
-lemma sound_stmt_at:
-  assumes "sound_stmt \<rho> (node s) o" and "\<eta> \<turnstile> \<rho> : \<Gamma>" and "wf_return \<zeta>"
-    and "check_stmt_at \<Sigma> \<Gamma> \<zeta> s = Ok R"
-  shows "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R"
-proof -
-  from assms(4) obtain R' where "check_stmt \<Sigma> \<Gamma> \<zeta> (node s) = Ok R'" and R': "bindings_of R' = bindings_of R"
-    by (blast dest: check_stmt_at_Ok)
-  with assms(1-3) have "wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R'" unfolding sound_stmt_def by simp
-  then show ?thesis by (cases o) (simp add: wf_completion_bindings[OF R'])
-qed
-
-lemma sound_stmtI:
-  assumes "\<And>\<eta> \<Gamma> \<zeta> R. \<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; wf_return \<zeta> ; check_stmt \<Sigma> \<Gamma> \<zeta> s = Ok R \<rbrakk> \<Longrightarrow> wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R"
-  shows "sound_stmt \<rho> s o"
-  unfolding sound_stmt_def using assms by blast
-
-lemma sound_elifI:
-  assumes "\<And>\<eta> \<Gamma> \<zeta> Rs. \<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; wf_return \<zeta> ; those_sum (check_elif \<Sigma> \<Gamma> \<zeta> eb) = Ok Rs \<rbrakk>
-            \<Longrightarrow> \<exists>R \<in> set Rs. wf_outcome \<eta> \<rho> \<Gamma> \<zeta> o R"
-  shows "sound_elif \<rho> eb o"
-  unfolding sound_elif_def using assms by blast
-
 subsection \<open>Statements\<close>
 
 lemma pass_sound: "sound_stmt \<rho> StmtPass (assigns\<^sub>o \<epsilon>)"
