@@ -7,12 +7,6 @@ declare meet.simps [simp del] needs_eq_class.simps [simp del]
 
 subsection \<open>Inclusion of class tables\<close>
 
-lemma fmsubset_lookup: "\<lbrakk> \<Sigma> \<subseteq>\<^sub>f \<Sigma>' ; fmlookup \<Sigma> C = Some ce \<rbrakk> \<Longrightarrow> fmlookup \<Sigma>' C = Some ce"
-  by (auto simp: fmsubset_alt_def fmpred_iff)
-
-lemma fmsubset_dom: "\<lbrakk> \<Sigma> \<subseteq>\<^sub>f \<Sigma>' ; C |\<in>| fmdom \<Sigma> \<rbrakk> \<Longrightarrow> C |\<in>| fmdom \<Sigma>'"
-  by (auto simp: fmlookup_dom_iff dest: fmsubset_lookup)
-
 lemma type_params_mono:
   assumes "\<Sigma> \<subseteq>\<^sub>f \<Sigma>'" and "C |\<in>| fmdom \<Sigma>"
   shows "type_params \<Sigma>' C = type_params \<Sigma> C"

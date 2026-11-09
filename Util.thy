@@ -54,6 +54,85 @@ proof (induction \<Delta>s arbitrary: \<Delta>)
   from Cons.IH[of "\<Delta>' \<otimes> \<Delta>"] Cons.prems show ?case by auto
 qed simp
 
+lemma fold_fmadd_lookup:
+  "fmlookup (fold (\<otimes>) \<Delta>s \<Delta>) x = Some \<sigma> \<Longrightarrow> fmlookup \<Delta> x = Some \<sigma> \<or> (\<exists>\<Delta>' \<in> set \<Delta>s. fmlookup \<Delta>' x = Some \<sigma>)"
+proof (induction \<Delta>s arbitrary: \<Delta>)
+  case (Cons a \<Delta>s)
+  from Cons.IH[OF Cons.prems[simplified]] show ?case by (auto split: if_splits)
+qed simp
+
+lemma fmdom'_fold_fmadd: "fmdom' (fold (\<otimes>) \<Delta>s \<Delta>) = fmdom' \<Delta> \<union> \<Union> (fmdom' ` set \<Delta>s)"
+  by (induction \<Delta>s arbitrary: \<Delta>) auto
+
+lemma foldr_fmadd_dom': "fmdom' (foldr fmadd \<Delta>s \<Delta>) = fmdom' \<Delta> \<union> \<Union> (fmdom' ` set \<Delta>s)"
+  by (induction \<Delta>s) auto
+
+lemma fold_fmadd_lookup_notin: "x \<notin> \<Union> (fmdom' ` set \<Delta>s) \<Longrightarrow> fmlookup (fold fmadd \<Delta>s \<Delta>) x = fmlookup \<Delta> x"
+  by (induction \<Delta>s arbitrary: \<Delta>) (auto simp: fmdom'_alt_def fmlookup_dom_iff)
+
+(* Variable in the domain of one map of a list only: in none of the others *)
+lemma notin_others:
+  "\<lbrakk> \<forall>j < Suc (length \<Delta>s). j \<noteq> 0 \<longrightarrow> x \<notin> fmdom' ((\<Delta>' # \<Delta>s) ! j) \<rbrakk> \<Longrightarrow> x \<notin> \<Union> (fmdom' ` set \<Delta>s)"
+proof
+  assume all: "\<forall>j < Suc (length \<Delta>s). j \<noteq> 0 \<longrightarrow> x \<notin> fmdom' ((\<Delta>' # \<Delta>s) ! j)" and "x \<in> \<Union> (fmdom' ` set \<Delta>s)"
+  then obtain i where "i < length \<Delta>s" and "x \<in> fmdom' (\<Delta>s ! i)" by (auto simp: in_set_conv_nth)
+  with all[rule_format, of "Suc i"] show False by simp
+qed
+
+(* Lookup in a fold of maps, at a variable in the domain of one of them only *)
+lemma fold_fmadd_lookup_nth:
+  "\<lbrakk> i < length \<Delta>s ; x \<in> fmdom' (\<Delta>s ! i) ; \<forall>j < length \<Delta>s. j \<noteq> i \<longrightarrow> x \<notin> fmdom' (\<Delta>s ! j) ; x \<notin> fmdom' \<Delta> \<rbrakk>
+  \<Longrightarrow> fmlookup (fold fmadd \<Delta>s \<Delta>) x = fmlookup (\<Delta>s ! i) x"
+proof (induction \<Delta>s arbitrary: i \<Delta>)
+  case (Cons \<Delta>' \<Delta>s)
+  show ?case
+  proof (cases i)
+    case 0
+    with Cons.prems have "x \<notin> \<Union> (fmdom' ` set \<Delta>s)" by (intro notin_others) simp
+    with Cons.prems 0 show ?thesis by (simp add: fold_fmadd_lookup_notin fmdom'_alt_def)
+  next
+    case (Suc i')
+    with Cons.prems have "x \<notin> fmdom' \<Delta>'" by fastforce
+    with Cons.prems Suc show ?thesis by (auto intro!: Cons.IH simp: fmdom'_alt_def)
+  qed
+qed simp
+
+(* Lookup in a fold of maps agreeing at a variable *)
+lemma foldr_fmadd_lookup_agree:
+  "\<lbrakk> j < length \<rho>s ; x \<in> fmdom' (\<rho>s ! j)
+   ; \<forall>k < length \<rho>s. x \<in> fmdom' (\<rho>s ! k) \<longrightarrow> fmlookup (\<rho>s ! k) x = fmlookup (\<rho>s ! j) x \<rbrakk>
+  \<Longrightarrow> fmlookup (foldr fmadd \<rho>s fmempty) x = fmlookup (\<rho>s ! j) x"
+proof (induction \<rho>s arbitrary: j)
+  case (Cons \<rho> \<rho>s)
+  show ?case
+  proof (cases "x \<in> fmdom' (foldr fmadd \<rho>s fmempty)")
+    case True
+    then obtain k where k: "k < length \<rho>s" and xk: "x \<in> fmdom' (\<rho>s ! k)"
+      by (auto simp: foldr_fmadd_dom' in_set_conv_nth)
+    have agree: "fmlookup (\<rho>s ! k') x = fmlookup (\<rho>s ! k) x" if "k' < length \<rho>s" and "x \<in> fmdom' (\<rho>s ! k')" for k'
+      using Cons.prems(3)[rule_format, of "Suc k'"] Cons.prems(3)[rule_format, of "Suc k"] that k xk by simp
+    have "\<forall>k' < length \<rho>s. x \<in> fmdom' (\<rho>s ! k') \<longrightarrow> fmlookup (\<rho>s ! k') x = fmlookup (\<rho>s ! k) x"
+      using agree by blast
+    then have "fmlookup (foldr fmadd \<rho>s fmempty) x = fmlookup (\<rho>s ! k) x" by (rule Cons.IH[OF k xk])
+    moreover have "fmlookup (\<rho>s ! k) x = fmlookup ((\<rho> # \<rho>s) ! j) x"
+      using Cons.prems(3)[rule_format, of "Suc k"] k xk by simp
+    ultimately show ?thesis using True by (simp add: fmdom'_alt_def)
+  next
+    case False
+    with Cons.prems have "x \<in> fmdom' \<rho>" by (cases j) (auto simp: foldr_fmadd_dom' dest!: nth_mem)
+    with False Cons.prems(3) show ?thesis by (auto simp: fmdom'_alt_def)
+  qed
+qed simp
+
+lemma fmsubset_lookup: "\<lbrakk> \<Sigma> \<subseteq>\<^sub>f \<Sigma>' ; fmlookup \<Sigma> C = Some ce \<rbrakk> \<Longrightarrow> fmlookup \<Sigma>' C = Some ce"
+  by (auto simp: fmsubset_alt_def fmpred_iff)
+
+lemma fmsubset_dom: "\<lbrakk> \<Sigma> \<subseteq>\<^sub>f \<Sigma>' ; C |\<in>| fmdom \<Sigma> \<rbrakk> \<Longrightarrow> C |\<in>| fmdom \<Sigma>'"
+  by (auto simp: fmlookup_dom_iff dest: fmsubset_lookup)
+
+lemma fcard_fmdom_Suc: "C |\<in>| fmdom \<Sigma> \<Longrightarrow> \<exists>n. fcard (fmdom \<Sigma>) = Suc n"
+  by (cases "fcard (fmdom \<Sigma>)") auto
+
 lemma map_of_zip_map_snd:
   "length xs = length ys \<Longrightarrow> map_of (zip xs (map f ys)) k = map_option f (map_of (zip xs ys) k)"
   by (induction xs ys rule: list_induct2) auto
@@ -75,6 +154,66 @@ proof (induction arbitrary: ks rule: list_all2_induct)
   case (Cons x xs y ys)
   then show ?case by (cases ks) auto
 qed simp
+
+lemma map_of_map_snd: "map_of (map (\<lambda>(x, y). (x, f y)) xys) x = map_option f (map_of xys x)"
+  by (induction xys) auto
+
+lemma map_of_nth: "\<lbrakk> distinct (map fst xs) ; i < length xs \<rbrakk> \<Longrightarrow> map_of xs (fst (xs ! i)) = Some (snd (xs ! i))"
+  by (metis map_of_is_SomeI nth_mem prod.collapse)
+
+(* Lookups in two association lists with the same keys and related values *)
+lemma map_of_list_all2:
+  "\<lbrakk> map fst xs = map fst ys ; list_all2 R (map snd xs) (map snd ys) ; map_of ys k = Some b \<rbrakk>
+  \<Longrightarrow> \<exists>a. map_of xs k = Some a \<and> R a b"
+proof (induction xs arbitrary: ys)
+  case (Cons x xs)
+  then obtain y ys' where "ys = y # ys'" by (cases ys) auto
+  with Cons show ?case by (cases "fst x = k") auto
+qed simp
+
+lemma map_of_keys: "distinct (map fst kps) \<Longrightarrow> map (\<lambda>x. the (map_of kps x)) (map fst kps) = map snd kps"
+  by (intro nth_equalityI) (auto simp: map_of_nth)
+
+lemma distinct_concat_nth:
+  "\<lbrakk> distinct (concat xss) ; i < length xss ; j < length xss ; i \<noteq> j \<rbrakk> \<Longrightarrow> set (xss ! i) \<inter> set (xss ! j) = {}"
+proof (induction xss arbitrary: i j)
+  case (Cons xs xss)
+  then show ?case by (cases i; cases j) (auto dest!: nth_mem)
+qed simp
+
+lemma UN_set_nth: "\<Union> (f ` set xs) = (\<Union>j \<in> {..<length xs}. f (xs ! j))"
+proof (intro set_eqI iffI)
+  fix x
+  assume "x \<in> \<Union> (f ` set xs)"
+  then obtain y where "y \<in> set xs" and "x \<in> f y" by blast
+  then obtain j where "j < length xs" and "y = xs ! j" by (auto simp: in_set_conv_nth)
+  with \<open>x \<in> f y\<close> show "x \<in> (\<Union>j \<in> {..<length xs}. f (xs ! j))" by auto
+next
+  fix x
+  assume "x \<in> (\<Union>j \<in> {..<length xs}. f (xs ! j))"
+  then obtain j where "j < length xs" and "x \<in> f (xs ! j)" by auto
+  then show "x \<in> \<Union> (f ` set xs)" using nth_mem by blast
+qed
+
+lemma distinct_cover: "\<lbrakk> distinct xs ; n + length ys = length xs ; set ys = set (drop n xs) \<rbrakk> \<Longrightarrow> distinct ys"
+proof -
+  assume "distinct xs" and "n + length ys = length xs" and "set ys = set (drop n xs)"
+  then have "card (set ys) = length ys" using distinct_card[of "drop n xs"] by simp
+  then show "distinct ys" by (rule card_distinct)
+qed
+
+lemma concat_map_singleton: "(\<And>z. z \<in> set zs \<Longrightarrow> g z = [h z]) \<Longrightarrow> concat (map g zs) = map h zs"
+  by (induction zs) auto
+
+lemma map2_replicate: "map2 f xs (replicate (length xs) y) = map (\<lambda>x. f x y) xs"
+  by (induction xs) simp_all
+
+lemma length_filter_eq_one: "\<lbrakk> distinct xs ; y \<in> set xs \<rbrakk> \<Longrightarrow> length (filter (\<lambda>x. x = y) xs) = 1"
+proof -
+  assume "distinct xs" and "y \<in> set xs"
+  then have "{x. x = y} \<inter> set xs = {y}" by auto
+  with distinct_length_filter[OF \<open>distinct xs\<close>, of "\<lambda>x. x = y"] show ?thesis by simp
+qed
 
 (* Termination through lists of pairs and finite maps *)
 lemma size_prod_pair [simp]: "size_prod f g p = f (fst p) + g (snd p) + Suc 0"
@@ -171,6 +310,15 @@ lemma those_sum_map_Ok: "those_sum (map f xs) = Ok ys \<Longrightarrow> list_all
 lemma those_sum_map_Ok_elem: "\<lbrakk> those_sum (map f xs) = Ok ys ; y \<in> set ys \<rbrakk> \<Longrightarrow> \<exists>x \<in> set xs. f x = Ok y"
   by (auto dest!: those_sum_map_Ok simp: list_all2_conv_all_nth in_set_conv_nth) (metis nth_mem)
 
+lemma those_sum_map_Ok_id [simp]: "those_sum (map Ok xs) = Ok xs"
+  by (induction xs) simp_all
+
+(* Success of a sequence of results, the sequences of a prefix and a suffix succeed *)
+lemma those_sum_append:
+  assumes "those_sum (xs @ ys) = Ok zs"
+  shows "\<exists>zs'. those_sum xs = Ok zs'" and "\<exists>zs'. those_sum ys = Ok zs'"
+  using those_sum_eq[OF assms] by (auto simp: append_eq_map_conv)
+
 (* First failure in the list, otherwise success *)
 definition all_sum :: "('e + unit) list \<Rightarrow> 'e + unit"
 where
@@ -247,6 +395,80 @@ proof -
     (map snd (take n x\<sigma>s @ drop n x\<sigma>s))"
     by (simp only: map_append)
   with us len1 show ?thesis by simp
+qed
+
+lemma kw_pattern_single:
+  "\<lbrakk> distinct (map fst kps) ; x \<in> set (map fst kps) \<rbrakk>
+  \<Longrightarrow> concat (map (\<lambda>(y, p). if y = x then [p] else []) kps) = [the (map_of kps x)]"
+proof (induction kps)
+  case (Cons kp kps)
+  obtain y p where kp: "kp = (y, p)" by (cases kp)
+  show ?case
+  proof (cases "y = x")
+    case True
+    with Cons.prems kp have "x \<notin> set (map fst kps)" by simp
+    then have "concat (map (\<lambda>(y, p). if y = x then [p] else []) kps) = []" by (induction kps) auto
+    with True kp show ?thesis by simp
+  next
+    case False
+    with Cons kp show ?thesis by simp
+  qed
+qed simp
+
+lemma kw_set:
+  assumes "distinct (map fst kps)" and "set (map fst kps) = set zs"
+  shows "set (map (\<lambda>(y, p). (p, g y)) kps) = set (map (\<lambda>x. (the (map_of kps x), g x)) zs)"
+proof -
+  have "set (map (\<lambda>(y, p). (p, g y)) kps) = (\<lambda>y. (the (map_of kps y), g y)) ` set (map fst kps)"
+  proof (intro set_eqI iffI)
+    fix pu
+    assume "pu \<in> set (map (\<lambda>(y, p). (p, g y)) kps)"
+    then obtain y p where "(y, p) \<in> set kps" and "pu = (p, g y)" by auto
+    with map_of_is_SomeI[OF assms(1)] show "pu \<in> (\<lambda>y. (the (map_of kps y), g y)) ` set (map fst kps)" by force
+  next
+    fix pu
+    assume "pu \<in> (\<lambda>y. (the (map_of kps y), g y)) ` set (map fst kps)"
+    then obtain y where "y \<in> set (map fst kps)" and "pu = (the (map_of kps y), g y)" by auto
+    then obtain p where "(y, p) \<in> set kps" by auto
+    with map_of_is_SomeI[OF assms(1) this] \<open>pu = _\<close> show "pu \<in> set (map (\<lambda>(y, p). (p, g y)) kps)" by force
+  qed
+  then show ?thesis unfolding assms(2) by auto
+qed
+
+(* Sub-patterns of a constructor pattern supplying the fields after the positional ones by keyword: one for each
+   such field, and the keyword patterns among them *)
+lemma field_patterns_cover:
+  assumes "distinct xs" and "n + length kps = length xs" and "set (map fst kps) = set (drop n xs)"
+  shows "length (concat (map (\<lambda>x. concat (map (\<lambda>(y, p). if y = x then [p] else []) kps)) (drop n xs)))
+         = length kps"
+    and "set (concat (map (\<lambda>x. concat (map (\<lambda>(y, p). if y = x then [p] else []) kps)) (drop n xs)))
+         = set (map snd kps)"
+proof -
+  let ?g = "\<lambda>x. concat (map (\<lambda>(y, p). if y = x then [p] else []) kps)"
+  have dist': "distinct (drop n xs)" using assms(1) by simp
+  have "card (set (map fst kps)) = length (map fst kps)"
+    using distinct_card[OF dist'] assms(2, 3) by simp
+  then have dist: "distinct (map fst kps)" by (rule card_distinct)
+  have g1: "length (?g x) = 1" if "x \<in> set (drop n xs)" for x
+  proof -
+    have "length (?g x) = length (filter (\<lambda>y. y = x) (map fst kps))" by (induction kps) auto
+    with length_filter_eq_one[OF dist that[folded assms(3)]] show ?thesis by simp
+  qed
+  have "map (length \<circ> ?g) (drop n xs) = map (\<lambda>_. 1) (drop n xs)" by (rule map_cong) (auto simp: g1)
+  then show "length (concat (map ?g (drop n xs))) = length kps"
+    using assms(2) by (simp add: length_concat map_replicate_const sum_list_replicate)
+  show "set (concat (map ?g (drop n xs))) = set (map snd kps)"
+  proof
+    show "set (concat (map ?g (drop n xs))) \<subseteq> set (map snd kps)" by (force split: if_splits)
+    show "set (map snd kps) \<subseteq> set (concat (map ?g (drop n xs)))"
+    proof
+      fix p
+      assume "p \<in> set (map snd kps)"
+      then obtain y where yp: "(y, p) \<in> set kps" by auto
+      then have "y \<in> set (drop n xs)" using assms(3) by force
+      with yp show "p \<in> set (concat (map ?g (drop n xs)))" by force
+    qed
+  qed
 qed
 
 end

@@ -142,9 +142,6 @@ proof -
     by (simp add: instantiated_ancestor_def)
 qed
 
-lemma fcard_fmdom_Suc: "C |\<in>| fmdom \<Sigma> \<Longrightarrow> \<exists>n. fcard (fmdom \<Sigma>) = Suc n"
-  by (cases "fcard (fmdom \<Sigma>)") auto
-
 lemma instantiated_ancestor_head [simp]: "C |\<in>| fmdom \<Sigma> \<Longrightarrow> instantiated_ancestor \<Sigma> C \<tau>s C = \<tau>s"
   unfolding instantiated_ancestor_def instantiated_ancestors_def by (auto dest!: fcard_fmdom_Suc)
 

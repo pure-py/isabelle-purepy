@@ -974,9 +974,6 @@ proof (rule sound_expr_typedI)
 qed simp_all
 
 (* Field of class C at type arguments \<tau>s, a subtype of the attribute type of a type above the class *)
-lemma map_of_map_snd: "map_of (map (\<lambda>(x, y). (x, f y)) xys) x = map_option f (map_of xys x)"
-  by (induction xys) auto
-
 lemma attribute_field:
   "\<lbrakk> \<Sigma> \<turnstile> TyClass C \<tau>s <: inst \<eta> \<sigma> ; attribute_type \<Sigma> \<sigma> x = Ok \<tau> ; wf_ty \<Sigma> (TyClass C \<tau>s) ; wf_ty \<Sigma> \<sigma>
    ; wf_inst \<Sigma> \<eta> \<rbrakk>

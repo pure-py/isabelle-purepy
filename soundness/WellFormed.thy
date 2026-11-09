@@ -1101,15 +1101,6 @@ lemma disjuncts_wf: "\<lbrakk> wf_ty \<Sigma> \<tau> ; \<sigma> \<in> set (disju
 lemma has_values_union: "has_values \<Sigma> k (TyUnion \<sigma> \<tau>) \<longleftrightarrow> has_values \<Sigma> k \<sigma> \<or> has_values \<Sigma> k \<tau>"
   by (cases k) simp_all
 
-lemma those_sum_map_Ok_id [simp]: "those_sum (map Ok xs) = Ok xs"
-  by (induction xs) simp_all
-
-(* Success of a sequence of results, the sequences of a prefix and a suffix succeed *)
-lemma those_sum_append:
-  assumes "those_sum (xs @ ys) = Ok zs"
-  shows "\<exists>zs'. those_sum xs = Ok zs'" and "\<exists>zs'. those_sum ys = Ok zs'"
-  using those_sum_eq[OF assms] by (auto simp: append_eq_map_conv)
-
 (* Bindings at the disjuncts of two types, bindings at the disjuncts of each *)
 lemma bindings_at_append:
   "bindings_at \<Sigma> \<Gamma> p (ms @ ms') = Ok \<Delta>
@@ -1302,19 +1293,6 @@ qed (auto simp: Let_def split: instances.splits if_splits option.splits cxt_entr
 
 subsection \<open>Pattern bindings\<close>
 
-lemma fold_fmadd_lookup:
-  "fmlookup (fold (\<otimes>) \<Delta>s \<Delta>) x = Some \<sigma> \<Longrightarrow> fmlookup \<Delta> x = Some \<sigma> \<or> (\<exists>\<Delta>' \<in> set \<Delta>s. fmlookup \<Delta>' x = Some \<sigma>)"
-proof (induction \<Delta>s arbitrary: \<Delta>)
-  case (Cons a \<Delta>s)
-  from Cons.IH[OF Cons.prems[simplified]] show ?case by (auto split: if_splits)
-qed simp
-
-lemma fmdom'_fold_fmadd: "fmdom' (fold (\<otimes>) \<Delta>s \<Delta>) = fmdom' \<Delta> \<union> \<Union> (fmdom' ` set \<Delta>s)"
-  by (induction \<Delta>s arbitrary: \<Delta>) auto
-
-lemma map2_replicate: "map2 f xs (replicate (length xs) y) = map (\<lambda>x. f x y) xs"
-  by (induction xs) simp_all
-
 (* Bindings of sub-patterns ps checked against types \<sigma>s: the domain the variables of ps, and each type bound
    well-formed and over V when the bindings of each sub-pattern are *)
 lemma pattern_bindings_wf:
@@ -1421,49 +1399,6 @@ proof -
   ultimately show ?thesis by blast
 qed
 
-
-lemma length_filter_eq_one: "\<lbrakk> distinct xs ; y \<in> set xs \<rbrakk> \<Longrightarrow> length (filter (\<lambda>x. x = y) xs) = 1"
-proof -
-  assume "distinct xs" and "y \<in> set xs"
-  then have "{x. x = y} \<inter> set xs = {y}" by auto
-  with distinct_length_filter[OF \<open>distinct xs\<close>, of "\<lambda>x. x = y"] show ?thesis by simp
-qed
-
-(* Sub-patterns of a constructor pattern supplying the fields after the positional ones by keyword: one for each
-   such field, and the keyword patterns among them *)
-lemma field_patterns_cover:
-  assumes "distinct xs" and "n + length kps = length xs" and "set (map fst kps) = set (drop n xs)"
-  shows "length (concat (map (\<lambda>x. concat (map (\<lambda>(y, p). if y = x then [p] else []) kps)) (drop n xs)))
-         = length kps"
-    and "set (concat (map (\<lambda>x. concat (map (\<lambda>(y, p). if y = x then [p] else []) kps)) (drop n xs)))
-         = set (map snd kps)"
-proof -
-  let ?g = "\<lambda>x. concat (map (\<lambda>(y, p). if y = x then [p] else []) kps)"
-  have dist': "distinct (drop n xs)" using assms(1) by simp
-  have "card (set (map fst kps)) = length (map fst kps)"
-    using distinct_card[OF dist'] assms(2, 3) by simp
-  then have dist: "distinct (map fst kps)" by (rule card_distinct)
-  have g1: "length (?g x) = 1" if "x \<in> set (drop n xs)" for x
-  proof -
-    have "length (?g x) = length (filter (\<lambda>y. y = x) (map fst kps))" by (induction kps) auto
-    with length_filter_eq_one[OF dist that[folded assms(3)]] show ?thesis by simp
-  qed
-  have "map (length \<circ> ?g) (drop n xs) = map (\<lambda>_. 1) (drop n xs)" by (rule map_cong) (auto simp: g1)
-  then show "length (concat (map ?g (drop n xs))) = length kps"
-    using assms(2) by (simp add: length_concat map_replicate_const sum_list_replicate)
-  show "set (concat (map ?g (drop n xs))) = set (map snd kps)"
-  proof
-    show "set (concat (map ?g (drop n xs))) \<subseteq> set (map snd kps)" by (force split: if_splits)
-    show "set (map snd kps) \<subseteq> set (concat (map ?g (drop n xs)))"
-    proof
-      fix p
-      assume "p \<in> set (map snd kps)"
-      then obtain y where yp: "(y, p) \<in> set kps" by auto
-      then have "y \<in> set (drop n xs)" using assms(3) by force
-      with yp show "p \<in> set (concat (map ?g (drop n xs)))" by force
-    qed
-  qed
-qed
 
 lemma length_field_types: "length (field_types \<Sigma> C \<sigma>s) = length (field_names \<Sigma> C)"
   by (cases "fields \<Sigma> C") (simp add: field_types_def field_names_def)
