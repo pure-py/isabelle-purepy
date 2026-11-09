@@ -1,26 +1,27 @@
 """Module discovery and checking of a program by the generated type checker"""
 
 import pathlib
+from dataclasses import dataclass
+
+from purepy_conformance import (
+    TYPE_CHECKER_VERDICT,
+    Classification,
+    Exit,
+    PurePyOutcome,
+    figure_numbers,
+)
 
 from . import syntax
-from .generated import Finite_Map, Option, Programs, Reasons
-from .generated.exit_codes import Exit
-from .messages import message
-from .syntax import (
-    ModuleBody,
-    Name,
-    Program,
-    QualifiedName,
-    Reason,
-    parse_name,
-    qualified_name,
-)
+from .generated import Finite_Map, Option, Programs, Syntax
+from .messages import classification, message, position
+from .rules import citation
+from .syntax import ModuleBody, Name, Program, Reason, parse_name
 
 MAIN = parse_name("__main__")
 
 
 def module_path(q: Name, base_dir: pathlib.Path) -> pathlib.Path:
-    stem = pathlib.Path(*q)
+    stem = pathlib.Path(*Syntax.variables(q))
     for candidate in (base_dir / f"{stem}.py", base_dir / stem / "__init__.py"):
         if candidate.exists():
             return candidate
@@ -31,29 +32,23 @@ def module_path(q: Name, base_dir: pathlib.Path) -> pathlib.Path:
 def module_name(base_dir: pathlib.Path, path: pathlib.Path) -> Name | None:
     rel = path.relative_to(base_dir)
     parts = rel.parent.parts if rel.name == "__init__.py" else rel.with_suffix("").parts
-    return parts if len(parts) > 0 else None
-
-
-def proper_prefixes(q: Name) -> list[Name]:
-    return [q[:i] for i in range(1, len(q))]
+    return parse_name(".".join(parts)) if len(parts) > 0 else None
 
 
 def module_names(base_dir: pathlib.Path) -> set[Name]:
     names = {
         module_name(base_dir, p) for p in base_dir.rglob("*.py") if "__pycache__" not in p.parts
     }
-    return {p for q in names if q is not None for p in [q, *proper_prefixes(q)]}
+    return {p for q in names if q is not None for p in [q, *Syntax.proper_prefixes(q)]}
 
 
-# Module and reason of an ill-formed program
-type IllFormed = tuple[QualifiedName, Reason]
-type PurePyRejects = IllFormed | syntax.ParserRejects
+type PurePyRejects = Programs.IllFormed | syntax.ParserRejects
 
 
 def parse_program(entry_path: pathlib.Path) -> Program:
     """Entry module parsed first, so its errors take precedence"""
     base_dir = entry_path.parent
-    names = sorted(module_names(base_dir), key=str)
+    names = sorted(module_names(base_dir), key=Syntax.variables)
     return program(
         {
             MAIN: parse_module(MAIN, entry_path),
@@ -72,68 +67,93 @@ def parse_module(q: Name, path: pathlib.Path) -> ModuleBody:
 
 
 def program(bodies: dict[Name, ModuleBody]) -> Program:
-    return Finite_Map.fmap_of_list([(qualified_name(q), body) for q, body in bodies.items()])
+    return Finite_Map.fmap_of_list(list(bodies.items()))
 
 
-def check(M: Program) -> IllFormed | None:
+def check(M: Program) -> Programs.IllFormed | None:
     match Programs.check_program(M):
         case Option.None_():
             return None
-        case Option.Some((q, r)):
-            return (q, r)
+        case Option.Some(Programs.IllFormed() as f):
+            return f
         case result:
             raise AssertionError(f"unexpected result: {result}")
 
 
-def check_program(entry_path: pathlib.Path) -> PurePyRejects | None:
+@dataclass(frozen=True)
+class Diagnostic:
+    """Rejection of a program, classified as in the taxonomy of the specification"""
+
+    outcome: PurePyOutcome
+    module: Name | None  # None for the entry module
+    position: tuple[int, int | None] | None
+    message: str
+    # Judgement which selects no rule, or rule violated, as the conformance suite cites them
+    judgement: str | None
+    rule: str | None
+
+
+def reason_outcome(r: Reason) -> PurePyOutcome:
+    excluded = classification(r) == Classification.FOR_NOW
+    return PurePyOutcome.EXCLUDED_FOR_NOW if excluded else PurePyOutcome.TYPING_REJECTS
+
+
+def diagnostic(rejection: PurePyRejects) -> Diagnostic:
+    """Judgement or rule cited only for a typing rejection, as in the conformance suite"""
+    match rejection:
+        case syntax.ParserRejects(module=q, line=line, col=col, msg=msg, classification=k):
+            excluded = k == Classification.FOR_NOW
+            outcome = PurePyOutcome.EXCLUDED_FOR_NOW if excluded else PurePyOutcome.PARSER_REJECTS
+            return Diagnostic(outcome, q, None if line is None else (line, col), msg, None, None)
+        case Programs.IllFormed(q, r):
+            outcome = reason_outcome(r)
+            judgement, rule = (
+                citation(r) if outcome == PurePyOutcome.TYPING_REJECTS else (None, None)
+            )
+            return Diagnostic(outcome, q, position(r), message(r), judgement, rule)
+        case _:
+            raise AssertionError(f"unexpected rejection: {rejection}")
+
+
+def check_program(entry_path: pathlib.Path) -> Diagnostic | None:
     try:
-        return check(parse_program(entry_path))
+        rejection = check(parse_program(entry_path))
     except syntax.ParserRejects as e:
-        return e
+        rejection = e
+    return None if rejection is None else diagnostic(rejection)
 
 
-def check_module(path: pathlib.Path) -> PurePyRejects | None:
+def check_module(path: pathlib.Path) -> Diagnostic | None:
     """Check the module at path as a program of one module"""
     try:
-        return check(program({MAIN: parse_module(MAIN, path)}))
+        rejection = check(program({MAIN: parse_module(MAIN, path)}))
     except syntax.ParserRejects as e:
-        return e
+        rejection = e
+    return None if rejection is None else diagnostic(rejection)
 
 
-def exit_code(rejection: PurePyRejects | None) -> Exit:
-    match rejection:
-        case None:
-            return Exit.OK
-        case syntax.ParserRejects():
-            return Exit.NOT_ALLOWED
-        case _:
-            return Exit.ILL_FORMED
+def exit_code(d: Diagnostic | None) -> Exit:
+    return Exit.OK if d is None else TYPE_CHECKER_VERDICT[d.outcome][0]
 
 
-def error_path(rejection: PurePyRejects, entry_path: pathlib.Path) -> pathlib.Path:
+def error_path(d: Diagnostic, entry_path: pathlib.Path) -> pathlib.Path:
     """File of the module at fault"""
-    match rejection:
-        case syntax.ParserRejects():
-            q = rejection.module
-        case ((x, xs), _):
-            q = (x, *xs)
+    q = d.module
     return entry_path if q is None or q == MAIN else module_path(q, entry_path.parent)
 
 
-def format_rejection(rejection: PurePyRejects | None, filename: str) -> str:
-    match rejection:
-        case None:
-            return f"{filename}: ok"
-        case syntax.ParserRejects() if rejection.line is not None:
-            return f"{filename}:{rejection.line}:{rejection.col}: {rejection.msg}"
-        case syntax.ParserRejects():
-            return f"{filename}: {rejection.msg}"
-        case (_, Reasons.Located((line, col), r)):
-            return f"{filename}:{line}:{col}: {message(r)}"
-        case (_, r):
-            return f"{filename}: {message(r)}"
+def format_diagnostic(d: Diagnostic | None, entry_path: pathlib.Path) -> str:
+    if d is None:
+        return f"{entry_path}: ok"
+    path = error_path(d, entry_path)
+    where = str(path) if d.position is None else f"{path}:{d.position[0]}:{d.position[1]}"
+    return f"{where}: {d.message} [{d.outcome}{cited(d)}]"
 
 
-def format_program_rejection(rejection: PurePyRejects | None, entry_path: pathlib.Path) -> str:
-    path = entry_path if rejection is None else error_path(rejection, entry_path)
-    return format_rejection(rejection, str(path))
+def cited(d: Diagnostic) -> str:
+    """Rule violated with its figure, or the figure alone of a judgement which selects no rule, since the
+    specification shows no names of judgements"""
+    figures = figure_numbers()
+    if d.rule is not None:
+        return f", rule {d.rule}, Figure {figures.rules[d.rule]}"
+    return "" if d.judgement is None else f", Figure {figures.judgements[d.judgement]}"

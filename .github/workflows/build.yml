@@ -21,7 +21,7 @@ jobs:
         run: echo "isabelle=$(cat .isabelle-version)" >> "$GITHUB_OUTPUT"
 
   build:
-    name: proofs, type checker and conformance suite
+    name: proof checking, type checker generation and conformance under CPython
     needs: version
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -49,17 +49,17 @@ jobs:
       - name: Lint, run conformance suite and build wheel
         run: make wheel
 
-      - name: Install type checker and conformance package into site
-        run: uv pip install --target site dist/*.whl "$(uv export --locked --only-group dev --no-hashes --no-emit-project | grep '^purepy-conformance ')"
+      - name: Install type checker, with the conformance package, into site
+        run: uv pip install --target site dist/*.whl
 
       - uses: actions/upload-artifact@v4
         with:
           name: site
           path: site
 
-  # Suite and type checker under other Python runtimes
+  # Run the programs of the suite under other Python runtimes, with harness and type checker under CPython
   runtimes:
-    name: conformance suite (${{ matrix.runtime }})
+    name: conformance suite under ${{ matrix.runtime }}
     needs: build
     runs-on: ubuntu-latest
     strategy:
@@ -79,9 +79,11 @@ jobs:
 
       - name: Set up GraalPy
         if: matrix.runtime == 'GraalPy'
+        id: graalpy
         uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.version }}
+          update-environment: false
 
       - name: Set up uv for Pyodide
         if: matrix.runtime == 'Pyodide'
@@ -98,7 +100,7 @@ jobs:
         if: matrix.runtime == 'GraalPy'
         env:
           PYTHONPATH: ${{ github.workspace }}/site
-        run: test/check-conformance.sh python --no-lint
+        run: test/check-conformance.sh "${{ steps.graalpy.outputs.python-path }}" --no-lint
 
       - name: Run tests with Pyodide
         if: matrix.runtime == 'Pyodide'

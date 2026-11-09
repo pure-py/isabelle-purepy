@@ -245,31 +245,33 @@ wheels = [
 
 [[package]]
 name = "purepy"
-version = "0.23.2"
+version = "0.27.3"
 source = { editable = "." }
+dependencies = [
+    { name = "purepy-conformance" },
+]
 
 [package.dev-dependencies]
 dev = [
     { name = "mypy" },
-    { name = "purepy-conformance" },
     { name = "ruff" },
 ]
 
 [package.metadata]
+requires-dist = [{ name = "purepy-conformance", url = "https://github.com/pure-py/pure-py-spec/releases/download/v0.27.3/purepy_conformance-0.27.3-py3-none-any.whl" }]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "mypy", specifier = ">=2.3.1" },
-    { name = "purepy-conformance", url = "https://github.com/pure-py/pure-py-spec/releases/download/v0.23.2/purepy_conformance-0.23.2-py3-none-any.whl" },
     { name = "ruff", specifier = ">=0.16.2" },
 ]
 
 [[package]]
 name = "purepy-conformance"
-version = "0.23.2"
-source = { url = "https://github.com/pure-py/pure-py-spec/releases/download/v0.23.2/purepy_conformance-0.23.2-py3-none-any.whl" }
+version = "0.27.3"
+source = { url = "https://github.com/pure-py/pure-py-spec/releases/download/v0.27.3/purepy_conformance-0.27.3-py3-none-any.whl" }
 wheels = [
-    { url = "https://github.com/pure-py/pure-py-spec/releases/download/v0.23.2/purepy_conformance-0.23.2-py3-none-any.whl", hash = "sha256:5a1a46af0190f4d8d4d0d4b011ac9dbf775149ffbaffa97f0b571c2a6564cc0e" },
+    { url = "https://github.com/pure-py/pure-py-spec/releases/download/v0.27.3/purepy_conformance-0.27.3-py3-none-any.whl", hash = "sha256:aee051bfc4d3a58e8f2b512f82624b2a0abdbd02d5a6c21eaa7e5dfd25dc72d6" },
 ]
 
 [[package]]

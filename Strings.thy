@@ -1,6 +1,6 @@
 (* Strings and identifiers as lists of Unicode code points *)
 theory Strings
-  imports "HOL-Library.List_Lexorder"
+  imports Util
 begin
 
 definition code_point_list :: "nat list set"
@@ -19,19 +19,18 @@ setup_lifting type_definition_str
 lift_definition substring :: "str \<Rightarrow> str \<Rightarrow> bool"
   is "\<lambda>ns ns'. \<exists>ms ms'. ns' = ms @ ns @ ms'" .
 
-(* String written in a theory *)
-lift_definition str_of :: "string \<Rightarrow> str"
-  is "map of_char"
-  by (rule code_point_list_of_string)
-
-(* Concatenation, and repetition n times, empty if n is not positive *)
 lift_definition str_append :: "str \<Rightarrow> str \<Rightarrow> str"
   is "(@)"
   by (auto simp: code_point_list_def)
 
-lift_definition str_repeat :: "int \<Rightarrow> str \<Rightarrow> str"
-  is "\<lambda>n ns. concat (replicate (nat n) ns)"
-  by (auto simp: code_point_list_def)
+lift_definition str_concat :: "str list \<Rightarrow> str"
+  is concat
+  by (auto simp: code_point_list_def list.pred_set)
+
+(* String written in a theory *)
+lift_definition str_of :: "string \<Rightarrow> str"
+  is "map of_char"
+  by (rule code_point_list_of_string)
 
 (* The one-character strings of a string, in order *)
 lift_definition str_chars :: "str \<Rightarrow> str list"

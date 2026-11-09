@@ -2,7 +2,7 @@ import argparse
 import pathlib
 import sys
 
-from .check_program import check_module, check_program, exit_code, format_program_rejection
+from .check_program import check_module, check_program, exit_code, format_diagnostic
 from .run_program import DEFAULT_FUEL, run_program
 
 
@@ -19,9 +19,9 @@ def main() -> None:
     if not args.check:
         sys.exit(run_program(args.path, args.args, args.fuel))
 
-    rejection = check_module(args.path) if args.module else check_program(args.path)
-    print(format_program_rejection(rejection, args.path))
-    sys.exit(exit_code(rejection))
+    d = check_module(args.path) if args.module else check_program(args.path)
+    print(format_diagnostic(d, args.path))
+    sys.exit(exit_code(d))
 
 
 if __name__ == "__main__":

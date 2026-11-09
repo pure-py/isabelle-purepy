@@ -1,10 +1,9 @@
 (* Context entries, class tables, name resolution, predefined modules, programs *)
 theory Contexts
-  imports Syntax "HOL-Library.List_Lexorder" "HOL-Library.Char_ord"
+  imports Syntax
 begin
 
-(* Possibly unassigned entries carry a flag, set when the variable is declared in a branch, for the diagnostic
-   only *)
+(* Possibly unassigned entries record whether the variable is declared in a branch, for error messages only *)
 datatype cxt_entry =
     Ty ty
   | DU ty
@@ -25,10 +24,27 @@ datatype class_entry = ClassDef cxt name "type_def located list" nat
 
 type_synonym class_table = "(name, class_entry) fmap"
 
+fun fv_scheme :: "ty_scheme \<Rightarrow> var set"
+where
+"fv_scheme (TyScheme \<alpha>s \<tau>) = fv \<tau> - set \<alpha>s"
+
+fun fv_entry :: "cxt_entry \<Rightarrow> var set"
+where
+"fv_entry (Ty \<tau>) = fv \<tau>" |
+"fv_entry (DU \<tau>) = fv \<tau>" |
+"fv_entry (PU \<tau> _) = fv \<tau>" |
+"fv_entry (Scheme \<pi>) = fv_scheme \<pi>" |
+"fv_entry (PUScheme \<pi> _) = fv_scheme \<pi>" |
+"fv_entry _ = {}"
+
+definition tyvars :: "cxt \<Rightarrow> var set"
+where
+"tyvars \<Gamma> = Set.filter (\<lambda>x. fmlookup \<Gamma> x = Some TypeVar) (fmdom' \<Gamma>) \<union> \<Union> (fv_entry ` fmran' \<Gamma>)"
+
 fun lookup :: "cxt \<Rightarrow> name \<Rightarrow> cxt_entry option"
 where
-"lookup \<Gamma> (x, []) = fmlookup \<Gamma> x" |
-"lookup \<Gamma> (x, y # ys) = (case fmlookup \<Gamma> x of Some (ModChecked _ \<Gamma>') \<Rightarrow> lookup \<Gamma>' (y, ys) | _ \<Rightarrow> None)"
+"lookup \<Gamma> (Simple x) = fmlookup \<Gamma> x" |
+"lookup \<Gamma> (Qualified q x) = (case lookup \<Gamma> q of Some (ModChecked _ \<Gamma>') \<Rightarrow> fmlookup \<Gamma>' x | _ \<Rightarrow> None)"
 
 definition resolve_name :: "cxt \<Rightarrow> name \<Rightarrow> cxt_entry option"
 where
@@ -42,40 +58,38 @@ where
    | Some PredefName \<Rightarrow> Some PredefName
    | _ \<Rightarrow> None)"
 
-definition range_class :: name where "range_class = snoc builtins (var ''range'')"
+definition range_class :: name where "range_class = name_of [''builtins'', ''range'']"
 
 abbreviation name_binding :: "var \<times> cxt_entry"
 where "name_binding \<equiv> (var ''__name__'', Ty (TyPrim str))"
 
-definition predefined :: "(name, cxt) fmap"
+definition \<P> :: "(name, cxt) fmap"
 where
-"predefined = fmap_of_list
+"\<P> = fmap_of_list
   [(builtins, fmap_of_list
      ([name_binding,
-       (var ''print'', Ty (TyCallable [TyPrim object] (TyPrim NoneType))),
        (var ''len'', Ty (TyCallable [TyPrim Sized] (TyPrim int))),
        (var ''range'', Type range_class),
        (var ''round'', Ty (TyCallable [TyPrim float] (TyPrim int)))]
       @ map (\<lambda>\<nu>. (prim_name \<nu>, PredefName)) [NoneType, object, bool, int, float, str]
       @ map (\<lambda>x. (var x, PredefName)) [''list'', ''dict'', ''tuple''])),
-   ((var ''sys'', []), fmap_of_list
+   (name_of [''sys''], fmap_of_list
      [name_binding, (var ''argv'', Ty (TyList (TyPrim str))),
       (var ''exit'', Ty (TyCallable [TyPrim int] (TyPrim Never)))]),
-   ((var ''typing'', []), fmap_of_list
+   (name_of [''typing''], fmap_of_list
      [name_binding, (var ''Callable'', PredefName), (var ''Literal'', PredefName),
       (prim_name Never, PredefName), (prim_name Sized, PredefName)]),
-   ((var ''dataclasses'', []),
+   (name_of [''dataclasses''],
     fmap_of_list [name_binding, (var ''dataclass'', PredefName)])]"
 
-(* Boxed plus of the specification isn't in Isabelle's symbol table *)
 function (sequential) extend_entry :: "cxt_entry \<Rightarrow> cxt_entry \<Rightarrow> cxt_entry"
-and extend :: "cxt \<Rightarrow> cxt \<Rightarrow> cxt" (infixl "\<uplus>" 65)
+and extend_cxt :: "cxt \<Rightarrow> cxt \<Rightarrow> cxt"
 where
 "extend_entry (ModChecked q \<Gamma>) (ModStub q') = (if q = q' then ModChecked q \<Gamma> else ModStub q')" |
 "extend_entry (ModChecked q \<Gamma>) (ModChecked q' \<Gamma>') =
-   (if q = q' then ModChecked q (\<Gamma> \<uplus> \<Gamma>') else ModChecked q' \<Gamma>')" |
+   (if q = q' then ModChecked q (extend_cxt \<Gamma> \<Gamma>') else ModChecked q' \<Gamma>')" |
 "extend_entry _ \<theta>' = \<theta>'" |
-"\<Gamma> \<uplus> \<Gamma>' =
+"extend_cxt \<Gamma> \<Gamma>' =
    \<Gamma> ++\<^sub>f fmmap_keys (\<lambda>x \<theta>'. case fmlookup \<Gamma> x of None \<Rightarrow> \<theta>' | Some \<theta> \<Rightarrow> extend_entry \<theta> \<theta>') \<Gamma>'"
 by pat_completeness auto
 
@@ -83,11 +97,13 @@ termination
 by (relation "measure (\<lambda>p. case p of Inl (\<theta>, _) \<Rightarrow> size \<theta> | Inr (\<Gamma>, _) \<Rightarrow> size_fmap (\<lambda>_. 0) size \<Gamma>)")
    (simp_all add: size_fmap_lookup del: size_fmap_def)
 
+adhoc_overloading extend \<rightleftharpoons> extend_cxt
+
 definition predefined_classes :: class_table
 where
 "predefined_classes =
   fmupd range_class
-    (ClassDef (the (fmlookup predefined builtins)) builtins
+    (ClassDef (the (fmlookup \<P> builtins)) builtins
       [At no_pos (Dataclass (var ''range'') [] None
         [(var ''start'', TyExprPrim int), (var ''stop'', TyExprPrim int)])] 0)
     fmempty"
@@ -121,35 +137,32 @@ definition scheme_of_name :: "cxt \<Rightarrow> expr \<Rightarrow> ty_scheme opt
 where
 "scheme_of_name \<Gamma> e = (case entry_of \<Gamma> e of Some (Scheme \<pi>) \<Rightarrow> Some \<pi> | _ \<Rightarrow> None)"
 
-
-(* Programs, and the stubs of the submodules of a module *)
 type_synonym program = "(name, module_body) fmap"
 
 context includes fmap.lifting
 begin
 lift_definition submods :: "program \<Rightarrow> name \<Rightarrow> cxt"
-  is "\<lambda>M q x. if snoc q x \<in> dom M then Some (ModStub (snoc q x)) else None"
+  is "\<lambda>\<M> q x. if Qualified q x \<in> dom \<M> then Some (ModStub (Qualified q x)) else None"
 proof -
-  fix M :: "name \<Rightarrow> module_body option" and q
-  let ?S = "\<lambda>x. if snoc q x \<in> dom M then Some (ModStub (snoc q x)) else None"
-  assume "finite (dom M)"
-  have "dom ?S \<subseteq> (\<lambda>q'. snd (the (unsnoc q'))) ` dom M"
-    by (auto simp: dom_def image_iff intro: rev_image_eqI)
-  then show "finite (dom ?S)"
-    using \<open>finite (dom M)\<close> by (blast intro: finite_subset finite_imageI)
+  fix \<M> :: "name \<Rightarrow> module_body option" and q
+  let ?S = "\<lambda>x. if Qualified q x \<in> dom \<M> then Some (ModStub (Qualified q x)) else None"
+  assume "finite (dom \<M>)"
+  have "dom ?S \<subseteq> Qualified q -` dom \<M>" by (auto simp: dom_def)
+  moreover have "inj (Qualified q)" by (simp add: inj_def)
+  ultimately show "finite (dom ?S)" using \<open>finite (dom \<M>)\<close> by (blast intro: finite_subset finite_vimageI)
 qed
 end
 
 lemma submods_of_list [code]:
   "submods (fmap_of_list m) q
-   = fmap_of_list (map (\<lambda>(q', _). (snd (the (unsnoc q')), ModStub q'))
-                       (filter (\<lambda>(q', _). case unsnoc q' of Some (q'', _) \<Rightarrow> q'' = q | None \<Rightarrow> False) m))"
+   = fmap_of_list (map (\<lambda>(q', _). (short_name q', ModStub q'))
+                       (filter (\<lambda>(q', _). case q' of Qualified q'' _ \<Rightarrow> q'' = q | Simple _ \<Rightarrow> False) m))"
 proof (rule fmap_ext)
   fix x
-  let ?l = "map (\<lambda>(q', _). (snd (the (unsnoc q')), ModStub q'))
-              (filter (\<lambda>(q', _). case unsnoc q' of Some (q'', _) \<Rightarrow> q'' = q | None \<Rightarrow> False) m)"
-  have "map_of ?l x = (if snoc q x \<in> dom (map_of m) then Some (ModStub (snoc q x)) else None)"
-    by (induction m) (auto simp: dom_def snoc_eq_iff simp del: snoc.simps unsnoc.simps split: option.splits)
+  let ?l = "map (\<lambda>(q', _). (short_name q', ModStub q'))
+              (filter (\<lambda>(q', _). case q' of Qualified q'' _ \<Rightarrow> q'' = q | Simple _ \<Rightarrow> False) m)"
+  have "map_of ?l x = (if Qualified q x \<in> dom (map_of m) then Some (ModStub (Qualified q x)) else None)"
+    by (induction m) (auto simp: dom_def split: name.splits)
   then show "fmlookup (submods (fmap_of_list m) q) x = fmlookup (fmap_of_list ?l) x"
     by (simp add: submods.rep_eq fmlookup_of_list)
 qed
