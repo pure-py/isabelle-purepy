@@ -8,7 +8,8 @@ from typing import Any
 
 from purepy_conformance import Exit
 
-from .check_program import check_program, exit_code, format_diagnostic, parse_program
+from . import syntax
+from .check_program import Diagnostic, diagnostic, exit_code, format_diagnostic, parse_program
 from .generated import Contexts, Eval, Option, Programs, Sum_Type, Syntax
 from .syntax import Program
 
@@ -19,11 +20,18 @@ OUT_OF_FUEL = 7
 DEFAULT_FUEL = 100_000
 
 
-def class_table(M: Program) -> Any:
-    """Class table of a well-formed program"""
+def check(entry_path: pathlib.Path) -> Diagnostic | tuple[Program, Any]:
+    """Diagnostic of an ill-formed program, or the program with its class table, by one check of the program as
+    Programs.check_program checks it"""
+    try:
+        M = parse_program(entry_path)
+    except syntax.ParserRejects as e:
+        return diagnostic(e)
     match Programs.check_module(M, [], Contexts.predefined_classes, Syntax.main, Syntax.main):
+        case Sum_Type.Inl((q, r)):
+            return diagnostic(Programs.IllFormed(q, r))
         case Sum_Type.Inr((_, sigma)):
-            return sigma
+            return M, sigma
         case result:
             raise AssertionError(f"unexpected result: {result}")
 
@@ -118,12 +126,12 @@ def run_program(
     """Exit status of the program at entry_path, run with command-line arguments args, so that sys.argv is the
     path followed by args. The interpreter recurses as deeply as derivations nest, so it
     runs in a thread with a large stack."""
-    d = check_program(entry_path)
-    if d is not None:
-        print(format_diagnostic(d, entry_path))
-        return int(exit_code(d))
-    M = parse_program(entry_path)
-    sigma = class_table(M)
+    match check(entry_path):
+        case Diagnostic() as d:
+            print(format_diagnostic(d, entry_path))
+            return int(exit_code(d))
+        case (M, sigma):
+            pass
     status: list[int] = [OUT_OF_FUEL]
     sys.setrecursionlimit(10**6)
     threading.stack_size(1 << 29)
