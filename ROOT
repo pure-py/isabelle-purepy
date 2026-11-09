@@ -40,6 +40,8 @@ session "isabelle-purepy-soundness" in "soundness" = "isabelle-purepy" +
     WellFormedExpressions
     WellFormedStatements
     Extension
+    ExtensionExpressions
+    ExtensionStatements
     ValueTyping
     ResultTyping
     Instances
