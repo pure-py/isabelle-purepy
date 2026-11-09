@@ -11,29 +11,25 @@ begin
 subsection \<open>Values at types\<close>
 
 lemma wf_val_never: "\<turnstile> v : Ty (TyPrim Never) \<Longrightarrow> False"
-proof -
-  assume "\<turnstile> v : Ty (TyPrim Never)"
-  from wf_val_intro(1)[OF this] obtain \<sigma> where "intro_typed v \<sigma>" and "\<Sigma> \<turnstile> \<sigma> <: TyPrim Never" by blast
-  with intro_typed_nonunion[OF this(1)] subty_never_inv show False by blast
-qed
+  by (erule WfTyE) (auto dest: subty_never_inv)
 
 (* Value at an instance of a type: at the instance of one of its disjuncts *)
 lemma wf_val_inst_disjunct: "\<turnstile> v : Ty (inst \<eta> \<tau>) \<Longrightarrow> \<exists>\<sigma> \<in> set (disjuncts \<tau>). \<turnstile> v : Ty (inst \<eta> \<sigma>)"
   by (induction \<tau>) (auto dest: wf_val_union)
 
-(* Introduction type of a value, below each of its types *)
+(* Value at a type: at a type of its form below that type *)
 lemma wf_list_sub: "\<turnstile> VList vs : Ty \<tau> \<Longrightarrow> \<exists>\<upsilon>. \<Sigma> \<turnstile> TyList \<upsilon> <: \<tau>"
-  using wf_val_intro(1) by fastforce
+  by (erule WfTyE) auto
 
 lemma wf_tuple_sub: "\<turnstile> VTuple vs : Ty \<tau> \<Longrightarrow> \<exists>\<upsilon>s. \<Sigma> \<turnstile> TyTuple \<upsilon>s <: \<tau>"
-  using wf_val_intro(1) by fastforce
+  by (erule WfTyE) auto
 
 lemma wf_dict_sub: "\<turnstile> VDict \<delta> : Ty \<tau> \<Longrightarrow> \<exists>\<upsilon>. \<Sigma> \<turnstile> TyDict \<upsilon> <: \<tau>"
-  using wf_val_intro(1) by fastforce
+  by (erule WfTyE) auto
 
 lemma wf_lit_sub:
   "\<turnstile> VLit l : Ty \<tau> \<Longrightarrow> \<Sigma> \<turnstile> TyLiteral l <: \<tau> \<or> (\<exists>x. l = LitFloat x \<and> \<Sigma> \<turnstile> TyPrim float <: \<tau>)"
-  using wf_val_intro(1) by fastforce
+  by (erule WfTyE) auto
 
 (* Range class: no base class, no type parameters, no other ancestor *)
 lemma range_base: "base \<Sigma> range_class = None"
@@ -330,7 +326,7 @@ proof (induction \<tau> arbitrary: \<Delta>)
     using inst_subty[OF wf_class_table join_upper(1)] inst_subty[OF wf_class_table join_upper(2)]
       wf\<^sub>1 wf\<^sub>2 wf_join[OF wf\<^sub>1 wf\<^sub>2]
     by blast+
-  ultimately show ?case using inst_wf[OF TyUnion.prems(5) wf_join[OF wf\<^sub>1 wf\<^sub>2]] by (auto intro: ValSub)
+  ultimately show ?case using inst_wf[OF TyUnion.prems(5) wf_join[OF wf\<^sub>1 wf\<^sub>2]] by (auto intro: wf_val_sub)
 qed auto
 
 lemma remaining_lift:
@@ -346,18 +342,10 @@ proof (induction \<tau>)
     using inst_subty[OF wf_class_table join_upper(1)] inst_subty[OF wf_class_table join_upper(2)]
       wf\<^sub>1 wf\<^sub>2 wf_join[OF wf\<^sub>1 wf\<^sub>2]
     by blast+
-  ultimately show ?case using inst_wf[OF TyUnion.prems(3) wf_join[OF wf\<^sub>1 wf\<^sub>2]] by (auto intro: ValSub)
+  ultimately show ?case using inst_wf[OF TyUnion.prems(3) wf_join[OF wf\<^sub>1 wf\<^sub>2]] by (auto intro: wf_val_sub)
 qed auto
 
 subsection \<open>Canonical forms of literals\<close>
-
-lemma wf_val_literal: "\<turnstile> v : Ty (TyLiteral l) \<Longrightarrow> v = VLit l"
-proof -
-  assume "\<turnstile> v : Ty (TyLiteral l)"
-  from wf_val_intro(1)[OF this] obtain \<sigma> where intro: "intro_typed v \<sigma>" and "\<Sigma> \<turnstile> \<sigma> <: TyLiteral l" by blast
-  with intro_typed_nonunion[OF intro] subty_literal_inv' have "\<sigma> = TyLiteral l" by blast
-  with intro show "v = VLit l" by (cases v) auto
-qed
 
 lemma wf_val_bool: "\<turnstile> v : Ty (TyPrim bool) \<Longrightarrow> \<exists>b. v = VLit (LitBool b)"
   by (erule wf_prim_lit[OF _ SubtyRefl]) (auto elim: base_type_lit.elims split: if_splits)
@@ -1048,7 +1036,7 @@ proof -
     by blast
   have "wf_ty \<Sigma> \<upsilon>" using dom[rule_format, of "disjuncts \<tau> ! k" \<Delta>\<^sub>d] k fk look by auto
   with inst_subty[OF wf_class_table sub] wf have "\<Sigma> \<turnstile> inst \<eta> \<upsilon> <: inst \<eta> \<sigma>'" by blast
-  with u inst_wf[OF wf\<eta> wf] \<sigma>' show ?thesis by (auto intro: ValSub)
+  with u inst_wf[OF wf\<eta> wf] \<sigma>' show ?thesis by (auto intro: wf_val_sub)
 qed
 
 (* Disjunct of a type at which a pattern has bindings: the check there succeeds, or there is none *)
@@ -1385,9 +1373,9 @@ proof (induction p arbitrary: \<tau> \<Delta> v rule: measure_induct_rule[where 
       have "\<turnstile> v : Ty (inst \<eta> (remaining \<Sigma> \<Gamma> \<sigma> (PatLiteral l)))"
       proof (cases \<sigma>)
         case (TyLiteral l')
-        with v have "v = VLit l'" by (auto dest: wf_val_literal)
+        with v have "v = VLit l'" by (auto dest: wf_lit)
         with no not_float have "l' \<noteq> l" by (cases l) (auto split: if_splits result.splits bool.splits)
-        with \<open>v = VLit l'\<close> show ?thesis unfolding TyLiteral by (simp add: ValLit)
+        with \<open>v = VLit l'\<close> show ?thesis unfolding TyLiteral by (simp add: wf_val_lit)
       next
         case (TyPrim p)
         consider "p = bool" | "p = NoneType" | "p \<notin> {bool, NoneType}" by blast
@@ -1399,7 +1387,7 @@ proof (induction p arbitrary: \<tau> \<Delta> v rule: measure_induct_rule[where 
           proof (cases l)
             case (LitBool b)
             with no v' have "b' \<noteq> b" by (auto split: if_splits bool.splits result.splits)
-            with v' show ?thesis unfolding TyPrim 1 LitBool by (simp add: remaining_literal_bool ValLit)
+            with v' show ?thesis unfolding TyPrim 1 LitBool by (simp add: remaining_literal_bool wf_val_lit)
           qed (use v TyPrim 1 in \<open>simp_all add: remaining_literal_bool\<close>)
         next
           case 2
@@ -1431,7 +1419,7 @@ proof (induction p arbitrary: \<tau> \<Delta> v rule: measure_induct_rule[where 
           then obtain x where l: "l = LitFloat x" by blast
           from eq_lit_float[OF eq_lit[unfolded l]] have number: "is_number (VLit l')" .
           then have float: "\<turnstile> v : Ty (TyPrim float)"
-            unfolding v' by (cases l') (auto intro: wf_int_float ValLitFloat)
+            unfolding v' by (cases l') (auto intro: wf_int_float wf_val_float)
           from number_comparable_float[OF v[unfolded v'] number nonunion] False
           consider "\<Sigma> \<turnstile> TyPrim float <: \<sigma>" | "\<Sigma> \<turnstile> \<sigma> <: TyPrim float" by blast
           then show ?thesis using matched float v unfolding l by cases (auto simp: meet_float[OF nonunion])
@@ -1439,7 +1427,7 @@ proof (induction p arbitrary: \<tau> \<Delta> v rule: measure_induct_rule[where 
           case no_float: False
           with not_float v' eq_lit have "\<forall>x. l' \<noteq> LitFloat x" by (cases l; cases l') auto
           with eq_lit_same[OF eq_lit] no_float have "l' = l" by auto
-          with v' have lit: "\<turnstile> v : Ty (TyLiteral l)" by (simp add: ValLit)
+          with v' have lit: "\<turnstile> v : Ty (TyLiteral l)" by (simp add: wf_val_lit)
           from lit_comparable[OF v[unfolded v' \<open>l' = l\<close>] _ nonunion] False no_float have "\<Sigma> \<turnstile> TyLiteral l <: \<sigma>"
             by auto
           with matched lit no_float show ?thesis by (cases l) (auto simp: meet_literal[OF nonunion])
@@ -1520,7 +1508,7 @@ proof (induction p arbitrary: \<tau> \<Delta> v rule: measure_induct_rule[where 
           from sound_i[OF i this] seq\<^sub>3 i show ?thesis by (auto simp: pat_sound_def)
         qed
         then show "\<turnstile> v : Ty (inst \<eta> (matched_as \<Sigma> \<Gamma> \<sigma> (PatTuple ps)))"
-          unfolding \<sigma>s vs using len len_vs by (auto intro!: ValTuple simp: list_all2_conv_all_nth)
+          unfolding \<sigma>s vs using len len_vs by (auto intro!: wf_val_tuple simp: list_all2_conv_all_nth)
       next
         assume "match \<rho> (PatTuple ps) v = NoMatch"
         from seq(2)[OF this[unfolded m]] obtain i where i: "i < length ps"
@@ -1551,7 +1539,7 @@ proof (induction p arbitrary: \<tau> \<Delta> v rule: measure_induct_rule[where 
               unfolding \<sigma>s using len single ji by (simp add: Let_def)
             moreover have "\<turnstile> v : Ty (TyTuple (map (inst \<eta>) (\<sigma>s[i := ?\<rho>s ! i])))"
               using typed vi i len unfolding vs \<rho>s_i
-              by (auto intro!: ValTuple simp: list_all2_conv_all_nth nth_list_update)
+              by (auto intro!: wf_val_tuple simp: list_all2_conv_all_nth nth_list_update)
             ultimately show ?thesis by simp
           next
             case (Cons j' js')
@@ -1870,7 +1858,7 @@ proof (induction p arbitrary: \<tau> \<Delta> v rule: measure_induct_rule[where 
       have below: "\<exists>D zvs. v = VObject D zvs \<and> C \<in> set (ancestors \<Sigma> D)" if sub: "\<Sigma> \<turnstile> \<sigma> <: TyClass C \<sigma>s"
       proof -
         from inst_subty[OF wf_class_table sub] wf\<sigma> wfC have "\<Sigma> \<turnstile> inst \<eta> \<sigma> <: inst \<eta> (TyClass C \<sigma>s)" by blast
-        with v inst_wf[OF wf\<eta> wfC] have vC: "\<turnstile> v : Ty (TyClass C (map (inst \<eta>) \<sigma>s))" by (auto intro: ValSub)
+        with v inst_wf[OF wf\<eta> wfC] have vC: "\<turnstile> v : Ty (TyClass C (map (inst \<eta>) \<sigma>s))" by (auto intro: wf_val_sub)
         from wf_object_type[OF vC] obtain D zvs where vD: "v = VObject D zvs" by (cases v) auto
         from wf_object[OF vC[unfolded vD]] obtain \<upsilon>s where "\<Sigma> \<turnstile> TyClass D \<upsilon>s <: TyClass C (map (inst \<eta>) \<sigma>s)"
           and "wf_ty \<Sigma> (TyClass D \<upsilon>s)"
@@ -1897,7 +1885,7 @@ proof (induction p arbitrary: \<tau> \<Delta> v rule: measure_induct_rule[where 
           by (rule instance_at_sub[OF inst nonunion wf\<sigma> C subD wfD anc])
         have wfC\<eta>: "wf_ty \<Sigma> (TyClass C (map (inst \<eta>) \<sigma>s))" using inst_wf[OF wf\<eta> wfC] by simp
         have vC: "\<turnstile> v : Ty (inst \<eta> (TyClass C \<sigma>s))"
-          using ValObj[OF wfD names typed] below wfC\<eta> unfolding vD by (auto intro: ValSub)
+          using ValObj[OF wfD names typed] below wfC\<eta> unfolding vD by (auto intro: wf_val_sub)
         (* Field names of C: the first fields of D *)
         from instantiate_fields_ancestor[OF wf_class_table D anc, of \<upsilon>s] obtain rest
           where fieldsD: "instantiate (fields \<Sigma> D) \<upsilon>s = instantiate (fields \<Sigma> C) (instantiated_ancestor \<Sigma> D \<upsilon>s C) @ rest"
@@ -1939,7 +1927,7 @@ proof (induction p arbitrary: \<tau> \<Delta> v rule: measure_induct_rule[where 
             where u: "map_of zvs (?xs ! i) = Some u" and "\<turnstile> u : Ty \<tau>'"
             by blast
           have "wf_ty \<Sigma> (inst \<eta> (?fts ! i))" by (rule fields_wf[OF wf_class_table wfC\<eta> map_of_SomeD[OF lookC]])
-          with \<open>\<turnstile> u : Ty \<tau>'\<close> equiv have "\<turnstile> u : Ty (inst \<eta> (?fts ! i))" by (auto intro: ValSub)
+          with \<open>\<turnstile> u : Ty \<tau>'\<close> equiv have "\<turnstile> u : Ty (inst \<eta> (?fts ! i))" by (auto intro: wf_val_sub)
           with u i show ?thesis by simp
         qed
         have sound_i: "pat_sound \<Gamma> \<eta> \<rho> (node (?fps ! i)) (?fts ! i) \<Delta>'' (?us ! i)"

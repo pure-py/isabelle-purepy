@@ -203,40 +203,49 @@ where
 context evaluation
 begin
 
+(* Definitions ds checked at signatures \<pi>s in \<Gamma> extended by those signatures, their type parameters fresh
+   for \<Gamma> *)
+definition defs_checked :: "cxt \<Rightarrow> func located list \<Rightarrow> ty_scheme list \<Rightarrow> bool"
+where
+"defs_checked \<Gamma> ds \<pi>s =
+  (those_sum (map (\<lambda>d. locate (pos_of d) (def_signature \<Sigma> \<Gamma> (node d))) ds) = Ok \<pi>s
+   \<and> all_sum (map2 (check_def_at \<Sigma> (\<Gamma> \<otimes> fmap_of_list (zip (map (def_name \<circ> node) ds) (map signature_entry \<pi>s))))
+       ds \<pi>s) = Ok ()
+   \<and> (\<forall>d \<in> set ds. case node d of Def _ \<alpha>s _ _ _ \<Rightarrow> set \<alpha>s \<inter> tyvars \<Gamma> = {}))"
+
 inductive wf_val :: "val \<Rightarrow> cxt_entry \<Rightarrow> bool" ("\<turnstile> _ : _" [51, 51] 50)
 and wf_env :: "(var \<Rightarrow> ty) \<Rightarrow> env \<Rightarrow> cxt \<Rightarrow> bool" ("_ \<turnstile> _ : _" [51, 51, 51] 50)
 where
-ValLit: "\<turnstile> VLit l : Ty (TyLiteral l)" |
-ValLitFloat: "\<turnstile> VLit (LitFloat x) : Ty (TyPrim float)" |
-ValList: "\<lbrakk> \<forall>v \<in> set vs. \<turnstile> v : Ty \<tau> ; wf_ty \<Sigma> \<tau> \<rbrakk> \<Longrightarrow> \<turnstile> VList vs : Ty (TyList \<tau>)" |
-ValTuple: "list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) vs \<tau>s \<Longrightarrow> \<turnstile> VTuple vs : Ty (TyTuple \<tau>s)" |
+ValLit: "\<lbrakk> \<Sigma> \<turnstile> TyLiteral l <: \<tau> ; wf_ty \<Sigma> \<tau> \<rbrakk> \<Longrightarrow> \<turnstile> VLit l : Ty \<tau>" |
+ValLitFloat: "\<lbrakk> \<Sigma> \<turnstile> TyPrim float <: \<tau> ; wf_ty \<Sigma> \<tau> \<rbrakk> \<Longrightarrow> \<turnstile> VLit (LitFloat x) : Ty \<tau>" |
+ValList:
+  "\<lbrakk> \<forall>v \<in> set vs. \<turnstile> v : Ty \<sigma> ; wf_ty \<Sigma> \<sigma> ; \<Sigma> \<turnstile> TyList \<sigma> <: \<tau> ; wf_ty \<Sigma> \<tau> \<rbrakk> \<Longrightarrow> \<turnstile> VList vs : Ty \<tau>" |
+ValTuple:
+  "\<lbrakk> list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty \<sigma>) vs \<sigma>s ; \<Sigma> \<turnstile> TyTuple \<sigma>s <: \<tau> ; wf_ty \<Sigma> \<tau> \<rbrakk> \<Longrightarrow> \<turnstile> VTuple vs : Ty \<tau>" |
 ValDict:
-  "\<lbrakk> \<forall>w v. (w, v) \<in> set \<delta> \<longrightarrow> \<turnstile> v : Ty \<tau> ; distinct (map fst \<delta>) ; wf_ty \<Sigma> \<tau> \<rbrakk>
-  \<Longrightarrow> \<turnstile> VDict \<delta> : Ty (TyDict \<tau>)" |
+  "\<lbrakk> \<forall>w v. (w, v) \<in> set \<delta> \<longrightarrow> \<turnstile> v : Ty \<sigma> ; distinct (map fst \<delta>) ; wf_ty \<Sigma> \<sigma> ; \<Sigma> \<turnstile> TyDict \<sigma> <: \<tau>
+   ; wf_ty \<Sigma> \<tau> \<rbrakk>
+  \<Longrightarrow> \<turnstile> VDict \<delta> : Ty \<tau>" |
 ValLambda:
-  "\<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; length xs = length \<sigma>s ; params_cxt xs \<sigma>s = Ok \<Delta> ; check_expr_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e \<tau> = Ok ()
-   ; wf_ty \<Sigma> (TyCallable \<sigma>s \<tau>) \<rbrakk>
-  \<Longrightarrow> \<turnstile> Lam(\<rho>, xs, e) : Ty (inst \<eta> (TyCallable \<sigma>s \<tau>))" |
+  "\<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; length xs = length \<sigma>s ; params_cxt xs \<sigma>s = Ok \<Delta> ; check_expr_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e \<sigma> = Ok ()
+   ; wf_ty \<Sigma> (TyCallable \<sigma>s \<sigma>) ; \<Sigma> \<turnstile> inst \<eta> (TyCallable \<sigma>s \<sigma>) <: \<tau> ; wf_ty \<Sigma> \<tau> \<rbrakk>
+  \<Longrightarrow> \<turnstile> Lam(\<rho>, xs, e) : Ty \<tau>" |
 ValDef:
-  "\<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; those_sum (map (\<lambda>d. locate (pos_of d) (def_signature \<Sigma> \<Gamma> (node d))) ds) = Ok \<pi>s
-   ; \<Delta> = fmap_of_list (zip (map (def_name \<circ> node) ds) (map signature_entry \<pi>s))
-   ; all_sum (map2 (check_def_at \<Sigma> (\<Gamma> \<otimes> \<Delta>)) ds \<pi>s) = Ok ()
-   ; \<forall>d \<in> set ds. case node d of Def _ \<alpha>s _ _ _ \<Rightarrow> set \<alpha>s \<inter> tyvars \<Gamma> = {}
-   ; i < length ds ; \<pi>s ! i = TyScheme \<alpha>s \<tau> \<rbrakk>
-  \<Longrightarrow> \<turnstile> Def(\<rho>, ds, i) : inst_entry \<eta> (signature_entry (TyScheme \<alpha>s \<tau>))" |
-ValInst:
-  "\<lbrakk> \<turnstile> v : Scheme (TyScheme \<alpha>s \<sigma>) ; length \<tau>s = length \<alpha>s ; \<forall>\<tau> \<in> set \<tau>s. fv \<tau> = {}
-   ; \<forall>\<tau> \<in> set \<tau>s. wf_ty \<Sigma> \<tau> \<rbrakk>
-  \<Longrightarrow> \<turnstile> v : Ty (subst \<tau>s \<alpha>s \<sigma>)" |
+  "\<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; defs_checked \<Gamma> ds \<pi>s ; i < length ds ; \<pi>s ! i = TyScheme \<alpha>s (TyCallable \<sigma>s \<sigma>)
+   ; length \<tau>s = length \<alpha>s ; \<forall>\<tau>' \<in> set \<tau>s. fv \<tau>' = {} \<and> wf_ty \<Sigma> \<tau>'
+   ; \<Sigma> \<turnstile> subst \<tau>s \<alpha>s (inst (shadow \<alpha>s \<eta>) (TyCallable \<sigma>s \<sigma>)) <: \<tau> ; wf_ty \<Sigma> \<tau> \<rbrakk>
+  \<Longrightarrow> \<turnstile> Def(\<rho>, ds, i) : Ty \<tau>" |
+ValDefScheme:
+  "\<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; defs_checked \<Gamma> ds \<pi>s ; i < length ds ; \<pi>s ! i = TyScheme \<alpha>s (TyCallable \<sigma>s \<sigma>) ; \<alpha>s \<noteq> [] \<rbrakk>
+  \<Longrightarrow> \<turnstile> Def(\<rho>, ds, i) : Scheme (TyScheme \<alpha>s (inst (shadow \<alpha>s \<eta>) (TyCallable \<sigma>s \<sigma>)))" |
 ValObj:
-  "\<lbrakk> wf_ty \<Sigma> (TyClass C \<tau>s) ; map fst xvs = field_names \<Sigma> C
-   ; list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) (map snd xvs) (field_types \<Sigma> C \<tau>s) \<rbrakk>
-  \<Longrightarrow> \<turnstile> VObject C xvs : Ty (TyClass C \<tau>s)" |
-ValSub: "\<lbrakk> \<turnstile> v : Ty \<sigma> ; \<Sigma> \<turnstile> \<sigma> <: \<tau> ; wf_ty \<Sigma> \<tau> \<rbrakk> \<Longrightarrow> \<turnstile> v : Ty \<tau>" |
+  "\<lbrakk> wf_ty \<Sigma> (TyClass C \<sigma>s) ; map fst xvs = field_names \<Sigma> C
+   ; list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty \<sigma>) (map snd xvs) (field_types \<Sigma> C \<sigma>s) ; \<Sigma> \<turnstile> TyClass C \<sigma>s <: \<tau> ; wf_ty \<Sigma> \<tau> \<rbrakk>
+  \<Longrightarrow> \<turnstile> VObject C xvs : Ty \<tau>" |
 ValPrim:
   "\<lbrakk> fmlookup (\<E> \<A>) q = Some \<rho> ; fmlookup \<rho> x = Some (VPrim f) ; fmlookup \<P> q = Some \<Gamma>
-   ; fmlookup \<Gamma> x = Some \<theta> \<rbrakk>
-  \<Longrightarrow> \<turnstile> VPrim f : \<theta>" |
+   ; fmlookup \<Gamma> x = Some (Ty (TyCallable \<sigma>s \<sigma>)) ; \<Sigma> \<turnstile> TyCallable \<sigma>s \<sigma> <: \<tau> ; wf_ty \<Sigma> \<tau> \<rbrakk>
+  \<Longrightarrow> \<turnstile> VPrim f : Ty \<tau>" |
 ValPredef: "\<turnstile> VPredef q : PredefName" |
 ValMod: "\<turnstile> VModStub q : ModStub q" |
 ValModLoaded: "\<eta> \<turnstile> \<rho> : \<Gamma> \<Longrightarrow> \<turnstile> VModLoaded q \<rho> : ModChecked q \<Gamma>" |
@@ -362,13 +371,12 @@ proof -
 qed
 
 lemma wf_unbound:
-  "\<turnstile> v : \<theta> \<Longrightarrow> v = VUnbound \<longrightarrow> \<theta> = Unbound \<or> (\<exists>\<tau>. \<theta> = DU \<tau>) \<or> (\<exists>\<tau> b. \<theta> = PU \<tau> b) \<or> (\<exists>\<pi> b. \<theta> = PUScheme \<pi> b)"
-  "\<eta> \<turnstile> \<rho> : \<Gamma> \<Longrightarrow> True"
-  by (induction rule: wf_val_wf_env.inducts) (auto simp: inst_entry_signature_entry split: if_splits)
+  "\<turnstile> VUnbound : \<theta> \<Longrightarrow> \<theta> = Unbound \<or> (\<exists>\<tau>. \<theta> = DU \<tau>) \<or> (\<exists>\<tau> b. \<theta> = PU \<tau> b) \<or> (\<exists>\<pi> b. \<theta> = PUScheme \<pi> b)"
+  by (erule wf_val.cases) auto
 
 lemma wf_unbound_ty: "\<turnstile> VUnbound : Ty \<tau> \<Longrightarrow> False"
   and wf_unbound_scheme: "\<turnstile> VUnbound : Scheme \<pi> \<Longrightarrow> False"
-  by (auto dest!: wf_unbound(1))
+  by (auto dest!: wf_unbound)
 
 (* Contexts of the predefined modules, well-formed *)
 lemma predefined_cxt_wf: "fmlookup \<P> q = Some \<Gamma> \<Longrightarrow> wf_cxt \<Sigma> \<Gamma>"
@@ -381,43 +389,105 @@ qed
 lemma wf_range_class: "wf_ty \<Sigma> (TyClass range_class [])"
   using range_lookup by (simp add: predefined_classes_def fmlookup_dom_iff type_params_def)
 
-lemma wf_entry_cases:
-  "wf_entry \<Sigma> \<theta> \<Longrightarrow> (\<forall>\<tau>. \<theta> = Ty \<tau> \<longrightarrow> wf_ty \<Sigma> \<tau>) \<and> (\<forall>\<pi>. \<theta> = Scheme \<pi> \<longrightarrow> wf_entry \<Sigma> (Scheme \<pi>))"
-  by auto
+inductive_cases WfTyE: "\<turnstile> v : Ty \<tau>"
 
-(* Type or scheme at which a value is typed, well-formed *)
-lemma wf_val_wf:
-  "\<turnstile> v : \<theta> \<Longrightarrow> (\<forall>\<tau>. \<theta> = Ty \<tau> \<longrightarrow> wf_ty \<Sigma> \<tau>) \<and> (\<forall>\<pi>. \<theta> = Scheme \<pi> \<longrightarrow> wf_entry \<Sigma> (Scheme \<pi>))"
-  "\<eta> \<turnstile> \<rho> : \<Gamma> \<Longrightarrow> True"
-proof (induction rule: wf_val_wf_env.inducts)
-  case (ValTuple vs \<tau>s)
-  then have "\<forall>\<tau> \<in> set \<tau>s. wf_ty \<Sigma> \<tau>" by (auto simp: in_set_conv_nth list_all2_conv_all_nth)
-  then show ?case by simp
-next
-  case (ValLambda \<eta> \<rho> \<Gamma> xs \<sigma>s \<Delta> e \<tau>)
-  have "wf_ty \<Sigma> (TyCallable \<sigma>s \<tau>)" by fact
-  from inst_wf[OF wf_env_wf_inst[OF ValLambda(1)] this] show ?case by simp
-next
-  case (ValDef \<eta> \<rho> \<Gamma> ds \<pi>s \<Delta> i \<alpha>s \<tau>)
-  have sigs: "those_sum (map (\<lambda>d. locate (pos_of d) (def_signature \<Sigma> \<Gamma> (node d))) ds) = Ok \<pi>s"
-    and i: "i < length ds" and \<pi>: "\<pi>s ! i = TyScheme \<alpha>s \<tau>"
-    by fact+
-  have "\<pi>s ! i \<in> set \<pi>s" using those_sum_map_Ok[OF sigs] i by (simp add: list_all2_lengthD)
-  from those_sum_map_Ok_elem[OF sigs this] obtain d where "def_signature \<Sigma> \<Gamma> (node d) = Ok (\<pi>s ! i)" by auto
-  from def_signature_wf[OF wf_env_wf_cxt[OF ValDef(1)] this]
-  have "wf_entry \<Sigma> (signature_entry (TyScheme \<alpha>s \<tau>))" by (simp add: \<pi>)
-  from inst_entry_wf[OF wf_env_wf_inst[OF ValDef(1)] this] show ?case by (rule wf_entry_cases)
-next
-  case (ValInst v \<alpha>s \<sigma> \<tau>s)
-  then show ?case by (auto intro: wf_ty_subst)
-next
-  case (ValPrim \<A> q \<rho> x f \<Gamma> \<theta>)
-  from wf_cxt_lookup[OF predefined_cxt_wf[OF ValPrim(3)] ValPrim(4)] show ?case by (rule wf_entry_cases)
-qed auto
+inductive_cases WfSchemeE: "\<turnstile> v : Scheme \<pi>"
 
 lemma wf_val_ty: "\<turnstile> v : Ty \<tau> \<Longrightarrow> wf_ty \<Sigma> \<tau>"
-  and wf_val_scheme: "\<turnstile> v : Scheme \<pi> \<Longrightarrow> wf_entry \<Sigma> (Scheme \<pi>)"
-  by (auto dest!: wf_val_wf(1))
+  by (erule WfTyE) simp_all
+
+lemma wf_vals_tys: "list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) vs \<tau>s \<Longrightarrow> \<forall>\<tau> \<in> set \<tau>s. wf_ty \<Sigma> \<tau>"
+  by (induction rule: list_all2_induct) (auto dest: wf_val_ty)
+
+lemma wf_val_lit: "\<turnstile> VLit l : Ty (TyLiteral l)"
+  by (rule ValLit) (simp_all add: SubtyRefl)
+
+lemma wf_val_float: "\<turnstile> VLit (LitFloat x) : Ty (TyPrim float)"
+  by (rule ValLitFloat) (simp_all add: SubtyRefl)
+
+lemma wf_val_list: "\<lbrakk> \<forall>v \<in> set vs. \<turnstile> v : Ty \<tau> ; wf_ty \<Sigma> \<tau> \<rbrakk> \<Longrightarrow> \<turnstile> VList vs : Ty (TyList \<tau>)"
+  by (rule ValList[OF _ _ SubtyRefl]) simp_all
+
+lemma wf_val_tuple: "list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) vs \<tau>s \<Longrightarrow> \<turnstile> VTuple vs : Ty (TyTuple \<tau>s)"
+  by (frule wf_vals_tys) (rule ValTuple[OF _ SubtyRefl]; simp)
+
+(* Signature of a checked definition, well-formed and callable *)
+lemma defs_checked_wf:
+  assumes "wf_cxt \<Sigma> \<Gamma>" and "defs_checked \<Gamma> ds \<pi>s" and "i < length ds" and "\<pi>s ! i = TyScheme \<alpha>s \<sigma>"
+  shows "wf_ty \<Sigma> \<sigma> \<and> (\<exists>\<sigma>s \<sigma>'. \<sigma> = TyCallable \<sigma>s \<sigma>')"
+proof -
+  have sigs: "those_sum (map (\<lambda>d. locate (pos_of d) (def_signature \<Sigma> \<Gamma> (node d))) ds) = Ok \<pi>s"
+    using assms(2) by (simp add: defs_checked_def)
+  have "\<pi>s ! i \<in> set \<pi>s" using those_sum_map_Ok[OF sigs] assms(3) by (simp add: list_all2_lengthD)
+  from those_sum_map_Ok_elem[OF sigs this] obtain d where "def_signature \<Sigma> \<Gamma> (node d) = Ok (\<pi>s ! i)" by auto
+  from def_signature_wf[OF assms(1) this] def_signatures_callable[OF sigs assms(3, 4)] show ?thesis
+    by (cases \<alpha>s) (auto simp: assms(4))
+qed
+
+lemma wf_val_scheme: "\<turnstile> v : Scheme \<pi> \<Longrightarrow> wf_entry \<Sigma> (Scheme \<pi>)"
+  by (erule WfSchemeE)
+     (auto dest: defs_checked_wf[OF wf_env_wf_cxt] intro!: inst_wf_ty shadow_wf intro: wf_env_wf_inst)
+
+(* Subsumption *)
+lemma wf_val_sub:
+  assumes "\<turnstile> v : Ty \<sigma>" and "\<Sigma> \<turnstile> \<sigma> <: \<tau>" and "wf_ty \<Sigma> \<tau>"
+  shows "\<turnstile> v : Ty \<tau>"
+proof -
+  have trans: "\<Sigma> \<turnstile> \<sigma>' <: \<tau>" if "\<Sigma> \<turnstile> \<sigma>' <: \<sigma>" and "wf_ty \<Sigma> \<sigma>'" for \<sigma>'
+    using subty_trans[OF wf_class_table that(2) wf_val_ty[OF assms(1)] that(1) assms(2)] .
+  from assms(1) show ?thesis
+  proof (cases rule: wf_val.cases)
+    case ValTuple
+    then show ?thesis
+      by (auto intro!: wf_val_wf_env.ValTuple trans assms(3) dest: wf_vals_tys)
+  next
+    case ValLambda
+    then show ?thesis by (auto intro!: wf_val_wf_env.ValLambda trans assms(3) inst_wf intro: wf_env_wf_inst)
+  next
+    case ValDef
+    then show ?thesis
+      by (auto intro!: wf_val_wf_env.ValDef trans assms(3) wf_ty_subst inst_wf_ty shadow_wf
+          intro: wf_env_wf_inst dest: defs_checked_wf[OF wf_env_wf_cxt])
+  next
+    case ValPrim
+    then show ?thesis
+      by (auto intro!: wf_val_wf_env.ValPrim trans assms(3) dest: wf_cxt_lookup[OF predefined_cxt_wf])
+  qed (auto intro!: wf_val_wf_env.intros trans assms(3))
+qed
+
+(* Instantiation of a scheme *)
+lemma wf_val_inst:
+  assumes "\<turnstile> v : Scheme (TyScheme \<alpha>s \<sigma>)" and "length \<tau>s = length \<alpha>s" and "\<forall>\<tau> \<in> set \<tau>s. fv \<tau> = {}"
+    and "\<forall>\<tau> \<in> set \<tau>s. wf_ty \<Sigma> \<tau>"
+  shows "\<turnstile> v : Ty (subst \<tau>s \<alpha>s \<sigma>)"
+proof -
+  have wf: "wf_ty \<Sigma> (subst \<tau>s \<alpha>s \<sigma>)" using wf_val_scheme[OF assms(1)] assms(4) by (auto intro: wf_ty_subst)
+  from assms(1) show ?thesis
+    by (cases rule: WfSchemeE) (use assms(2-4) wf in \<open>auto intro!: ValDef SubtyRefl\<close>)
+qed
+
+(* Closure of a definition, at the entry of its signature *)
+lemma wf_def_entry:
+  assumes env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and defs: "defs_checked \<Gamma> ds \<pi>s" and i: "i < length ds"
+    and \<pi>: "\<pi>s ! i = TyScheme \<alpha>s \<sigma>"
+  shows "\<turnstile> Def(\<rho>, ds, i) : inst_entry \<eta> (signature_entry (TyScheme \<alpha>s \<sigma>))"
+proof -
+  from defs_checked_wf[OF wf_env_wf_cxt[OF env] defs i \<pi>] obtain \<sigma>s \<sigma>' where wf: "wf_ty \<Sigma> \<sigma>"
+    and \<sigma>: "\<sigma> = TyCallable \<sigma>s \<sigma>'"
+    by blast
+  show ?thesis
+  proof (cases "\<alpha>s = []")
+    case True
+    have "wf_ty \<Sigma> (inst \<eta> \<sigma>)" using wf_env_wf_inst[OF env] wf by (rule inst_wf)
+    then have "\<turnstile> Def(\<rho>, ds, i) : Ty (inst \<eta> \<sigma>)"
+      using True
+      by (intro ValDef[OF env defs i \<pi>[unfolded \<sigma>], where \<tau>s = "[]"]) (simp_all add: \<sigma> SubtyRefl comp_def)
+    with True show ?thesis by simp
+  next
+    case False
+    with ValDefScheme[OF env defs i \<pi>[unfolded \<sigma>]] show ?thesis by (simp add: inst_entry_signature_entry \<sigma>)
+  qed
+qed
 
 inductive_cases WfUnboundE: "\<turnstile> v : Unbound"
 
@@ -425,7 +495,7 @@ inductive_cases WfDUE: "\<turnstile> v : DU \<tau>"
 
 lemma wf_val_unbound: "\<turnstile> v : Unbound \<Longrightarrow> v = VUnbound"
   and wf_val_du: "\<turnstile> v : DU \<tau> \<Longrightarrow> v = VUnbound"
-  by (auto elim!: WfUnboundE WfDUE simp: inst_entry_signature_entry \<E>_def \<P>_def split: if_splits)
+  by (auto elim!: WfUnboundE WfDUE)
 
 inductive_cases WfPUE: "\<turnstile> v : PU \<tau> b"
 
@@ -433,28 +503,17 @@ inductive_cases WfPUSchemeE: "\<turnstile> v : PUScheme \<pi> b"
 
 lemma wf_val_pu: "\<turnstile> v : PU \<tau> b \<Longrightarrow> v = VUnbound \<or> \<turnstile> v : Ty \<tau>"
   and wf_val_puscheme: "\<turnstile> v : PUScheme \<pi> b \<Longrightarrow> v = VUnbound \<or> \<turnstile> v : Scheme \<pi>"
-  by (auto elim!: WfPUE WfPUSchemeE simp: inst_entry_signature_entry \<E>_def \<P>_def split: if_splits)
+  by (auto elim!: WfPUE WfPUSchemeE)
 
 lemma wf_dict_update:
   "\<lbrakk> \<forall>w v. (w, v) \<in> set \<delta> \<longrightarrow> \<turnstile> v : Ty \<tau> ; wf_ty \<Sigma> \<tau> \<rbrakk> \<Longrightarrow> \<turnstile> VDict (update [] \<delta>) : Ty (TyDict \<tau>)"
-  using set_update[of "[]" \<delta>] by (auto intro!: ValDict distinct_update)
+  using set_update[of "[]" \<delta>] by (auto intro!: ValDict SubtyRefl distinct_update)
 
 lemma wf_mod_checked: "\<turnstile> v : ModChecked q \<Gamma> \<Longrightarrow> \<exists>\<rho> \<eta>. v = VModLoaded q \<rho> \<and> \<eta> \<turnstile> \<rho> : \<Gamma>"
-proof -
-  have "\<turnstile> v : \<theta> \<Longrightarrow> \<theta> = ModChecked q \<Gamma> \<longrightarrow> (\<exists>\<rho> \<eta>. v = VModLoaded q \<rho> \<and> \<eta> \<turnstile> \<rho> : \<Gamma>)"
-    and "\<eta> \<turnstile> \<rho> : \<Gamma>' \<Longrightarrow> True" for \<theta> \<eta> \<rho> \<Gamma>'
-    by (induction rule: wf_val_wf_env.inducts)
-       (auto simp: inst_entry_signature_entry split: if_splits dest: prim_entry_callable)
-  then show "\<turnstile> v : ModChecked q \<Gamma> \<Longrightarrow> ?thesis" by blast
-qed
+  by (erule wf_val.cases) auto
 
 lemma wf_mod_loaded: "\<turnstile> VModLoaded q \<rho> : \<theta> \<Longrightarrow> \<exists>\<Gamma>. \<theta> = ModChecked q \<Gamma>"
-proof -
-  have "\<turnstile> v : \<theta> \<Longrightarrow> v = VModLoaded q \<rho> \<longrightarrow> (\<exists>\<Gamma>. \<theta> = ModChecked q \<Gamma>)" and "\<eta> \<turnstile> \<rho>' : \<Gamma>' \<Longrightarrow> True"
-    for v \<theta> \<eta> \<rho>' \<Gamma>'
-    by (induction rule: wf_val_wf_env.inducts) auto
-  then show "\<turnstile> VModLoaded q \<rho> : \<theta> \<Longrightarrow> ?thesis" by blast
-qed
+  by (erule wf_val.cases) (auto elim: WfTyE WfSchemeE)
 
 (* Member of a module environment typed by the context of the module, which is closed *)
 lemma module_member:
@@ -465,10 +524,8 @@ lemma module_member:
 inductive_cases WfTypeE: "\<turnstile> v : Type C"
 
 lemma wf_type_entry: "\<turnstile> v : Type C \<Longrightarrow> v = VClass C"
-  by (erule WfTypeE) (auto dest: prim_entry_callable simp: inst_entry_signature_entry split: if_splits)
-
-lemma wf_class_dom: "\<turnstile> v : Type C \<Longrightarrow> C |\<in>| fmdom \<Sigma>"
-  by (erule WfTypeE) (auto dest: prim_entry_callable simp: inst_entry_signature_entry split: if_splits)
+  and wf_class_dom: "\<turnstile> v : Type C \<Longrightarrow> C |\<in>| fmdom \<Sigma>"
+  by (auto elim!: WfTypeE)
 
 lemma module_member_TypeVar: "tyvars \<Gamma> = {} \<Longrightarrow> fmlookup \<Gamma> x \<noteq> Some TypeVar"
   by (force simp: tyvars_def fmlookup_dom'_iff)

@@ -31,7 +31,7 @@ next
   have wfs: "\<forall>\<tau>' \<in> set (map (inst \<eta>) \<tau>s). wf_ty \<Sigma> \<tau>'"
     using type_args_wf[OF wf \<tau>s] wf_env_wf_inst[OF env] by (auto intro: inst_wf)
   have "length (map (inst \<eta>) \<tau>s) = length \<alpha>s" by (simp add: len)
-  from v this closed wfs have "\<turnstile> v : Ty (subst (map (inst \<eta>) \<tau>s) \<alpha>s (inst ?\<eta>' \<sigma>))" by (rule ValInst)
+  from v this closed wfs have "\<turnstile> v : Ty (subst (map (inst \<eta>) \<tau>s) \<alpha>s (inst ?\<eta>' \<sigma>))" by (rule wf_val_inst)
   then have "\<turnstile> v : Ty (inst \<eta> (subst \<tau>s \<alpha>s \<sigma>))" by (simp only: inst_subst[OF wf_env_wf_inst[OF env] len])
   then show "result_typed (Val v) (inst \<eta> \<tau>)"
     using sub wf wf_env_wf_inst[OF env] by (auto intro: wf_val_inst_sub)
@@ -50,14 +50,16 @@ lemma var_unknown_sound: "fmlookup \<rho> x = None \<Longrightarrow> sound_expr 
 lemma var_unbound_sound: "fmlookup \<rho> x = Some VUnbound \<Longrightarrow> sound_expr \<rho> (ExprVar x) (Aborts NameError)"
   by (rule sound_exprI)
      (auto simp: var_scheme_def scheme_of_name_def entry_of_def resolve_name_def sound_name_def
-      split: option.splits cxt_entry.splits dest!: wf_env_lookup wf_unbound_ty wf_unbound_scheme wf_unbound(1))
+      split: option.splits cxt_entry.splits dest!: wf_env_lookup wf_unbound_ty wf_unbound_scheme wf_unbound)
 
 lemma literal_sound: "sound_expr \<rho> (ExprLiteral l) (Val (VLit l))"
-  by (rule sound_expr_synthI) (auto simp: var_scheme_None intro: ValLit ValLitFloat split: lit.splits)
+  by (rule sound_expr_synthI)
+     (auto simp: var_scheme_None wf_val_lit wf_val_float split: lit.splits)
 
 lemma lambda_sound: "sound_expr \<rho> (ExprLambda xs e) (Val Lam(\<rho>, xs, e))"
   by (rule sound_exprI)
-     (auto simp: bind_sum_def intro!: ValLambda[simplified] split: ty.splits if_splits sum.splits)
+     (auto simp: bind_sum_def intro!: ValLambda SubtyRefl inst_wf[OF wf_env_wf_inst]
+      split: ty.splits if_splits sum.splits)
 
 lemma unop_overload_sub: "unop_overload \<Sigma> op \<sigma> \<omega> \<Longrightarrow> \<Sigma> \<turnstile> \<sigma> <: fst \<omega>"
 proof (induction rule: unop_overload.induct)
@@ -101,7 +103,7 @@ proof -
       ultimately show ?thesis using num assms(1) v \<open>\<tau> = \<tau>'\<close> by auto
     next
       assume "\<tau> = TyPrim float \<and> l = LitFloat x"
-      with num assms(1) v \<open>\<tau> = \<tau>'\<close> show ?thesis by (auto intro: ValLitFloat SubtyRefl)
+      with num assms(1) v \<open>\<tau> = \<tau>'\<close> show ?thesis by (auto simp: wf_val_float SubtyRefl)
     qed
   qed
 qed
@@ -208,7 +210,7 @@ next
     using vs us OverloadAddList.prems(3)
     by (auto intro: wf_val_inst_sub[OF _ join_upper(1) wf] wf_val_inst_sub[OF _ join_upper(2) wf])
   then have "\<turnstile> VList (vs @ us) : Ty (TyList (inst \<eta> (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>)))"
-    by (rule ValList) (rule inst_wf[OF OverloadAddList.prems(3) wf])
+    by (rule wf_val_list) (rule inst_wf[OF OverloadAddList.prems(3) wf])
   with v u show ?case by (simp add: binop_simps)
 next
   case (OverloadAddTuple \<sigma>s \<tau>s)
@@ -219,7 +221,7 @@ next
     and us: "list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) us (map (inst \<eta>) \<tau>s)"
     by (auto elim: wf_tuple)
   have "\<turnstile> VTuple (vs @ us) : Ty (TyTuple (map (inst \<eta>) \<sigma>s @ map (inst \<eta>) \<tau>s))"
-    by (rule ValTuple[OF list_all2_appendI[OF vs us]])
+    by (rule wf_val_tuple[OF list_all2_appendI[OF vs us]])
   with v u show ?case by (simp add: binop_simps)
 next
   case OverloadMulStrInt
@@ -235,7 +237,7 @@ next
   from OverloadMulListInt.prems(2) obtain n where u: "u = VLit (LitInt n)"
     by (auto dest!: wf_int[OF _ SubtyRefl])
   from vs wf_val_ty[OF OverloadMulListInt.prems(1)]
-  have "\<turnstile> VList (concat (replicate (nat n) vs)) : Ty (TyList (inst \<eta> \<tau>))" by (auto intro!: ValList)
+  have "\<turnstile> VList (concat (replicate (nat n) vs)) : Ty (TyList (inst \<eta> \<tau>))" by (auto intro!: wf_val_list)
   with v u show ?case by (simp add: binop_simps)
 next
   case (OverloadMulIntList \<sigma>\<^sub>1 \<tau>)
@@ -245,7 +247,7 @@ next
   from OverloadMulIntList.prems(1) obtain n where v: "v = VLit (LitInt n)"
     by (auto dest!: wf_int[OF _ SubtyRefl])
   from us wf_val_ty[OF OverloadMulIntList.prems(2)]
-  have "\<turnstile> VList (concat (replicate (nat n) us)) : Ty (TyList (inst \<eta> \<tau>))" by (auto intro!: ValList)
+  have "\<turnstile> VList (concat (replicate (nat n) us)) : Ty (TyList (inst \<eta> \<tau>))" by (auto intro!: wf_val_list)
   with v u show ?case by (simp add: binop_simps)
 next
   case OverloadPowNat
@@ -491,7 +493,7 @@ proof -
     with vs have "\<turnstile> v : Ty (inst \<eta> (\<tau>s ! i))" and "\<tau>s ! i \<in> set \<tau>s" by (auto simp: list_all2_conv_all_nth)
     with sub assms(4) wf_env_wf_inst[OF assms(3)] show ?thesis by (blast intro: wf_val_inst_sub)
   qed
-  then show ?thesis by (auto intro!: ValList inst_wf[OF wf_env_wf_inst[OF assms(3)] assms(4)])
+  then show ?thesis by (auto intro!: wf_val_list inst_wf[OF wf_env_wf_inst[OF assms(3)] assms(4)])
 qed
 
 lemma list_sound:
@@ -543,7 +545,7 @@ proof (rule sound_expr_typedI)
   fix \<eta> \<Gamma> \<tau>
   assume "\<eta> \<turnstile> \<rho> : \<Gamma>" and "typed_by_rule \<Sigma> \<Gamma> (ExprTuple es) \<tau>"
   with tuple_typed[OF this(2)] assms show "result_typed (Val (VTuple vs)) (inst \<eta> \<tau>)"
-    by (auto simp: sound_exprs_def ValTuple)
+    by (auto simp: sound_exprs_def wf_val_tuple)
 qed simp_all
 
 lemma tuple_fail_sound:
@@ -880,7 +882,7 @@ proof (rule sound_expr_typedI)
   have wf: "wf_ty \<Sigma> \<tau>'"
     using typed_by_rule_wf[OF wf_env_wf_cxt[OF env] \<open>typed_by_rule _ _ _ _\<close>] by (simp add: \<tau>)
   from sound_compD[OF assms(2) envs e] sub wf wf_env_wf_inst[OF env]
-  show "result_typed (Val (VList vs)) (inst \<eta> \<tau>)" by (auto simp: \<tau> intro: ValList wf_val_inst_sub inst_wf)
+  show "result_typed (Val (VList vs)) (inst \<eta> \<tau>)" by (auto simp: \<tau> intro: wf_val_list wf_val_inst_sub inst_wf)
 qed simp_all
 
 lemma list_comp_fail_quals_sound:
@@ -1122,7 +1124,7 @@ proof -
     using attribute_type_wf[OF wf_class_table wf\<sigma> assms(2)] by (auto intro: inst_wf[OF assms(3)])
   moreover obtain v where "map_of xvs x = Some v" and "\<turnstile> v : Ty \<sigma>'"
     by (rule object_field[OF names fields field])
-  ultimately show thesis using that ValSub[OF _ sub'] by blast
+  ultimately show thesis using that wf_val_sub[OF _ sub'] by blast
 qed
 
 lemma attr_object_sound:
@@ -1198,7 +1200,7 @@ next
   have wfs: "\<forall>\<tau>' \<in> set (map (inst \<eta>) \<tau>s). wf_ty \<Sigma> \<tau>'"
     using type_args_wf[OF wf module_scheme(4)] wf_env_wf_inst[OF env] by (auto intro: inst_wf)
   have "length (map (inst \<eta>) \<tau>s) = length \<alpha>s" by (simp add: len)
-  from v this closed wfs have "\<turnstile> v : Ty (subst (map (inst \<eta>) \<tau>s) \<alpha>s \<sigma>)" by (rule ValInst)
+  from v this closed wfs have "\<turnstile> v : Ty (subst (map (inst \<eta>) \<tau>s) \<alpha>s \<sigma>)" by (rule wf_val_inst)
   then have "\<turnstile> v : Ty (inst \<eta> (subst \<tau>s \<alpha>s \<sigma>))"
     by (simp only: inst_subst_closed[OF wf_env_wf_inst[OF env] len fv])
   from that[OF lookup wf_val_inst_sub[OF this module_scheme(5) wf wf_env_wf_inst[OF env]]] show thesis .
@@ -1359,11 +1361,7 @@ next
   case (TyClass C \<sigma>s)
   then have C: "C = range_class" and "\<sigma>s = []" and \<tau>: "\<tau> = TyPrim int"
     by (auto split: if_splits elim: elem_type.elims)
-  from wf_val_intro(1)[OF TyClass(2)] obtain \<sigma> where intro: "intro_typed v \<sigma>"
-    and sub: "\<Sigma> \<turnstile> \<sigma> <: inst \<eta> (TyClass C \<sigma>s)"
-    by blast
-  from subty_class_inv(1)[OF sub] intro_typed_nonunion[OF intro] obtain D \<sigma>s' where "\<sigma> = TyClass D \<sigma>s'" by auto
-  with intro obtain xvs where "v = VObject D xvs" by (cases v) auto
+  from wf_object_type[OF TyClass(2)] obtain D xvs where "v = VObject D xvs" by (cases v) auto
   with TyClass(4) \<tau> show ?case
     by (auto intro: wf_int_lit split: if_splits option.splits val.splits lit.splits)
 next
@@ -1452,11 +1450,7 @@ next
   case (TyClass C \<sigma>s)
   then have C: "C = range_class" and "\<sigma>s = []" by (auto split: if_splits elim: elem_type.elims)
   with TyClass(2) have v: "\<turnstile> v : Ty (TyClass range_class [])" by simp
-  from wf_val_intro(1)[OF v] obtain \<sigma> where intro: "intro_typed v \<sigma>" and sub: "\<Sigma> \<turnstile> \<sigma> <: TyClass range_class []"
-    by blast
-  from subty_class_inv(1)[OF sub refl] intro_typed_nonunion[OF intro] obtain D \<sigma>s' where "\<sigma> = TyClass D \<sigma>s'"
-    by auto
-  with intro obtain xvs where v': "v = VObject D xvs" by (cases v) auto
+  from wf_object_type[OF v] obtain D xvs where v': "v = VObject D xvs" by (cases v) auto
   with v have "\<turnstile> VObject D xvs : Ty (TyClass range_class [])" by simp
   from iter_range[OF this] v' show ?case by simp
 next

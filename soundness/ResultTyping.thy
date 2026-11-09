@@ -164,7 +164,7 @@ lemma wf_val_inst_sub:
 proof -
   have "wf_ty \<Sigma> \<sigma>" using wf_val_ty[OF assms(1)] by (rule wf_ty_inst_inv)
   with inst_subty[OF wf_class_table assms(2)] assms(3) have "\<Sigma> \<turnstile> inst \<eta> \<sigma> <: inst \<eta> \<tau>" by simp
-  from ValSub[OF assms(1) this inst_wf[OF assms(4, 3)]] show ?thesis .
+  from wf_val_sub[OF assms(1) this inst_wf[OF assms(4, 3)]] show ?thesis .
 qed
 
 lemma result_typed_sub:
@@ -172,16 +172,16 @@ lemma result_typed_sub:
   by (cases r) (auto intro: wf_val_inst_sub)
 
 lemma wf_lit_bool: "\<turnstile> VLit (LitBool b) : Ty (TyPrim bool)"
-  by (rule ValSub[OF ValLit SubtyLiteral]) (simp_all add: SubtyRefl)
+  by (rule ValLit[OF SubtyLiteral]) (simp_all add: SubtyRefl)
 
 lemma wf_str_char: "\<turnstile> VLit (LitString c) : Ty (TyPrim str)"
-  by (rule ValSub[OF ValLit SubtyLiteral]) (simp_all add: SubtyRefl)
+  by (rule ValLit[OF SubtyLiteral]) (simp_all add: SubtyRefl)
 
 lemma wf_int_lit: "\<turnstile> VLit (LitInt k) : Ty (TyPrim int)"
-  by (rule ValSub[OF ValLit SubtyLiteral]) (simp_all add: SubtyRefl)
+  by (rule ValLit[OF SubtyLiteral]) (simp_all add: SubtyRefl)
 
 lemma wf_int_float: "\<turnstile> VLit (LitInt k) : Ty (TyPrim float)"
-  by (rule ValSub[OF wf_int_lit SubtyIntFloat]) simp
+  by (rule ValLit[OF SubtyLiteral]) (simp_all add: SubtyIntFloat)
 
 (* None at an instance of a well-formed type above NoneType *)
 lemma wf_none:
@@ -191,7 +191,7 @@ proof -
   have "\<Sigma> \<turnstile> inst \<eta> (TyPrim NoneType) <: inst \<eta> \<tau>"
     using inst_subty[OF wf_class_table assms(1)] assms(2) by simp
   then have "\<Sigma> \<turnstile> TyLiteral LitNone <: inst \<eta> \<tau>" by (auto intro: SubtyLiteral)
-  from ValSub[OF ValLit this inst_wf[OF assms(3, 2)]] show ?thesis .
+  from ValLit[OF this inst_wf[OF assms(3, 2)]] show ?thesis .
 qed
 
 subsection \<open>Well-formed types produced by the checker\<close>
@@ -306,240 +306,64 @@ lemma sound_exprs_abort:
 
 subsection \<open>Canonical forms\<close>
 
-(* Typing of a value at \<sigma> by the typing rule for its form, with its components typed *)
-fun intro_typed :: "val \<Rightarrow> ty \<Rightarrow> bool"
-where
-"intro_typed (VLit l) \<sigma> = (\<sigma> = TyLiteral l \<or> (\<exists>x. l = LitFloat x) \<and> \<sigma> = TyPrim float)" |
-"intro_typed (VList vs) \<sigma> = (\<exists>\<tau>. \<sigma> = TyList \<tau> \<and> (\<forall>v \<in> set vs. \<turnstile> v : Ty \<tau>) \<and> wf_ty \<Sigma> \<tau>)" |
-"intro_typed (VTuple vs) \<sigma> = (\<exists>\<tau>s. \<sigma> = TyTuple \<tau>s \<and> list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) vs \<tau>s)" |
-"intro_typed (VDict \<delta>) \<sigma> =
-  (\<exists>\<tau>. \<sigma> = TyDict \<tau> \<and> (\<forall>w v. (w, v) \<in> set \<delta> \<longrightarrow> \<turnstile> v : Ty \<tau>) \<and> distinct (map fst \<delta>) \<and> wf_ty \<Sigma> \<tau>)" |
-"intro_typed (VObject C xvs) \<sigma> =
-  (\<exists>\<tau>s. \<sigma> = TyClass C \<tau>s \<and> wf_ty \<Sigma> (TyClass C \<tau>s) \<and> map fst xvs = field_names \<Sigma> C
-     \<and> list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) (map snd xvs) (field_types \<Sigma> C \<tau>s))" |
-"intro_typed Lam(\<rho>, xs, e) \<sigma> =
-  (\<exists>\<eta> \<Gamma> \<sigma>s \<tau> \<Delta>. \<eta> \<turnstile> \<rho> : \<Gamma> \<and> length xs = length \<sigma>s \<and> params_cxt xs \<sigma>s = Ok \<Delta>
-     \<and> check_expr_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e \<tau> = Ok () \<and> wf_ty \<Sigma> (TyCallable \<sigma>s \<tau>)
-     \<and> \<sigma> = inst \<eta> (TyCallable \<sigma>s \<tau>))" |
-"intro_typed Def(\<rho>, ds, i) \<sigma> =
-  (\<exists>\<eta> \<Gamma> \<pi>s \<alpha>s \<sigma>s \<tau> \<tau>s. \<eta> \<turnstile> \<rho> : \<Gamma>
-     \<and> those_sum (map (\<lambda>d. locate (pos_of d) (def_signature \<Sigma> \<Gamma> (node d))) ds) = Ok \<pi>s
-     \<and> all_sum
-         (map2 (check_def_at \<Sigma> (\<Gamma> \<otimes> fmap_of_list (zip (map (def_name \<circ> node) ds) (map signature_entry \<pi>s))))
-           ds \<pi>s) = Ok ()
-     \<and> (\<forall>d \<in> set ds. case node d of Def _ \<alpha>s _ _ _ \<Rightarrow> set \<alpha>s \<inter> tyvars \<Gamma> = {})
-     \<and> i < length ds \<and> \<pi>s ! i = TyScheme \<alpha>s (TyCallable \<sigma>s \<tau>)
-     \<and> length \<tau>s = length \<alpha>s \<and> (\<forall>\<tau>' \<in> set \<tau>s. fv \<tau>' = {} \<and> wf_ty \<Sigma> \<tau>')
-     \<and> \<sigma> = subst \<tau>s \<alpha>s (inst (shadow \<alpha>s \<eta>) (TyCallable \<sigma>s \<tau>)))" |
-"intro_typed (VPrim f) \<sigma> =
-  ((\<exists>\<A> q \<rho> x \<Gamma>. fmlookup (\<E> \<A>) q = Some \<rho> \<and> fmlookup \<rho> x = Some (VPrim f) \<and> fmlookup \<P> q = Some \<Gamma>
-      \<and> fmlookup \<Gamma> x = Some (Ty \<sigma>))
-   \<and> (\<exists>\<sigma>s \<tau>. \<sigma> = TyCallable \<sigma>s \<tau>))" |
-"intro_typed v \<sigma> = False"
-
-lemma intro_def_wf:
-  assumes "\<eta> \<turnstile> \<rho> : \<Gamma>" and "those_sum (map (\<lambda>d. locate (pos_of d) (def_signature \<Sigma> \<Gamma> (node d))) ds) = Ok \<pi>s"
-    and "all_sum
-           (map2 (check_def_at \<Sigma> (\<Gamma> \<otimes> fmap_of_list (zip (map (def_name \<circ> node) ds) (map signature_entry \<pi>s))))
-             ds \<pi>s) = Ok ()"
-    and "\<forall>d \<in> set ds. case node d of Def _ \<alpha>s _ _ _ \<Rightarrow> set \<alpha>s \<inter> tyvars \<Gamma> = {}"
-    and "i < length ds" and "\<pi>s ! i = TyScheme \<alpha>s \<tau>" and "length \<tau>s = length \<alpha>s"
-    and "\<forall>\<tau>' \<in> set \<tau>s. fv \<tau>' = {} \<and> wf_ty \<Sigma> \<tau>'"
-  shows "\<turnstile> Def(\<rho>, ds, i) : Ty (subst \<tau>s \<alpha>s (inst (shadow \<alpha>s \<eta>) \<tau>))"
-proof -
-  have def: "\<turnstile> Def(\<rho>, ds, i) : inst_entry \<eta> (signature_entry (TyScheme \<alpha>s \<tau>))"
-    by (rule ValDef[OF assms(1, 2) refl assms(3-6)])
-  show ?thesis
-  proof (cases "\<alpha>s = []")
-    case True
-    with def assms(7) show ?thesis by simp
-  next
-    case False
-    with def have "\<turnstile> Def(\<rho>, ds, i) : Scheme (TyScheme \<alpha>s (inst (shadow \<alpha>s \<eta>) \<tau>))"
-      by (simp add: inst_entry_signature_entry)
-    from ValInst[OF this assms(7)] assms(8) show ?thesis by blast
-  qed
-qed
-
-lemma intro_typed_wf: "intro_typed v \<sigma> \<Longrightarrow> \<turnstile> v : Ty \<sigma>"
-proof (cases v)
-  case (VLamClosure \<rho> xs e)
-  then show "intro_typed v \<sigma> \<Longrightarrow> \<turnstile> v : Ty \<sigma>" by (auto intro: ValLambda[simplified])
-next
-  case (VDefClosure \<rho> ds i)
-  then show "intro_typed v \<sigma> \<Longrightarrow> \<turnstile> v : Ty \<sigma>"
-    by (clarsimp simp only: intro_typed.simps) (rule intro_def_wf, assumption+)
-next
-  case (VPrim f)
-  then show "intro_typed v \<sigma> \<Longrightarrow> \<turnstile> v : Ty \<sigma>" by (auto intro: ValPrim)
-qed (auto intro: ValLit ValLitFloat ValList ValTuple ValDict ValObj)
-
-lemma intro_typed_nonunion: "intro_typed v \<sigma> \<Longrightarrow> \<not> is_union \<sigma> \<and> \<sigma> \<noteq> TyPrim Never"
-  by (cases v) auto
-
-lemma intro_witness: "intro_typed v \<sigma> \<Longrightarrow> \<exists>\<sigma>'. intro_typed v \<sigma>' \<and> \<Sigma> \<turnstile> \<sigma>' <: \<sigma>"
-  by (blast intro: SubtyRefl)
-
-lemma intro_witness_ty:
-  "intro_typed v \<sigma> \<Longrightarrow> \<forall>\<tau>. Ty \<sigma> = Ty \<tau> \<longrightarrow> (\<exists>\<sigma>'. intro_typed v \<sigma>' \<and> \<Sigma> \<turnstile> \<sigma>' <: \<tau>)"
-  by (auto intro: SubtyRefl)
-
-(* Value typed at a scheme, typed by the typing rule for its form at any instance of the scheme *)
-lemma wf_scheme_intro:
-  "\<turnstile> v : \<theta> \<Longrightarrow> \<theta> = Scheme (TyScheme \<alpha>s \<sigma>) \<Longrightarrow> length \<tau>s = length \<alpha>s \<Longrightarrow> \<forall>\<tau> \<in> set \<tau>s. fv \<tau> = {}
-    \<Longrightarrow> \<forall>\<tau> \<in> set \<tau>s. wf_ty \<Sigma> \<tau> \<Longrightarrow> intro_typed v (subst \<tau>s \<alpha>s \<sigma>)"
-  "\<eta> \<turnstile> \<rho> : \<Gamma> \<Longrightarrow> True"
-proof (induction arbitrary: \<alpha>s \<sigma> \<tau>s rule: wf_val_wf_env.inducts)
-  case (ValDef \<eta> \<rho> \<Gamma> ds \<pi>s \<Delta> i \<alpha>s' \<tau>)
-  have "\<exists>\<sigma>s \<tau>'. \<tau> = TyCallable \<sigma>s \<tau>'" using ValDef by (blast intro: def_signatures_callable)
-  then obtain \<sigma>s \<tau>' where \<tau>: "\<tau> = TyCallable \<sigma>s \<tau>'" by blast
-  from ValDef(9) have "\<alpha>s' = \<alpha>s" and "\<sigma> = inst (shadow \<alpha>s \<eta>) \<tau>"
-    by (auto simp: inst_entry_signature_entry split: if_splits)
-  with ValDef \<tau> show ?case by simp blast
-next
-  case ValPrim
-  then show ?case by (auto dest: prim_entry_callable)
-qed auto
-
-(* Value typed by the typing rule for its form at a type below any type at which it is typed *)
-lemma wf_val_intro:
-  "\<turnstile> v : \<theta> \<Longrightarrow> \<forall>\<tau>. \<theta> = Ty \<tau> \<longrightarrow> (\<exists>\<sigma>. intro_typed v \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>)"
-  "\<eta> \<turnstile> \<rho> : \<Gamma> \<Longrightarrow> True"
-proof (induction rule: wf_val_wf_env.inducts)
-  case (ValLit l)
-  show ?case by (auto intro!: exI[of _ "TyLiteral l"] SubtyRefl)
-next
-  case (ValLitFloat x)
-  show ?case by (auto intro!: exI[of _ "TyPrim float"] SubtyRefl)
-next
-  case (ValList vs \<tau>)
-  then have "intro_typed (VList vs) (TyList \<tau>)" by auto
-  then show ?case by (rule intro_witness_ty)
-next
-  case (ValTuple vs \<tau>s)
-  then have "list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) vs \<tau>s" by (rule list_all2_mono) simp
-  then have "intro_typed (VTuple vs) (TyTuple \<tau>s)" by simp
-  then show ?case by (rule intro_witness_ty)
-next
-  case (ValDict \<delta> \<tau>)
-  then have "intro_typed (VDict \<delta>) (TyDict \<tau>)" by auto
-  then show ?case by (rule intro_witness_ty)
-next
-  case (ValLambda \<eta> \<rho> \<Gamma> xs \<sigma>s \<Delta> e \<tau>)
-  then have "intro_typed Lam(\<rho>, xs, e) (inst \<eta> (TyCallable \<sigma>s \<tau>))" by (simp only: intro_typed.simps) blast
-  then show ?case by (rule intro_witness_ty)
-next
-  case (ValDef \<eta> \<rho> \<Gamma> ds \<pi>s \<Delta> i \<alpha>s \<tau>)
-  have "\<exists>\<sigma>s \<tau>'. \<tau> = TyCallable \<sigma>s \<tau>'" using ValDef by (blast intro: def_signatures_callable)
-  then obtain \<sigma>s \<tau>' where \<tau>: "\<tau> = TyCallable \<sigma>s \<tau>'" by blast
-  show ?case
-  proof (intro allI impI)
-    fix \<tau>''
-    assume "inst_entry \<eta> (signature_entry (TyScheme \<alpha>s \<tau>)) = Ty \<tau>''"
-    then have \<alpha>s: "\<alpha>s = []" and "\<tau>'' = inst \<eta> \<tau>" by (auto simp: inst_entry_signature_entry split: if_splits)
-    with ValDef \<tau> have "intro_typed Def(\<rho>, ds, i) \<tau>''"
-      by (simp only: intro_typed.simps)
-         (rule exI[of _ \<eta>], rule exI[of _ \<Gamma>], rule exI[of _ \<pi>s], rule exI[of _ "[]"], rule exI[of _ \<sigma>s],
-          rule exI[of _ \<tau>'], rule exI[of _ "[]"], simp)
-    then show "\<exists>\<sigma>. intro_typed Def(\<rho>, ds, i) \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>''" by (rule intro_witness)
-  qed
-next
-  case (ValInst v \<alpha>s \<sigma> \<tau>s)
-  from wf_scheme_intro(1)[OF ValInst(1) refl ValInst(4, 5, 3)] have "intro_typed v (subst \<tau>s \<alpha>s \<sigma>)" .
-  then show ?case by (rule intro_witness_ty)
-next
-  case (ValObj C \<tau>s xvs)
-  from ValObj(3) have "list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) (map snd xvs) (field_types \<Sigma> C \<tau>s)"
-    by (rule list_all2_mono) simp
-  with ValObj(1, 2) have "intro_typed (VObject C xvs) (TyClass C \<tau>s)" by simp
-  then show ?case by (rule intro_witness_ty)
-next
-  case (ValSub v \<sigma> \<tau>)
-  from ValSub(2) obtain \<sigma>' where intro: "intro_typed v \<sigma>'" and sub: "\<Sigma> \<turnstile> \<sigma>' <: \<sigma>" by blast
-  have "\<Sigma> \<turnstile> \<sigma>' <: \<tau>"
-    by (rule subty_trans[OF wf_class_table wf_val_ty[OF intro_typed_wf[OF intro]] wf_val_ty[OF ValSub(1)] sub
-          ValSub(3)])
-  with intro show ?case by blast
-next
-  case ValPrim
-  from prim_entry_callable[OF ValPrim] ValPrim show ?case by auto (blast intro: SubtyRefl)
-qed auto
-
 lemma wf_class_ty: "\<turnstile> VClass C : Ty \<tau> \<Longrightarrow> False"
-  by (auto dest!: wf_val_intro(1))
+  by (erule WfTyE) simp_all
 
 (* Literal at a subtype of a primitive type p other than object and Sized *)
 lemma wf_prim_lit:
   assumes "\<turnstile> v : Ty \<tau>" and "\<Sigma> \<turnstile> \<tau> <: TyPrim p" and "p \<notin> {object, Sized}"
   obtains l where "v = VLit l" and "prim_subtype p (TyLiteral l)"
 proof -
-  from wf_val_intro(1)[OF assms(1)] obtain \<sigma> where intro: "intro_typed v \<sigma>" and sub: "\<Sigma> \<turnstile> \<sigma> <: \<tau>" by blast
-  have "\<Sigma> \<turnstile> \<sigma> <: TyPrim p"
-    by (rule subty_trans[OF wf_class_table wf_val_ty[OF intro_typed_wf[OF intro]] wf_val_ty[OF assms(1)] sub
-          assms(2)])
-  then have "prim_subtype p \<sigma>" using prim_subtype_subty(1)[OF assms(3)] by simp
-  with intro that show thesis by (cases v) (auto split: lit.splits)
+  from wf_val_sub[OF assms(1, 2)] have "\<turnstile> v : Ty (TyPrim p)" by simp
+  then show thesis by (cases rule: WfTyE) (auto dest!: prim_subtype_subty(1)[OF assms(3)] intro: that)
 qed
 
 lemma wf_object_type: "\<lbrakk> \<turnstile> v : Ty \<tau> ; object_type \<tau> \<rbrakk> \<Longrightarrow> is_object v"
-proof -
-  assume "\<turnstile> v : Ty \<tau>" and "object_type \<tau>"
-  from wf_val_intro(1)[OF this(1)] obtain \<sigma> where intro: "intro_typed v \<sigma>" and "\<Sigma> \<turnstile> \<sigma> <: \<tau>" by blast
-  from object_type_subty(1)[OF this(2) \<open>object_type \<tau>\<close>] intro show "is_object v" by (cases v) auto
-qed
+  by (erule WfTyE) (auto dest: object_type_subty(1))
 
 (* Object of class C, typed at a type above the class at type arguments typing its fields *)
 lemma wf_object:
   assumes "\<turnstile> VObject C xvs : Ty \<tau>"
   obtains \<tau>s where "wf_ty \<Sigma> (TyClass C \<tau>s)" and "map fst xvs = field_names \<Sigma> C"
     and "list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) (map snd xvs) (field_types \<Sigma> C \<tau>s)" and "\<Sigma> \<turnstile> TyClass C \<tau>s <: \<tau>"
-  using wf_val_intro(1)[OF assms] that by auto
+  using assms by (cases rule: WfTyE) (auto intro: that)
 
 lemma wf_val_union:
   assumes "\<turnstile> v : Ty (TyUnion \<sigma> \<sigma>')"
   shows "\<turnstile> v : Ty \<sigma> \<or> \<turnstile> v : Ty \<sigma>'"
 proof -
-  from wf_val_intro(1)[OF assms] obtain \<tau> where intro: "intro_typed v \<tau>" and sub: "\<Sigma> \<turnstile> \<tau> <: TyUnion \<sigma> \<sigma>'"
-    by blast
   from wf_val_ty[OF assms] have "wf_ty \<Sigma> \<sigma>" and "wf_ty \<Sigma> \<sigma>'" by simp_all
-  with nonunion_subty_union(1)[OF sub refl] intro_typed_nonunion[OF intro] show ?thesis
-    by (auto intro: ValSub[OF intro_typed_wf[OF intro]])
+  with assms show ?thesis
+    by (cases rule: WfTyE) (auto dest!: nonunion_subty_union(1)[OF _ refl] intro: wf_val_wf_env.intros)
 qed
 
 lemma wf_list:
   assumes "\<turnstile> v : Ty (TyList \<tau>)"
   obtains vs where "v = VList vs" and "\<forall>u \<in> set vs. \<turnstile> u : Ty \<tau>"
 proof -
-  from wf_val_intro(1)[OF assms] obtain \<sigma> where intro: "intro_typed v \<sigma>" and sub: "\<Sigma> \<turnstile> \<sigma> <: TyList \<tau>"
-    by blast
-  from subty_list_inv(1)[OF sub refl] intro_typed_nonunion[OF intro] obtain \<sigma>' where \<sigma>: "\<sigma> = TyList \<sigma>'"
-    and sub': "\<Sigma> \<turnstile> \<sigma>' <: \<tau>"
-    by blast
-  from intro \<sigma> have "\<exists>vs. v = VList vs \<and> (\<forall>u \<in> set vs. \<turnstile> u : Ty \<sigma>')" by (cases v) auto
-  moreover have "wf_ty \<Sigma> \<tau>" using wf_val_ty[OF assms] by simp
-  ultimately show thesis using that ValSub[OF _ sub'] by blast
+  from assms obtain vs \<sigma> where v: "v = VList vs" and typed: "\<forall>u \<in> set vs. \<turnstile> u : Ty \<sigma>" and sub: "\<Sigma> \<turnstile> \<sigma> <: \<tau>"
+    by (cases rule: WfTyE) (auto dest!: subty_list_inv(1)[OF _ refl])
+  have "wf_ty \<Sigma> \<tau>" using wf_val_ty[OF assms] by simp
+  with typed sub have "\<forall>u \<in> set vs. \<turnstile> u : Ty \<tau>" by (blast intro: wf_val_sub)
+  with v that show thesis by blast
 qed
 
 lemma wf_tuple:
   assumes "\<turnstile> v : Ty (TyTuple \<tau>s)"
   obtains vs where "v = VTuple vs" and "list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) vs \<tau>s"
 proof -
-  from wf_val_intro(1)[OF assms] obtain \<sigma> where intro: "intro_typed v \<sigma>" and sub: "\<Sigma> \<turnstile> \<sigma> <: TyTuple \<tau>s"
-    by blast
-  from subty_tuple_inv(1)[OF sub refl] intro_typed_nonunion[OF intro] obtain \<sigma>s where \<sigma>: "\<sigma> = TyTuple \<sigma>s"
-    and sub': "\<Sigma> \<turnstile> \<sigma>s [<:] \<tau>s"
-    by blast
-  from intro \<sigma> obtain vs where v: "v = VTuple vs" and vs: "list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) vs \<sigma>s"
-    by (cases v) auto
+  from assms obtain vs \<sigma>s where v: "v = VTuple vs" and vs: "list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) vs \<sigma>s"
+    and sub: "\<Sigma> \<turnstile> \<sigma>s [<:] \<tau>s"
+    by (cases rule: WfTyE) (auto dest!: subty_tuple_inv(1)[OF _ refl])
   have "list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) vs \<tau>s"
   proof (rule list_all2_all_nthI)
-    show len: "length vs = length \<tau>s" using vs sub' by (simp add: list_all2_lengthD subtys_list_all2)
+    show len: "length vs = length \<tau>s" using vs sub by (simp add: list_all2_lengthD subtys_list_all2)
     fix i
     assume i: "i < length vs"
-    with vs sub' have "\<turnstile> vs ! i : Ty (\<sigma>s ! i)" and "\<Sigma> \<turnstile> \<sigma>s ! i <: \<tau>s ! i"
+    with vs sub have "\<turnstile> vs ! i : Ty (\<sigma>s ! i)" and "\<Sigma> \<turnstile> \<sigma>s ! i <: \<tau>s ! i"
       by (auto simp: list_all2_conv_all_nth subtys_list_all2)
     moreover have "wf_ty \<Sigma> (\<tau>s ! i)" using wf_val_ty[OF assms] i len by simp
-    ultimately show "\<turnstile> vs ! i : Ty (\<tau>s ! i)" by (rule ValSub)
+    ultimately show "\<turnstile> vs ! i : Ty (\<tau>s ! i)" by (rule wf_val_sub)
   qed
   with v that show thesis by blast
 qed
@@ -548,15 +372,12 @@ lemma wf_dict:
   assumes "\<turnstile> v : Ty (TyDict \<tau>)"
   obtains \<delta> where "v = VDict \<delta>" and "\<forall>w u. (w, u) \<in> set \<delta> \<longrightarrow> \<turnstile> u : Ty \<tau>"
 proof -
-  from wf_val_intro(1)[OF assms] obtain \<sigma> where intro: "intro_typed v \<sigma>" and sub: "\<Sigma> \<turnstile> \<sigma> <: TyDict \<tau>"
-    by blast
-  from subty_dict_inv(1)[OF sub refl] intro_typed_nonunion[OF intro] obtain \<sigma>' where \<sigma>: "\<sigma> = TyDict \<sigma>'"
-    and sub': "\<Sigma> \<turnstile> \<sigma>' <: \<tau>"
-    by blast
-  from intro \<sigma> obtain \<delta> where v: "v = VDict \<delta>" and "\<forall>w u. (w, u) \<in> set \<delta> \<longrightarrow> \<turnstile> u : Ty \<sigma>'"
-    by (cases v) auto
-  moreover have "wf_ty \<Sigma> \<tau>" using wf_val_ty[OF assms] by simp
-  ultimately show thesis using sub' that by (blast intro: ValSub)
+  from assms obtain \<delta> \<sigma> where v: "v = VDict \<delta>" and typed: "\<forall>w u. (w, u) \<in> set \<delta> \<longrightarrow> \<turnstile> u : Ty \<sigma>"
+    and sub: "\<Sigma> \<turnstile> \<sigma> <: \<tau>"
+    by (cases rule: WfTyE) (auto dest!: subty_dict_inv(1)[OF _ refl])
+  have "wf_ty \<Sigma> \<tau>" using wf_val_ty[OF assms] by simp
+  with typed sub have "\<forall>w u. (w, u) \<in> set \<delta> \<longrightarrow> \<turnstile> u : Ty \<tau>" by (blast intro: wf_val_sub)
+  with v that show thesis by blast
 qed
 
 (* Field of an object of class C, typed by the field of the class at type arguments typing the fields *)
@@ -586,13 +407,7 @@ lemma wf_float:
   by (erule wf_prim_lit) (auto elim: base_type_lit.elims)
 
 lemma wf_lit: "\<turnstile> v : Ty (TyLiteral l) \<Longrightarrow> v = VLit l"
-proof -
-  assume "\<turnstile> v : Ty (TyLiteral l)"
-  from wf_val_intro(1)[OF this] obtain \<sigma> where intro: "intro_typed v \<sigma>" and sub: "\<Sigma> \<turnstile> \<sigma> <: TyLiteral l"
-    by blast
-  from subty_literal_inv(1)[OF sub refl] intro_typed_nonunion[OF intro] have "\<sigma> = TyLiteral l" by blast
-  with intro show "v = VLit l" by (cases v) auto
-qed
+  by (erule WfTyE) (auto dest!: subty_literal_inv(1)[OF _ refl])
 
 (* Operand checked at a primitive type *)
 lemma prim_operand:
@@ -630,41 +445,18 @@ lemma iter_sized:
   assumes "\<turnstile> v : Ty \<tau>" and "\<Sigma> \<turnstile> \<tau> <: TyPrim Sized"
   shows "iter v \<noteq> None"
 proof -
-  from wf_val_intro(1)[OF assms(1)] obtain \<sigma> where intro: "intro_typed v \<sigma>" and sub': "\<Sigma> \<turnstile> \<sigma> <: \<tau>"
-    by blast
-  have sub: "\<Sigma> \<turnstile> \<sigma> <: TyPrim Sized"
-    by (rule subty_trans[OF wf_class_table wf_val_ty[OF intro_typed_wf[OF intro]] wf_val_ty[OF assms(1)] sub'
-          assms(2)])
-  from subty_sized_inv(1)[OF sub refl] intro_typed_nonunion[OF intro]
-  consider (sized) "sized \<sigma>" | (literal) w where "\<sigma> = TyLiteral (LitString w)"
-    | (range) C \<sigma>s where "\<sigma> = TyClass C \<sigma>s" and "\<Sigma> \<turnstile> \<sigma> <: TyClass range_class []"
-    | (top) "\<sigma> = TyPrim Sized"
-    by blast
-  then show ?thesis
-  proof cases
-    case sized
-    with intro show ?thesis
-    proof (cases v)
-      case (VObject C xvs)
-      with intro obtain \<tau>s where \<sigma>: "\<sigma> = TyClass C \<tau>s" by auto
-      with sized have "C = range_class" and "\<tau>s = []" by (cases \<tau>s; simp)+
-      with intro_typed_wf[OF intro] \<sigma> VObject have "\<turnstile> VObject C xvs : Ty (TyClass range_class [])" by simp
-      then show ?thesis unfolding VObject by (rule iter_range)
-    qed (auto elim: sized.elims)
-  next
-    case literal
-    with intro show ?thesis by (cases v) auto
-  next
-    case (range C \<sigma>s)
-    with intro obtain xvs where v: "v = VObject C xvs" by (cases v) auto
-    from ValSub[OF intro_typed_wf[OF intro] range(2) wf_range_class]
-    have "\<turnstile> VObject C xvs : Ty (TyClass range_class [])"
-      by (simp add: v)
-    then show ?thesis unfolding v by (rule iter_range)
-  next
-    case top
-    with intro show ?thesis by (cases v) auto
-  qed
+  from wf_val_sub[OF assms] have v: "\<turnstile> v : Ty (TyPrim Sized)" by simp
+  show ?thesis
+  proof (cases v)
+    case (VObject C xvs)
+    from v obtain \<sigma>s where wf: "wf_ty \<Sigma> (TyClass C \<sigma>s)" and names: "map fst xvs = field_names \<Sigma> C"
+      and fields: "list_all2 (\<lambda>v \<tau>. \<turnstile> v : Ty \<tau>) (map snd xvs) (field_types \<Sigma> C \<sigma>s)"
+      and sub: "\<Sigma> \<turnstile> TyClass C \<sigma>s <: TyPrim Sized"
+      unfolding VObject by (rule wf_object)
+    from subty_sized_inv(1)[OF sub refl] have "\<Sigma> \<turnstile> TyClass C \<sigma>s <: TyClass range_class []"
+      by (cases \<sigma>s) (auto intro: SubtyRefl)
+    from ValObj[OF wf names fields this wf_range_class] show ?thesis unfolding VObject by (rule iter_range)
+  qed (use v in \<open>auto elim!: WfTyE dest!: subty_sized_inv(1)[OF _ refl]\<close>)
 qed
 
 end

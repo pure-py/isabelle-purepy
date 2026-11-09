@@ -200,7 +200,8 @@ proof -
   have entry: "\<turnstile> Def(\<rho>, ds, i) : inst_entry \<eta> (signature_entry (\<pi>s ! i))" if "i < length ds" for i
   proof -
     obtain \<alpha>s \<tau> where \<pi>: "\<pi>s ! i = TyScheme \<alpha>s \<tau>" by (cases "\<pi>s ! i")
-    from ValDef[OF env sigs refl defs disjoint that \<pi>] \<pi> show ?thesis by simp
+    have "defs_checked \<Gamma> ds \<pi>s" using sigs defs disjoint by (simp add: defs_checked_def)
+    from wf_def_entry[OF env this that \<pi>] \<pi> show ?thesis by simp
   qed
   then have typed: "list_all2 (\<lambda>v \<theta>. \<turnstile> v : inst_entry \<eta> \<theta>) vs (map signature_entry \<pi>s)"
     using len by (auto simp: vs list_all2_conv_all_nth)
@@ -923,21 +924,21 @@ proof (rule call_callable_exprI[OF assms(1, 2)])
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and v: "\<turnstile> Def(\<rho>', ds, j) : Ty (inst \<eta> (TyCallable \<sigma>s \<tau>'))"
     and es: "list_all2 (has_type_at \<Sigma> \<Gamma>) es \<sigma>s"
   let ?xs = "map (def_name \<circ> node) ds"
-  from v assms(5) env es obtain \<sigma>s' \<tau>''
-    where intro: "intro_typed Def(\<rho>', ds, j) (TyCallable \<sigma>s' \<tau>'')" and us: "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty \<sigma>) us \<sigma>s'"
-    and ret: "\<Sigma> \<turnstile> \<tau>'' <: inst \<eta> \<tau>'"
-    by (rule callable_args)
+  from v obtain \<eta>' \<Gamma>' \<pi>s \<alpha>s' \<sigma>s\<^sub>d \<tau>\<^sub>d \<tau>s where env': "\<eta>' \<turnstile> \<rho>' : \<Gamma>'" and checked: "defs_checked \<Gamma>' ds \<pi>s"
+    and "j < length ds" and \<pi>: "\<pi>s ! j = TyScheme \<alpha>s' (TyCallable \<sigma>s\<^sub>d \<tau>\<^sub>d)"
+    and "length \<tau>s = length \<alpha>s'" and closed_wf: "\<forall>\<tau>' \<in> set \<tau>s. fv \<tau>' = {} \<and> wf_ty \<Sigma> \<tau>'"
+    and sub: "\<Sigma> \<turnstile> inst (inst_params \<alpha>s' \<tau>s \<eta>') (TyCallable \<sigma>s\<^sub>d \<tau>\<^sub>d) <: inst \<eta> (TyCallable \<sigma>s \<tau>')"
+    and wf: "wf_ty \<Sigma> (inst (inst_params \<alpha>s' \<tau>s \<eta>') (TyCallable \<sigma>s\<^sub>d \<tau>\<^sub>d))"
+    by (rule wf_def)
+  from wf have "\<forall>\<sigma> \<in> set (map (inst (inst_params \<alpha>s' \<tau>s \<eta>')) \<sigma>s\<^sub>d). wf_ty \<Sigma> \<sigma>" by simp
+  note args = callable_args[OF sub[unfolded inst.simps] this assms(5) env es]
   show "result_typed (result_of \<omega>) (inst \<eta> \<tau>')"
   proof -
-    from intro[unfolded intro_typed.simps] obtain \<eta>' \<Gamma>' \<pi>s \<alpha>s' \<sigma>s\<^sub>d \<tau>\<^sub>d \<tau>s where env': "\<eta>' \<turnstile> \<rho>' : \<Gamma>'"
-      and sigs: "those_sum (map (\<lambda>d. locate (pos_of d) (def_signature \<Sigma> \<Gamma>' (node d))) ds) = Ok \<pi>s"
+    from checked have sigs: "those_sum (map (\<lambda>d. locate (pos_of d) (def_signature \<Sigma> \<Gamma>' (node d))) ds) = Ok \<pi>s"
       and defs: "all_sum (map2 (check_def_at \<Sigma> (\<Gamma>' \<otimes> fmap_of_list (zip ?xs (map signature_entry \<pi>s)))) ds \<pi>s)
                   = Ok ()"
       and disjoint: "\<forall>d \<in> set ds. case node d of Def _ \<alpha>s _ _ _ \<Rightarrow> set \<alpha>s \<inter> tyvars \<Gamma>' = {}"
-      and \<pi>: "\<pi>s ! j = TyScheme \<alpha>s' (TyCallable \<sigma>s\<^sub>d \<tau>\<^sub>d)"
-      and len_\<tau>s: "length \<tau>s = length \<alpha>s'" and closed_wf: "\<forall>\<tau>' \<in> set \<tau>s. fv \<tau>' = {} \<and> wf_ty \<Sigma> \<tau>'"
-      and eq: "TyCallable \<sigma>s' \<tau>'' = subst \<tau>s \<alpha>s' (inst (shadow \<alpha>s' \<eta>') (TyCallable \<sigma>s\<^sub>d \<tau>\<^sub>d))"
-      by blast
+      by (simp_all add: defs_checked_def)
     let ?\<Delta> = "fmap_of_list (zip ?xs (map signature_entry \<pi>s))"
     let ?\<eta> = "inst_params \<alpha>s \<tau>s \<eta>'"
     have len: "length \<pi>s = length ds" using those_sum_map_Ok[OF sigs] by (simp add: list_all2_lengthD)
@@ -958,9 +959,6 @@ proof (rule call_callable_exprI[OF assms(1, 2)])
       by (rule check_def_Ok)
     (* Instantiation of the body: that of the closure, with the type parameters at the type arguments *)
     have wf_\<eta>: "wf_inst \<Sigma> ?\<eta>" using wf_env_wf_inst[OF env'] closed_wf by (rule wf_inst_params)
-    have inst_\<eta>: "inst ?\<eta> \<sigma> = subst \<tau>s \<alpha>s (inst (shadow \<alpha>s \<eta>') \<sigma>)" for \<sigma>
-      using wf_env_wf_inst[OF env'] len_\<tau>s \<alpha>s' by (simp add: inst_inst_params)
-    from eq have \<sigma>s': "\<sigma>s' = map (inst ?\<eta>) \<sigma>s\<^sub>d" and \<tau>'': "\<tau>'' = inst ?\<eta> \<tau>\<^sub>d" by (simp_all add: \<alpha>s' inst_\<eta>)
     (* Environment of the body *)
     have env_defs: "\<eta>' \<turnstile> \<rho>' \<otimes> fmap_of_list (zip ?xs vs) : \<Gamma>' \<otimes> ?\<Delta>"
       using env' sigs defs disjoint vs by (rule wf_env_defs)
@@ -974,7 +972,7 @@ proof (rule call_callable_exprI[OF assms(1, 2)])
     qed
     then have env_params: "?\<eta> \<turnstile> \<rho>' \<otimes> fmap_of_list (zip ?xs vs) : \<Gamma>' \<otimes> ?\<Delta> \<otimes> fmconst (set \<alpha>s) TypeVar"
       by (rule wf_env_type_params)
-    from us have us': "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty (inst ?\<eta> \<sigma>)) us \<sigma>s\<^sub>d" by (simp add: \<sigma>s' list.rel_map)
+    from args(1) have us': "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty (inst ?\<eta> \<sigma>)) us \<sigma>s\<^sub>d" by (simp add: \<alpha>s' list.rel_map)
     have len_xs: "length (map fst xps) = length \<sigma>s\<^sub>d" using len_\<sigma>s by simp
     from wf_env_params[OF env_params \<Delta>' len_xs us']
     have "?\<eta> \<turnstile> \<rho>' \<otimes> fmap_of_list (zip ?xs vs) \<otimes> fmap_of_list (zip (map fst xps) us)
@@ -985,14 +983,14 @@ proof (rule call_callable_exprI[OF assms(1, 2)])
     have "wf_outcome ?\<eta> (\<rho>' \<otimes> fmap_of_list (zip ?xs vs) \<otimes> fmap_of_list (zip (map fst xps) us) \<otimes> \<rho>s)
       (\<Gamma>' \<otimes> ?\<Delta> \<otimes> fmconst (set \<alpha>s) TypeVar \<otimes> \<Delta>' \<otimes> \<Delta>) (Some \<tau>\<^sub>d) ([], \<omega>) R"
       using body env_body wf_\<tau>\<^sub>d chk by (intro sound_stmt_at) simp_all
-    then have "result_typed (result_of \<omega>) \<tau>''"
+    then have "result_typed (result_of \<omega>) (inst ?\<eta> \<tau>\<^sub>d)"
     proof (cases \<omega>)
       case (Assigns \<rho>'')
       with \<open>wf_outcome _ _ _ _ _ _\<close> R have "\<Sigma> \<turnstile> TyPrim NoneType <: \<tau>\<^sub>d" by (cases R) auto
-      from wf_none[OF this wf_\<tau>\<^sub>d wf_\<eta>] show ?thesis by (simp add: Assigns \<tau>'')
-    qed (simp_all add: \<tau>'')
+      from wf_none[OF this wf_\<tau>\<^sub>d wf_\<eta>] show ?thesis by (simp add: Assigns)
+    qed simp_all
     moreover have "wf_ty \<Sigma> (inst \<eta> \<tau>')" using wf_val_ty[OF v] by simp
-    ultimately show ?thesis using ret by (cases \<omega>) (auto intro: ValSub)
+    ultimately show ?thesis using args(2) \<alpha>s' by (cases \<omega>) (auto intro: wf_val_sub)
   qed
 qed simp_all
 

@@ -103,7 +103,7 @@ next
   from inferred_type_args_fv[OF \<tau>s, of UNIV] this have wf_\<tau>s: "\<forall>\<tau> \<in> set \<tau>s. wf_ty \<Sigma> \<tau>" by blast
   have closed: "\<forall>\<tau> \<in> set (map (inst \<eta>) \<tau>s). fv \<tau> = {}" by (simp add: inst_closed[OF wf_env_wf_inst[OF env]])
   have wfs: "\<forall>\<tau> \<in> set (map (inst \<eta>) \<tau>s). wf_ty \<Sigma> \<tau>" using wf_\<tau>s wf_env_wf_inst[OF env] by (auto intro: inst_wf)
-  from wf_val_wf_env.ValInst[OF v _ closed wfs] len show ?thesis
+  from wf_val_inst[OF v _ closed wfs] len show ?thesis
     unfolding \<sigma> by (simp only: inst_subst[OF wf_env_wf_inst[OF env] len] length_map)
 qed
 
@@ -185,18 +185,34 @@ next
   qed
 qed (auto simp: bind_sum_def split: sum.splits)
 
-(* Value typed at a callable type, typed by the rule for its form at a callable type below it *)
-lemma wf_callable:
-  assumes "\<turnstile> v : Ty (TyCallable \<sigma>s \<tau>)"
-  obtains \<sigma>s' \<tau>' where "intro_typed v (TyCallable \<sigma>s' \<tau>')" and "\<Sigma> \<turnstile> \<sigma>s [<:] \<sigma>s'" and "\<Sigma> \<turnstile> \<tau>' <: \<tau>"
-proof -
-  from wf_val_intro(1)[OF assms] obtain \<sigma> where intro: "intro_typed v \<sigma>" and sub: "\<Sigma> \<turnstile> \<sigma> <: TyCallable \<sigma>s \<tau>"
-    by blast
-  from subty_callable_inv(1)[OF sub refl] intro_typed_nonunion[OF intro] intro that show thesis by blast
-qed
+(* Value at a callable type: a closure or a primitive *)
+lemma wf_callable: "\<turnstile> v : Ty (TyCallable \<sigma>s \<tau>) \<Longrightarrow> is_closure v \<or> is_prim v"
+  by (erule WfTyE) (auto dest!: subty_callable_inv(1)[OF _ refl])
 
-lemma intro_callable_value: "intro_typed v (TyCallable \<sigma>s \<tau>) \<Longrightarrow> is_closure v \<or> is_prim v"
-  by (cases v) auto
+inductive_cases WfLamE[consumes 1, case_names ValLambda]: "\<turnstile> Lam(\<rho>, xs, e) : Ty \<tau>"
+
+inductive_cases WfPrimE: "\<turnstile> VPrim f : Ty \<tau>"
+
+inductive_cases WfDefE[consumes 1, case_names ValDef]: "\<turnstile> Def(\<rho>, ds, i) : Ty \<tau>"
+
+(* Closure of a definition at a type: the premises of its typing, with the instance of its signature below the
+   type *)
+lemma wf_def:
+  assumes "\<turnstile> Def(\<rho>, ds, i) : Ty \<tau>"
+  obtains \<eta> \<Gamma> \<pi>s \<alpha>s \<sigma>s \<sigma> \<tau>s where "\<eta> \<turnstile> \<rho> : \<Gamma>" and "defs_checked \<Gamma> ds \<pi>s" and "i < length ds"
+    and "\<pi>s ! i = TyScheme \<alpha>s (TyCallable \<sigma>s \<sigma>)" and "length \<tau>s = length \<alpha>s"
+    and "\<forall>\<tau>' \<in> set \<tau>s. fv \<tau>' = {} \<and> wf_ty \<Sigma> \<tau>'" and "\<Sigma> \<turnstile> inst (inst_params \<alpha>s \<tau>s \<eta>) (TyCallable \<sigma>s \<sigma>) <: \<tau>"
+    and "wf_ty \<Sigma> (inst (inst_params \<alpha>s \<tau>s \<eta>) (TyCallable \<sigma>s \<sigma>))"
+  using assms
+proof (cases rule: WfDefE)
+  case (ValDef \<eta> \<Gamma> \<pi>s \<alpha>s \<sigma>s \<sigma> \<tau>s)
+  have eq: "inst (inst_params \<alpha>s \<tau>s \<eta>) = subst \<tau>s \<alpha>s \<circ> inst (shadow \<alpha>s \<eta>)"
+    using inst_inst_params[OF wf_env_wf_inst[OF ValDef(1)] ValDef(5)] by (intro ext) simp
+  have "wf_inst \<Sigma> (inst_params \<alpha>s \<tau>s \<eta>)" using wf_env_wf_inst[OF ValDef(1)] ValDef(6) by (rule wf_inst_params)
+  from inst_wf[OF this conjunct1[OF defs_checked_wf[OF wf_env_wf_cxt[OF ValDef(1)] ValDef(2-4)]]]
+  have "wf_ty \<Sigma> (inst (inst_params \<alpha>s \<tau>s \<eta>) (TyCallable \<sigma>s \<sigma>))" .
+  with that[OF ValDef(1-6)] ValDef(7) show thesis by (simp add: eq)
+qed
 
 (* Typing of a call by synthesis, or as a call statement *)
 lemma call_typed:
@@ -371,21 +387,16 @@ proof (intro conjI allI impI)
   qed
 qed simp
 
-(* Callee value at a callable type, with arguments typed at its parameter types: typed by the rule for its form
-   at a callable type whose parameter types type the arguments and whose result type is below *)
+(* Arguments of a call, at the parameter types of a callable type below that of the callee *)
 lemma callable_args:
-  assumes "\<turnstile> v : Ty (inst \<eta> (TyCallable \<sigma>s \<tau>))" and "sound_exprs \<rho> es (Val us)" and "\<eta> \<turnstile> \<rho> : \<Gamma>"
-    and "list_all2 (has_type_at \<Sigma> \<Gamma>) es \<sigma>s"
-  obtains \<sigma>s' \<tau>' where "intro_typed v (TyCallable \<sigma>s' \<tau>')" and "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty \<sigma>) us \<sigma>s'"
-    and "\<Sigma> \<turnstile> \<tau>' <: inst \<eta> \<tau>"
+  assumes "\<Sigma> \<turnstile> TyCallable \<sigma>s' \<tau>' <: TyCallable (map (inst \<eta>) \<sigma>s) (inst \<eta> \<tau>)" and "\<forall>\<sigma> \<in> set \<sigma>s'. wf_ty \<Sigma> \<sigma>"
+    and "sound_exprs \<rho> es (Val us)" and "\<eta> \<turnstile> \<rho> : \<Gamma>" and "list_all2 (has_type_at \<Sigma> \<Gamma>) es \<sigma>s"
+  shows "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty \<sigma>) us \<sigma>s'" and "\<Sigma> \<turnstile> \<tau>' <: inst \<eta> \<tau>"
 proof -
-  from assms(1) obtain \<sigma>s' \<tau>' where intro: "intro_typed v (TyCallable \<sigma>s' \<tau>')"
-    and sub: "\<Sigma> \<turnstile> map (inst \<eta>) \<sigma>s [<:] \<sigma>s'" and ret: "\<Sigma> \<turnstile> \<tau>' <: inst \<eta> \<tau>"
-    by (auto elim: wf_callable)
-  from sound_exprs_typed[OF assms(2-4)] have args: "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty \<sigma>) us (map (inst \<eta>) \<sigma>s)"
+  from subty_callable_inv(1)[OF assms(1) refl] have sub: "\<Sigma> \<turnstile> map (inst \<eta>) \<sigma>s [<:] \<sigma>s'" by simp
+  from sound_exprs_typed[OF assms(3-5)] have args: "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty \<sigma>) us (map (inst \<eta>) \<sigma>s)"
     by (simp add: list.rel_map)
-  have wf: "\<forall>\<sigma> \<in> set \<sigma>s'. wf_ty \<Sigma> \<sigma>" using wf_val_ty[OF intro_typed_wf[OF intro]] by simp
-  have "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty \<sigma>) us \<sigma>s'"
+  show "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty \<sigma>) us \<sigma>s'"
   proof (rule list_all2_all_nthI)
     show len: "length us = length \<sigma>s'"
       using list_all2_lengthD[OF args] list_all2_lengthD[OF sub[unfolded subtys_list_all2]] by simp
@@ -393,10 +404,10 @@ proof -
     assume i: "i < length us"
     with args sub have "\<turnstile> us ! i : Ty (map (inst \<eta>) \<sigma>s ! i)" and "\<Sigma> \<turnstile> map (inst \<eta>) \<sigma>s ! i <: \<sigma>s' ! i"
       by (auto simp: list_all2_conv_all_nth subtys_list_all2)
-    moreover have "wf_ty \<Sigma> (\<sigma>s' ! i)" using wf i len by simp
-    ultimately show "\<turnstile> us ! i : Ty (\<sigma>s' ! i)" by (rule ValSub)
+    moreover have "wf_ty \<Sigma> (\<sigma>s' ! i)" using assms(2) i len by simp
+    ultimately show "\<turnstile> us ! i : Ty (\<sigma>s' ! i)" by (rule wf_val_sub)
   qed
-  with intro ret that show thesis by blast
+  from subty_callable_inv(1)[OF assms(1) refl] show "\<Sigma> \<turnstile> \<tau>' <: inst \<eta> \<tau>" by simp
 qed
 
 lemma call_nonfun_sound:
@@ -409,8 +420,7 @@ proof (rule call_callable_exprI[OF assms(1, 2) _ assms(5)])
 next
   fix \<eta> \<Gamma> \<sigma>s \<tau>
   assume "\<turnstile> v : Ty (inst \<eta> (TyCallable \<sigma>s \<tau>))"
-  then obtain \<sigma>s' \<tau>' where "intro_typed v (TyCallable \<sigma>s' \<tau>')" by (auto elim: wf_callable)
-  with assms(3, 4) show "result_typed (Aborts TypeError) (inst \<eta> \<tau>)" by (auto dest: intro_callable_value)
+  with assms(3, 4) show "result_typed (Aborts TypeError) (inst \<eta> \<tau>)" by (auto dest: wf_callable)
 qed
 
 (* Call of a lambda written as the callee, with its arguments typed by synthesis and its body typed under
@@ -463,13 +473,6 @@ proof -
   qed
 qed
 
-lemma intro_lambda:
-  "intro_typed Lam(\<rho>, xs, e) (TyCallable \<sigma>s \<tau>) \<Longrightarrow>
-   \<exists>\<eta> \<Gamma> \<sigma>s' \<tau>' \<Delta>. \<eta> \<turnstile> \<rho> : \<Gamma> \<and> length xs = length \<sigma>s' \<and> params_cxt xs \<sigma>s' = Ok \<Delta>
-     \<and> check_expr_at \<Sigma> (\<Gamma> \<otimes> \<Delta>) e \<tau>' = Ok () \<and> wf_ty \<Sigma> (TyCallable \<sigma>s' \<tau>')
-     \<and> \<sigma>s = map (inst \<eta>) \<sigma>s' \<and> \<tau> = inst \<eta> \<tau>'"
-  by auto
-
 lemma call_lambda_arity_sound:
   assumes "\<rho>, node e \<Rightarrow>\<^sub>e Val Lam(\<rho>', xs, e')" and "sound_expr \<rho> (node e) (Val Lam(\<rho>', xs, e'))"
     and "sound_exprs \<rho> es (Val us)" and "length xs \<noteq> length us"
@@ -496,10 +499,14 @@ proof (intro conjI allI impI)
     then show ?thesis by simp
   next
     case (callable \<sigma>s \<tau>')
-    from callable(1) assms(3) env callable(3) obtain \<sigma>s' \<tau>''
-      where "intro_typed Lam(\<rho>', xs, e') (TyCallable \<sigma>s' \<tau>'')" and "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty \<sigma>) us \<sigma>s'"
-      by (rule callable_args)
-    with intro_lambda[OF this(1)] assms(4) show ?thesis by (auto dest: list_all2_lengthD)
+    from callable(1) show ?thesis
+    proof (cases rule: WfLamE)
+      case (ValLambda \<eta>' \<Gamma>' \<sigma>s' \<Delta> \<sigma>)
+      have "\<forall>\<sigma>'' \<in> set (map (inst \<eta>') \<sigma>s'). wf_ty \<Sigma> \<sigma>''"
+        using ValLambda(7) inst_wf[OF wf_env_wf_inst[OF ValLambda(1)]] by auto
+      from callable_args(1)[OF ValLambda(5)[unfolded inst.simps] this assms(3) env callable(3)]
+      show ?thesis using ValLambda(2) assms(4) by (auto dest: list_all2_lengthD)
+    qed
   qed
 qed simp
 
@@ -517,21 +524,20 @@ proof (intro conjI allI impI)
     if "\<turnstile> Lam(\<rho>', xs, e') : Ty (inst \<eta> (TyCallable \<sigma>s \<tau>'))" and "list_all2 (has_type_at \<Sigma> \<Gamma>) es \<sigma>s"
     for \<sigma>s \<tau>'
   proof -
-    from that(1) assms(3) env that(2) obtain \<sigma>s' \<tau>''
-      where "intro_typed Lam(\<rho>', xs, e') (TyCallable \<sigma>s' \<tau>'')" and us: "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty \<sigma>) us \<sigma>s'"
-      and ret: "\<Sigma> \<turnstile> \<tau>'' <: inst \<eta> \<tau>'"
-      by (rule callable_args)
-    from intro_lambda[OF this(1)] obtain \<eta>' \<Gamma>' \<sigma>s'' \<tau>b \<Delta> where env': "\<eta>' \<turnstile> \<rho>' : \<Gamma>'"
+    from that(1) obtain \<eta>' \<Gamma>' \<sigma>s'' \<Delta> \<tau>b where env': "\<eta>' \<turnstile> \<rho>' : \<Gamma>'"
       and len: "length xs = length \<sigma>s''" and \<Delta>: "params_cxt xs \<sigma>s'' = Ok \<Delta>"
-      and checked: "check_expr_at \<Sigma> (\<Gamma>' \<otimes> \<Delta>) e' \<tau>b = Ok ()" and wf: "wf_ty \<Sigma> (TyCallable \<sigma>s'' \<tau>b)"
-      and \<sigma>s': "\<sigma>s' = map (inst \<eta>') \<sigma>s''" and \<tau>'': "\<tau>'' = inst \<eta>' \<tau>b"
-      by blast
-    from us have "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty (inst \<eta>' \<sigma>)) us \<sigma>s''" by (simp add: \<sigma>s' list.rel_map)
+      and checked: "check_expr_at \<Sigma> (\<Gamma>' \<otimes> \<Delta>) e' \<tau>b = Ok ()"
+      and sub: "\<Sigma> \<turnstile> TyCallable (map (inst \<eta>') \<sigma>s'') (inst \<eta>' \<tau>b) <: inst \<eta> (TyCallable \<sigma>s \<tau>')"
+      and "wf_ty \<Sigma> (inst \<eta> (TyCallable \<sigma>s \<tau>'))" and wf: "\<forall>\<sigma> \<in> set \<sigma>s''. wf_ty \<Sigma> \<sigma>" "wf_ty \<Sigma> \<tau>b"
+      by (rule WfLamE)
+    have "\<forall>\<sigma> \<in> set (map (inst \<eta>') \<sigma>s''). wf_ty \<Sigma> \<sigma>" using wf(1) inst_wf[OF wf_env_wf_inst[OF env']] by auto
+    note args = callable_args[OF sub[unfolded inst.simps] this assms(3) env that(2)]
+    from args(1) have "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty (inst \<eta>' \<sigma>)) us \<sigma>s''" by (simp add: list.rel_map)
     then have "\<eta>' \<turnstile> \<rho>' \<otimes> fmap_of_list (zip xs us) : \<Gamma>' \<otimes> \<Delta>" by (rule wf_env_params[OF env' \<Delta> len])
-    moreover from checked wf have "has_type_at \<Sigma> (\<Gamma>' \<otimes> \<Delta>) e' \<tau>b" by (auto intro: has_type_check_at)
+    moreover from checked wf(2) have "has_type_at \<Sigma> (\<Gamma>' \<otimes> \<Delta>) e' \<tau>b" by (auto intro: has_type_check_at)
     ultimately have "result_typed r (inst \<eta>' \<tau>b)" using body by (auto dest: sound_expr_has_type_at)
     moreover have "wf_ty \<Sigma> (inst \<eta> \<tau>')" using wf_val_ty[OF that(1)] by simp
-    ultimately show ?thesis using ret \<tau>'' by (cases r) (auto intro: ValSub)
+    ultimately show ?thesis using args(2) by (cases r) (auto intro: wf_val_sub)
   qed
   from assms(2) env typed show "result_typed r (inst \<eta> \<tau>)"
   proof (cases rule: call_cases)
@@ -564,13 +570,11 @@ qed simp
 
 (* Meaning of a primitive function at arguments typed by its parameter types *)
 lemma prim_meaning_typed:
-  assumes "intro_typed (VPrim f) (TyCallable \<sigma>s \<tau>)" and "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty \<sigma>) us \<sigma>s"
+  assumes "fmlookup (\<E> \<A>) q = Some \<rho>" and "fmlookup \<rho> x = Some (VPrim f)" and "fmlookup \<P> q = Some \<Gamma>"
+    and "fmlookup \<Gamma> x = Some (Ty (TyCallable \<sigma>s \<tau>))" and us: "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty \<sigma>) us \<sigma>s"
   shows "result_typed (prim_meaning f us) \<tau>"
 proof -
-  from assms(1) obtain \<A> q \<rho> x \<Gamma> where "fmlookup (\<E> \<A>) q = Some \<rho>" and "fmlookup \<rho> x = Some (VPrim f)"
-    and "fmlookup \<P> q = Some \<Gamma>" and "fmlookup \<Gamma> x = Some (Ty (TyCallable \<sigma>s \<tau>))"
-    by auto
-  from prim_entry_types[OF this] consider
+  from prim_entry_types[OF assms(1-4)] consider
       (len) "f = PrimLen" "\<sigma>s = [TyPrim Sized]" "\<tau> = TyPrim int"
     | (round) "f = PrimRound" "\<sigma>s = [TyPrim float]" "\<tau> = TyPrim int"
     | (exit) "f = PrimExit" "\<sigma>s = [TyPrim int]" "\<tau> = TyPrim Never"
@@ -578,19 +582,19 @@ proof -
   then show ?thesis
   proof cases
     case len
-    with assms(2) obtain u where us: "us = [u]" and "\<turnstile> u : Ty (TyPrim Sized)" by (auto simp: list_all2_Cons2)
+    with us obtain u where us: "us = [u]" and "\<turnstile> u : Ty (TyPrim Sized)" by (auto simp: list_all2_Cons2)
     from iter_sized[OF this(2) SubtyRefl] obtain vs where "iter u = Some vs" by auto
     with us len show ?thesis by (simp add: wf_int_lit)
   next
     case round
-    with assms(2) obtain u where us: "us = [u]" and u: "\<turnstile> u : Ty (TyPrim float)" by (auto simp: list_all2_Cons2)
+    with us obtain u where us: "us = [u]" and u: "\<turnstile> u : Ty (TyPrim float)" by (auto simp: list_all2_Cons2)
     from u obtain l where "u = VLit l" and "prim_subtype float (TyLiteral l)"
       by (rule wf_prim_lit[OF _ SubtyRefl]) simp
     with us round show ?thesis
       by (cases l) (auto simp: wf_int_lit split: option.splits ereal.splits)
   next
     case exit
-    with assms(2) obtain u where us: "us = [u]" and u: "\<turnstile> u : Ty (TyPrim int)" by (auto simp: list_all2_Cons2)
+    with us obtain u where us: "us = [u]" and u: "\<turnstile> u : Ty (TyPrim int)" by (auto simp: list_all2_Cons2)
     from wf_int[OF u SubtyRefl] us exit show ?thesis by auto
   qed
 qed
@@ -601,13 +605,17 @@ lemma call_prim_sound:
   shows "sound_expr \<rho> (ExprCall e (es, [])) (prim_meaning f us)"
 proof (rule call_callable_exprI[OF assms(1, 2)])
   fix \<eta> \<Gamma> \<sigma>s \<tau>
-  assume "\<eta> \<turnstile> \<rho> : \<Gamma>" and "\<turnstile> VPrim f : Ty (inst \<eta> (TyCallable \<sigma>s \<tau>))" and "list_all2 (has_type_at \<Sigma> \<Gamma>) es \<sigma>s"
-  from this(2) assms(3) this(1, 3) obtain \<sigma>s' \<tau>' where intro: "intro_typed (VPrim f) (TyCallable \<sigma>s' \<tau>')"
-    and us: "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty \<sigma>) us \<sigma>s'" and ret: "\<Sigma> \<turnstile> \<tau>' <: inst \<eta> \<tau>"
-    by (rule callable_args)
-  have "wf_ty \<Sigma> (inst \<eta> \<tau>)" using wf_val_ty[OF \<open>\<turnstile> VPrim f : Ty (inst \<eta> (TyCallable \<sigma>s \<tau>))\<close>] by simp
-  with prim_meaning_typed[OF intro us] ret show "result_typed (prim_meaning f us) (inst \<eta> \<tau>)"
-    by (cases "prim_meaning f us") (auto intro: ValSub)
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and v: "\<turnstile> VPrim f : Ty (inst \<eta> (TyCallable \<sigma>s \<tau>))"
+    and es: "list_all2 (has_type_at \<Sigma> \<Gamma>) es \<sigma>s"
+  from v obtain \<A> q \<rho>' x \<Gamma>' \<sigma>s' \<tau>' where prim: "fmlookup (\<E> \<A>) q = Some \<rho>'"
+    "fmlookup \<rho>' x = Some (VPrim f)" "fmlookup \<P> q = Some \<Gamma>'" "fmlookup \<Gamma>' x = Some (Ty (TyCallable \<sigma>s' \<tau>'))"
+    and sub: "\<Sigma> \<turnstile> TyCallable \<sigma>s' \<tau>' <: inst \<eta> (TyCallable \<sigma>s \<tau>)"
+    by (blast elim: WfPrimE)
+  have "\<forall>\<sigma> \<in> set \<sigma>s'. wf_ty \<Sigma> \<sigma>" using wf_cxt_lookup[OF predefined_cxt_wf[OF prim(3)] prim(4)] by simp
+  note args = callable_args[OF sub[unfolded inst.simps] this assms(3) env es]
+  have "wf_ty \<Sigma> (inst \<eta> \<tau>)" using wf_val_ty[OF v] by simp
+  with prim_meaning_typed[OF prim args(1)] args(2) show "result_typed (prim_meaning f us) (inst \<eta> \<tau>)"
+    by (cases "prim_meaning f us") (auto intro: wf_val_sub)
 qed simp_all
 
 lemma call_def_arity_sound:
@@ -617,16 +625,19 @@ lemma call_def_arity_sound:
   shows "sound_expr \<rho> (ExprCall e (es, [])) (Aborts TypeError)"
 proof (rule call_callable_exprI[OF assms(1, 2)])
   fix \<eta> \<Gamma> \<sigma>s \<tau>
-  assume "\<eta> \<turnstile> \<rho> : \<Gamma>" and "\<turnstile> Def(\<rho>', ds, j) : Ty (inst \<eta> (TyCallable \<sigma>s \<tau>))"
-    and "list_all2 (has_type_at \<Sigma> \<Gamma>) es \<sigma>s"
-  from this(2) assms(4) this(1, 3) obtain \<sigma>s' \<tau>' where intro: "intro_typed Def(\<rho>', ds, j) (TyCallable \<sigma>s' \<tau>')"
-    and us: "list_all2 (\<lambda>v \<sigma>. \<turnstile> v : Ty \<sigma>) us \<sigma>s'"
-    by (rule callable_args)
-  from intro obtain \<Gamma>' \<pi>s \<alpha>s' \<sigma>sD \<tau>D \<tau>s where
-    sigs: "those_sum (map (\<lambda>d. locate (pos_of d) (def_signature \<Sigma> \<Gamma>' (node d))) ds) = Ok \<pi>s"
-    and \<pi>: "\<pi>s ! j = TyScheme \<alpha>s' (TyCallable \<sigma>sD \<tau>D)" and "length \<sigma>s' = length \<sigma>sD"
-    by auto
-  with def_signatures_arity[OF sigs assms(6, 3) \<pi>] list_all2_lengthD[OF us] assms(5)
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and v: "\<turnstile> Def(\<rho>', ds, j) : Ty (inst \<eta> (TyCallable \<sigma>s \<tau>))"
+    and es: "list_all2 (has_type_at \<Sigma> \<Gamma>) es \<sigma>s"
+  from v obtain \<eta>' \<Gamma>' \<pi>s \<alpha>s' \<sigma>sD \<tau>D \<tau>s where "defs_checked \<Gamma>' ds \<pi>s"
+    and \<pi>: "\<pi>s ! j = TyScheme \<alpha>s' (TyCallable \<sigma>sD \<tau>D)"
+    and sub: "\<Sigma> \<turnstile> inst (inst_params \<alpha>s' \<tau>s \<eta>') (TyCallable \<sigma>sD \<tau>D) <: inst \<eta> (TyCallable \<sigma>s \<tau>)"
+    and wf: "wf_ty \<Sigma> (inst (inst_params \<alpha>s' \<tau>s \<eta>') (TyCallable \<sigma>sD \<tau>D))"
+    by (rule wf_def)
+  then have sigs: "those_sum (map (\<lambda>d. locate (pos_of d) (def_signature \<Sigma> \<Gamma>' (node d))) ds) = Ok \<pi>s"
+    by (simp add: defs_checked_def)
+  from wf have "\<forall>\<sigma> \<in> set (map (inst (inst_params \<alpha>s' \<tau>s \<eta>')) \<sigma>sD). wf_ty \<Sigma> \<sigma>" by simp
+  from callable_args(1)[OF sub[unfolded inst.simps] this assms(4) env es] have "length us = length \<sigma>sD"
+    by (simp add: list_all2_lengthD)
+  with def_signatures_arity[OF sigs assms(6, 3) \<pi>] assms(5)
   show "result_typed (Aborts TypeError) (inst \<eta> \<tau>)" by simp
 qed simp_all
 
@@ -844,7 +855,7 @@ proof (rule constr_exprI[OF eval callee])
   moreover have "map fst xus = field_names \<Sigma> C" using len_us n_kws(1) by (simp add: xus' names min_def comp_def)
   moreover have "wf_ty \<Sigma> (TyClass C (map (inst \<eta>) \<tau>s))"
     using dom len wf wf_env_wf_inst[OF env] by (auto intro: inst_wf)
-  ultimately have "\<turnstile> VObject C xus : Ty (TyClass C (map (inst \<eta>) \<tau>s))" by (blast intro: ValObj)
+  ultimately have "\<turnstile> VObject C xus : Ty (TyClass C (map (inst \<eta>) \<tau>s))" by (blast intro: ValObj SubtyRefl)
   then show "result_typed (Val (VObject C xus)) (inst \<eta> (TyClass C \<tau>s))" by simp
 qed
 
