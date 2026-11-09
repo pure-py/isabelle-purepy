@@ -837,7 +837,7 @@ proof (induction n qs qs' and n qs q xs and n qs q \<iota>s and n qs q \<iota> a
 next
   case (6 n qs q x xs r)
   show ?case
-  proof (cases "Qualified q x |\<in>| fmdom \<M> \<and> x \<notin> set (declares (the (fmlookup \<M> q)))")
+  proof (cases "q |\<notin>| fmdom \<P> \<and> Qualified q x |\<in>| fmdom \<M> \<and> x \<notin> set (declares (the (fmlookup \<M> q)))")
     case True
     from "6.prems" True obtain y where a: "run_loads n qs [Qualified q x] = Done y"
       and b: "run_submod_loads n y q xs = Done r"
@@ -922,7 +922,7 @@ next
 next
   case (4 qs q x xs)
   show ?case
-  proof (cases "Qualified q x |\<in>| fmdom \<M> \<and> x \<notin> set (declares (the (fmlookup \<M> q)))")
+  proof (cases "q |\<notin>| fmdom \<P> \<and> Qualified q x |\<in>| fmdom \<M> \<and> x \<notin> set (declares (the (fmlookup \<M> q)))")
     case True
     from 4 True have
       "\<forall>\<^sub>F n in sequentially. run_loads n qs [Qualified q x] = Done (loads qs [Qualified q x])"

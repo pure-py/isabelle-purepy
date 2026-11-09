@@ -430,7 +430,7 @@ where
 
 "submod_loads qs q [] = qs" |
 "submod_loads qs q (x # xs) =
-   (if Qualified q x |\<in>| fmdom \<M> \<and> x \<notin> set (declares (the (fmlookup \<M> q)))
+   (if q |\<notin>| fmdom \<P> \<and> Qualified q x |\<in>| fmdom \<M> \<and> x \<notin> set (declares (the (fmlookup \<M> q)))
     then submod_loads (loads qs [Qualified q x]) q xs
     else submod_loads qs q xs)" |
 
