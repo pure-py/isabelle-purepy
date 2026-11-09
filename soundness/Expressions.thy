@@ -8,6 +8,21 @@ begin
 
 subsection \<open>Expressions\<close>
 
+(* Value at the instance by \<eta> of a scheme bound to a name checked against \<tau>, typed at the instance of \<tau> *)
+lemma scheme_instance_typed:
+  assumes v: "\<turnstile> v : inst_entry \<eta> (Scheme (TyScheme \<alpha>s \<sigma>))" and \<eta>: "wf_inst \<Sigma> \<eta>" and wf: "wf_ty \<Sigma> \<tau>"
+    and \<tau>s: "Subtyping.type_args_of (type_args \<Sigma> \<alpha>s \<sigma> \<tau>) \<alpha>s = Ok \<tau>s" and sub: "\<Sigma> \<turnstile> subst \<tau>s \<alpha>s \<sigma> <: \<tau>"
+  shows "\<turnstile> v : Ty (inst \<eta> \<tau>)"
+proof -
+  have len: "length \<tau>s = length \<alpha>s" using \<tau>s by (rule type_args_of_length)
+  have closed: "\<forall>\<tau>' \<in> set (map (inst \<eta>) \<tau>s). fv \<tau>' = {}" by (simp add: inst_closed[OF \<eta>])
+  have wfs: "\<forall>\<tau>' \<in> set (map (inst \<eta>) \<tau>s). wf_ty \<Sigma> \<tau>'" using type_args_wf[OF wf \<tau>s] \<eta> by (auto intro: inst_wf)
+  from wf_val_inst[OF v[simplified] _ closed wfs] len
+  have "\<turnstile> v : Ty (subst (map (inst \<eta>) \<tau>s) \<alpha>s (inst (shadow \<alpha>s \<eta>) \<sigma>))" by simp
+  then have "\<turnstile> v : Ty (inst \<eta> (subst \<tau>s \<alpha>s \<sigma>))" by (simp only: inst_subst[OF \<eta> len])
+  then show ?thesis using sub wf \<eta> by (rule wf_val_inst_sub)
+qed
+
 lemma var_sound:
   assumes "fmlookup \<rho> x = Some v" and "v \<noteq> VUnbound"
   shows "sound_expr \<rho> (ExprVar x) (Val v)"
@@ -24,17 +39,9 @@ next
     and sub: "\<Sigma> \<turnstile> subst \<tau>s \<alpha>s \<sigma> <: \<tau>"
     by (auto simp: var_scheme_def scheme_of_name_def entry_of_def resolve_name_def bind_sum_def ensure_def
         Let_def split: option.splits cxt_entry.splits ty_scheme.splits if_splits sum.splits)
-  let ?\<eta>' = "shadow \<alpha>s \<eta>"
-  from env \<Gamma>x assms(1) have v: "\<turnstile> v : Scheme (TyScheme \<alpha>s (inst ?\<eta>' \<sigma>))" by (auto dest!: wf_env_lookup)
-  have len: "length \<tau>s = length \<alpha>s" using \<tau>s by (rule type_args_of_length)
-  have closed: "\<forall>\<tau>' \<in> set (map (inst \<eta>) \<tau>s). fv \<tau>' = {}" by (simp add: inst_closed[OF wf_env_wf_inst[OF env]])
-  have wfs: "\<forall>\<tau>' \<in> set (map (inst \<eta>) \<tau>s). wf_ty \<Sigma> \<tau>'"
-    using type_args_wf[OF wf \<tau>s] wf_env_wf_inst[OF env] by (auto intro: inst_wf)
-  have "length (map (inst \<eta>) \<tau>s) = length \<alpha>s" by (simp add: len)
-  from v this closed wfs have "\<turnstile> v : Ty (subst (map (inst \<eta>) \<tau>s) \<alpha>s (inst ?\<eta>' \<sigma>))" by (rule wf_val_inst)
-  then have "\<turnstile> v : Ty (inst \<eta> (subst \<tau>s \<alpha>s \<sigma>))" by (simp only: inst_subst[OF wf_env_wf_inst[OF env] len])
-  then show "result_typed (Val v) (inst \<eta> \<tau>)"
-    using sub wf wf_env_wf_inst[OF env] by (auto intro: wf_val_inst_sub)
+  from env \<Gamma>x assms(1) have "\<turnstile> v : inst_entry \<eta> (Scheme (TyScheme \<alpha>s \<sigma>))" by (auto dest!: wf_env_lookup)
+  from scheme_instance_typed[OF this wf_env_wf_inst[OF env] wf \<tau>s sub]
+  show "result_typed (Val v) (inst \<eta> \<tau>)" by simp
 next
   show "sound_name \<rho> (ExprVar x) (Val v)"
     using assms(1)
@@ -1192,18 +1199,12 @@ proof (cases rule: attr_typed)
 next
   case (module_scheme q q'' \<Gamma>' \<alpha>s \<sigma> \<tau>s)
   from module_attr_entry[OF assms(1, 2) module_scheme(1-3)] obtain v where lookup: "fmlookup \<rho>' x = Some v"
-    and v: "\<turnstile> v : Scheme (TyScheme \<alpha>s \<sigma>)" and fv: "fv \<sigma> \<subseteq> set \<alpha>s"
-    by auto
-  have len: "length \<tau>s = length \<alpha>s" using module_scheme(4) by (rule type_args_of_length)
-  have wf: "wf_ty \<Sigma> \<tau>" by (rule has_type_wf[OF wf_env_wf_cxt[OF env] assms(3)])
-  have closed: "\<forall>\<tau>' \<in> set (map (inst \<eta>) \<tau>s). fv \<tau>' = {}" by (simp add: inst_closed[OF wf_env_wf_inst[OF env]])
-  have wfs: "\<forall>\<tau>' \<in> set (map (inst \<eta>) \<tau>s). wf_ty \<Sigma> \<tau>'"
-    using type_args_wf[OF wf module_scheme(4)] wf_env_wf_inst[OF env] by (auto intro: inst_wf)
-  have "length (map (inst \<eta>) \<tau>s) = length \<alpha>s" by (simp add: len)
-  from v this closed wfs have "\<turnstile> v : Ty (subst (map (inst \<eta>) \<tau>s) \<alpha>s \<sigma>)" by (rule wf_val_inst)
-  then have "\<turnstile> v : Ty (inst \<eta> (subst \<tau>s \<alpha>s \<sigma>))"
-    by (simp only: inst_subst_closed[OF wf_env_wf_inst[OF env] len fv])
-  from that[OF lookup wf_val_inst_sub[OF this module_scheme(5) wf wf_env_wf_inst[OF env]]] show thesis .
+    and "\<turnstile> v : Scheme (TyScheme \<alpha>s \<sigma>)" and "fv_entry (Scheme (TyScheme \<alpha>s \<sigma>)) = {}"
+    by blast
+  then have "\<turnstile> v : inst_entry \<eta> (Scheme (TyScheme \<alpha>s \<sigma>))" by (simp only: inst_entry_closed)
+  from scheme_instance_typed[OF this wf_env_wf_inst[OF env] has_type_wf[OF wf_env_wf_cxt[OF env] assms(3)]
+      module_scheme(4, 5)]
+  show thesis by (rule that[OF lookup])
 next
   case (module_tyvar q q'' \<Gamma>')
   from lookup_wf[OF wf_env_wf_cxt[OF env] module_tyvar(2)] module_tyvar(3) show thesis
