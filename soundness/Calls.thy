@@ -208,7 +208,7 @@ proof (cases rule: WfDefE)
   case (ValDef \<eta> \<Gamma> \<pi>s \<alpha>s \<sigma>s \<sigma> \<tau>s)
   have eq: "inst (inst_params \<alpha>s \<tau>s \<eta>) = subst \<tau>s \<alpha>s \<circ> inst (shadow \<alpha>s \<eta>)"
     using inst_inst_params[OF wf_env_wf_inst[OF ValDef(1)] ValDef(5)] by (intro ext) simp
-  have "wf_inst \<Sigma> (inst_params \<alpha>s \<tau>s \<eta>)" using wf_env_wf_inst[OF ValDef(1)] ValDef(6) by (rule wf_inst_params)
+  have "wf_inst \<Sigma> (inst_params \<alpha>s \<tau>s \<eta>)" using wf_env_wf_inst[OF ValDef(1)] ValDef(6) by (rule inst_params_wf)
   from inst_wf[OF this conjunct1[OF defs_checked_wf[OF wf_env_wf_cxt[OF ValDef(1)] ValDef(2-4)]]]
   have "wf_ty \<Sigma> (inst (inst_params \<alpha>s \<tau>s \<eta>) (TyCallable \<sigma>s \<sigma>))" .
   with that[OF ValDef(1-6)] ValDef(7) show thesis by (simp add: eq)

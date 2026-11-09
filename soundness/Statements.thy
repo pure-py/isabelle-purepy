@@ -295,7 +295,7 @@ proof -
   then show ?thesis
   proof cases
     case tys
-    with wf have "wf_ty \<Sigma> (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>)" by (auto intro: wf_join)
+    with wf have "wf_ty \<Sigma> (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>)" by (auto intro: join_wf)
     with tys show ?thesis by (auto intro: ty join_upper)
   next
     case same
@@ -306,7 +306,7 @@ proof -
   next
     case vars
     have "wf_ty \<Sigma> (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>)"
-      using wf_entry_var_ty[OF vars(1) wf(1)] wf_entry_var_ty[OF vars(2) wf(2)] by (rule wf_join)
+      using var_ty_wf[OF vars(1) wf(1)] var_ty_wf[OF vars(2) wf(2)] by (rule join_wf)
     with vars show ?thesis by (auto intro: var join_upper)
   qed
 qed
@@ -902,7 +902,7 @@ proof (rule call_callable_exprI[OF assms(1, 2)])
       and R: "R = Returns\<^sub>R \<or> (\<exists>\<Delta>'' r. R = Assigns\<^sub>R \<Delta>'' r \<and> \<Sigma> \<turnstile> \<tau>\<^sub>d \<approx> TyPrim NoneType)"
       by (rule check_def_Ok)
     (* Instantiation of the body: that of the closure, with the type parameters at the type arguments *)
-    have wf_\<eta>: "wf_inst \<Sigma> ?\<eta>" using wf_env_wf_inst[OF env'] closed_wf by (rule wf_inst_params)
+    have wf_\<eta>: "wf_inst \<Sigma> ?\<eta>" using wf_env_wf_inst[OF env'] closed_wf by (rule inst_params_wf)
     (* Environment of the body *)
     have env_defs: "\<eta>' \<turnstile> \<rho>' \<otimes> fmap_of_list (zip ?xs vs) : \<Gamma>' \<otimes> ?\<Delta>"
       using env' sigs defs disjoint vs by (rule wf_env_defs)

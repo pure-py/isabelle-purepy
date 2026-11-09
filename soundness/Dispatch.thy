@@ -284,9 +284,9 @@ proof (induction \<tau> arbitrary: \<Delta>)
     using TyUnion.prems(1, 6) TyUnion.IH(1)[OF _ c\<^sub>1] TyUnion.IH(2)[OF _ c\<^sub>2] TyUnion.prems(3-5) by auto
   moreover have "\<Sigma> \<turnstile> inst \<eta> ?m\<^sub>1 <: inst \<eta> (?m\<^sub>1 \<squnion>\<^bsub>\<Sigma>\<^esub> ?m\<^sub>2)" and "\<Sigma> \<turnstile> inst \<eta> ?m\<^sub>2 <: inst \<eta> (?m\<^sub>1 \<squnion>\<^bsub>\<Sigma>\<^esub> ?m\<^sub>2)"
     using inst_subty[OF wf_class_table join_upper(1)] inst_subty[OF wf_class_table join_upper(2)]
-      wf\<^sub>1 wf\<^sub>2 wf_join[OF wf\<^sub>1 wf\<^sub>2]
+      wf\<^sub>1 wf\<^sub>2 join_wf[OF wf\<^sub>1 wf\<^sub>2]
     by blast+
-  ultimately show ?case using inst_wf[OF TyUnion.prems(5) wf_join[OF wf\<^sub>1 wf\<^sub>2]] by (auto intro: wf_val_sub)
+  ultimately show ?case using inst_wf[OF TyUnion.prems(5) join_wf[OF wf\<^sub>1 wf\<^sub>2]] by (auto intro: wf_val_sub)
 qed auto
 
 lemma remaining_lift:
@@ -300,9 +300,9 @@ proof (induction \<tau>)
     using TyUnion.prems TyUnion.IH by auto
   moreover have "\<Sigma> \<turnstile> inst \<eta> ?r\<^sub>1 <: inst \<eta> (?r\<^sub>1 \<squnion>\<^bsub>\<Sigma>\<^esub> ?r\<^sub>2)" and "\<Sigma> \<turnstile> inst \<eta> ?r\<^sub>2 <: inst \<eta> (?r\<^sub>1 \<squnion>\<^bsub>\<Sigma>\<^esub> ?r\<^sub>2)"
     using inst_subty[OF wf_class_table join_upper(1)] inst_subty[OF wf_class_table join_upper(2)]
-      wf\<^sub>1 wf\<^sub>2 wf_join[OF wf\<^sub>1 wf\<^sub>2]
+      wf\<^sub>1 wf\<^sub>2 join_wf[OF wf\<^sub>1 wf\<^sub>2]
     by blast+
-  ultimately show ?case using inst_wf[OF TyUnion.prems(3) wf_join[OF wf\<^sub>1 wf\<^sub>2]] by (auto intro: wf_val_sub)
+  ultimately show ?case using inst_wf[OF TyUnion.prems(3) join_wf[OF wf\<^sub>1 wf\<^sub>2]] by (auto intro: wf_val_sub)
 qed auto
 
 subsection \<open>Canonical forms of literals\<close>
@@ -875,7 +875,7 @@ proof -
   qed
   have "\<Delta>s ! k \<in> set \<Delta>s" using k len by simp
   then have mem: "\<upsilon> \<in> set (map (\<lambda>\<Delta>'. the (fmlookup \<Delta>' x)) \<Delta>s)" using \<Delta>k look by force
-  from joins_upper[OF wf_all mem] wf_joins[OF wf_all] \<Delta>x show ?thesis by auto
+  from joins_upper[OF wf_all mem] joins_wf[OF wf_all] \<Delta>x show ?thesis by auto
 qed
 
 lemma bindings_at_typed:

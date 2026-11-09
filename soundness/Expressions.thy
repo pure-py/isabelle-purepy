@@ -210,7 +210,7 @@ next
     by (auto elim: wf_list)
   have wf: "wf_ty \<Sigma> (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>)"
     using wf_val_ty[OF OverloadAddList.prems(1)] wf_val_ty[OF OverloadAddList.prems(2)]
-    by (auto intro: wf_join wf_ty_inst_inv)
+    by (auto intro: join_wf wf_ty_inst_inv)
   have "\<forall>v' \<in> set (vs @ us). \<turnstile> v' : Ty (inst \<eta> (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>))"
     using vs us OverloadAddList.prems(3)
     by (auto intro: wf_val_inst_sub[OF _ join_upper(1) wf] wf_val_inst_sub[OF _ join_upper(2) wf])
@@ -437,10 +437,10 @@ proof -
   proof -
     from that(1) obtain e where e: "e \<in> set es" and m: "m = synth_expr_at \<Sigma> \<Gamma> e" by auto
     with that(2) obtain \<sigma> where "synth_expr_at \<Sigma> \<Gamma> e = Ok \<sigma>" by (cases "synth_expr_at \<Sigma> \<Gamma> e") auto
-    with m synth_at_wf_ty[OF assms(2)] show ?thesis by (fastforce intro: wf_base_type)
+    with m synth_at_wf_ty[OF assms(2)] show ?thesis by (fastforce intro: base_type_wf)
   qed
   have wfs: "\<forall>\<tau>' \<in> set (map (base_type \<circ> projr) (filter (Not \<circ> isl) ?\<sigma>s)). wf_ty \<Sigma> \<tau>'" using synth by auto
-  have wf: "wf_ty \<Sigma> \<tau>" unfolding \<tau> by (rule wf_joins[OF wfs])
+  have wf: "wf_ty \<Sigma> \<tau>" unfolding \<tau> by (rule joins_wf[OF wfs])
   let ?\<tau> = "\<lambda>e. case synth_expr_at \<Sigma> \<Gamma> e of Ok \<sigma> \<Rightarrow> \<sigma> | Fail _ \<Rightarrow> \<tau>"
   have "has_type_at \<Sigma> \<Gamma> e (?\<tau> e) \<and> \<Sigma> \<turnstile> ?\<tau> e <: \<tau>" if "e \<in> set es" for e
   proof (cases "synth_expr_at \<Sigma> \<Gamma> e")
@@ -454,7 +454,7 @@ proof -
     then have "base_type \<sigma> \<in> set (map (base_type \<circ> projr) (filter (Not \<circ> isl) ?\<sigma>s))" using that by force
     then have bsub: "\<Sigma> \<turnstile> base_type \<sigma> <: \<tau>" unfolding \<tau> by (rule joins_upper[OF wfs])
     have wf\<sigma>: "wf_ty \<Sigma> \<sigma>" by (rule synth_at_wf_ty[OF assms(2) Inr])
-    have "\<Sigma> \<turnstile> \<sigma> <: \<tau>" by (rule subty_trans[OF wf_class_table wf\<sigma> wf_base_type[OF wf\<sigma>] base_type_upper bsub])
+    have "\<Sigma> \<turnstile> \<sigma> <: \<tau>" by (rule subty_trans[OF wf_class_table wf\<sigma> base_type_wf[OF wf\<sigma>] base_type_upper bsub])
     with Inr show ?thesis by (auto intro: has_type_synth_at)
   qed
   then have "list_all2 (\<lambda>e \<sigma>. has_type_at \<Sigma> \<Gamma> e \<sigma> \<and> \<Sigma> \<turnstile> \<sigma> <: \<tau>) es (map ?\<tau> es)"

@@ -131,7 +131,7 @@ next
     from synth show "wf_ty \<Sigma> \<tau> \<and> fv \<tau> \<subseteq> tyvars \<Gamma>"
     proof (cases rule: synth_cond)
       case (1 \<sigma>\<^sub>1 \<sigma>\<^sub>2)
-      with IH show ?thesis by (auto intro: wf_join dest!: fv_join_elem)
+      with IH show ?thesis by (auto intro: join_wf dest!: fv_join_elem)
     next
       case 2
       with IH show ?thesis by blast
@@ -218,7 +218,7 @@ next
     from "14.IH"(1)[OF "14.prems"] quals have \<Delta>: "wf_cxt \<Sigma> \<Delta> \<and> tyvars \<Delta> \<subseteq> tyvars \<Gamma>" by blast
     with "14.prems"(2) have cxt: "wf_cxt \<Sigma> (\<Gamma> \<otimes> \<Delta>)" by (auto intro: wf_cxt_add)
     from "14.IH"(2)[OF quals cap "14.prems"(1) cxt] body have "wf_ty \<Sigma> \<tau>' \<and> fv \<tau>' \<subseteq> tyvars (\<Gamma> \<otimes> \<Delta>)" by blast
-    with tyvars_add[of \<Gamma> \<Delta>] \<Delta> show "wf_ty \<Sigma> \<tau> \<and> fv \<tau> \<subseteq> tyvars \<Gamma>" unfolding \<tau> by (auto simp: wf_base_type)
+    with tyvars_add[of \<Gamma> \<Delta>] \<Delta> show "wf_ty \<Sigma> \<tau> \<and> fv \<tau> \<subseteq> tyvars \<Gamma>" unfolding \<tau> by (auto simp: base_type_wf)
   qed
 next
   case (15 \<Sigma> \<Gamma> e e' gs)
@@ -235,7 +235,7 @@ next
     with "15.prems"(2) have cxt: "wf_cxt \<Sigma> (\<Gamma> \<otimes> \<Delta>)" by (auto intro: wf_cxt_add)
     from "15.IH"(3)[OF quals cap key "15.prems"(1) cxt] body have "wf_ty \<Sigma> \<tau>' \<and> fv \<tau>' \<subseteq> tyvars (\<Gamma> \<otimes> \<Delta>)"
       by blast
-    with tyvars_add[of \<Gamma> \<Delta>] \<Delta> show "wf_ty \<Sigma> \<tau> \<and> fv \<tau> \<subseteq> tyvars \<Gamma>" unfolding \<tau> by (auto simp: wf_base_type)
+    with tyvars_add[of \<Gamma> \<Delta>] \<Delta> show "wf_ty \<Sigma> \<tau> \<and> fv \<tau> \<subseteq> tyvars \<Gamma>" unfolding \<tau> by (auto simp: base_type_wf)
   qed
 next
   case (17 \<Sigma> \<Gamma> p e)
@@ -288,7 +288,7 @@ next
       and \<tau>: "\<tau> = \<tau>\<^sub>1 \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>\<^sub>2"
       by (auto simp: bind_sum_Ok)
     with "19.IH"(1) "19.IH"(2)[OF this(1)] "19.prems" show "wf_ty \<Sigma> \<tau> \<and> fv \<tau> \<subseteq> fv (TyUnion \<sigma> \<sigma>')"
-      unfolding \<tau> by (auto intro: wf_join dest!: fv_join_elem)
+      unfolding \<tau> by (auto intro: join_wf dest!: fv_join_elem)
   qed
 next
   case (20 \<Sigma> \<Gamma> e \<sigma>s \<tau> kws es)
@@ -309,11 +309,11 @@ next
         by auto
       from nl obtain \<sigma> where \<sigma>: "synth_expr_at \<Sigma> \<Gamma> e'' = Ok \<sigma>" by (cases "synth_expr_at \<Sigma> \<Gamma> e''") auto
       from "22.IH"(1)[OF e "22.prems"] \<sigma> have "wf_ty \<Sigma> \<sigma> \<and> fv \<sigma> \<subseteq> tyvars \<Gamma>" by blast
-      then show ?thesis unfolding \<rho> \<sigma> by (simp add: wf_base_type)
+      then show ?thesis unfolding \<rho> \<sigma> by (simp add: base_type_wf)
     qed
     have wf: "\<forall>\<rho> \<in> set ?\<rho>s. wf_ty \<Sigma> \<rho>" using elems by blast
     have fv: "\<Union> (fv ` set ?\<rho>s) \<subseteq> tyvars \<Gamma>" unfolding UN_subset_iff using elems by blast
-    from wf_joins[OF wf] subset_trans[OF fv_joins fv] show "wf_ty \<Sigma> \<tau> \<and> fv \<tau> \<subseteq> tyvars \<Gamma>"
+    from joins_wf[OF wf] subset_trans[OF fv_joins fv] show "wf_ty \<Sigma> \<tau> \<and> fv \<tau> \<subseteq> tyvars \<Gamma>"
       unfolding \<tau> by blast
   qed
 next
@@ -339,7 +339,7 @@ next
     from gen obtain \<sigma> where \<sigma>: "synth_expr_at \<Sigma> \<Gamma> e = Ok \<sigma>" and elem: "elem_type \<Sigma> \<sigma> = Some \<tau>"
       by (auto simp: bind_sum_Ok or_else_def ensure_def split: option.splits if_splits)
     from "37.IH"(1)[OF "37.prems"] \<sigma> have "wf_ty \<Sigma> \<sigma> \<and> fv \<sigma> \<subseteq> tyvars \<Gamma>" by blast
-    with wf_elem_type[OF _ elem] elem_type_fv[OF elem] have \<tau>: "wf_ty \<Sigma> \<tau>" "fv \<tau> \<subseteq> tyvars \<Gamma>" by auto
+    with elem_type_wf[OF _ elem] elem_type_fv[OF elem] have \<tau>: "wf_ty \<Sigma> \<tau>" "fv \<tau> \<subseteq> tyvars \<Gamma>" by auto
     let ?\<Gamma>' = "\<Gamma> \<otimes> fmupd x (Ty \<tau>) fmempty"
     have cxt: "wf_cxt \<Sigma> ?\<Gamma>'" using "37.prems"(2) \<tau>(1) by (auto intro: wf_cxt_add wf_cxt_upd)
     have tyvars: "tyvars ?\<Gamma>' \<subseteq> tyvars \<Gamma>"
@@ -454,7 +454,7 @@ proof -
   proof (cases "instance_at \<Sigma> C \<tau>")
     case (Instance \<sigma>s)
     from instance_at_class_wf[OF assms(1, 3) Instance C] have "wf_ty \<Sigma> (TyClass C \<sigma>s)" .
-    from wf_meet(1)[OF assms(3) this] have wf: "wf_ty \<Sigma> (meet \<Sigma> \<tau> (TyClass C \<sigma>s))" .
+    from meet_wf(1)[OF assms(3) this] have wf: "wf_ty \<Sigma> (meet \<Sigma> \<tau> (TyClass C \<sigma>s))" .
     have "fv (TyClass C \<sigma>s) \<subseteq> fv \<tau>" using instance_at_wf[OF assms(1, 3) Instance] by auto
     with fv_meet[of \<Sigma> \<tau> "TyClass C \<sigma>s"] have fv: "fv (meet \<Sigma> \<tau> (TyClass C \<sigma>s)) \<subseteq> fv \<tau>" by blast
     show ?thesis unfolding eq Instance instances.case by (intro conjI wf fv)
@@ -472,7 +472,7 @@ proof (induction \<Sigma> \<Gamma> \<tau> p arbitrary: \<Delta> rule: matched_as
     and "check_pat \<Sigma> \<Gamma> p \<tau> = Ok \<Delta>\<^sub>2"
     by blast
   with "1.IH"(1)[OF "1.prems"(1, 2) _ this(1)] "1.IH"(2)[OF "1.prems"(1, 2) _ this(2)] "1.prems"(3)
-  show ?case by (auto intro: wf_join dest!: fv_join_elem)
+  show ?case by (auto intro: join_wf dest!: fv_join_elem)
 next
   case (8 \<Sigma> \<Gamma> \<tau>s ps)
   show ?case
@@ -502,7 +502,7 @@ next
     from wf fv True show ?thesis by simp
   qed (use "8.prems"(3) in simp)
 qed ((rule matched_as_constr_wf; (assumption | simp))
-     | (auto simp: bind_sum_Ok intro: wf_meet(1) dest!: fv_meet[THEN subsetD] check_pat_at_node)[1])+
+     | (auto simp: bind_sum_Ok intro: meet_wf(1) dest!: fv_meet[THEN subsetD] check_pat_at_node)[1])+
 
 
 (* Type remaining after a pattern at a well-formed type: well-formed and over the type variables of the type *)
@@ -510,7 +510,7 @@ lemma remaining_wf:
   "wf_ty \<Sigma> \<tau> \<Longrightarrow> wf_ty \<Sigma> (remaining \<Sigma> \<Gamma> \<tau> p) \<and> fv (remaining \<Sigma> \<Gamma> \<tau> p) \<subseteq> fv \<tau>"
 proof (induction \<Sigma> \<Gamma> \<tau> p rule: remaining.induct)
   case (1 \<Sigma> \<Gamma> \<sigma> \<tau> p)
-  then show ?case by (auto intro: wf_join dest!: fv_join_elem)
+  then show ?case by (auto intro: join_wf dest!: fv_join_elem)
 next
   case (8 \<Sigma> \<Gamma> \<tau>s ps)
   show ?case

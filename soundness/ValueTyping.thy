@@ -179,7 +179,7 @@ where
 lemma inst_params_notin [simp]: "\<beta> \<notin> set \<alpha>s \<Longrightarrow> inst_params \<alpha>s \<tau>s \<eta> \<beta> = \<eta> \<beta>"
   by (auto simp: inst_params_def split: option.splits dest!: map_of_SomeD dest: set_zip_leftD)
 
-lemma wf_inst_params:
+lemma inst_params_wf:
   "\<lbrakk> wf_inst \<Sigma> \<eta> ; \<forall>\<tau> \<in> set \<tau>s. fv \<tau> = {} \<and> wf_ty \<Sigma> \<tau> \<rbrakk> \<Longrightarrow> wf_inst \<Sigma> (inst_params \<alpha>s \<tau>s \<eta>)"
   by (auto simp: wf_inst_def inst_params_def split: option.splits dest!: map_of_SomeD set_zip_rightD)
 
@@ -386,7 +386,7 @@ proof -
     by (auto simp: \<P>_def fmlookup_of_list wf_cxt_iff split: if_splits)
 qed
 
-lemma wf_range_class: "wf_ty \<Sigma> (TyClass range_class [])"
+lemma range_class_wf: "wf_ty \<Sigma> (TyClass range_class [])"
   using range_lookup by (simp add: predefined_classes_def fmlookup_dom_iff type_params_def)
 
 inductive_cases WfTyE: "\<turnstile> v : Ty \<tau>"

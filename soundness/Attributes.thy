@@ -100,7 +100,7 @@ next
     proof -
       from that obtain k where k: "k < length vs" and u: "u = vs ! k" by (auto simp: in_set_conv_nth)
       from list_all2_nthD[OF vs k] k len u have "\<turnstile> u : Ty (inst \<eta> (\<sigma>s ! k))" by simp
-      from wf_val_inst_sub[OF this joins_upper[OF wfs] wf_joins[OF wfs] assms(3)] k len show ?thesis by simp
+      from wf_val_inst_sub[OF this joins_upper[OF wfs] joins_wf[OF wfs] assms(3)] k len show ?thesis by simp
     qed
     moreover have "elems v = Some vs" by (simp add: v)
     ultimately have get: "wf_result (\<lambda>u. \<turnstile> u : Ty (inst \<eta> (joins \<Sigma> \<sigma>s))) (getitem v (VLit (LitInt n)))" for n
@@ -208,7 +208,7 @@ proof (induction \<sigma> arbitrary: \<tau>)
   have wf': "wf_ty \<Sigma> \<tau>'" "wf_ty \<Sigma> \<tau>''"
     using attribute_type_wf[OF wf_class_table wf(1) \<tau>'] attribute_type_wf[OF wf_class_table wf(2) \<tau>'']
     by simp_all
-  have wf\<tau>: "wf_ty \<Sigma> (\<tau>' \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>'')" using wf' by (rule wf_join)
+  have wf\<tau>: "wf_ty \<Sigma> (\<tau>' \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>'')" using wf' by (rule join_wf)
   have sub: "\<Sigma> \<turnstile> inst \<eta> \<tau>' <: inst \<eta> \<tau>"
     unfolding \<tau> using inst_subty[OF wf_class_table join_upper(1)] wf'(1) wf\<tau> by blast
   have sub'': "\<Sigma> \<turnstile> inst \<eta> \<tau>'' <: inst \<eta> \<tau>"

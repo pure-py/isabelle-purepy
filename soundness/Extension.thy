@@ -72,7 +72,7 @@ lemma range_dom: "range_class |\<in>| fmdom \<Sigma>"
 lemma range_params: "type_params \<Sigma> range_class = []"
   using fmsubset_lookup[OF predefined, of range_class] by (simp add: predefined_classes_def type_params_def)
 
-lemma wf_range: "wf_ty \<Sigma> (TyClass range_class [])"
+lemma range_class_wf: "wf_ty \<Sigma> (TyClass range_class [])"
   by (simp add: range_dom range_params)
 
 lemma lookup_ext: "fmlookup \<Sigma> C = Some ce \<Longrightarrow> fmlookup \<Sigma>' C = Some ce"
@@ -265,7 +265,7 @@ lemma join_ext: "\<lbrakk> wf_ty \<Sigma> \<sigma> ; wf_ty \<Sigma> \<tau> \<rbr
   by (simp add: join_def subty_ext)
 
 lemma joins_ext: "\<forall>\<tau> \<in> set \<tau>s. wf_ty \<Sigma> \<tau> \<Longrightarrow> joins \<Sigma>' \<tau>s = joins \<Sigma> \<tau>s"
-  by (induction \<tau>s) (simp_all add: joins_def join_ext wf_joins[unfolded joins_def])
+  by (induction \<tau>s) (simp_all add: joins_def join_ext joins_wf[unfolded joins_def])
 
 end
 
@@ -299,7 +299,7 @@ next
     then have "map2 (meet \<Sigma>') \<sigma>s \<tau>s = map2 (meet \<Sigma>) \<sigma>s \<tau>s" by (intro map_cong[OF refl]) auto
     with True show ?thesis by simp
   qed simp
-qed (auto simp: extension.subty_ext extension.join_ext wf_meet)
+qed (auto simp: extension.subty_ext extension.join_ext meet_wf)
 
 context extension
 begin
@@ -309,10 +309,10 @@ lemmas meet_ext = meet_mono(1)[OF extension_axioms]
 lemma elem_type_ext: "wf_ty \<Sigma> \<tau> \<Longrightarrow> elem_type \<Sigma>' \<tau> = elem_type \<Sigma> \<tau>"
 proof (induction \<tau>)
   case (TyUnion \<sigma> \<tau>)
-  then show ?case by (auto simp: join_ext wf_elem_type split: option.splits)
+  then show ?case by (auto simp: join_ext elem_type_wf split: option.splits)
 next
   case (TyTuple \<tau>s)
-  then have "\<forall>\<tau> \<in> set (map base_type \<tau>s). wf_ty \<Sigma> \<tau>" by (auto intro: wf_base_type)
+  then have "\<forall>\<tau> \<in> set (map base_type \<tau>s). wf_ty \<Sigma> \<tau>" by (auto intro: base_type_wf)
   then show ?case by (simp add: joins_ext)
 next
   case (TyPrim p)
@@ -403,16 +403,16 @@ proof (rule fmap_ext)
     by (cases "fmlookup \<gamma> \<alpha>"; cases "fmlookup \<gamma>' \<alpha>") (auto simp: join_cxt_def fmlookup_fmmap_keys join_ext)
 qed
 
-lemma wf_bindings_join_cxt: "\<lbrakk> wf_bindings \<gamma> ; wf_bindings \<gamma>' \<rbrakk> \<Longrightarrow> wf_bindings (join_cxt \<Sigma> \<gamma> \<gamma>')"
-  unfolding wf_bindings_def by (auto elim!: join_cxt_lookup intro: wf_join)
+lemma join_cxt_wf: "\<lbrakk> wf_bindings \<gamma> ; wf_bindings \<gamma>' \<rbrakk> \<Longrightarrow> wf_bindings (join_cxt \<Sigma> \<gamma> \<gamma>')"
+  unfolding wf_bindings_def by (auto elim!: join_cxt_lookup intro: join_wf)
 
 lemma wf_bindings_empty: "wf_bindings fmempty"
   by (simp add: wf_bindings_def)
 
-lemma wf_bindings_foldr: "\<forall>\<gamma> \<in> set \<gamma>s. wf_bindings \<gamma> \<Longrightarrow> wf_bindings (foldr (join_cxt \<Sigma>) \<gamma>s fmempty)"
-  by (induction \<gamma>s) (simp_all add: wf_bindings_empty wf_bindings_join_cxt)
+lemma foldr_join_cxt_wf: "\<forall>\<gamma> \<in> set \<gamma>s. wf_bindings \<gamma> \<Longrightarrow> wf_bindings (foldr (join_cxt \<Sigma>) \<gamma>s fmempty)"
+  by (induction \<gamma>s) (simp_all add: wf_bindings_empty join_cxt_wf)
 
-lemma wf_bindings_type_args: "wf_ty \<Sigma> \<tau> \<Longrightarrow> wf_bindings (type_args \<Sigma> \<alpha>s \<sigma> \<tau>)"
+lemma type_args_bindings_wf: "wf_ty \<Sigma> \<tau> \<Longrightarrow> wf_bindings (type_args \<Sigma> \<alpha>s \<sigma> \<tau>)"
   unfolding wf_bindings_def using type_args_range(1)[OF wf_table] by blast
 
 lemma instance_at_wf_ext: "\<lbrakk> wf_ty \<Sigma> \<tau> ; instance_at \<Sigma> C \<tau> = Instance \<tau>s \<rbrakk> \<Longrightarrow> \<forall>\<tau>' \<in> set \<tau>s. wf_ty \<Sigma> \<tau>'"
@@ -433,11 +433,11 @@ proof (induction \<Sigma> \<alpha>s \<sigma> \<tau> and \<Sigma> \<alpha>s \<sig
   then have args: "map2 (type_args \<Sigma>' \<alpha>s) \<sigma>s \<tau>s = map2 (type_args \<Sigma> \<alpha>s) \<sigma>s \<tau>s"
     by (intro map_cong[OF refl]) auto
   have "foldr (join_cxt \<Sigma>') \<gamma>s fmempty = foldr (join_cxt \<Sigma>) \<gamma>s fmempty" if "\<forall>\<gamma> \<in> set \<gamma>s. wf_bindings \<gamma>" for \<gamma>s
-    using that by (induction \<gamma>s) (simp_all add: join_cxt_ext wf_bindings_foldr)
+    using that by (induction \<gamma>s) (simp_all add: join_cxt_ext foldr_join_cxt_wf)
   moreover have "\<forall>\<gamma> \<in> set (map2 (type_args \<Sigma> \<alpha>s) \<sigma>s \<tau>s). wf_bindings \<gamma>"
-    using "10.prems"(3) by (auto dest: set_zip_rightD intro: wf_bindings_type_args)
+    using "10.prems"(3) by (auto dest: set_zip_rightD intro: type_args_bindings_wf)
   ultimately show ?case by (simp add: args)
-qed (auto simp: extension.join_cxt_ext extension.wf_bindings_type_args extension.instance_at_ext
+qed (auto simp: extension.join_cxt_ext extension.type_args_bindings_wf extension.instance_at_ext
      extension.subty_ext extension.instance_at_wf_ext split: instances.splits)
 
 context extension
@@ -510,14 +510,14 @@ proof
   then show "binop_overload \<Sigma>' op \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<omega>"
     using assms
     by (induction rule: binop_overload.induct)
-       (auto simp: subty_ext equality_type_ext joins_ext join_ext[symmetric] wf_base_type wf_joins
+       (auto simp: subty_ext equality_type_ext joins_ext join_ext[symmetric] base_type_wf joins_wf
         intro: binop_overload.intros)
 next
   assume "binop_overload \<Sigma>' op \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<omega>"
   then show "binop_overload \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<omega>"
     using assms
     by (induction rule: binop_overload.induct)
-       (auto simp: subty_ext equality_type_ext joins_ext join_ext wf_base_type wf_joins
+       (auto simp: subty_ext equality_type_ext joins_ext join_ext base_type_wf joins_wf
         intro: binop_overload.intros)
 qed
 
@@ -528,12 +528,12 @@ proof
   assume "unop_overload \<Sigma> op \<sigma> \<omega>"
   then show "unop_overload \<Sigma>' op \<sigma> \<omega>"
     using assms
-    by (induction rule: unop_overload.induct) (auto simp: subty_ext wf_base_type intro: unop_overload.intros)
+    by (induction rule: unop_overload.induct) (auto simp: subty_ext base_type_wf intro: unop_overload.intros)
 next
   assume "unop_overload \<Sigma>' op \<sigma> \<omega>"
   then show "unop_overload \<Sigma> op \<sigma> \<omega>"
     using assms
-    by (induction rule: unop_overload.induct) (auto simp: subty_ext wf_base_type intro: unop_overload.intros)
+    by (induction rule: unop_overload.induct) (auto simp: subty_ext base_type_wf intro: unop_overload.intros)
 qed
 
 lemma binop_overloads_ext:

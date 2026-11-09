@@ -179,12 +179,12 @@ next
     with TyTuple(4) v obtain i where i: "i < length vs" and u: "u = vs ! i" by (auto simp: in_set_conv_nth)
     with vs have "\<turnstile> u : Ty (inst \<eta> (\<sigma>s ! i))" and "i < length \<sigma>s" by (auto simp: list_all2_conv_all_nth)
     have wfs: "\<forall>\<sigma> \<in> set (map base_type \<sigma>s). wf_ty \<Sigma> \<sigma>"
-      using wf_ty_inst_inv[OF wf_val_ty[OF TyTuple(2)]] by (auto intro: wf_base_type)
-    have wf\<tau>: "wf_ty \<Sigma> \<tau>" unfolding \<tau> by (rule wf_joins[OF wfs])
+      using wf_ty_inst_inv[OF wf_val_ty[OF TyTuple(2)]] by (auto intro: base_type_wf)
+    have wf\<tau>: "wf_ty \<Sigma> \<tau>" unfolding \<tau> by (rule joins_wf[OF wfs])
     have wf\<sigma>: "wf_ty \<Sigma> (\<sigma>s ! i)" using wf_ty_inst_inv[OF wf_val_ty[OF TyTuple(2)]] \<open>i < length \<sigma>s\<close> by simp
     from \<open>i < length \<sigma>s\<close> have "\<Sigma> \<turnstile> base_type (\<sigma>s ! i) <: \<tau>" unfolding \<tau> by (auto intro: joins_upper[OF wfs])
     with base_type_upper have "\<Sigma> \<turnstile> \<sigma>s ! i <: \<tau>"
-      by (rule subty_trans[OF wf_class_table wf\<sigma> wf_base_type[OF wf\<sigma>]])
+      by (rule subty_trans[OF wf_class_table wf\<sigma> base_type_wf[OF wf\<sigma>]])
     with \<open>\<turnstile> u : Ty (inst \<eta> (\<sigma>s ! i))\<close> wf\<tau> TyTuple(5) show "\<turnstile> u : Ty (inst \<eta> \<tau>)"
       by (blast intro: wf_val_inst_sub)
   qed
@@ -194,8 +194,8 @@ next
     and \<tau>: "\<tau> = \<tau>' \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>''"
     by (auto split: option.splits)
   have wf: "wf_ty \<Sigma> (\<tau>' \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>'')"
-    using wf_ty_inst_inv[OF wf_val_ty[OF TyUnion(3)]] wf_elem_type[OF _ \<tau>'] wf_elem_type[OF _ \<tau>'']
-    by (auto intro: wf_join)
+    using wf_ty_inst_inv[OF wf_val_ty[OF TyUnion(3)]] elem_type_wf[OF _ \<tau>'] elem_type_wf[OF _ \<tau>'']
+    by (auto intro: join_wf)
   from wf_val_union[of v "inst \<eta> \<sigma>" "inst \<eta> \<sigma>'"] TyUnion(3) have "\<turnstile> v : Ty (inst \<eta> \<sigma>) \<or> \<turnstile> v : Ty (inst \<eta> \<sigma>')"
     by simp
   then show ?case
@@ -222,7 +222,7 @@ proof (intro allI impI)
     by (auto simp: bind_sum_def or_else_def ensure_def split: sum.splits option.splits if_splits)
   from sound_expr_synth_at[OF assms(1) env synth] have "\<turnstile> v : Ty (inst \<eta> \<sigma>)" by simp
   from iter_typed[OF this elem assms(2) wf_env_wf_inst[OF env]] have us: "\<forall>u \<in> set us. \<turnstile> u : Ty (inst \<eta> \<tau>)" .
-  have "wf_ty \<Sigma> \<tau>" using wf_elem_type[OF synth_at_wf_ty[OF wf_env_wf_cxt[OF env] synth] elem] .
+  have "wf_ty \<Sigma> \<tau>" using elem_type_wf[OF synth_at_wf_ty[OF wf_env_wf_cxt[OF env] synth] elem] .
   then have "wf_envs \<eta> r (\<Gamma> \<otimes> fmupd x (Ty \<tau>) fmempty \<otimes> \<Delta>')"
     using assms(3) env us \<Delta>' by (simp add: sound_gen_def)
   with \<Delta> show "wf_envs \<eta> r (\<Gamma> \<otimes> \<Delta>)" by simp

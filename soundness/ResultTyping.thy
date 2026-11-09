@@ -209,7 +209,7 @@ proof (induction \<tau>s)
     case False
     with Cons.prems have \<tau>: "\<tau> \<in> set \<tau>s" by simp
     with Cons have "\<Sigma> \<turnstile> \<tau> <: joins \<Sigma> \<tau>s" by simp
-    from subty_trans[OF wf_class_table _ wf_joins this join_upper(2)] Cons.prems(1) \<tau> show ?thesis
+    from subty_trans[OF wf_class_table _ joins_wf this join_upper(2)] Cons.prems(1) \<tau> show ?thesis
       by (simp add: joins_def)
   qed
 qed simp
@@ -512,7 +512,7 @@ proof -
       unfolding VObject by (rule wf_object)
     from subty_sized_inv(1)[OF sub refl] have "\<Sigma> \<turnstile> TyClass C \<sigma>s <: TyClass range_class []"
       by (cases \<sigma>s) (auto intro: SubtyRefl)
-    from ValObj[OF wf names fields this wf_range_class] show ?thesis unfolding VObject by (rule iter_range)
+    from ValObj[OF wf names fields this range_class_wf] show ?thesis unfolding VObject by (rule iter_range)
   qed (use v in \<open>auto elim!: WfTyE dest!: subty_sized_inv(1)[OF _ refl]\<close>)
 qed
 

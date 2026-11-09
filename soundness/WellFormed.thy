@@ -79,16 +79,16 @@ qed
 
 subsection \<open>Joins and meets\<close>
 
-lemma wf_join: "\<lbrakk> wf_ty \<Sigma> \<sigma> ; wf_ty \<Sigma> \<tau> \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>)"
+lemma join_wf: "\<lbrakk> wf_ty \<Sigma> \<sigma> ; wf_ty \<Sigma> \<tau> \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>)"
   by (simp add: join_def)
 
-lemma wf_joins: "\<forall>\<tau> \<in> set \<tau>s. wf_ty \<Sigma> \<tau> \<Longrightarrow> wf_ty \<Sigma> (joins \<Sigma> \<tau>s)"
-  by (induction \<tau>s) (simp_all add: joins_def wf_join)
+lemma joins_wf: "\<forall>\<tau> \<in> set \<tau>s. wf_ty \<Sigma> \<tau> \<Longrightarrow> wf_ty \<Sigma> (joins \<Sigma> \<tau>s)"
+  by (induction \<tau>s) (simp_all add: joins_def join_wf)
 
-lemma wf_base_type_lit [simp]: "wf_ty \<Sigma> (base_type_lit l)"
+lemma base_type_lit_wf [simp]: "wf_ty \<Sigma> (base_type_lit l)"
   by (cases l) simp_all
 
-lemma wf_base_type: "wf_ty \<Sigma> \<tau> \<Longrightarrow> wf_ty \<Sigma> (base_type \<tau>)"
+lemma base_type_wf: "wf_ty \<Sigma> \<tau> \<Longrightarrow> wf_ty \<Sigma> (base_type \<tau>)"
   by (cases \<tau>) simp_all
 
 lemma fv_join_elem: "x \<in> fv (\<sigma> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>) \<Longrightarrow> x \<in> fv \<sigma> \<or> x \<in> fv \<tau>"
@@ -133,7 +133,7 @@ qed (auto split: if_splits dest!: fv_join_elem)
 lemma fv_meet: "fv (meet \<Sigma> \<sigma> \<tau>) \<subseteq> fv \<sigma> \<union> fv \<tau>"
   using fv_meet_elem(1) by blast
 
-lemma wf_meet:
+lemma meet_wf:
   "wf_ty \<Sigma> \<sigma> \<Longrightarrow> wf_ty \<Sigma> \<tau> \<Longrightarrow> wf_ty \<Sigma> (meet \<Sigma> \<sigma> \<tau>)"
   "wf_ty \<Sigma> \<sigma>' \<Longrightarrow> wf_ty \<Sigma> \<tau>' \<Longrightarrow> wf_ty \<Sigma> (meet_incomparable \<Sigma> \<sigma>' \<tau>')"
 proof (induction \<Sigma> \<sigma> \<tau> and \<Sigma> \<sigma>' \<tau>' rule: meet_meet_incomparable.induct)
@@ -142,7 +142,7 @@ proof (induction \<Sigma> \<sigma> \<tau> and \<Sigma> \<sigma>' \<tau>' rule: m
   proof (cases "length \<sigma>s = length \<tau>s")
     case True
     have "wf_ty \<Sigma> (a \<squnion>\<^bsub>\<Sigma>\<^esub> b)" if "(a, b) \<in> set (zip \<sigma>s \<tau>s)" for a b
-      using "4.prems" set_zip_leftD[OF that] set_zip_rightD[OF that] by (auto intro: wf_join)
+      using "4.prems" set_zip_leftD[OF that] set_zip_rightD[OF that] by (auto intro: join_wf)
     with "4.IH"[OF True] "4.prems" True show ?thesis by auto
   qed simp
 next
@@ -154,11 +154,11 @@ next
       using "5.IH"[OF True that refl] "5.prems" set_zip_leftD[OF that] set_zip_rightD[OF that] by auto
     with True show ?thesis by auto
   qed simp
-qed (auto split: if_splits intro: wf_join)
+qed (auto split: if_splits intro: join_wf)
 
 subsection \<open>Elements, subscripts and attributes\<close>
 
-lemma wf_elem_type: "\<lbrakk> wf_ty \<Sigma> \<sigma> ; elem_type \<Sigma> \<sigma> = Some \<tau> \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> \<tau>"
+lemma elem_type_wf: "\<lbrakk> wf_ty \<Sigma> \<sigma> ; elem_type \<Sigma> \<sigma> = Some \<tau> \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> \<tau>"
 proof (induction \<sigma> arbitrary: \<tau>)
   case (TyPrim p)
   then show ?case by (cases p) auto
@@ -170,7 +170,7 @@ next
   then show ?case by (cases \<tau>s) (auto split: if_splits)
 next
   case (TyTuple \<tau>s)
-  then show ?case by (auto intro!: wf_joins wf_base_type)
+  then show ?case by (auto intro!: joins_wf base_type_wf)
 next
   case (TyUnion \<sigma> \<sigma>')
   show ?case
@@ -182,7 +182,7 @@ next
       with \<open>elem_type \<Sigma> \<sigma> = Some \<tau>\<^sub>1\<close> TyUnion.prems have \<tau>: "\<tau> = \<tau>\<^sub>1 \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>\<^sub>2" and "wf_ty \<Sigma> \<sigma>" and "wf_ty \<Sigma> \<sigma>'"
         by simp_all
       with TyUnion.IH(1)[OF _ \<open>elem_type \<Sigma> \<sigma> = Some \<tau>\<^sub>1\<close>] TyUnion.IH(2)[OF _ Some] show ?thesis
-        by (simp add: wf_join)
+        by (simp add: join_wf)
     qed (use TyUnion.prems(2) \<open>elem_type \<Sigma> \<sigma> = Some \<tau>\<^sub>1\<close> in simp)
   qed (use TyUnion.prems(2) in simp)
 next
@@ -209,7 +209,7 @@ proof (induction \<Sigma> \<sigma> int_ok str_ok p idx arbitrary: \<tau> rule: s
     and "subscript_type \<Sigma> \<sigma>' int_ok str_ok p idx = Ok \<tau>\<^sub>2" and \<tau>: "\<tau> = \<tau>\<^sub>1 \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>\<^sub>2"
     by (auto simp: bind_sum_Ok)
   from "1.IH"(1)[OF wf(1) this(1)] "1.IH"(2)[OF this(1) wf(2) this(2)] show ?case
-    unfolding \<tau> by (auto intro: wf_join dest!: fv_join_elem)
+    unfolding \<tau> by (auto intro: join_wf dest!: fv_join_elem)
 next
   case (4 \<Sigma> \<tau>s int_ok str_ok p idx)
   from "4.prems"(2) obtain \<iota> where "idx = Ok \<iota>"
@@ -232,7 +232,7 @@ next
   next
     case (TyPrim q)
     with \<tau> have "\<tau> = joins \<Sigma> \<tau>s" by (cases q) auto
-    with "4.prems"(1) show ?thesis by (auto intro!: wf_joins dest!: fv_joins[THEN subsetD])
+    with "4.prems"(1) show ?thesis by (auto intro!: joins_wf dest!: fv_joins[THEN subsetD])
   qed (use \<tau> in auto)
 qed (auto simp: bind_sum_Ok split: if_splits)
 
@@ -245,7 +245,7 @@ proof (induction \<Sigma> \<sigma> x arbitrary: \<tau> rule: attribute_type.indu
     and \<tau>: "\<tau> = \<tau>\<^sub>1 \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>\<^sub>2"
     by (auto simp: bind_sum_Ok)
   from "1.IH"(1)[OF "1.prems"(1) wf(1) this(1)] "1.IH"(2)[OF this(1) "1.prems"(1) wf(2) this(2)] show ?case
-    unfolding \<tau> by (auto intro: wf_join dest!: fv_join_elem)
+    unfolding \<tau> by (auto intro: join_wf dest!: fv_join_elem)
 next
   case (2 \<Sigma> C \<sigma>s x)
   then have "(x, \<tau>) \<in> set (instantiate (fields \<Sigma> C) \<sigma>s)"
@@ -442,7 +442,7 @@ proof -
   next
     case (both \<rho> \<rho>')
     from IH(1)[OF both(1)] IH(2)[OF both(2)] show ?thesis
-      unfolding both(3) by (auto intro: wf_join dest!: fv_join_elem)
+      unfolding both(3) by (auto intro: join_wf dest!: fv_join_elem)
   qed
 qed
 
@@ -494,7 +494,7 @@ proof -
   next
     case (both \<rho> \<rho>')
     from IH(1)[OF both(1)] IH(2)[OF both(2)] show ?thesis
-      unfolding both(3) by (auto intro: wf_join dest!: fv_join_elem)
+      unfolding both(3) by (auto intro: join_wf dest!: fv_join_elem)
   qed
 qed
 
@@ -527,7 +527,7 @@ lemma type_args_range:
   \<Longrightarrow> (\<forall>x. x \<in> fv \<tau>' \<longrightarrow> (\<exists>\<tau> \<in> set \<tau>s. x \<in> fv \<tau>)) \<and> wf_ty \<Sigma> \<tau>'"
 proof (induction \<Sigma> \<alpha>s \<sigma> \<tau> and \<Sigma> \<alpha>s \<sigma>s \<tau>s arbitrary: \<tau>' and \<tau>' rule: type_args_induct)
   case (Var \<Sigma> \<alpha>s \<alpha>' \<tau>)
-  then show ?case by (auto simp: wf_base_type split: if_splits)
+  then show ?case by (auto simp: base_type_wf split: if_splits)
 next
   case UnionRight
   from UnionRight.IH UnionRight.prems UnionRight.hyps show ?case by (rule type_args_union_range)
@@ -569,7 +569,7 @@ next
   proof (rule foldr_join_cxt_lookup[OF Seq.prems(3)[unfolded type_args_seq.simps]])
     show "\<forall>\<gamma> \<in> set (map2 (type_args \<Sigma> \<alpha>s) \<sigma>s \<tau>s). \<forall>\<tau>'. fmlookup \<gamma> \<alpha> = Some \<tau>' \<longrightarrow> ?P \<tau>'" using elem by blast
     show "?P (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>')" if "?P \<tau>" and "?P \<tau>'" for \<tau> \<tau>'
-      using that by (blast intro: wf_join dest: fv_join_elem)
+      using that by (blast intro: join_wf dest: fv_join_elem)
   qed
 qed simp_all
 
@@ -580,7 +580,7 @@ subsection \<open>Operators\<close>
 lemma binop_overload_result:
   "\<lbrakk> binop_overload \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<omega> ; wf_ty \<Sigma> \<sigma>\<^sub>1 ; wf_ty \<Sigma> \<sigma>\<^sub>2 \<rbrakk>
   \<Longrightarrow> wf_ty \<Sigma> (snd \<omega>) \<and> fv (snd \<omega>) \<subseteq> fv \<sigma>\<^sub>1 \<union> fv \<sigma>\<^sub>2"
-  by (induction rule: binop_overload.induct) (auto simp: wf_base_type intro: wf_join dest!: fv_join_elem)
+  by (induction rule: binop_overload.induct) (auto simp: base_type_wf intro: join_wf dest!: fv_join_elem)
 
 lemma resolve_binop_union_wf:
   "\<lbrakk> wf_ty \<Sigma> \<sigma> ; wf_ty \<Sigma> \<sigma>' ; resolve_binop_union \<Sigma> op \<sigma> \<sigma>' = Some \<tau> \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> \<tau> \<and> fv \<tau> \<subseteq> fv \<sigma> \<union> fv \<sigma>'"
@@ -595,20 +595,20 @@ proof (induction "size \<sigma> + size \<sigma>'" arbitrary: \<sigma> \<sigma>' 
     case (left \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<tau>\<^sub>1 \<tau>\<^sub>2)
     with less.prems(1) have "wf_ty \<Sigma> \<sigma>\<^sub>1" and "wf_ty \<Sigma> \<sigma>\<^sub>2" by simp_all
     from less.hyps[OF _ this(1) less.prems(2) left(2)] less.hyps[OF _ this(2) less.prems(2) left(3)] left(1, 4)
-    show ?thesis by (auto intro: wf_join dest!: fv_join_elem)
+    show ?thesis by (auto intro: join_wf dest!: fv_join_elem)
   next
     case (right \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<tau>\<^sub>1 \<tau>\<^sub>2)
     with less.prems(2) have "wf_ty \<Sigma> \<sigma>\<^sub>1" and "wf_ty \<Sigma> \<sigma>\<^sub>2" by simp_all
     from less.hyps[OF _ less.prems(1) this(1) right(2)] less.hyps[OF _ less.prems(1) this(2) right(3)]
       right(1, 4)
-    show ?thesis by (auto intro: wf_join dest!: fv_join_elem)
+    show ?thesis by (auto intro: join_wf dest!: fv_join_elem)
   qed
 qed
 
 lemma binop_overload_operands:
   "\<lbrakk> binop_overload \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2 \<omega> ; wf_ty \<Sigma> \<sigma>\<^sub>1 ; wf_ty \<Sigma> \<sigma>\<^sub>2 \<rbrakk>
   \<Longrightarrow> wf_ty \<Sigma> (fst (fst \<omega>)) \<and> wf_ty \<Sigma> (snd (fst \<omega>))"
-  by (induction rule: binop_overload.induct) (auto simp: wf_base_type)
+  by (induction rule: binop_overload.induct) (auto simp: base_type_wf)
 
 lemma resolve_unop_wf: "resolve_unop \<Sigma> op \<sigma> = Some \<tau> \<Longrightarrow> wf_ty \<Sigma> \<tau> \<and> fv \<tau> = {}"
   by (auto elim!: resolve_unop_overload dest!: unop_overload_types)

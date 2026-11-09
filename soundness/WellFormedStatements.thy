@@ -106,7 +106,7 @@ proof -
     qed
     have wf: "\<forall>\<rho> \<in> set ?\<rho>s. wf_ty \<Sigma> \<rho>" using elems by blast
     have fv: "\<Union> (fv ` set ?\<rho>s) \<subseteq> fv \<tau>" unfolding UN_subset_iff using elems by blast
-    from wf_joins[OF wf] subset_trans[OF fv_joins fv] show ?thesis unfolding \<sigma> by blast
+    from joins_wf[OF wf] subset_trans[OF fv_joins fv] show ?thesis unfolding \<sigma> by blast
   qed
   ultimately show ?thesis by blast
 qed
@@ -291,7 +291,7 @@ lemma tyvars_fmempty [simp]: "tyvars fmempty = {}"
 lemma wf_entry_PUScheme: "wf_entry \<Sigma> (PUScheme \<pi> b) = wf_entry \<Sigma> (Scheme \<pi>)"
   by (cases \<pi>) simp_all
 
-lemma wf_entry_var_ty: "\<lbrakk> var_ty \<theta> = Some \<sigma> ; wf_entry \<Sigma> \<theta> \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> \<sigma>"
+lemma var_ty_wf: "\<lbrakk> var_ty \<theta> = Some \<sigma> ; wf_entry \<Sigma> \<theta> \<rbrakk> \<Longrightarrow> wf_ty \<Sigma> \<sigma>"
   by (auto dest!: var_ty_Some)
 
 lemma possibly_unassigned_wf: "\<lbrakk> possibly_unassigned b \<theta> = Some \<theta>' ; wf_entry \<Sigma> \<theta> \<rbrakk> \<Longrightarrow> wf_entry \<Sigma> \<theta>'"
@@ -311,7 +311,7 @@ proof (cases e)
     assume "merge_cxt_entry \<Sigma> b e e' = Some \<theta>''" and "\<forall>\<theta> \<in> set_option e. wf_entry \<Sigma> \<theta>"
       and "\<forall>\<theta> \<in> set_option e'. wf_entry \<Sigma> \<theta>"
     with \<open>e = Some \<theta>\<close> Some merge_cxt_entry_cases[of \<Sigma> b \<theta> \<theta>' \<theta>''] show ?thesis
-      by (auto intro!: wf_join simp: wf_entry_PUScheme dest!: scheme_of_Some var_ty_Some)
+      by (auto intro!: join_wf simp: wf_entry_PUScheme dest!: scheme_of_Some var_ty_Some)
   qed (use Some in \<open>auto dest: possibly_unassigned_wf\<close>)
 qed (cases e'; auto dest: possibly_unassigned_wf)
 
