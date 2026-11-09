@@ -20,10 +20,10 @@ To browse the theories with the prover running, open the session directory in th
 ./vscode.sh
 ```
 
-## Type checker (`purepy`)
+## Type checker and reference interpreter (`purepy`)
 
-The `purepy` package in `src/purepy/` contains the generated type checker and the code which runs it on source
-files.
+The `purepy` package in `src/purepy/` contains the generated type checker and reference interpreter, and the
+code which runs them on source files.
 
 Install the wheel attached to the latest [release](https://github.com/pure-py/isabelle-purepy/releases) as a
 standalone command-line tool with `uv tool install <wheel URL>`. Then check a single module, or a whole program
@@ -34,7 +34,22 @@ purepy --check --module path/to/module.py
 purepy --check path/to/main.py
 ```
 
-From a checkout, after `make build`, the same checks run with `uv run --locked python -m purepy --check`.
+Without `--check`, `purepy` checks the program and, if it is well-formed, runs it by the reference interpreter,
+with any further arguments as `sys.argv[1:]`:
+
+```bash
+purepy path/to/main.py arg1 arg2
+```
+
+An ill-formed program is rejected with the same message and exit status as `--check` gives. Otherwise the
+program runs, printing what it prints, and `purepy` exits with:
+
+- the program's own exit status, when the run ends as in Python;
+- 4, when the run has undefined behaviour in PurePy;
+- 6, when the interpreter gets stuck, which cannot happen for a well-formed program;
+- 7, when the run nests deeper than `--fuel` allows (default 100000).
+
+From a checkout, after `make build`, the same commands run with `uv run --locked python -m purepy`.
 
 ## Tests
 
