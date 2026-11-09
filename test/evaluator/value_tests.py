@@ -9,7 +9,7 @@ M = name("m")
 
 
 def env(*bindings):
-    rho = Finite_Map.fmempty()
+    rho = Finite_Map.fmempty
     for x, v in bindings:
         rho = Finite_Map.fmupd(EQ_VAR, chars(x), v, rho)
     return rho

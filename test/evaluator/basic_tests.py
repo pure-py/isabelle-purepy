@@ -54,7 +54,7 @@ def if_else(e, s, s_else):
 def defs(*ds):
     """Environment of a mutual region of definitions, each a (name, parameter, body) triple of one int parameter"""
     fs = [Syntax.Def(chars(f), [], [(chars(x), int_ty)], int_ty, s) for f, x, s in ds]
-    closures = [Values.VDefClosure(Finite_Map.fmempty(), fs, i) for i in range(len(fs))]
+    closures = [Values.VDefClosure(Finite_Map.fmempty, fs, i) for i in range(len(fs))]
     return Finite_Map.fmap_of_list([(chars(f), v) for (f, _, _), v in zip(ds, closures)])
 
 
@@ -70,18 +70,18 @@ def test_eval_mutual_recursion_fuel():
         )
 
     rho = defs(("even", "n", body(True, "odd")), ("odd", "n", body(False, "even")))
-    assert Eval.run_expr(Finite_Map.fmempty(), 10, rho, call("even", lit(10))) == Eval.OutOfFuel()
+    assert Eval.run_expr(Finite_Map.fmempty, 10, rho, call("even", lit(10))) == Eval.OutOfFuel()
 
 
 def test_eval_unbound_local():
     body = seq(Syntax.StmtExpr(var("r")), Syntax.StmtAssign(chars("r"), Option.None_(), lit(1)))
-    result = Eval.run_expr(Finite_Map.fmempty(), 50, defs(("g", "n", body)), call("g", lit(0)))
+    result = Eval.run_expr(Finite_Map.fmempty, 50, defs(("g", "n", body)), call("g", lit(0)))
     assert result == Eval.Done(Values.Aborts(Values.NameError_()))
 
 
 def test_eval_nonbool_condition():
     body = Syntax.StmtIf(lit(1), Syntax.StmtPass(), [], Option.None_())
-    result = Eval.run_expr(Finite_Map.fmempty(), 50, defs(("g", "n", body)), call("g", lit(0)))
+    result = Eval.run_expr(Finite_Map.fmempty, 50, defs(("g", "n", body)), call("g", lit(0)))
     assert result == Eval.Done(Values.Aborts(Values.Excluded()))
 
 
@@ -90,7 +90,7 @@ def string(w):
 
 
 def evaluate(e):
-    return Eval.run_expr(Finite_Map.fmempty(), 50, Finite_Map.fmempty(), e)
+    return Eval.run_expr(Finite_Map.fmempty, 50, Finite_Map.fmempty, e)
 
 
 def aborts(kappa):
@@ -116,7 +116,7 @@ def test_eval_subscript():
 def call_match(cases, arg):
     """Call of a function of parameter n whose body is a match on n"""
     body = Syntax.StmtMatch(var("n"), cases)
-    return Eval.run_expr(Finite_Map.fmempty(), 50, defs(("g", "n", body)), call("g", arg))
+    return Eval.run_expr(Finite_Map.fmempty, 50, defs(("g", "n", body)), call("g", arg))
 
 
 def test_eval_match_list_tuple():

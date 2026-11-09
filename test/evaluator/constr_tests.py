@@ -8,7 +8,7 @@ EQ_NAME = Syntax.equal_name()
 EQ_VAR = Strings.equal_var()
 BOX = name("m", "Box")
 # The context of the class declaration: int is predefined
-GAMMA = Finite_Map.fmupd(EQ_VAR, chars("int"), Contexts.PredefName(), Finite_Map.fmempty())
+GAMMA = Finite_Map.fmupd(EQ_VAR, chars("int"), Contexts.PredefName(), Finite_Map.fmempty)
 # @dataclass class Box: x: int; y: int
 SIGMA = Finite_Map.fmupd(
     EQ_NAME,
@@ -29,9 +29,9 @@ SIGMA = Finite_Map.fmupd(
         ],
         0,
     ),
-    Finite_Map.fmempty(),
+    Finite_Map.fmempty,
 )
-RHO = Finite_Map.fmupd(EQ_VAR, chars("Box"), Values.VClass(BOX), Finite_Map.fmempty())
+RHO = Finite_Map.fmupd(EQ_VAR, chars("Box"), Values.VClass(BOX), Finite_Map.fmempty)
 
 
 def run(e):

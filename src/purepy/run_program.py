@@ -21,7 +21,7 @@ DEFAULT_FUEL = 100_000
 
 def class_table(M: Program) -> Any:
     """Class table of a well-formed program"""
-    match Programs.check_module(M, [], Contexts.predefined_classes(), Syntax.main(), Syntax.main()):
+    match Programs.check_module(M, [], Contexts.predefined_classes, Syntax.main, Syntax.main):
         case Sum_Type.Inr((_, sigma)):
             return sigma
         case result:

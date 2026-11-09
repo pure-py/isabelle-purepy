@@ -18,7 +18,7 @@ SIGMA = Finite_Map.fmupd(
     SUB,
     Contexts.ClassDef(GAMMA, name("m"), DECLS, 1),
     Finite_Map.fmupd(
-        EQ_NAME, BOX, Contexts.ClassDef(GAMMA, name("m"), DECLS, 0), Finite_Map.fmempty()
+        EQ_NAME, BOX, Contexts.ClassDef(GAMMA, name("m"), DECLS, 0), Finite_Map.fmempty
     ),
 )
 RHO = Finite_Map.fmupd(
@@ -29,7 +29,7 @@ RHO = Finite_Map.fmupd(
         EQ_VAR,
         chars("Box"),
         Values.VClass(BOX),
-        Finite_Map.fmupd(EQ_VAR, chars("n"), Values.VLit(Syntax.LitInt(0)), Finite_Map.fmempty()),
+        Finite_Map.fmupd(EQ_VAR, chars("n"), Values.VLit(Syntax.LitInt(0)), Finite_Map.fmempty),
     ),
 )
 

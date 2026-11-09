@@ -17,7 +17,7 @@ def top_seq(t, *ts):
 
 
 def run(t):
-    return Eval.run_top(SIGMA, 50, M, Finite_Map.fmempty(), t)
+    return Eval.run_top(SIGMA, 50, M, Finite_Map.fmempty, t)
 
 
 def test_eval_top_stmt_return():
