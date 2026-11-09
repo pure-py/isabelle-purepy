@@ -1,4 +1,4 @@
-"""Constructor calls and type arguments, against the generated evaluator"""
+"""Constructor calls and type arguments, at the cases which typing rules out"""
 
 from basic_tests import chars, lit, name, var
 
@@ -60,15 +60,6 @@ def aborts(k):
     return Eval.Done(Values.Aborts(k))
 
 
-def test_eval_constr_positional():
-    assert run(call(var("Box"), [lit(1), lit(2)])) == box(1, 2)
-
-
-def test_eval_constr_keywords():
-    assert run(call(var("Box"), [lit(1)], [("y", lit(2))])) == box(1, 2)
-    assert run(call(var("Box"), [], [("y", lit(2)), ("x", lit(1))])) == box(1, 2)
-
-
 def test_eval_constr_type_args():
     """Box[int](1, 2): the type argument is not evaluated, though int is unbound"""
     assert run(call(Syntax.ExprSubscript(var("Box"), var("int")), [lit(1), lit(2)])) == box(1, 2)
@@ -78,11 +69,6 @@ def test_eval_class_type_args():
     assert run(Syntax.ExprSubscript(var("Box"), var("int"))) == Eval.Done(
         Values.Val(Values.VClass(BOX))
     )
-
-
-def test_eval_constr_fail():
-    div0 = Syntax.ExprBinOp(Syntax.BOpFloorDiv(), lit(1), lit(0))
-    assert run(call(var("Box"), [lit(1), div0])) == aborts(Values.ZeroDivisionError_())
 
 
 def test_eval_call_unbound_callee():

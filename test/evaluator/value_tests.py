@@ -1,7 +1,7 @@
-"""Primitives, module values and opaque values, against the generated evaluator"""
+"""Primitives, module values and opaque values, at the aborting cases which typing rules out"""
 
 from basic_tests import aborts_o, chars, lit, name, var
-from constr_tests import BOX, EQ_VAR, SIGMA, aborts, box, call
+from constr_tests import BOX, EQ_VAR, SIGMA, aborts, call
 
 from purepy.generated import Eval, Finite_Map, Option, Syntax, Values
 
@@ -36,10 +36,6 @@ def run(e):
     return Eval.run_expr(SIGMA, 50, RHO, e)
 
 
-def val(v):
-    return Eval.Done(Values.Val(v))
-
-
 def flt(num, den):
     return Syntax.ExprLiteral(Syntax.LitFloat(num / den))
 
@@ -49,25 +45,18 @@ def prim(f, *args):
 
 
 def test_eval_call_prim_len():
-    assert run(prim("len", Syntax.ExprList([lit(1), lit(2), lit(3)]))) == val(int_val(3))
     assert run(prim("len", lit(1))) == aborts(Values.TypeError_())
     assert run(prim("len")) == aborts(Values.TypeError_())
 
 
 def test_eval_call_prim_round():
-    """Ties to even; a Boolean or a second argument is excluded"""
-    assert run(prim("round", flt(5, 2))) == val(int_val(2))
-    assert run(prim("round", flt(7, 2))) == val(int_val(4))
-    assert run(prim("round", flt(-5, 2))) == val(int_val(-2))
-    assert run(prim("round", flt(27, 10))) == val(int_val(3))
-    assert run(prim("round", lit(7))) == val(int_val(7))
+    """A Boolean or a second argument is excluded"""
     assert run(prim("round", Syntax.ExprLiteral(Syntax.LitBool(True)))) == aborts(Values.Excluded())
     assert run(prim("round", flt(5, 2), lit(1))) == aborts(Values.Excluded())
     assert run(prim("round", Syntax.ExprList([]))) == aborts(Values.TypeError_())
 
 
 def test_eval_call_prim_exit():
-    assert run(prim("exit", lit(3))) == aborts(Values.SystemExit_(3))
     assert run(prim("exit")) == aborts(Values.Excluded())
     assert run(prim("exit", flt(1, 2))) == aborts(Values.Excluded())
     assert run(prim("exit", lit(1), lit(2))) == aborts(Values.TypeError_())
@@ -80,11 +69,6 @@ def test_eval_call_nonfun_opaque():
 
 def attr(e, x):
     return Syntax.ExprAttribute(e, chars(x))
-
-
-def test_eval_attr_module():
-    assert run(attr(var("m"), "a")) == val(int_val(1))
-    assert run(call(attr(var("m"), "Box"), [lit(1), lit(2)])) == box(1, 2)
 
 
 def test_eval_attr_module_missing():
@@ -112,7 +96,7 @@ def match_box(*q):
 
 
 def test_eval_match_qualified_head():
-    assert match_box("m", "Box") == Option.Some(int_val(1))
+    """A missing attribute of a module, a stub, or a value which is not a module"""
     assert match_box("m", "C") == Eval.Done(aborts_o(Values.AttributeError_()))
     assert match_box("stub", "Box") == Eval.Done(aborts_o(Values.AttributeError_()))
     assert match_box("m", "a", "b") == Eval.Done(aborts_o(Values.AttributeError_()))

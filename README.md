@@ -51,8 +51,9 @@ interpreter is given, such as the generated reference interpreter:
 uv run --locked ./test/check-conformance.sh "python -m purepy"
 ```
 
-The evaluator tests in `test/evaluator/` run the generated reference interpreter on syntax built directly,
-without the type checker, so that they also reach the aborting cases the type system rules out:
+The evaluator tests in `test/evaluator/` cover what the conformance suite cannot reach. They run the generated
+reference interpreter on syntax built directly, without the type checker: aborts which typing rules out, runs
+to which no rule applies, and runs out of fuel.
 
 ```bash
 uv run --locked ./test/evaluator/run.py

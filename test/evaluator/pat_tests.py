@@ -1,4 +1,4 @@
-"""Constructor patterns, against the generated evaluator"""
+"""Constructor patterns, at the aborting cases which typing rules out"""
 
 from basic_tests import aborts_o, chars, lit, lookup, name, var
 from constr_tests import BOX, EQ_NAME, EQ_VAR, GAMMA, call
@@ -57,40 +57,11 @@ def run_match(e, p):
             return o
 
 
-def pair(a, b):
-    return Option.Some(
-        Values.VTuple([Values.VLit(Syntax.LitInt(a)), Values.VLit(Syntax.LitInt(b))])
-    )
-
-
-NO_MATCH = Option.Some(Values.VLit(Syntax.LitInt(0)))
 BOX12 = call(var("Box"), [lit(1), lit(2)])
-SUB123 = call(var("Sub"), [lit(1), lit(2), lit(3)])
 
 
 def aborts(k):
     return Eval.Done(aborts_o(k))
-
-
-def test_eval_match_constr_positional_and_keywords():
-    assert run_match(BOX12, pconstr("Box", [pvar("a"), pvar("b")])) == pair(1, 2)
-    assert run_match(BOX12, pconstr("Box", [], [("y", pvar("b")), ("x", pvar("a"))])) == pair(1, 2)
-    assert run_match(BOX12, pconstr("Box", [pvar("a")], [("y", pvar("b"))])) == pair(1, 2)
-
-
-def test_eval_match_constr_subclass():
-    """A Sub object matches Box(a, b), but a Box object does not match Sub(...)"""
-    assert run_match(SUB123, pconstr("Box", [pvar("a"), pvar("b")])) == pair(1, 2)
-    assert (
-        run_match(BOX12, pconstr("Sub", [pvar("a"), pvar("b"), Syntax.PatWildcard()])) == NO_MATCH
-    )
-
-
-def test_eval_match_constr_no_match():
-    """A non-object, or a sub-pattern that does not match"""
-    assert run_match(lit(1), pconstr("Box", [pvar("a"), pvar("b")])) == NO_MATCH
-    one = Syntax.PatLiteral(Syntax.LitInt(1))
-    assert run_match(BOX12, pconstr("Box", [pvar("a"), one])) == NO_MATCH
 
 
 def test_eval_match_constr_type_error():

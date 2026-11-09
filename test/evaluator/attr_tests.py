@@ -1,9 +1,9 @@
-"""Attribute access, against the generated evaluator"""
+"""Attribute access, at the aborting cases which typing rules out"""
 
 from basic_tests import chars, lit, var
 from constr_tests import aborts, call, run
 
-from purepy.generated import Eval, Syntax, Values
+from purepy.generated import Syntax, Values
 
 
 def attr(e, x):
@@ -12,11 +12,6 @@ def attr(e, x):
 
 def box12():
     return call(var("Box"), [lit(1), lit(2)])
-
-
-def test_eval_attr_object():
-    assert run(attr(box12(), "x")) == Eval.Done(Values.Val(Values.VLit(Syntax.LitInt(1))))
-    assert run(attr(box12(), "y")) == Eval.Done(Values.Val(Values.VLit(Syntax.LitInt(2))))
 
 
 def test_eval_attr_missing():
