@@ -1,35 +1,35 @@
 """Constructor patterns, against the generated evaluator"""
 
-from basic_tests import chars, lit, lookup, var
+from basic_tests import aborts_o, chars, lit, lookup, name, var
 from constr_tests import BOX, EQ_NAME, EQ_VAR, GAMMA, call
 
-from purepy.generated import Contexts, Eval, Finite_Map, Option, Semantics, Syntax
+from purepy.generated import Contexts, Eval, Finite_Map, Option, Syntax, Values
 
-SUB = (chars("m"), [chars("Sub")])
+SUB = name("m", "Sub")
 INT = Syntax.TyExprPrim(Syntax.int_())
 # @dataclass class Box: x: int; y: int
 # @dataclass class Sub(Box): z: int
 DECLS = [
     Syntax.Dataclass(chars("Box"), [], Option.None_(), [(chars("x"), INT), (chars("y"), INT)]),
-    Syntax.Dataclass(chars("Sub"), [], Option.Some(((chars("Box"), []), [])), [(chars("z"), INT)]),
+    Syntax.Dataclass(chars("Sub"), [], Option.Some((name("Box"), [])), [(chars("z"), INT)]),
 ]
 SIGMA = Finite_Map.fmupd(
     EQ_NAME,
     SUB,
-    Contexts.ClassDef(GAMMA, (chars("m"), []), DECLS, 1),
+    Contexts.ClassDef(GAMMA, name("m"), DECLS, 1),
     Finite_Map.fmupd(
-        EQ_NAME, BOX, Contexts.ClassDef(GAMMA, (chars("m"), []), DECLS, 0), Finite_Map.fmempty
+        EQ_NAME, BOX, Contexts.ClassDef(GAMMA, name("m"), DECLS, 0), Finite_Map.fmempty()
     ),
 )
 RHO = Finite_Map.fmupd(
     EQ_VAR,
     chars("Sub"),
-    Semantics.VClass(SUB),
+    Values.VClass(SUB),
     Finite_Map.fmupd(
         EQ_VAR,
         chars("Box"),
-        Semantics.VClass(BOX),
-        Finite_Map.fmupd(EQ_VAR, chars("n"), Semantics.VLit(Syntax.LitInt(0)), Finite_Map.fmempty),
+        Values.VClass(BOX),
+        Finite_Map.fmupd(EQ_VAR, chars("n"), Values.VLit(Syntax.LitInt(0)), Finite_Map.fmempty()),
     ),
 )
 
@@ -39,7 +39,7 @@ def pvar(x):
 
 
 def pconstr(c, ps, kps=()):
-    return Syntax.PatConstr((chars(c), []), (list(ps), [(chars(y), p) for y, p in kps]))
+    return Syntax.PatConstr(name(c), (list(ps), [(chars(y), p) for y, p in kps]))
 
 
 def assign(x, e):
@@ -51,7 +51,7 @@ def run_match(e, p):
     pair = Syntax.ExprTuple([var("a"), var("b")])
     s = Syntax.StmtMatch(e, [(p, assign("r", pair)), (Syntax.PatWildcard(), assign("r", lit(0)))])
     match Eval.run_stmt(SIGMA, 50, RHO, s):
-        case Eval.Done(Semantics.Assigns(delta)):
+        case Eval.Done(([], Values.Assigns(delta))):
             return lookup(delta, "r")
         case o:
             return o
@@ -59,17 +59,17 @@ def run_match(e, p):
 
 def pair(a, b):
     return Option.Some(
-        Semantics.VTuple([Semantics.VLit(Syntax.LitInt(a)), Semantics.VLit(Syntax.LitInt(b))])
+        Values.VTuple([Values.VLit(Syntax.LitInt(a)), Values.VLit(Syntax.LitInt(b))])
     )
 
 
-NO_MATCH = Option.Some(Semantics.VLit(Syntax.LitInt(0)))
+NO_MATCH = Option.Some(Values.VLit(Syntax.LitInt(0)))
 BOX12 = call(var("Box"), [lit(1), lit(2)])
 SUB123 = call(var("Sub"), [lit(1), lit(2), lit(3)])
 
 
 def aborts(k):
-    return Eval.Done(Semantics.Aborts_o(k))
+    return Eval.Done(aborts_o(k))
 
 
 def test_eval_match_constr_positional_and_keywords():
@@ -96,15 +96,15 @@ def test_eval_match_constr_no_match():
 def test_eval_match_constr_type_error():
     """Too many positional sub-patterns, a keyword for a positional field, or a head that is not a class"""
     assert run_match(BOX12, pconstr("Box", [pvar("a"), pvar("b"), pvar("c")])) == aborts(
-        Semantics.TypeError_()
+        Values.TypeError_()
     )
     assert run_match(BOX12, pconstr("Box", [pvar("a")], [("x", pvar("b"))])) == aborts(
-        Semantics.TypeError_()
+        Values.TypeError_()
     )
-    assert run_match(BOX12, pconstr("n", [])) == aborts(Semantics.TypeError_())
+    assert run_match(BOX12, pconstr("n", [])) == aborts(Values.TypeError_())
 
 
 def test_eval_match_constr_excluded():
     """Sub-patterns not covering the fields, which Python allows"""
-    assert run_match(BOX12, pconstr("Box", [pvar("a")])) == aborts(Semantics.Excluded())
-    assert run_match(BOX12, pconstr("Box", [], [("x", pvar("a"))])) == aborts(Semantics.Excluded())
+    assert run_match(BOX12, pconstr("Box", [pvar("a")])) == aborts(Values.Excluded())
+    assert run_match(BOX12, pconstr("Box", [], [("x", pvar("a"))])) == aborts(Values.Excluded())

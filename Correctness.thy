@@ -16,21 +16,28 @@ lemma mlet_case: "mlet_result r f = (case r of Val v \<Rightarrow> f v | Aborts 
 
 lemma flet_outcome_case:
   "flet_outcome m f =
-    (case m of Done (Val v) \<Rightarrow> f v | Done (Aborts \<kappa>) \<Rightarrow> Done (Aborts\<^sub>o \<kappa>) | Stuck \<Rightarrow> Stuck | OutOfFuel \<Rightarrow> OutOfFuel)"
+    (case m of Done (Val v) \<Rightarrow> f v | Done (Aborts \<kappa>) \<Rightarrow> Done (aborts\<^sub>o \<kappa>) | Stuck \<Rightarrow> Stuck | OutOfFuel \<Rightarrow> OutOfFuel)"
   by (cases "(m, f)" rule: flet_outcome.cases) simp_all
 
-lemma mlet_outcome_case: "mlet_outcome r f = (case r of Val v \<Rightarrow> f v | Aborts \<kappa> \<Rightarrow> Aborts\<^sub>o \<kappa>)"
+lemma mlet_outcome_case: "mlet_outcome r f = (case r of Val v \<Rightarrow> f v | Aborts \<kappa> \<Rightarrow> aborts\<^sub>o \<kappa>)"
   by (cases r) simp_all
 
 lemma fseq_case:
   "fseq m f =
     (case m of
-      Done o \<Rightarrow> (case o of Assigns \<rho>' \<Rightarrow> map_fuelled (\<lambda>o'. Assigns \<rho>' \<otimes>\<^sub>o o') (f \<rho>') | _ \<Rightarrow> Done o)
+      Done (us, \<omega>) \<Rightarrow>
+        (case \<omega> of Assigns \<rho>' \<Rightarrow> map_fuelled (\<lambda>o'. (us, Assigns \<rho>') \<otimes> o') (f \<rho>') | _ \<Rightarrow> Done (us, \<omega>))
     | Stuck \<Rightarrow> Stuck
     | OutOfFuel \<Rightarrow> OutOfFuel)"
   by (cases "(m, f)" rule: fseq.cases) simp_all
 
 lemma map_fuelled_Done: "map_fuelled f m = Done r \<longleftrightarrow> (\<exists>x. m = Done x \<and> r = f x)"
+  by (cases m) auto
+
+lemma body_result_Done: "body_result m = Done r \<longleftrightarrow> (\<exists>\<omega>. m = Done ([], \<omega>) \<and> r = result_of \<omega>)"
+  by (cases m rule: body_result.cases) auto
+
+lemma fbind_Done: "fbind m f = Done r \<longleftrightarrow> (\<exists>x. m = Done x \<and> f x = Done r)"
   by (cases m) auto
 
 lemmas eval_simps = flet_case flet_outcome_case mlet_case mlet_outcome_case fseq_case
@@ -102,22 +109,28 @@ lemma EvalExprsConsAborts:
   "\<lbrakk> \<rho>, node e \<Rightarrow>\<^sub>e Val v ; \<rho>, es \<Rightarrow>\<^sub>e\<^sub>s Aborts \<kappa> \<rbrakk> \<Longrightarrow> \<rho>, e # es \<Rightarrow>\<^sub>e\<^sub>s Aborts \<kappa>"
   using EvalExprsCons by fastforce
 
-lemma EvalAssignVal: "\<rho>, node e \<Rightarrow>\<^sub>e Val v \<Longrightarrow> \<rho>, StmtAssign x \<pi> e \<Rightarrow>\<^sub>s Assigns (fmupd x v \<epsilon>)"
+lemma EvalAssignVal: "\<rho>, node e \<Rightarrow>\<^sub>e Val v \<Longrightarrow> \<rho>, StmtAssign x \<pi> e \<Rightarrow>\<^sub>s assigns\<^sub>o (fmupd x v \<epsilon>)"
   using EvalAssign by fastforce
 
-lemma EvalAssignAborts: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtAssign x \<pi> e \<Rightarrow>\<^sub>s Aborts\<^sub>o \<kappa>"
+lemma EvalAssignAborts: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtAssign x \<pi> e \<Rightarrow>\<^sub>s aborts\<^sub>o \<kappa>"
   using EvalAssign by fastforce
 
-lemma EvalExprStmtVal: "\<rho>, node e \<Rightarrow>\<^sub>e Val v \<Longrightarrow> \<rho>, StmtExpr e \<Rightarrow>\<^sub>s Assigns \<epsilon>"
+lemma EvalExprStmtVal: "\<rho>, node e \<Rightarrow>\<^sub>e Val v \<Longrightarrow> \<rho>, StmtExpr e \<Rightarrow>\<^sub>s assigns\<^sub>o \<epsilon>"
   using EvalExprStmt by fastforce
 
-lemma EvalExprStmtAborts: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtExpr e \<Rightarrow>\<^sub>s Aborts\<^sub>o \<kappa>"
+lemma EvalExprStmtAborts: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtExpr e \<Rightarrow>\<^sub>s aborts\<^sub>o \<kappa>"
   using EvalExprStmt by fastforce
 
-lemma EvalReturnVal: "\<rho>, node e \<Rightarrow>\<^sub>e Val v \<Longrightarrow> \<rho>, StmtReturn (Some e) \<Rightarrow>\<^sub>s Returns v"
+lemma EvalPrintVal: "\<rho>, node e \<Rightarrow>\<^sub>e Val v \<Longrightarrow> \<rho>, StmtPrint e \<Rightarrow>\<^sub>s ([v], Assigns \<epsilon>)"
+  using EvalPrint by fastforce
+
+lemma EvalPrintAborts: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtPrint e \<Rightarrow>\<^sub>s aborts\<^sub>o \<kappa>"
+  using EvalPrint by fastforce
+
+lemma EvalReturnVal: "\<rho>, node e \<Rightarrow>\<^sub>e Val v \<Longrightarrow> \<rho>, StmtReturn (Some e) \<Rightarrow>\<^sub>s returns\<^sub>o v"
   using EvalReturn by fastforce
 
-lemma EvalReturnAborts: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtReturn (Some e) \<Rightarrow>\<^sub>s Aborts\<^sub>o \<kappa>"
+lemma EvalReturnAborts: "\<rho>, node e \<Rightarrow>\<^sub>e Aborts \<kappa> \<Longrightarrow> \<rho>, StmtReturn (Some e) \<Rightarrow>\<^sub>s aborts\<^sub>o \<kappa>"
   using EvalReturn by fastforce
 
 lemma EvalGenConsVal:
@@ -150,7 +163,8 @@ lemmas eval_intros =
   eval_rules
   EvalUnOpVal EvalUnOpAborts EvalBinOpVal EvalBinOpAborts EvalSubscriptVal EvalSubscriptAborts
   EvalExprsConsVal EvalExprsConsAborts
-  EvalAssignVal EvalAssignAborts EvalExprStmtVal EvalExprStmtAborts EvalReturnVal EvalReturnAborts
+  EvalAssignVal EvalAssignAborts EvalExprStmtVal EvalExprStmtAborts EvalPrintVal EvalPrintAborts
+  EvalReturnVal EvalReturnAborts
   EvalGenConsVal EvalGenConsAborts EvalCompConsVal EvalCompConsAborts EvalEntriesConsVal EvalEntriesConsAborts
 
 theorem soundness:
@@ -164,11 +178,11 @@ theorem soundness:
     and soundness_entries: "run_entries n \<rho>s ec ec' = Done dr \<Longrightarrow> \<rho>s, ec, ec' \<Rightarrow>\<^sub>e\<^sub>n\<^sub>t\<^sub>r\<^sub>i\<^sub>e\<^sub>s dr"
 proof (induction n \<rho> e and n \<rho> es and n \<rho> s and n \<rho> eb and n \<rho> gs and n \<rho> x us gs and n \<rho>s ec
     and n \<rho>s ec ec' arbitrary: r and rs and o and o and q and q and vr and dr rule: eval_fun_induct)
-qed (auto simp: eval_simps map_fuelled_Done as_bool_Some as_bool_None class_of_Some class_of_None fields_of_Some fields_of_None
-  module_env_of_Some module_env_of_None
-  split: fuelled.splits result.splits outcome.splits option.splits bool.splits val.splits lit.splits if_splits
+qed (auto simp: eval_simps map_fuelled_Done body_result_Done as_bool_Some as_bool_None class_of_Some class_of_None
+  fields_of_Some fields_of_None module_env_of_Some module_env_of_None
+  split: fuelled.splits result.splits completion.splits option.splits bool.splits val.splits lit.splits if_splits
   intro: eval_intros,
-  (fastforce intro: eval_intros simp: map_fuelled_Done split: func.splits if_splits option.splits)+)
+  (fastforce intro: eval_intros simp: map_fuelled_Done body_result_Done split: func.splits if_splits option.splits)+)
 
 (* Every large enough fuel gives the outcome of a derivation *)
 theorem completeness_eventually:
@@ -204,32 +218,32 @@ next
   case EvalUnOp
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalUnOp.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalUnOp.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalBinOp
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalBinOp.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalBinOp.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalBinOpFail
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalBinOpFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalBinOpFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalAndFalse
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalAndFalse.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalAndFalse.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalAndTrue
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalAndTrue.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalAndTrue.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalAndFail
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalAndFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalAndFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalAndNonBool
   show ?case
@@ -240,17 +254,17 @@ next
   case EvalOrTrue
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalOrTrue.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalOrTrue.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalOrFalse
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalOrFalse.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalOrFalse.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalOrFail
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalOrFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalOrFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalOrNonBool
   show ?case
@@ -261,17 +275,17 @@ next
   case EvalCondTrue
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalCondTrue.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalCondTrue.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalCondFalse
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalCondFalse.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalCondFalse.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalCondFail
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalCondFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalCondFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalCondNonBool
   show ?case
@@ -282,22 +296,22 @@ next
   case EvalList
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalList.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalList.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalListFail
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalListFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalListFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalTuple
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalTuple.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalTuple.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalTupleFail
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalTupleFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalTupleFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalDict
   show ?case
@@ -307,7 +321,7 @@ next
   case EvalDictFail
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalDictFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalDictFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalDictNonStr
   show ?case
@@ -328,7 +342,7 @@ next
   case EvalSubscriptFail
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalSubscriptFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalSubscriptFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalAttrObject
   show ?case
@@ -359,7 +373,7 @@ next
   case EvalAttrFail
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalAttrFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalAttrFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalCallLambda
   show ?case
@@ -399,7 +413,7 @@ next
   case EvalCallFail
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalCallFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalCallFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalCallFailArgs
   show ?case
@@ -428,12 +442,12 @@ next
   case EvalExprsCons
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalExprsCons.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalExprsCons.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalExprsFail
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalExprsFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalExprsFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalPass
   show ?case
@@ -446,17 +460,22 @@ next
   case EvalAssign
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalAssign.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalAssign.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalExprStmt
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalExprStmt.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalExprStmt.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
+next
+  case EvalPrint
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1])
+      (use EvalPrint.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalReturn
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalReturn.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalReturn.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalReturnNone
   show ?case
@@ -469,17 +488,17 @@ next
   case EvalAssert
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalAssert.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalAssert.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalAssertFalse
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalAssertFalse.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalAssertFalse.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalAssertFail
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalAssertFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalAssertFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalAssertNonBool
   show ?case
@@ -490,22 +509,22 @@ next
   case EvalAssertMsg
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalAssertMsg.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalAssertMsg.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalAssertMsgFalse
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalAssertMsgFalse.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalAssertMsgFalse.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalAssertMsgFalseFail
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalAssertMsgFalseFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalAssertMsgFalseFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalAssertMsgFail
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalAssertMsgFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalAssertMsgFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalAssertMsgNonBool
   show ?case
@@ -522,17 +541,17 @@ next
   case EvalIfTrue
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalIfTrue.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalIfTrue.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalIfFalse
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalIfFalse.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalIfFalse.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalIfFail
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalIfFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalIfFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalIfNonBool
   show ?case
@@ -548,7 +567,7 @@ next
   case EvalMatchFail
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalMatchFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalMatchFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalMatchAbort
   show ?case
@@ -558,17 +577,17 @@ next
   case EvalSeq
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalSeq.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalSeq.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalSeqReturn
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalSeqReturn.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalSeqReturn.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalSeqFail
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalSeqFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalSeqFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalIfNone
   show ?case
@@ -577,22 +596,22 @@ next
   case EvalElse
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalElse.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalElse.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalElifTrue
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalElifTrue.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalElifTrue.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalElifFalse
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalElifFalse.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalElifFalse.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalElifFail
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalElifFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalElifFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalElifNonBool
   show ?case
@@ -603,32 +622,32 @@ next
   case EvalListComp
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalListComp.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalListComp.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalListCompFailQuals
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalListCompFailQuals.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalListCompFailQuals.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalListCompFail
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalListCompFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalListCompFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalDictComp
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalDictComp.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalDictComp.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalDictCompFailQuals
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalDictCompFailQuals.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalDictCompFailQuals.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalDictCompFail
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalDictCompFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalDictCompFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalQualsNil
   show ?case
@@ -637,17 +656,17 @@ next
   case EvalQualGuardTrue
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalQualGuardTrue.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalQualGuardTrue.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalQualGuardFalse
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalQualGuardFalse.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalQualGuardFalse.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalQualGuardFail
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalQualGuardFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalQualGuardFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalQualGuardNonBool
   show ?case
@@ -664,7 +683,7 @@ next
   case EvalQualGeneratorFail
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalQualGeneratorFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalQualGeneratorFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalQualGeneratorNonSeq
   show ?case
@@ -679,12 +698,12 @@ next
   case EvalGenCons
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalGenCons.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalGenCons.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalGenFail
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalGenFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalGenFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalCompNil
   show ?case
@@ -693,12 +712,12 @@ next
   case EvalCompCons
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalCompCons.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalCompCons.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalCompFail
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalCompFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalCompFail.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalEntriesNil
   show ?case
@@ -707,12 +726,12 @@ next
   case EvalEntriesCons
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalEntriesCons.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalEntriesCons.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalEntriesFailKey
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalEntriesFailKey.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalEntriesFailKey.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 next
   case EvalEntriesNonStr
   show ?case
@@ -723,7 +742,7 @@ next
   case EvalEntriesFailValue
   show ?case
     by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalEntriesFailValue.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split outcome.split\<close>)
+      (use EvalEntriesFailValue.IH in \<open>eventually_elim, auto simp: eval_simps split: result.split completion.split\<close>)
 qed
 
 corollary completeness:
@@ -744,8 +763,20 @@ proof (induction t arbitrary: \<rho> o)
   then show ?case by (auto intro: EvalTopStmt soundness_stmt)
 next
   case (TopSeq t t')
-  then show ?case
-    by (auto simp: map_fuelled_Done intro: eval_top.intros split: fuelled.splits outcome.splits)
+  obtain us \<omega> where t: "run_top n q \<rho> t = Done (us, \<omega>)"
+    using TopSeq.prems by (cases "run_top n q \<rho> t") auto
+  then have "q, \<rho>, t \<Rightarrow>\<^sub>t (us, \<omega>)" by (rule TopSeq.IH(1))
+  show ?case
+  proof (cases \<omega>)
+    case (Assigns \<rho>')
+    with TopSeq.prems t obtain o' where "run_top n q (\<rho> \<otimes> \<rho>') t' = Done o'" "o = (us, Assigns \<rho>') \<otimes> o'"
+      by (auto simp: map_fuelled_Done)
+    moreover from this(1) have "q, \<rho> \<otimes> \<rho>', t' \<Rightarrow>\<^sub>t o'" by (cases o') (auto intro: TopSeq.IH(2))
+    ultimately show ?thesis using \<open>q, \<rho>, t \<Rightarrow>\<^sub>t (us, \<omega>)\<close> Assigns by (auto intro: EvalTopSeq)
+  next
+    case (Aborts\<^sub>\<omega> \<kappa>)
+    with TopSeq.prems t \<open>q, \<rho>, t \<Rightarrow>\<^sub>t (us, \<omega>)\<close> show ?thesis by (auto intro: EvalTopSeqFail)
+  qed (use TopSeq.prems t in simp)
 qed (auto intro: EvalTypes)
 
 theorem completeness_top_eventually: "q, \<rho>, t \<Rightarrow>\<^sub>t o \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_top n q \<rho> t = Done o"
@@ -768,217 +799,257 @@ end
 context loading
 begin
 
-(* The rules whose results are composed by mlet, at a value and at an abort *)
-lemma EvalImportVal:
-  "\<lbrakk> (x, []) \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> ; (x, []), \<rho>, xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b Val \<rho>'' ; q, \<iota>s \<Rightarrow>\<^sub>i Val \<rho>' \<rbrakk>
-  \<Longrightarrow> q, At p (Import (x, xs)) # \<iota>s \<Rightarrow>\<^sub>i Val (fmupd x (VModLoaded (x, []) \<rho>'') \<epsilon> \<uplus>\<^sub>v \<rho>')"
-  using EvalImport by fastforce
+abbreviation loads_dom :: "name list \<Rightarrow> name list \<Rightarrow> bool"
+where "loads_dom qs qs' \<equiv> loads_submod_loads_imports_loads_import_loads_dom (Inl (Inl (qs, qs')))"
 
-lemma EvalImportAborts:
-  "\<lbrakk> (x, []) \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> ; (x, []), \<rho>, xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b Val \<rho>'' ; q, \<iota>s \<Rightarrow>\<^sub>i Aborts \<kappa> \<rbrakk>
-  \<Longrightarrow> q, At p (Import (x, xs)) # \<iota>s \<Rightarrow>\<^sub>i Aborts \<kappa>"
-  using EvalImport by fastforce
+lemmas loads_psimps = loads.psimps submod_loads.psimps imports_loads.psimps import_loads.psimps
+lemmas loads_domintros = loads_submod_loads_imports_loads_import_loads.domintros
 
-lemma EvalFromImportVal:
-  "\<lbrakk> unique_to q' q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s Val () ; q' \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> ; \<rho>, xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s Val vs ; q, \<iota>s \<Rightarrow>\<^sub>i Val \<rho>'' \<rbrakk>
-  \<Longrightarrow> q, At p (FromImport q' xs) # \<iota>s \<Rightarrow>\<^sub>i Val (fmap_of_list (zip xs vs) \<uplus>\<^sub>v \<rho>'')"
-  using EvalFromImport by fastforce
-
-lemma EvalFromImportAborts:
-  "\<lbrakk> unique_to q' q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s Val () ; q' \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho> ; \<rho>, xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s Val vs ; q, \<iota>s \<Rightarrow>\<^sub>i Aborts \<kappa> \<rbrakk>
-  \<Longrightarrow> q, At p (FromImport q' xs) # \<iota>s \<Rightarrow>\<^sub>i Aborts \<kappa>"
-  using EvalFromImport by fastforce
-
-lemma EvalSubmodulesConsVal:
-  "\<lbrakk> snoc q x \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho>' ; snoc q x, \<rho>', xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b Val \<rho>'' \<rbrakk>
-  \<Longrightarrow> q, \<rho>, x # xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b Val (\<rho> \<uplus>\<^sub>v fmupd x (VModLoaded (snoc q x) \<rho>'') \<epsilon>)"
-  using EvalSubmodulesCons by fastforce
-
-lemma EvalSubmodulesConsAborts:
-  "\<lbrakk> snoc q x \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d Val \<rho>' ; snoc q x, \<rho>', xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b Aborts \<kappa> \<rbrakk> \<Longrightarrow> q, \<rho>, x # xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b Aborts \<kappa>"
-  using EvalSubmodulesCons by fastforce
-
-lemma EvalImpsConsVal:
-  "\<lbrakk> \<rho>, x \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p Val v ; \<rho>, xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s Val vs \<rbrakk> \<Longrightarrow> \<rho>, x # xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s Val (v # vs)"
-  using EvalImpsCons by fastforce
-
-lemma EvalImpsConsAborts:
-  "\<lbrakk> \<rho>, x \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p Val v ; \<rho>, xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s Aborts \<kappa> \<rbrakk> \<Longrightarrow> \<rho>, x # xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s Aborts \<kappa>"
-  using EvalImpsCons by fastforce
-
-lemmas loading_intros =
-  eval_mod_eval_imports_eval_sub_eval_imp_eval_imps_eval_mods.intros
-  EvalImportVal EvalImportAborts EvalFromImportVal EvalFromImportAborts
-  EvalSubmodulesConsVal EvalSubmodulesConsAborts EvalImpsConsVal EvalImpsConsAborts
-
-(* Soundness of the evaluator *)
-theorem loading_soundness:
-  shows "run_mod n q = Done r \<Longrightarrow> q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d r"
-    and "run_imports n q \<iota>s = Done r \<Longrightarrow> q, \<iota>s \<Rightarrow>\<^sub>i r"
-    and "run_sub n q \<rho> xs = Done r \<Longrightarrow> q, \<rho>, xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b r"
-    and "run_imp n \<rho> x = Done vr \<Longrightarrow> \<rho>, x \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p vr"
-    and "run_imps n \<rho> xs = Done vsr \<Longrightarrow> \<rho>, xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s vsr"
-    and "run_mods n qs = Done ur \<Longrightarrow> qs \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s ur"
-proof (induction n q and n q \<iota>s and n q \<rho> xs and n \<rho> x and n \<rho> xs and n qs
-    arbitrary: r and r and r and vr and vsr and ur rule: run_loading_induct)
-  case (2 n q)
-  then show ?case
-    by (auto simp: flet_case intro: loading_intros soundness_top
-      split: option.splits module_body.splits fuelled.splits result.splits outcome.splits)
-qed (auto intro: loading_intros simp: flet_case stub_of_Some stub_of_None split: option.splits fuelled.splits result.splits,
-  (fastforce intro: loading_intros)+)
-
-theorem program_soundness: "run_program n = Done \<kappa> \<Longrightarrow> eval_program \<kappa>"
-  by (auto simp: run_program_def intro: eval_program.intros loading_soundness(1)
-    split: fuelled.splits result.splits)
-
-(* Completeness of loading, given that no module of the program is predefined *)
-context
-  assumes disjoint: "fmdom M |\<inter>| fmdom predefined_env = {||}"
-begin
-
-lemma flet_Done_mlet: "flet (Done r) (\<lambda>v. Done (f v)) = Done (mlet r f)"
-  by (cases r) simp_all
-
-theorem loading_completeness_eventually:
-  shows "q \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d r \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_mod n q = Done r"
-    and "q, \<iota>s \<Rightarrow>\<^sub>i r \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_imports n q \<iota>s = Done r"
-    and "q, \<rho>, xs \<Rightarrow>\<^sub>s\<^sub>u\<^sub>b r \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_sub n q \<rho> xs = Done r"
-    and "\<rho>, x \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p vr \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_imp n \<rho> x = Done vr"
-    and "\<rho>, xs \<Rightarrow>\<^sub>i\<^sub>m\<^sub>p\<^sub>s vsr \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_imps n \<rho> xs = Done vsr"
-    and "qs \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s ur \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_mods n qs = Done ur"
-proof (induction rule: eval_mod_eval_imports_eval_sub_eval_imp_eval_imps_eval_mods.inducts[ih_names])
-  case EvalPredefined
+(* An evaluation of the order of loading terminates, with the order computed by loads *)
+theorem loads_soundness:
+  shows "run_loads n qs qs' = Done r \<Longrightarrow> loads_dom qs qs' \<and> loads qs qs' = r"
+    and "run_submod_loads n qs q xs = Done r \<Longrightarrow>
+      loads_submod_loads_imports_loads_import_loads_dom (Inl (Inr (qs, q, xs))) \<and> submod_loads qs q xs = r"
+    and "run_imports_loads n qs q \<iota>s = Done r \<Longrightarrow>
+      loads_submod_loads_imports_loads_import_loads_dom (Inr (Inl (qs, q, \<iota>s))) \<and> imports_loads qs q \<iota>s = r"
+    and "run_import_loads n qs q \<iota> = Done r \<Longrightarrow>
+      loads_submod_loads_imports_loads_import_loads_dom (Inr (Inr (qs, q, \<iota>))) \<and> import_loads qs q \<iota> = r"
+proof (induction n qs qs' and n qs q xs and n qs q \<iota>s and n qs q \<iota> arbitrary: r and r and r and r
+    rule: run_loads_induct)
+  case (3 n qs q qs' r)
   show ?case
-    by (rule eventually_sequentially_Suc[THEN iffD1]) (simp add: EvalPredefined.hyps)
+  proof (cases "q \<in> set qs \<or> q |\<in>| fmdom \<P>")
+    case True
+    with "3.prems" have "run_loads n qs qs' = Done r" by simp
+    with "3.IH"(1) True have IH: "loads_dom qs qs' \<and> loads qs qs' = r" by blast
+    then have d: "loads_dom qs (q # qs')" using True by (auto intro: loads_domintros)
+    with IH True show ?thesis by (simp add: loads.psimps(2)[OF d])
+  next
+    case False
+    obtain \<iota>s t where body: "the (fmlookup \<M> q) = ModuleBody \<iota>s t" by (cases "the (fmlookup \<M> q)")
+    from "3.prems" False body obtain x where a: "run_imports_loads n qs q \<iota>s = Done x"
+      and b: "run_loads n (x @ [q]) qs' = Done r"
+      by (auto simp: fbind_Done)
+    note A = "3.IH"(2)[OF False body a] and B = "3.IH"(3)[OF False body a b]
+    have d: "loads_dom qs (q # qs')" using A B False body by (auto intro: loads_domintros)
+    with A B False body show ?thesis by (simp add: loads.psimps(2)[OF d])
+  qed
 next
+  case (6 n qs q x xs r)
+  show ?case
+  proof (cases "Qualified q x |\<in>| fmdom \<M> \<and> x \<notin> set (declares (the (fmlookup \<M> q)))")
+    case True
+    from "6.prems" True obtain y where a: "run_loads n qs [Qualified q x] = Done y"
+      and b: "run_submod_loads n y q xs = Done r"
+      by (auto simp: fbind_Done)
+    note A = "6.IH"(1)[OF True a] and B = "6.IH"(2)[OF True a b]
+    have d: "loads_submod_loads_imports_loads_import_loads_dom (Inl (Inr (qs, q, x # xs)))"
+      using A B True by (auto intro: loads_domintros)
+    with A B True show ?thesis by (simp add: submod_loads.psimps(2)[OF d])
+  next
+    case False
+    with "6.prems" have b: "run_submod_loads n qs q xs = Done r" by auto
+    note B = "6.IH"(3)[OF False b]
+    have d: "loads_submod_loads_imports_loads_import_loads_dom (Inl (Inr (qs, q, x # xs)))"
+      using B False by (auto intro: loads_domintros)
+    with B False show ?thesis by (auto simp: submod_loads.psimps(2)[OF d])
+  qed
+next
+  case (9 n qs q \<iota> \<iota>s r)
+  from "9.prems" obtain y where a: "run_import_loads n qs q (node \<iota>) = Done y"
+    and b: "run_imports_loads n y q \<iota>s = Done r"
+    by (auto simp: fbind_Done)
+  note A = "9.IH"(1)[OF a] and B = "9.IH"(2)[OF a b]
+  have d: "loads_submod_loads_imports_loads_import_loads_dom (Inr (Inl (qs, q, \<iota> # \<iota>s)))"
+    using A B by (auto intro: loads_domintros)
+  with A B show ?case by (simp add: imports_loads.psimps(2)[OF d])
+next
+  case (11 n qs q q' r)
+  from "11.prems" have a: "run_loads n qs (proper_prefixes q' @ [q']) = Done r" by simp
+  note A = "11.IH"[OF a]
+  have d: "loads_submod_loads_imports_loads_import_loads_dom (Inr (Inr (qs, q, Import q')))"
+    using A by (auto intro: loads_domintros)
+  with A show ?case by (simp add: import_loads.psimps(1)[OF d])
+next
+  case (12 n qs q q' xs r)
+  from "12.prems" obtain y where a: "run_loads n qs (unique_to q' q @ [q']) = Done y"
+    and b: "run_submod_loads n y q' xs = Done r"
+    by (auto simp: fbind_Done)
+  note A = "12.IH"(1)[OF a] and B = "12.IH"(2)[OF a b]
+  have d: "loads_submod_loads_imports_loads_import_loads_dom (Inr (Inr (qs, q, FromImport q' xs)))"
+    using A B by (auto intro: loads_domintros)
+  with A B show ?case by (simp add: import_loads.psimps(2)[OF d])
+qed (auto intro: loads_domintros simp: loads_psimps loads_domintros)
+
+theorem loads_completeness_eventually:
+  shows "loads_dom qs qs' \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_loads n qs qs' = Done (loads qs qs')"
+    and "loads_submod_loads_imports_loads_import_loads_dom (Inl (Inr (qs, q, xs))) \<Longrightarrow>
+      \<forall>\<^sub>F n in sequentially. run_submod_loads n qs q xs = Done (submod_loads qs q xs)"
+    and "loads_submod_loads_imports_loads_import_loads_dom (Inr (Inl (qs, q, \<iota>s))) \<Longrightarrow>
+      \<forall>\<^sub>F n in sequentially. run_imports_loads n qs q \<iota>s = Done (imports_loads qs q \<iota>s)"
+    and "loads_submod_loads_imports_loads_import_loads_dom (Inr (Inr (qs, q, \<iota>))) \<Longrightarrow>
+      \<forall>\<^sub>F n in sequentially. run_import_loads n qs q \<iota> = Done (import_loads qs q \<iota>)"
+proof (induction qs qs' and qs q xs and qs q \<iota>s and qs q \<iota>
+    rule: loads_submod_loads_imports_loads_import_loads.pinduct)
+  case (1 qs)
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1]) (simp add: 1 loads_psimps)
+next
+  case (2 qs q qs')
+  show ?case
+  proof (cases "q \<in> set qs \<or> q |\<in>| fmdom \<P>")
+    case True
+    from 2 True have "\<forall>\<^sub>F n in sequentially. run_loads n qs qs' = Done (loads qs qs')" by blast
+    then have "\<forall>\<^sub>F n in sequentially. run_loads (Suc n) qs (q # qs') = Done (loads qs (q # qs'))"
+      by eventually_elim (simp add: 2(1) True loads_psimps)
+    then show ?thesis by (rule eventually_sequentially_Suc[THEN iffD1])
+  next
+    case False
+    obtain \<iota>s t where body: "the (fmlookup \<M> q) = ModuleBody \<iota>s t" by (cases "the (fmlookup \<M> q)")
+    from 2 False body have
+      "\<forall>\<^sub>F n in sequentially. run_imports_loads n qs q \<iota>s = Done (imports_loads qs q \<iota>s)"
+      "\<forall>\<^sub>F n in sequentially.
+         run_loads n (imports_loads qs q \<iota>s @ [q]) qs' = Done (loads (imports_loads qs q \<iota>s @ [q]) qs')"
+      by (blast dest: sym)+
+    then have "\<forall>\<^sub>F n in sequentially. run_loads (Suc n) qs (q # qs') = Done (loads qs (q # qs'))"
+      by eventually_elim (simp add: 2(1) False body loads_psimps)
+    then show ?thesis by (rule eventually_sequentially_Suc[THEN iffD1])
+  qed
+next
+  case (3 qs q)
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1]) (simp add: 3 loads_psimps)
+next
+  case (4 qs q x xs)
+  show ?case
+  proof (cases "Qualified q x |\<in>| fmdom \<M> \<and> x \<notin> set (declares (the (fmlookup \<M> q)))")
+    case True
+    from 4 True have
+      "\<forall>\<^sub>F n in sequentially. run_loads n qs [Qualified q x] = Done (loads qs [Qualified q x])"
+      "\<forall>\<^sub>F n in sequentially.
+         run_submod_loads n (loads qs [Qualified q x]) q xs = Done (submod_loads (loads qs [Qualified q x]) q xs)"
+      by blast+
+    then have "\<forall>\<^sub>F n in sequentially. run_submod_loads (Suc n) qs q (x # xs) = Done (submod_loads qs q (x # xs))"
+      by eventually_elim (simp add: 4(1) True loads_psimps)
+    then show ?thesis by (rule eventually_sequentially_Suc[THEN iffD1])
+  next
+    case False
+    from 4 False have "\<forall>\<^sub>F n in sequentially. run_submod_loads n qs q xs = Done (submod_loads qs q xs)"
+      by blast
+    then have "\<forall>\<^sub>F n in sequentially. run_submod_loads (Suc n) qs q (x # xs) = Done (submod_loads qs q (x # xs))"
+      by eventually_elim (use False in \<open>auto simp: 4(1) loads_psimps\<close>)
+    then show ?thesis by (rule eventually_sequentially_Suc[THEN iffD1])
+  qed
+next
+  case (5 qs q)
+  show ?case
+    by (rule eventually_sequentially_Suc[THEN iffD1]) (simp add: 5 loads_psimps)
+next
+  case (6 qs q \<iota> \<iota>s)
+  from 6 have
+    "\<forall>\<^sub>F n in sequentially. run_import_loads n qs q (node \<iota>) = Done (import_loads qs q (node \<iota>))"
+    "\<forall>\<^sub>F n in sequentially.
+       run_imports_loads n (import_loads qs q (node \<iota>)) q \<iota>s = Done (imports_loads (import_loads qs q (node \<iota>)) q \<iota>s)"
+    by blast+
+  then have "\<forall>\<^sub>F n in sequentially. run_imports_loads (Suc n) qs q (\<iota> # \<iota>s) = Done (imports_loads qs q (\<iota> # \<iota>s))"
+    by eventually_elim (simp add: 6(1) loads_psimps)
+  then show ?case by (rule eventually_sequentially_Suc[THEN iffD1])
+next
+  case (7 qs q q')
+  from 7 have "\<forall>\<^sub>F n in sequentially.
+    run_loads n qs (proper_prefixes q' @ [q']) = Done (loads qs (proper_prefixes q' @ [q']))"
+    by blast
+  then have "\<forall>\<^sub>F n in sequentially. run_import_loads (Suc n) qs q (Import q') = Done (import_loads qs q (Import q'))"
+    by eventually_elim (simp add: 7(1) loads_psimps)
+  then show ?case by (rule eventually_sequentially_Suc[THEN iffD1])
+next
+  case (8 qs q q' xs)
+  from 8 have
+    "\<forall>\<^sub>F n in sequentially. run_loads n qs (unique_to q' q @ [q']) = Done (loads qs (unique_to q' q @ [q']))"
+    "\<forall>\<^sub>F n in sequentially. run_submod_loads n (loads qs (unique_to q' q @ [q'])) q' xs =
+       Done (submod_loads (loads qs (unique_to q' q @ [q'])) q' xs)"
+    by blast+
+  then have "\<forall>\<^sub>F n in sequentially.
+    run_import_loads (Suc n) qs q (FromImport q' xs) = Done (import_loads qs q (FromImport q' xs))"
+    by eventually_elim (simp add: 8(1) loads_psimps)
+  then show ?case by (rule eventually_sequentially_Suc[THEN iffD1])
+qed
+
+theorem mod_soundness: "run_mod n q \<L> = Done o \<Longrightarrow> q, \<L> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d o"
+  by (auto simp: run_mod_def intro: EvalModule soundness_top split: option.splits module_body.splits)
+
+theorem mod_completeness_eventually: "q, \<L> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d o \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_mod n q \<L> = Done o"
+proof (induction rule: eval_mod.induct)
   case EvalModule
-  show ?case
-    by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalModule.IH completeness_top_eventually[OF EvalModule.hyps(4)] in \<open>eventually_elim,
-        simp add: EvalModule.hyps(1,3) module_not_predefined[OF disjoint]\<close>)
+  from completeness_top_eventually[OF EvalModule(3)] show ?case
+    by eventually_elim (simp add: run_mod_def EvalModule(1,2))
+qed
+
+theorem mods_soundness: "run_mods n qs \<L> = Done o \<Longrightarrow> qs, \<L> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s o"
+proof (induction qs arbitrary: \<L> o)
+  case Nil
+  then show ?case by (auto intro: EvalModsNil)
 next
-  case EvalModuleFail
-  show ?case
-    by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalModuleFail.IH in \<open>eventually_elim, simp add: EvalModuleFail.hyps flet_Done_mlet module_not_predefined[OF disjoint]\<close>)
-next
-  case EvalModuleFailBody
-  show ?case
-    by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalModuleFailBody.IH completeness_top_eventually[OF EvalModuleFailBody.hyps(4)] in \<open>eventually_elim,
-        simp add: EvalModuleFailBody.hyps(1,3) module_not_predefined[OF disjoint]\<close>)
-next
-  case EvalImportsNil
-  show ?case
-    by (rule eventually_sequentially_Suc[THEN iffD1]) simp
-next
-  case EvalImport
-  show ?case
-    by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalImport.IH in \<open>eventually_elim, simp add: flet_Done_mlet\<close>)
-next
-  case EvalImportFail
-  show ?case
-    by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalImportFail.IH in \<open>eventually_elim, simp add: flet_Done_mlet\<close>)
-next
-  case EvalImportFailChain
-  show ?case
-    by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalImportFailChain.IH in \<open>eventually_elim, simp add: flet_Done_mlet\<close>)
-next
-  case EvalFromImport
-  show ?case
-    by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalFromImport.IH in \<open>eventually_elim, simp add: flet_Done_mlet\<close>)
-next
-  case EvalFromImportFail
-  show ?case
-    by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalFromImportFail.IH in \<open>eventually_elim, simp add: flet_Done_mlet\<close>)
-next
-  case EvalFromImportFailContaining
-  show ?case
-    by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalFromImportFailContaining.IH in \<open>eventually_elim, simp add: flet_Done_mlet\<close>)
-next
-  case EvalFromImportFailMember
-  show ?case
-    by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalFromImportFailMember.IH in \<open>eventually_elim, simp add: flet_Done_mlet\<close>)
-next
-  case EvalSubmodulesNil
-  show ?case
-    by (rule eventually_sequentially_Suc[THEN iffD1]) simp
-next
-  case EvalSubmodulesCons
-  show ?case
-    by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalSubmodulesCons.IH in \<open>eventually_elim, simp add: flet_Done_mlet\<close>)
-next
-  case EvalSubmodulesFail
-  show ?case
-    by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalSubmodulesFail.IH in \<open>eventually_elim, simp add: flet_Done_mlet\<close>)
-next
-  case EvalImpMember
-  show ?case
-    by (rule eventually_sequentially_Suc[THEN iffD1]) (simp add: EvalImpMember.hyps(1) stub_of_None[THEN iffD2, OF EvalImpMember.hyps(2)])
-next
-  case EvalImpSubmodule
-  show ?case
-    by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalImpSubmodule.IH in \<open>eventually_elim, simp add: EvalImpSubmodule.hyps flet_Done_mlet\<close>)
-next
-  case EvalImpSubmoduleFail
-  show ?case
-    by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalImpSubmoduleFail.IH in \<open>eventually_elim, simp add: EvalImpSubmoduleFail.hyps flet_Done_mlet\<close>)
-next
-  case EvalImpsNil
-  show ?case
-    by (rule eventually_sequentially_Suc[THEN iffD1]) simp
-next
-  case EvalImpsCons
-  show ?case
-    by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalImpsCons.IH in \<open>eventually_elim, simp add: flet_Done_mlet\<close>)
-next
-  case EvalImpsFail
-  show ?case
-    by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalImpsFail.IH in \<open>eventually_elim, simp add: flet_Done_mlet\<close>)
-next
-  case EvalModsNil
-  show ?case
-    by (rule eventually_sequentially_Suc[THEN iffD1]) simp
-next
+  case (Cons q qs)
+  then show ?case
+    by (auto simp: map_fuelled_Done intro: eval_mods.intros mod_soundness
+      split: fuelled.splits completion.splits prod.splits)
+qed
+
+theorem mods_completeness_eventually:
+  "qs, \<L> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s o \<Longrightarrow> \<forall>\<^sub>F n in sequentially. run_mods n qs \<L> = Done o"
+proof (induction rule: eval_mods.induct)
   case EvalModsCons
-  show ?case
-    by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalModsCons.IH in \<open>eventually_elim, simp add: flet_Done_mlet\<close>)
+  from mod_completeness_eventually[OF EvalModsCons(1)] EvalModsCons(3) show ?case
+    by eventually_elim simp
 next
   case EvalModsFail
-  show ?case
-    by (rule eventually_sequentially_Suc[THEN iffD1])
-      (use EvalModsFail.IH in \<open>eventually_elim, simp add: flet_Done_mlet\<close>)
+  from mod_completeness_eventually[OF EvalModsFail] show ?case
+    by eventually_elim simp
+qed simp
+
+theorem program_soundness:
+  assumes "run_program n \<A> = Done (vs, \<kappa>)"
+  shows "eval_program \<A> vs \<kappa>"
+proof -
+  obtain qs where l: "run_loads n [] [main] = Done qs"
+    and m: "(case run_mods n qs (\<E> \<A>) of
+               Done (vs, Assigns \<rho>) \<Rightarrow> Done (vs, SystemExit 0)
+             | Done (vs, Aborts\<^sub>\<omega> \<kappa>) \<Rightarrow> Done (vs, \<kappa>)
+             | Done (vs, Returns v) \<Rightarrow> Stuck
+             | Stuck \<Rightarrow> Stuck
+             | OutOfFuel \<Rightarrow> OutOfFuel) = Done (vs, \<kappa>)"
+    using assms by (auto simp: run_program_def fbind_Done)
+  have q: "loads [] [main] = qs" using loads_soundness(1)[OF l] by simp
+  obtain us \<omega> where r: "run_mods n qs (\<E> \<A>) = Done (us, \<omega>)"
+    using m by (cases "run_mods n qs (\<E> \<A>)") auto
+  then have d: "loads [] [main], \<E> \<A> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s (us, \<omega>)" unfolding q by (rule mods_soundness)
+  show ?thesis
+    using m r d by (cases \<omega>) (auto intro: EvalProgram EvalProgramAbort)
 qed
 
-theorem program_completeness: "eval_program \<kappa> \<Longrightarrow> \<exists>n. run_program n = Done \<kappa>"
-proof (induction rule: eval_program.induct)
+(* Completeness, given that loading terminates *)
+theorem program_completeness:
+  assumes "eval_program \<A> vs \<kappa>" and "loads_dom [] [main]"
+  shows "\<exists>n. run_program n \<A> = Done (vs, \<kappa>)"
+  using assms(1)
+proof (cases rule: eval_program.cases)
   case (EvalProgram \<rho>)
-  then obtain n where "run_mod n main = Done (Val \<rho>)"
-    using loading_completeness_eventually(1)[THEN eventually_happens'[OF sequentially_bot]] by blast
-  then show ?case by (intro exI[of _ n]) (simp add: run_program_def)
+  then have "\<forall>\<^sub>F n in sequentially. run_mods n (loads [] [main]) (\<E> \<A>) = Done (vs, Assigns \<rho>)"
+    by (blast intro: mods_completeness_eventually)
+  with loads_completeness_eventually(1)[OF assms(2)]
+  have "\<forall>\<^sub>F n in sequentially. run_program n \<A> = Done (vs, \<kappa>)"
+    by eventually_elim (use EvalProgram in \<open>simp add: run_program_def\<close>)
+  then show ?thesis by (fact eventually_happens'[OF sequentially_bot])
 next
-  case (EvalProgramAbort \<kappa>)
-  then obtain n where "run_mod n main = Done (Aborts \<kappa>)"
-    using loading_completeness_eventually(1)[THEN eventually_happens'[OF sequentially_bot]] by blast
-  then show ?case by (intro exI[of _ n]) (simp add: run_program_def)
+  case EvalProgramAbort
+  then have "\<forall>\<^sub>F n in sequentially. run_mods n (loads [] [main]) (\<E> \<A>) = Done (vs, Aborts\<^sub>\<omega> \<kappa>)"
+    by (blast intro: mods_completeness_eventually)
+  with loads_completeness_eventually(1)[OF assms(2)]
+  have "\<forall>\<^sub>F n in sequentially. run_program n \<A> = Done (vs, \<kappa>)"
+    by eventually_elim (simp add: run_program_def)
+  then show ?thesis by (fact eventually_happens'[OF sequentially_bot])
 qed
-
-end
 
 end
 

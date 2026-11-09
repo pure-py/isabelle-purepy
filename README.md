@@ -44,11 +44,11 @@ After `make build`:
 make check-conformance
 ```
 
-The conformance suite comes from the pinned specification. The same suite runs under the generated reference
-interpreter, for the tests on which PurePy agrees with Python or is undefined:
+The conformance suite comes from the pinned specification. The tests are run by Python unless another
+interpreter is given, such as the generated reference interpreter:
 
 ```bash
-uv run --locked ./test/conformance-purepy.py
+uv run --locked ./test/check-conformance.sh "python -m purepy"
 ```
 
 The evaluator tests in `test/evaluator/` run the generated reference interpreter on syntax built directly,
@@ -96,6 +96,8 @@ Run the `Release` GitHub Action manually. The version number of a release is tha
 | `Values.thy`                | Values, results and functions on values                                        |
 | `Semantics.thy`             | Evaluation judgements                                                          |
 | `Determinism.thy`           | Inversion lemmas and determinism of evaluation                                 |
+| `Eval.thy`                  | Evaluation as a function with fuel, and its executable code equations          |
+| `Correctness.thy`           | Soundness and completeness of the evaluator against the evaluation judgements  |
 | `Subtyping.thy`             | Subtyping, join and meet; element, subscript and attribute types               |
 | `Shapes.thy`                | Heads and shapes for pattern matching; head and shape typing; shapes of a type |
 | `Patterns.thy`              | Pattern checking; matched and remaining types of patterns                      |

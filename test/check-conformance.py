@@ -29,7 +29,6 @@ def check_lint(r: Results) -> None:
     with r.test("mypy and ruff"):
         sources = sorted(str(path) for path in SRC.glob("*.py")) + [
             str(TEST / "check-conformance.py"),
-            str(TEST / "conformance-purepy.py"),
         ]
         for tool in (
             ["mypy", "--strict", "--python-version", PYTHON_VERSION],

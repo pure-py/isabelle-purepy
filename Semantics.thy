@@ -417,7 +417,7 @@ locale loading = evaluation +
   fixes \<M> :: program
 begin
 
-function
+function (domintros)
   loads :: "name list \<Rightarrow> name list \<Rightarrow> name list" and
   submod_loads :: "name list \<Rightarrow> name \<Rightarrow> var list \<Rightarrow> name list" and
   imports_loads :: "name list \<Rightarrow> name \<Rightarrow> import located list \<Rightarrow> name list" and

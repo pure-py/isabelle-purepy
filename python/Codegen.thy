@@ -25,106 +25,56 @@ code_printing
   | constant "(<) :: var \<Rightarrow> var \<Rightarrow> bool" \<rightharpoonup> (Python) "(_ < _)"
   | constant var \<rightharpoonup> (Python) "\"\".join'(_')"
 
-(* Output of print, as Python's str of the value, written through a helper module as an effect; the equation
-   gives None, as the printed code does *)
-code_printing
-    constant print_value \<rightharpoonup> (Python) "'_'_import'_'_'(\"Purepy'_Output\"').output'(_')"
-  | code_module "Purepy_Output.py" \<rightharpoonup> (Python)
-\<open>import dataclasses
-import Semantics
-import Syntax
-
-
-def args(x):
-    return [getattr(x, f.name) for f in dataclasses.fields(x)]
-
-
-def kind(x):
-    return type(x).__name__.rstrip("_")
-
-
-def qualified(q):
-    x, xs = q
-    return ".".join([x, *xs])
-
-
-def to_str(v, nested=False):
-    k = kind(v)
-    if k == "VLit":
-        (lit,) = args(v)
-        lk = kind(lit)
-        if lk == "LitInt":
-            return str(args(lit)[0])
-        if lk == "LitFloat":
-            return repr(args(lit)[0])
-        if lk == "LitString":
-            w = args(lit)[0]
-            return repr(w) if nested else w
-        if lk == "LitBool":
-            return "True" if args(lit)[0] else "False"
-        return "None"
-    if k == "VList":
-        return "[" + ", ".join(to_str(u, True) for u in args(v)[0]) + "]"
-    if k == "VTuple":
-        us = args(v)[0]
-        return "(" + ", ".join(to_str(u, True) for u in us) + ("," if len(us) == 1 else "") + ")"
-    if k == "VDict":
-        return "{" + ", ".join(repr(w) + ": " + to_str(u, True) for w, u in args(v)[0]) + "}"
-    if k == "VObject":
-        c, fields = args(v)
-        return c[1][-1] + "(" + ", ".join(f"{x}={to_str(u, True)}" for x, u in fields) + ")"
-    if k == "VClass":
-        return f"<class '{qualified(args(v)[0])}'>"
-    if k == "VOpaque":
-        x, xs = args(v)[0]
-        return f"<class '{xs[-1]}'>" if x == "builtins" else f"<{qualified(args(v)[0])}>"
-    if k == "VPrim":
-        return f"<built-in function {kind(args(v)[0])[4:].lower()}>"
-    if k in ("VModStub", "VModLoaded"):
-        return f"<module '{qualified(args(v)[0])}'>"
-    return f"<{k}>"
-
-
-def output(v):
-    print(to_str(v), flush=True)
-    return Semantics.Val(Semantics.VLit(Syntax.LitNone()))
-\<close>
-
 (* The equations of the lifted string operations aren't executable, and their printings replace them *)
-declare [[code drop: substring str_of str_chars str_append str_repeat]]
+declare [[code drop: substring str_of str_chars str_append str_concat]]
 
 (* Strings written in the theories, and the characters of a string *)
 code_printing
     constant str_of \<rightharpoonup> (Python) "\"\".join'(_')"
   | constant str_chars \<rightharpoonup> (Python) "list'(_')"
   | constant str_append \<rightharpoonup> (Python) "(_ + _)"
-  | constant str_repeat \<rightharpoonup> (Python) "(_ * _)"
+  | constant str_concat \<rightharpoonup> (Python) "\"\".join'(_')"
 
-(* Float arithmetic as Python's, and the value of a float as an exact extended real, through a helper module *)
+(* Float arithmetic as Python's, and conversion between floats and extended reals through a helper module *)
 code_printing
-    constant float_of_int \<rightharpoonup> (Python) "float'(_')"
-  | constant float_neg \<rightharpoonup> (Python) "(- _)"
+    constant float_neg \<rightharpoonup> (Python) "(- _)"
   | constant float_add \<rightharpoonup> (Python) "(_ + _)"
   | constant float_sub \<rightharpoonup> (Python) "(_ - _)"
   | constant float_mul \<rightharpoonup> (Python) "(_ * _)"
   | constant float_div \<rightharpoonup> (Python) "(_ '/ _)"
   | constant float_floordiv \<rightharpoonup> (Python) "(_ '/'/ _)"
   | constant float_mod \<rightharpoonup> (Python) "(_ % _)"
-  | constant float_pow \<rightharpoonup> (Python) "(_ ** _)"
-  | constant float_value \<rightharpoonup> (Python) "'_'_import'_'_'(\"Purepy'_Floats\"').float'_value'(_')"
+  | constant nan \<rightharpoonup> (Python) "float'(\"nan\"')"
+  | constant negative \<rightharpoonup> (Python) "('_'_import'_'_'(\"math\"').copysign'(1.0, _') < 0)"
+  | constant real_of_float \<rightharpoonup> (Python) "'_'_import'_'_'(\"Purepy'_Floats\"').real'_of'_float'(_')"
+  | constant fl \<rightharpoonup> (Python) "'_'_import'_'_'(\"Purepy'_Floats\"').fl'(_')"
   | code_module "Purepy_Floats.py" \<rightharpoonup> (Python)
-\<open>import math
+\<open>import fractions
+import math
 import Option
 import Extended_Real
 import Real
 import Rat
 
-def float_value(x):
+
+def real_of_float(x):
     if math.isnan(x):
         return Option.None_()
     if math.isinf(x):
         return Option.Some(Extended_Real.PInfty() if x > 0 else Extended_Real.MInfty())
     return Option.Some(Extended_Real.ereal_(Real.Ratreal(Rat.Frct(x.as_integer_ratio()))))
+
+
+def fl(y):
+    if isinstance(y, Extended_Real.PInfty):
+        return math.inf
+    if isinstance(y, Extended_Real.MInfty):
+        return -math.inf
+    n, d = y.a.a.a
+    try:
+        return float(fractions.Fraction(n, d))
+    except OverflowError:
+        return math.inf if n > 0 else -math.inf
 \<close>
 
 code_pred subty .
@@ -142,9 +92,12 @@ lemma unop_overloads_code [code]:
   by (auto simp: unop_overloads_def unop_overload_i_i_i_Poo_def)
 
 (* A definition or function in the evaluation locale has no code equation of its own *)
-declare evaluation.field_map_def [code] evaluation.match.simps [code]
-  evaluation.match_all.simps [code] evaluation.match_dict.simps [code] evaluation.match_kws.simps [code] evaluation.dispatch.simps [code]
-  evaluation.type_value_def [code] evaluation.run_top.simps [code]
+declare evaluation.overload_def [code] evaluation.tuple_overload_def [code] evaluation.overloads.simps [code]
+  evaluation.select.simps [code] evaluation.binop_meaning_def [code] evaluation.unop_meaning.simps [code]
+  evaluation.field_map_def [code] evaluation.match.simps [code] evaluation.match_all.simps [code]
+  evaluation.match_dict.simps [code] evaluation.match_kws.simps [code] evaluation.match_fields.simps [code]
+  evaluation.dispatch.simps [code] evaluation.type_args_of_def [code] evaluation.type_value_def [code]
+  evaluation.run_top.simps [code]
 
 (* Natural numbers are target integers, so the evaluator's equations can't match the fuel against 0 and Suc. One
    equation per function tests the fuel; the equations for positive fuel are stated for a step function. *)
@@ -179,34 +132,31 @@ lemmas run_step_code [code] =
   evaluation.run_quals.simps(2-)[folded run_steps_def] evaluation.run_gen.simps(2-)[folded run_steps_def]
   evaluation.run_comp.simps(2-)[folded run_steps_def] evaluation.run_entries.simps(2-)[folded run_steps_def]
 
-(* The same for loading, whose functions also take the program *)
-declare loading.submods_env_def [code] loading.run_program_def [code]
+(* The same for the order of loading, whose functions also take the program *)
+declare loading.submods_env_def [code] loading.run_mod_def [code] loading.run_mods.simps [code]
+  loading.run_program_def [code]
 
-definition run_mod_step where "run_mod_step \<Sigma> M A n = loading.run_mod \<Sigma> M A (Suc n)"
-definition run_imports_step where "run_imports_step \<Sigma> M A n = loading.run_imports \<Sigma> M A (Suc n)"
-definition run_sub_step where "run_sub_step \<Sigma> M A n = loading.run_sub \<Sigma> M A (Suc n)"
-definition run_imp_step where "run_imp_step \<Sigma> M A n = loading.run_imp \<Sigma> M A (Suc n)"
-definition run_imps_step where "run_imps_step \<Sigma> M A n = loading.run_imps \<Sigma> M A (Suc n)"
-definition run_mods_step where "run_mods_step \<Sigma> M A n = loading.run_mods \<Sigma> M A (Suc n)"
-lemmas run_loading_steps_def = run_mod_step_def run_imports_step_def run_sub_step_def run_imp_step_def run_imps_step_def run_mods_step_def
+definition run_loads_step where "run_loads_step M n = loading.run_loads M (Suc n)"
+definition run_submod_loads_step where "run_submod_loads_step M n = loading.run_submod_loads M (Suc n)"
+definition run_imports_loads_step where "run_imports_loads_step M n = loading.run_imports_loads M (Suc n)"
+definition run_import_loads_step where "run_import_loads_step M n = loading.run_import_loads M (Suc n)"
+lemmas run_loads_steps_def =
+  run_loads_step_def run_submod_loads_step_def run_imports_loads_step_def run_import_loads_step_def
 
-lemma run_loading_fuel_code [code]:
-  "loading.run_mod \<Sigma> M A n q = (if n = 0 then OutOfFuel else run_mod_step \<Sigma> M A (n - 1) q)"
-  "loading.run_imports \<Sigma> M A n q \<iota>s = (if n = 0 then OutOfFuel else run_imports_step \<Sigma> M A (n - 1) q \<iota>s)"
-  "loading.run_sub \<Sigma> M A n q \<rho> xs = (if n = 0 then OutOfFuel else run_sub_step \<Sigma> M A (n - 1) q \<rho> xs)"
-  "loading.run_imp \<Sigma> M A n \<rho> x = (if n = 0 then OutOfFuel else run_imp_step \<Sigma> M A (n - 1) \<rho> x)"
-  "loading.run_imps \<Sigma> M A n \<rho> xs = (if n = 0 then OutOfFuel else run_imps_step \<Sigma> M A (n - 1) \<rho> xs)"
-  "loading.run_mods \<Sigma> M A n qs = (if n = 0 then OutOfFuel else run_mods_step \<Sigma> M A (n - 1) qs)"
-  by (cases n; simp only: run_loading_steps_def loading.run_mod.simps(1) loading.run_imports.simps(1) loading.run_sub.simps(1) loading.run_imp.simps(1) loading.run_imps.simps(1) loading.run_mods.simps(1)
+lemma run_loads_fuel_code [code]:
+  "loading.run_loads M n qs qs' = (if n = 0 then OutOfFuel else run_loads_step M (n - 1) qs qs')"
+  "loading.run_submod_loads M n qs q xs = (if n = 0 then OutOfFuel else run_submod_loads_step M (n - 1) qs q xs)"
+  "loading.run_imports_loads M n qs q \<iota>s = (if n = 0 then OutOfFuel else run_imports_loads_step M (n - 1) qs q \<iota>s)"
+  "loading.run_import_loads M n qs q \<iota> = (if n = 0 then OutOfFuel else run_import_loads_step M (n - 1) qs q \<iota>)"
+  by (cases n; simp only: run_loads_steps_def loading.run_loads.simps(1) loading.run_submod_loads.simps(1)
+    loading.run_imports_loads.simps(1) loading.run_import_loads.simps(1)
     simp_thms if_True if_False nat.distinct(2) diff_Suc_1)+
 
-lemmas run_loading_step_code [code] =
-  loading.run_mod.simps(2-)[folded run_loading_steps_def]
-  loading.run_imports.simps(2-)[folded run_loading_steps_def]
-  loading.run_sub.simps(2-)[folded run_loading_steps_def]
-  loading.run_imp.simps(2-)[folded run_loading_steps_def]
-  loading.run_imps.simps(2-)[folded run_loading_steps_def]
-  loading.run_mods.simps(2-)[folded run_loading_steps_def]
+lemmas run_loads_step_code [code] =
+  loading.run_loads.simps(2-)[folded run_loads_steps_def]
+  loading.run_submod_loads.simps(2-)[folded run_loads_steps_def]
+  loading.run_imports_loads.simps(2-)[folded run_loads_steps_def]
+  loading.run_import_loads.simps(2-)[folded run_loads_steps_def]
 
 export_code check_program check_module predefined_classes main
   evaluation.run_expr evaluation.run_stmt evaluation.run_top loading.run_program

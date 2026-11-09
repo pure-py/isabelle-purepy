@@ -15,6 +15,8 @@ session "isabelle-purepy" = HOL +
     Values
     Semantics
     Determinism
+    Eval
+    Correctness
     Subtyping
     Shapes
     Patterns

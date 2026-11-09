@@ -3,7 +3,7 @@
 import dataclasses
 import functools
 
-from purepy.generated import Contexts, Option, Positions, Semantics, Syntax
+from purepy.generated import Contexts, Option, Positions, Semantics, Syntax, Values
 
 LOCATED = {
     "ExprVar",
@@ -37,6 +37,7 @@ LOCATED = {
     "StmtDeclare",
     "StmtAssign",
     "StmtExpr",
+    "StmtPrint",
     "StmtAssert",
     "StmtReturn",
     "StmtIf",
@@ -75,5 +76,5 @@ def install(module):
             cls.__init__ = wrapped
 
 
-for module in (Syntax, Semantics, Contexts):
+for module in (Syntax, Semantics, Values, Contexts):
     install(module)

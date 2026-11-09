@@ -1,14 +1,14 @@
 """Top-level statements, against the generated evaluator"""
 
-from basic_tests import chars, lit, lookup, ret, var
+from basic_tests import aborts_o, chars, lit, lookup, name, ret, var
 from constr_tests import BOX, SIGMA, call
 
-from purepy.generated import Eval, Finite_Map, Option, Semantics, Syntax
+from purepy.generated import Eval, Finite_Map, Option, Syntax, Values
 
-M = (chars("m"), [])
+M = name("m")
 INT = Syntax.TyExprPrim(Syntax.int_())
 BOX_DEF = Syntax.Dataclass(chars("Box"), [], Option.None_(), [(chars("x"), INT), (chars("y"), INT)])
-PAIR_DEF = Syntax.TypeStmt(chars("Pair"), [], Syntax.TyExprName((chars("tuple"), []), [INT, INT]))
+PAIR_DEF = Syntax.TypeStmt(chars("Pair"), [], Syntax.TyExprName(name("tuple"), [INT, INT]))
 DIV0 = Syntax.ExprBinOp(Syntax.BOpFloorDiv(), lit(1), lit(0))
 
 
@@ -21,12 +21,12 @@ def top_seq(t, *ts):
 
 
 def run(t):
-    return Eval.run_top(SIGMA, 50, M, Finite_Map.fmempty, t)
+    return Eval.run_top(SIGMA, 50, M, Finite_Map.fmempty(), t)
 
 
 def env_of(r):
     match r:
-        case Eval.Done(Semantics.Assigns(delta)):
+        case Eval.Done(([], Values.Assigns(delta))):
             return delta
     raise AssertionError(r)
 
@@ -34,8 +34,8 @@ def env_of(r):
 def test_eval_types():
     """A class binds its name to the class value, an alias to an alias value recording the region"""
     delta = env_of(run(Syntax.TypeDefs([BOX_DEF, PAIR_DEF])))
-    assert lookup(delta, "Box") == Option.Some(Semantics.VClass(BOX))
-    assert lookup(delta, "Pair") == Option.Some(Semantics.VTypeAlias(M, [BOX_DEF, PAIR_DEF], 1))
+    assert lookup(delta, "Box") == Option.Some(Values.VClass(BOX))
+    assert lookup(delta, "Pair") == Option.Some(Values.VTypeAlias(M, [BOX_DEF, PAIR_DEF], 1))
 
 
 def test_eval_top_seq():
@@ -45,18 +45,18 @@ def test_eval_top_seq():
         assign("b", call(var("Box"), [lit(1), lit(2)])),
         assign("r", Syntax.ExprAttribute(var("b"), chars("y"))),
     )
-    assert lookup(env_of(run(t)), "r") == Option.Some(Semantics.VLit(Syntax.LitInt(2)))
+    assert lookup(env_of(run(t)), "r") == Option.Some(Values.VLit(Syntax.LitInt(2)))
 
 
 def test_eval_top_seq_fail():
     """An abort skips the rest"""
     t = top_seq(assign("a", DIV0), assign("r", lit(1)))
-    assert run(t) == Eval.Done(Semantics.Aborts_o(Semantics.ZeroDivisionError_()))
+    assert run(t) == Eval.Done(aborts_o(Values.ZeroDivisionError_()))
 
 
 def test_eval_top_stmt_return():
     """A return as the last statement is evaluated by the statement judgement; before another, no rule applies"""
     assert run(Syntax.Stmt(ret(lit(1)))) == Eval.Done(
-        Semantics.Returns(Semantics.VLit(Syntax.LitInt(1)))
+        ([], Values.Returns(Values.VLit(Syntax.LitInt(1))))
     )
     assert run(top_seq(Syntax.Stmt(ret(lit(1))), assign("r", lit(1)))) == Eval.Stuck()

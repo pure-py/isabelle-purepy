@@ -1,20 +1,16 @@
-"""Module loading, imports and programs, against the generated evaluator"""
+"""Module loading, imports and programs, against the generated evaluator, observed through what they print"""
 
-from basic_tests import chars, lit, lookup, var
+from basic_tests import chars, lit, name, var
 from constr_tests import EQ_NAME, call
 
-from purepy.generated import Eval, Finite_Map, Option, Semantics, Syntax
+from purepy.generated import Eval, Finite_Map, Option, Syntax, Values
 
-MAIN = (chars("__main__"), [])
-
-
-def name(*xs):
-    return (chars(xs[0]), [chars(x) for x in xs[1:]])
+MAIN = Syntax.main()
 
 
 def program(*modules):
     """Program of (name, imports, statements) triples"""
-    m = Finite_Map.fmempty
+    m = Finite_Map.fmempty()
     for q, imports, stmts in modules:
         m = Finite_Map.fmupd(EQ_NAME, q, Syntax.ModuleBody(imports, top(*stmts)), m)
     return m
@@ -39,46 +35,43 @@ def attr(e, *xs):
 
 
 def run(m, fuel=50):
-    return Eval.run_program(Finite_Map.fmempty, m, ["main.py"], fuel)
+    return Eval.run_program(Finite_Map.fmempty(), m, fuel, ["main.py"])
 
 
-def main_env(m):
-    match Eval.run_mod(Finite_Map.fmempty, m, ["main.py"], 50, MAIN):
-        case Eval.Done(Semantics.Val(rho)):
-            return rho
-    raise AssertionError("main does not load")
+def exits(vs, kappa):
+    return Eval.Done((vs, kappa))
 
 
-def int_val(n):
-    return Option.Some(Semantics.VLit(Syntax.LitInt(n)))
+def ints(*ns):
+    return [Values.VLit(Syntax.LitInt(n)) for n in ns]
 
 
+OK = Values.SystemExit_(0)
 DIV0 = Syntax.ExprBinOp(Syntax.BOpFloorDiv(), lit(1), lit(0))
 
 
 def test_eval_program():
-    m = program((MAIN, [], [assign("r", lit(1))]))
-    assert run(m) == Eval.Done(Semantics.SystemExit_(0))
-    assert lookup(main_env(m), "r") == int_val(1)
+    m = program((MAIN, [], [assign("r", lit(1)), Syntax.StmtPrint(var("r"))]))
+    assert run(m) == exits(ints(1), OK)
 
 
 def test_eval_import():
-    """import m; r = m.a"""
+    """import m; print(m.a), m printing first"""
     m = program(
-        (MAIN, [Syntax.Import(name("m"))], [assign("r", attr(var("m"), "a"))]),
-        (name("m"), [], [assign("a", lit(1))]),
+        (MAIN, [Syntax.Import(name("m"))], [Syntax.StmtPrint(attr(var("m"), "a"))]),
+        (name("m"), [], [assign("a", lit(1)), Syntax.StmtPrint(lit(0))]),
     )
-    assert lookup(main_env(m), "r") == int_val(1)
+    assert run(m) == exits(ints(0, 1), OK)
 
 
 def test_eval_import_submodules():
-    """import p.q; r = p.q.x, loading p and then p.q"""
+    """import p.q; print(p.q.x), loading p and then p.q"""
     m = program(
-        (MAIN, [Syntax.Import(name("p", "q"))], [assign("r", attr(var("p"), "q", "x"))]),
+        (MAIN, [Syntax.Import(name("p", "q"))], [Syntax.StmtPrint(attr(var("p"), "q", "x"))]),
         (name("p"), [], []),
         (name("p", "q"), [], [assign("x", lit(2))]),
     )
-    assert lookup(main_env(m), "r") == int_val(2)
+    assert run(m) == exits(ints(2), OK)
 
 
 def test_eval_from_import():
@@ -90,15 +83,13 @@ def test_eval_from_import():
                 Syntax.FromImport(name("m"), [chars("a")]),
                 Syntax.FromImport(name("p"), [chars("q")]),
             ],
-            [assign("r", var("a")), assign("s", attr(var("q"), "x"))],
+            [Syntax.StmtPrint(var("a")), Syntax.StmtPrint(attr(var("q"), "x"))],
         ),
         (name("m"), [], [assign("a", lit(1))]),
         (name("p"), [], []),
         (name("p", "q"), [], [assign("x", lit(2))]),
     )
-    rho = main_env(m)
-    assert lookup(rho, "r") == int_val(1)
-    assert lookup(rho, "s") == int_val(2)
+    assert run(m) == exits(ints(1, 2), OK)
 
 
 def test_eval_predefined():
@@ -110,37 +101,35 @@ def test_eval_predefined():
             [Syntax.StmtExpr(call(var("exit"), [lit(3)]))],
         )
     )
-    assert run(m) == Eval.Done(Semantics.SystemExit_(3))
+    assert run(m) == exits([], Values.SystemExit_(3))
     m = program(
         (
             MAIN,
             [Syntax.Import(name("sys"))],
             [
-                assign("r", call(var("len"), [Syntax.ExprList([lit(1), lit(2)])])),
-                assign("s", attr(var("sys"), "__name__")),
+                Syntax.StmtPrint(call(var("len"), [Syntax.ExprList([lit(1), lit(2)])])),
+                Syntax.StmtPrint(attr(var("sys"), "__name__")),
             ],
         )
     )
-    rho = main_env(m)
-    assert lookup(rho, "r") == int_val(2)
-    assert lookup(rho, "s") == Option.Some(Semantics.VLit(Syntax.LitString(chars("sys"))))
+    assert run(m) == exits([*ints(2), Values.VLit(Syntax.LitString(chars("sys")))], OK)
 
 
 def test_eval_program_abort():
-    """An abort in an imported module aborts the program"""
+    """An abort in an imported module aborts the program, after what it printed"""
     m = program(
-        (MAIN, [Syntax.Import(name("m"))], [assign("r", lit(1))]),
-        (name("m"), [], [assign("a", DIV0)]),
+        (MAIN, [Syntax.Import(name("m"))], [Syntax.StmtPrint(lit(1))]),
+        (name("m"), [], [Syntax.StmtPrint(lit(0)), assign("a", DIV0)]),
     )
-    assert run(m) == Eval.Done(Semantics.ZeroDivisionError_())
+    assert run(m) == exits(ints(0), Values.ZeroDivisionError_())
     m = program(
         (MAIN, [Syntax.FromImport(name("m"), [chars("a")])], []),
         (name("m"), [], [assign("a", DIV0)]),
     )
-    assert run(m) == Eval.Done(Semantics.ZeroDivisionError_())
+    assert run(m) == exits([], Values.ZeroDivisionError_())
 
 
 def test_eval_import_cycle():
-    """An import cycle has no derivation, and runs out of fuel"""
+    """An import cycle has no order of loading, and runs out of fuel"""
     m = program((MAIN, [Syntax.Import(name("m"))], []), (name("m"), [Syntax.Import(MAIN)], []))
     assert run(m) == Eval.OutOfFuel()
