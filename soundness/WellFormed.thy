@@ -498,6 +498,26 @@ proof -
   qed
 qed
 
+(* Induction over the clauses of type argument matching, with one case for a type other than a variable matched
+   against a union, one for a class and one for a union matched against a type other than a union *)
+lemma type_args_induct[case_names Var UnionRight List Dict Tuple Callable Class UnionLeft Other Seq]:
+  assumes "\<And>\<Sigma> \<alpha>s \<alpha> \<tau>. P \<Sigma> \<alpha>s (TyVar \<alpha>) \<tau>"
+    and "\<And>\<Sigma> \<alpha>s \<sigma> \<tau> \<tau>'. \<lbrakk> \<forall>\<alpha>. \<sigma> \<noteq> TyVar \<alpha> ; P \<Sigma> \<alpha>s \<sigma> \<tau> ; P \<Sigma> \<alpha>s \<sigma> \<tau>' \<rbrakk> \<Longrightarrow> P \<Sigma> \<alpha>s \<sigma> (TyUnion \<tau> \<tau>')"
+    and "\<And>\<Sigma> \<alpha>s \<sigma> \<tau>. P \<Sigma> \<alpha>s \<sigma> \<tau> \<Longrightarrow> P \<Sigma> \<alpha>s (TyList \<sigma>) (TyList \<tau>)"
+    and "\<And>\<Sigma> \<alpha>s \<sigma> \<tau>. P \<Sigma> \<alpha>s \<sigma> \<tau> \<Longrightarrow> P \<Sigma> \<alpha>s (TyDict \<sigma>) (TyDict \<tau>)"
+    and "\<And>\<Sigma> \<alpha>s \<sigma>s \<tau>s. Q \<Sigma> \<alpha>s \<sigma>s \<tau>s \<Longrightarrow> P \<Sigma> \<alpha>s (TyTuple \<sigma>s) (TyTuple \<tau>s)"
+    and "\<And>\<Sigma> \<alpha>s \<sigma>s \<sigma> \<tau>s \<tau>. Q \<Sigma> \<alpha>s (\<sigma> # \<sigma>s) (\<tau> # \<tau>s) \<Longrightarrow> P \<Sigma> \<alpha>s (TyCallable \<sigma>s \<sigma>) (TyCallable \<tau>s \<tau>)"
+    and "\<And>\<Sigma> \<alpha>s C \<sigma>s \<tau>. \<lbrakk> \<forall>\<rho> \<rho>'. \<tau> \<noteq> TyUnion \<rho> \<rho>' ; \<And>\<tau>s. instance_at \<Sigma> C \<tau> = Instance \<tau>s \<Longrightarrow> Q \<Sigma> \<alpha>s \<sigma>s \<tau>s \<rbrakk>
+          \<Longrightarrow> P \<Sigma> \<alpha>s (TyClass C \<sigma>s) \<tau>"
+    and "\<And>\<Sigma> \<alpha>s \<sigma> \<sigma>' \<tau>. \<lbrakk> \<forall>\<rho> \<rho>'. \<tau> \<noteq> TyUnion \<rho> \<rho>'
+          ; \<not> (\<Sigma> \<turnstile> \<tau> <: \<sigma> \<and> fv \<sigma> \<inter> set \<alpha>s = {} \<or> \<Sigma> \<turnstile> \<tau> <: \<sigma>' \<and> fv \<sigma>' \<inter> set \<alpha>s = {}) \<Longrightarrow> P \<Sigma> \<alpha>s \<sigma> \<tau>
+          ; \<not> (\<Sigma> \<turnstile> \<tau> <: \<sigma> \<and> fv \<sigma> \<inter> set \<alpha>s = {} \<or> \<Sigma> \<turnstile> \<tau> <: \<sigma>' \<and> fv \<sigma>' \<inter> set \<alpha>s = {}) \<Longrightarrow> P \<Sigma> \<alpha>s \<sigma>' \<tau> \<rbrakk>
+          \<Longrightarrow> P \<Sigma> \<alpha>s (TyUnion \<sigma> \<sigma>') \<tau>"
+    and "\<And>\<Sigma> \<alpha>s \<sigma> \<tau>. type_args \<Sigma> \<alpha>s \<sigma> \<tau> = fmempty \<Longrightarrow> P \<Sigma> \<alpha>s \<sigma> \<tau>"
+    and "\<And>\<Sigma> \<alpha>s \<sigma>s \<tau>s. (\<And>\<sigma> \<tau>. (\<sigma>, \<tau>) \<in> set (zip \<sigma>s \<tau>s) \<Longrightarrow> P \<Sigma> \<alpha>s \<sigma> \<tau>) \<Longrightarrow> Q \<Sigma> \<alpha>s \<sigma>s \<tau>s"
+  shows "P \<Sigma> \<alpha>s \<sigma> \<tau>" and "Q \<Sigma> \<alpha>s \<sigma>s \<tau>s"
+  by (induction \<Sigma> \<alpha>s \<sigma> \<tau> and \<Sigma> \<alpha>s \<sigma>s \<tau>s rule: type_args_type_args_seq.induct) (rule assms; simp)+
+
 (* Type bound to a type variable by matching \<sigma> against well-formed \<tau>: over the type variables of \<tau> and
    well-formed *)
 lemma type_args_range:
@@ -505,111 +525,48 @@ lemma type_args_range:
   \<Longrightarrow> (\<forall>x. x \<in> fv \<tau>' \<longrightarrow> x \<in> fv \<tau>) \<and> wf_ty \<Sigma> \<tau>'"
   "\<lbrakk> wf_class_table \<Sigma> ; \<forall>\<tau> \<in> set \<tau>s. wf_ty \<Sigma> \<tau> ; fmlookup (type_args_seq \<Sigma> \<alpha>s \<sigma>s \<tau>s) \<alpha> = Some \<tau>' \<rbrakk>
   \<Longrightarrow> (\<forall>x. x \<in> fv \<tau>' \<longrightarrow> (\<exists>\<tau> \<in> set \<tau>s. x \<in> fv \<tau>)) \<and> wf_ty \<Sigma> \<tau>'"
-proof (induction \<Sigma> \<alpha>s \<sigma> \<tau> and \<Sigma> \<alpha>s \<sigma>s \<tau>s arbitrary: \<tau>' and \<tau>' rule: type_args_type_args_seq.induct)
-  case (1 \<Sigma> \<alpha>s \<alpha>' \<tau>)
+proof (induction \<Sigma> \<alpha>s \<sigma> \<tau> and \<Sigma> \<alpha>s \<sigma>s \<tau>s arbitrary: \<tau>' and \<tau>' rule: type_args_induct)
+  case (Var \<Sigma> \<alpha>s \<alpha>' \<tau>)
   then show ?case by (auto simp: wf_base_type split: if_splits)
 next
-  case "2_1"
-  from "2_1.IH" "2_1.prems" show ?case by (rule type_args_union_range) auto
+  case UnionRight
+  from UnionRight.IH UnionRight.prems UnionRight.hyps show ?case by (rule type_args_union_range)
 next
-  case "2_2"
-  from "2_2.IH" "2_2.prems" show ?case by (rule type_args_union_range) auto
+  case (List \<Sigma> \<alpha>s \<sigma> \<tau>)
+  from List.prems have "wf_ty \<Sigma> \<tau>" and "fmlookup (type_args \<Sigma> \<alpha>s \<sigma> \<tau>) \<alpha> = Some \<tau>'" by simp_all
+  from List.IH[OF List.prems(1) this] show ?case by simp
 next
-  case "2_3"
-  from "2_3.IH" "2_3.prems" show ?case by (rule type_args_union_range) auto
+  case (Dict \<Sigma> \<alpha>s \<sigma> \<tau>)
+  from Dict.prems have "wf_ty \<Sigma> \<tau>" and "fmlookup (type_args \<Sigma> \<alpha>s \<sigma> \<tau>) \<alpha> = Some \<tau>'" by simp_all
+  from Dict.IH[OF Dict.prems(1) this] show ?case by simp
 next
-  case "2_4"
-  from "2_4.IH" "2_4.prems" show ?case by (rule type_args_union_range) auto
-next
-  case "2_5"
-  from "2_5.IH" "2_5.prems" show ?case by (rule type_args_union_range) auto
-next
-  case "2_6"
-  from "2_6.IH" "2_6.prems" show ?case by (rule type_args_union_range) auto
-next
-  case "2_7"
-  from "2_7.IH" "2_7.prems" show ?case by (rule type_args_union_range) auto
-next
-  case "2_8"
-  from "2_8.IH" "2_8.prems" show ?case by (rule type_args_union_range) auto
-next
-  case (3 \<Sigma> \<alpha>s \<sigma> \<tau>)
-  from "3.prems" have "wf_ty \<Sigma> \<tau>" and "fmlookup (type_args \<Sigma> \<alpha>s \<sigma> \<tau>) \<alpha> = Some \<tau>'" by simp_all
-  from "3.IH"[OF "3.prems"(1) this] show ?case by simp
-next
-  case (4 \<Sigma> \<alpha>s \<sigma> \<tau>)
-  from "4.prems" have "wf_ty \<Sigma> \<tau>" and "fmlookup (type_args \<Sigma> \<alpha>s \<sigma> \<tau>) \<alpha> = Some \<tau>'" by simp_all
-  from "4.IH"[OF "4.prems"(1) this] show ?case by simp
-next
-  case (5 \<Sigma> \<alpha>s \<sigma>s \<tau>s)
-  from "5.prems" have "\<forall>\<tau> \<in> set \<tau>s. wf_ty \<Sigma> \<tau>" and "fmlookup (type_args_seq \<Sigma> \<alpha>s \<sigma>s \<tau>s) \<alpha> = Some \<tau>'"
+  case (Tuple \<Sigma> \<alpha>s \<sigma>s \<tau>s)
+  from Tuple.prems have "\<forall>\<tau> \<in> set \<tau>s. wf_ty \<Sigma> \<tau>" and "fmlookup (type_args_seq \<Sigma> \<alpha>s \<sigma>s \<tau>s) \<alpha> = Some \<tau>'"
     by simp_all
-  from "5.IH"[OF "5.prems"(1) this] show ?case by auto
+  from Tuple.IH[OF Tuple.prems(1) this] show ?case by auto
 next
-  case (6 \<Sigma> \<alpha>s \<sigma>s \<sigma> \<tau>s \<tau>)
-  from "6.prems" have "\<forall>\<tau>' \<in> set (\<tau> # \<tau>s). wf_ty \<Sigma> \<tau>'"
+  case (Callable \<Sigma> \<alpha>s \<sigma>s \<sigma> \<tau>s \<tau>)
+  from Callable.prems have "\<forall>\<tau>' \<in> set (\<tau> # \<tau>s). wf_ty \<Sigma> \<tau>'"
     and "fmlookup (type_args_seq \<Sigma> \<alpha>s (\<sigma> # \<sigma>s) (\<tau> # \<tau>s)) \<alpha> = Some \<tau>'"
     by simp_all
-  from "6.IH"[OF "6.prems"(1) this] show ?case by auto
+  from Callable.IH[OF Callable.prems(1) this] show ?case by auto
 next
-  case "7_1"
-  from "7_1.IH" "7_1.prems" show ?case by (rule type_args_class_range) auto
+  case Class
+  from Class.IH Class.prems Class.hyps show ?case by (rule type_args_class_range)
 next
-  case "7_2"
-  from "7_2.IH" "7_2.prems" show ?case by (rule type_args_class_range) auto
+  case UnionLeft
+  from UnionLeft.IH UnionLeft.prems UnionLeft.hyps show ?case by (rule type_args_union_left_range)
 next
-  case "7_3"
-  from "7_3.IH" "7_3.prems" show ?case by (rule type_args_class_range) auto
-next
-  case "7_4"
-  from "7_4.IH" "7_4.prems" show ?case by (rule type_args_class_range) auto
-next
-  case "7_5"
-  from "7_5.IH" "7_5.prems" show ?case by (rule type_args_class_range) auto
-next
-  case "7_6"
-  from "7_6.IH" "7_6.prems" show ?case by (rule type_args_class_range) auto
-next
-  case "7_7"
-  from "7_7.IH" "7_7.prems" show ?case by (rule type_args_class_range) auto
-next
-  case "7_8"
-  from "7_8.IH" "7_8.prems" show ?case by (rule type_args_class_range) auto
-next
-  case "8_1"
-  from "8_1.IH" "8_1.prems" show ?case by (rule type_args_union_left_range) auto
-next
-  case "8_2"
-  from "8_2.IH" "8_2.prems" show ?case by (rule type_args_union_left_range) auto
-next
-  case "8_3"
-  from "8_3.IH" "8_3.prems" show ?case by (rule type_args_union_left_range) auto
-next
-  case "8_4"
-  from "8_4.IH" "8_4.prems" show ?case by (rule type_args_union_left_range) auto
-next
-  case "8_5"
-  from "8_5.IH" "8_5.prems" show ?case by (rule type_args_union_left_range) auto
-next
-  case "8_6"
-  from "8_6.IH" "8_6.prems" show ?case by (rule type_args_union_left_range) auto
-next
-  case "8_7"
-  from "8_7.IH" "8_7.prems" show ?case by (rule type_args_union_left_range) auto
-next
-  case "8_8"
-  from "8_8.IH" "8_8.prems" show ?case by (rule type_args_union_left_range) auto
-next
-  case (10 \<Sigma> \<alpha>s \<sigma>s \<tau>s)
+  case (Seq \<Sigma> \<alpha>s \<sigma>s \<tau>s)
   let ?P = "\<lambda>\<tau>'. (\<forall>x. x \<in> fv \<tau>' \<longrightarrow> (\<exists>\<tau> \<in> set \<tau>s. x \<in> fv \<tau>)) \<and> wf_ty \<Sigma> \<tau>'"
   have elem: "?P \<tau>'" if "\<gamma> \<in> set (map2 (type_args \<Sigma> \<alpha>s) \<sigma>s \<tau>s)" and "fmlookup \<gamma> \<alpha> = Some \<tau>'" for \<gamma> \<tau>'
   proof -
     from that(1) obtain \<sigma> \<tau> where mem: "(\<sigma>, \<tau>) \<in> set (zip \<sigma>s \<tau>s)" and \<gamma>: "\<gamma> = type_args \<Sigma> \<alpha>s \<sigma> \<tau>" by auto
-    from "10.prems"(2) set_zip_rightD[OF mem] have wf: "wf_ty \<Sigma> \<tau>" by auto
-    from "10.IH"[OF mem refl "10.prems"(1) wf that(2)[unfolded \<gamma>]] set_zip_rightD[OF mem] show ?thesis by auto
+    from Seq.prems(2) set_zip_rightD[OF mem] have wf: "wf_ty \<Sigma> \<tau>" by auto
+    from Seq.IH[OF mem Seq.prems(1) wf that(2)[unfolded \<gamma>]] set_zip_rightD[OF mem] show ?thesis by auto
   qed
   show ?case
-  proof (rule foldr_join_cxt_lookup[OF "10.prems"(3)[unfolded type_args_seq.simps]])
+  proof (rule foldr_join_cxt_lookup[OF Seq.prems(3)[unfolded type_args_seq.simps]])
     show "\<forall>\<gamma> \<in> set (map2 (type_args \<Sigma> \<alpha>s) \<sigma>s \<tau>s). \<forall>\<tau>'. fmlookup \<gamma> \<alpha> = Some \<tau>' \<longrightarrow> ?P \<tau>'" using elem by blast
     show "?P (\<tau> \<squnion>\<^bsub>\<Sigma>\<^esub> \<tau>')" if "?P \<tau>" and "?P \<tau>'" for \<tau> \<tau>'
       using that by (blast intro: wf_join dest: fv_join_elem)
@@ -1291,31 +1248,8 @@ next
       unfolding UN_subset_iff using elems by auto
     from wf fv True show ?thesis by simp
   qed (use "8.prems"(3) in simp)
-next
-  case "11_1"
-  from "11_1.prems" show ?case by (rule matched_as_constr_wf) auto
-next
-  case "11_2"
-  from "11_2.prems" show ?case by (rule matched_as_constr_wf) auto
-next
-  case "11_3"
-  from "11_3.prems" show ?case by (rule matched_as_constr_wf) auto
-next
-  case "11_4"
-  from "11_4.prems" show ?case by (rule matched_as_constr_wf) auto
-next
-  case "11_5"
-  from "11_5.prems" show ?case by (rule matched_as_constr_wf) auto
-next
-  case "11_6"
-  from "11_6.prems" show ?case by (rule matched_as_constr_wf) auto
-next
-  case "11_7"
-  from "11_7.prems" show ?case by (rule matched_as_constr_wf) auto
-next
-  case "11_8"
-  from "11_8.prems" show ?case by (rule matched_as_constr_wf) auto
-qed (auto simp: bind_sum_Ok intro: wf_meet(1) dest!: fv_meet[THEN subsetD] check_pat_at_node)
+qed ((rule matched_as_constr_wf; (assumption | simp))
+     | (auto simp: bind_sum_Ok intro: wf_meet(1) dest!: fv_meet[THEN subsetD] check_pat_at_node)[1])+
 
 
 (* Type remaining after a pattern at a well-formed type: well-formed and over the type variables of the type *)
