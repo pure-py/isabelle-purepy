@@ -24,6 +24,7 @@ session "isabelle-purepy" = HOL +
     Operators
     Typing
     Programs
+    LoadsTermination
     Examples
 
 session "isabelle-purepy-python" in "python" = "isabelle-purepy" +
