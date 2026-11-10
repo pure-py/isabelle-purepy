@@ -69,13 +69,6 @@ interpreter is given, such as the generated reference interpreter:
 uv run --locked ./test/check-conformance.sh "python -m purepy"
 ```
 
-The evaluator test in `test/evaluator/` covers a run out of fuel, which the conformance suite can't reach. The
-test runs the generated reference interpreter on syntax built directly.
-
-```bash
-uv run --locked ./test/evaluator/run.py
-```
-
 ## Development
 
 Synchronise the project environment and install the development dependencies:
