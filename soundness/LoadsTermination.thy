@@ -56,35 +56,15 @@ lemma loads_dom_body:
   by (auto intro: loads_domintros)
 
 lemma submod_loads_dom:
-  "(\<And>x. \<lbrakk> x \<in> set xs ; q |\<notin>| fmdom \<P> ; Qualified q x |\<in>| fmdom \<M> \<rbrakk> \<Longrightarrow> loads_all [Qualified q x])
+  "(\<And>x b. \<lbrakk> x \<in> set xs ; fmlookup \<M> q = Some b ; Qualified q x |\<in>| fmdom \<M> \<rbrakk> \<Longrightarrow> loads_all [Qualified q x])
   \<Longrightarrow> submod_loads_dom qs q xs"
 proof (induction xs arbitrary: qs)
   case Nil
   then show ?case by (auto intro: loads_domintros)
 next
   case (Cons x xs)
-  then show ?case by (auto intro: loads_domintros)
+  then show ?case by (auto intro: loads_domintros split: option.splits)
 qed
-
-(* A name of the context of a module which is a submodule; by disjointness, the module itself binds no such name *)
-lemma submodule_unbound:
-  assumes "(fmdom \<Gamma> |\<union>| fmdom \<Delta>) |\<inter>| fmdom (submods \<M> q) = {||}" and "fmlookup \<M> (Qualified q x) = Some b"
-  shows "fmlookup \<Delta> x = None"
-proof -
-  have "fmlookup (submods \<M> q) x = Some (ModStub (Qualified q x))"
-    using assms(2) by (simp add: submods.rep_eq fmdom'I)
-  then have "x |\<in>| fmdom (submods \<M> q)" by (rule fmdomI)
-  with assms(1) have "x |\<notin>| fmdom \<Delta>" by (metis fempty_iff finter_iff funion_iff)
-  then show ?thesis by (rule fmdom_notD)
-qed
-
-(* Every submodule of a checked module which is not predefined is a stub of its context *)
-lemma check_module_stub:
-  assumes "check_module \<M> V \<Sigma> q\<^sub>0 q = Ok (\<Delta>, \<Sigma>')" and "q |\<notin>| fmdom \<P>" and "Qualified q x |\<in>| fmdom \<M>"
-  shows "fmlookup \<Delta> x = Some (ModStub (Qualified q x))"
-  using assms
-  by (auto simp: fmlookup_dom_iff fmlookup_dom'_iff submods.rep_eq Let_def bind_sum_def dest: submodule_unbound
-    split: option.splits if_splits module_body.splits sum.splits prod.splits static_outcome.splits)
 
 end
 
@@ -97,8 +77,15 @@ where "imports_loads_dom_in \<M> qs q \<iota>s \<equiv> loading.loads_submod_loa
 
 lemmas loads_domintros = loading.loads_submod_loads_imports_loads_import_loads.domintros
 
+context
+begin
+
+declare check_module.simps [simp] check_imports.simps [simp] submodules.simps [simp]
+  imports_entry.simps [simp] imports_entries.simps [simp] check_modules.simps [simp]
+
 (* Each function of the type checker, accepting, visits every module that loading visits from the same place *)
 theorem check_loads:
+  assumes disjoint: "fmdom \<M> |\<inter>| fmdom \<P> = {||}"
   shows "check_module \<M> V \<Sigma> q' q = Ok r\<^sub>1 \<Longrightarrow> loads_all_in \<M> qs' \<Longrightarrow> loads_all_in \<M> (q # qs')"
     and "check_imports \<M> V \<Sigma> q \<iota>s = Ok r\<^sub>2 \<Longrightarrow> imports_loads_dom_in \<M> qs q \<iota>s"
     and "submodules \<M> V \<Sigma> q q' \<Gamma> xs = Ok r\<^sub>3 \<Longrightarrow> loads_all_in \<M> qs' \<Longrightarrow> loads_all_in \<M> (chain q' xs @ qs')"
@@ -107,6 +94,7 @@ theorem check_loads:
     and "imports_entries \<M> V \<Sigma> q q' \<Gamma> xs = Ok r\<^sub>5 \<Longrightarrow> y \<in> set xs \<Longrightarrow> fmlookup \<Gamma> y = Some (ModStub q'')
       \<Longrightarrow> loads_all_in \<M> qs' \<Longrightarrow> loads_all_in \<M> (q'' # qs')"
     and "check_modules \<M> V \<Sigma> q qs\<^sub>0 = Ok \<Sigma>' \<Longrightarrow> loads_all_in \<M> qs' \<Longrightarrow> loads_all_in \<M> (qs\<^sub>0 @ qs')"
+using disjoint
 proof (induction \<M> V \<Sigma> q' q and \<M> V \<Sigma> q \<iota>s and \<M> V \<Sigma> q q' \<Gamma> xs and \<M> V \<Sigma> q q' \<Gamma> x
     and \<M> V \<Sigma> q q' \<Gamma> xs and \<M> V \<Sigma> q qs\<^sub>0
     arbitrary: r\<^sub>1 qs' and r\<^sub>2 qs and r\<^sub>3 qs' and r\<^sub>4 q'' qs' and r\<^sub>5 y q'' qs' and \<Sigma>' qs'
@@ -128,7 +116,7 @@ proof (induction \<M> V \<Sigma> q' q and \<M> V \<Sigma> q \<iota>s and \<M> V 
       obtain \<iota>s t where b: "b = ModuleBody \<iota>s t" by (cases b)
       obtain r where ci: "check_imports \<M> (V @ [q]) \<Sigma> q \<iota>s = Ok r"
         using "1.prems"(1) P nV Mq b by (cases "check_imports \<M> (V @ [q]) \<Sigma> q \<iota>s") auto
-      have "\<forall>qs. imports_loads_dom_in \<M> qs q \<iota>s" using "1.IH"[OF P nV Mq b ci] by blast
+      have "\<forall>qs. imports_loads_dom_in \<M> qs q \<iota>s" using "1.IH"[OF P nV Mq b ci "1.prems"(3)] by blast
       moreover have "the (fmlookup \<M> q) = ModuleBody \<iota>s t" using Mq b by simp
       ultimately show ?thesis using "1.prems"(2) by (blast intro: loading.loads_dom_body)
     qed
@@ -149,12 +137,13 @@ next
   obtain r where i: "check_imports \<M> V \<Sigma>\<^sub>2 q \<iota>s = Ok r"
     using "3.prems" vq e m s by (cases "check_imports \<M> V \<Sigma>\<^sub>2 q \<iota>s") (auto simp: locate_in_def)
   have "loads_all_in \<M> (chain (Simple x) xs @ [])"
-    using "3.IH"(2)[OF vq e m refl s] loading.loads_all_Nil by blast
+    using "3.IH"(2)[OF vq e m refl s] loading.loads_all_Nil "3.prems"(2) by blast
   then have "loads_all_in \<M> (Simple x # chain (Simple x) xs @ [])"
-    using "3.IH"(1)[OF vq e m] by blast
+    using "3.IH"(1)[OF vq e m] "3.prems"(2) by blast
   then have "loading.loads_submod_loads_imports_loads_import_loads_dom \<M> (Inr (Inr (qs, q, Import q')))"
     by (auto intro: loads_domintros simp: proper_prefixes_chain x_def xs_def)
-  moreover have "\<forall>qs. imports_loads_dom_in \<M> qs q \<iota>s" using "3.IH"(3)[OF vq e m refl s refl i] by blast
+  moreover have "\<forall>qs. imports_loads_dom_in \<M> qs q \<iota>s"
+    using "3.IH"(3)[OF vq e m refl s refl i "3.prems"(2)] by blast
   ultimately show ?case by (auto intro: loads_domintros)
 next
   case (4 \<M> V \<Sigma> q p q' xs \<iota>s r\<^sub>2 qs)
@@ -168,19 +157,23 @@ next
     using "4.prems" m ms c by (cases "imports_entries \<M> V \<Sigma>\<^sub>2 q q' \<Delta> xs") (auto simp: locate_in_def)
   obtain r where i: "check_imports \<M> V \<Sigma>\<^sub>3 q \<iota>s = Ok r"
     using "4.prems" m ms c es by (cases "check_imports \<M> V \<Sigma>\<^sub>3 q \<iota>s") (auto simp: locate_in_def)
-  have q': "loads_all_in \<M> [q']" using "4.IH"(1)[OF m] loading.loads_all_Nil by blast
-  have "loads_all_in \<M> (unique_to q' q @ [q'])" using "4.IH"(2)[OF m refl ms q'] .
+  have q': "loads_all_in \<M> [q']" using "4.IH"(1)[OF m] loading.loads_all_Nil "4.prems"(2) by blast
+  have "loads_all_in \<M> (unique_to q' q @ [q'])" using "4.IH"(2)[OF m refl ms q' "4.prems"(2)] .
   moreover have "loading.loads_submod_loads_imports_loads_import_loads_dom \<M> (Inl (Inr (qs', q', xs)))" for qs'
   proof (rule loading.submod_loads_dom)
-    fix x
-    assume "x \<in> set xs" and "q' |\<notin>| fmdom \<P>" and "Qualified q' x |\<in>| fmdom \<M>"
-    with m have "fmlookup \<Delta> x = Some (ModStub (Qualified q' x))" by (blast intro: loading.check_module_stub)
-    with "4.IH"(3)[OF m refl ms c es \<open>x \<in> set xs\<close>] loading.loads_all_Nil
+    fix x b
+    assume "x \<in> set xs" and M: "fmlookup \<M> q' = Some b" and x: "Qualified q' x |\<in>| fmdom \<M>"
+    from M have "q' |\<in>| fmdom \<M>" by (rule fmdomI)
+    with "4.prems"(2) have "q' |\<notin>| fmdom \<P>" by (metis fempty_iff finterI)
+    then have "fmlookup \<P> q' = None" by (rule fmdom_notD)
+    then have "fmlookup \<Delta> x = Some (ModStub (Qualified q' x))" by (rule check_module_stub[OF m _ x])
+    with "4.IH"(3)[OF m refl ms c es \<open>x \<in> set xs\<close>] loading.loads_all_Nil "4.prems"(2)
     show "loads_all_in \<M> [Qualified q' x]" by blast
   qed
   ultimately have "loading.loads_submod_loads_imports_loads_import_loads_dom \<M> (Inr (Inr (qs, q, FromImport q' xs)))"
     by (auto intro: loads_domintros)
-  moreover have "\<forall>qs. imports_loads_dom_in \<M> qs q \<iota>s" using "4.IH"(4)[OF m refl ms c es refl i] by blast
+  moreover have "\<forall>qs. imports_loads_dom_in \<M> qs q \<iota>s"
+    using "4.IH"(4)[OF m refl ms c es refl i "4.prems"(2)] by blast
   ultimately show ?case by (auto intro: loads_domintros)
 next
   case (5 \<M> V \<Sigma> q q' \<Gamma> r\<^sub>3 qs')
@@ -191,13 +184,13 @@ next
     using "6.prems"(1) by (cases "check_module \<M> V \<Sigma> q (Qualified q' x)") auto
   obtain r where s: "submodules \<M> V \<Sigma>\<^sub>1 q (Qualified q' x) \<Delta> xs = Ok r"
     using "6.prems"(1) m by (cases "submodules \<M> V \<Sigma>\<^sub>1 q (Qualified q' x) \<Delta> xs") auto
-  have "loads_all_in \<M> (chain (Qualified q' x) xs @ qs')" using "6.IH"(2)[OF m refl s "6.prems"(2)] .
-  then show ?case using "6.IH"(1)[OF m] by simp
+  have "loads_all_in \<M> (chain (Qualified q' x) xs @ qs')" using "6.IH"(2)[OF m refl s "6.prems"(2,3)] .
+  then show ?case using "6.IH"(1)[OF m] "6.prems"(3) by simp
 next
   case (7 \<M> V \<Sigma> q q' \<Gamma> x r\<^sub>4 q'' qs')
   obtain r where m: "check_module \<M> V \<Sigma> q q'' = Ok r"
     using "7.prems"(1,2) by (cases "check_module \<M> V \<Sigma> q q''") auto
-  show ?case using "7.IH"[OF "7.prems"(2) refl m "7.prems"(3)] .
+  show ?case using "7.IH"[OF "7.prems"(2) refl m "7.prems"(3,4)] .
 next
   case (8 \<M> V \<Sigma> q q' \<Gamma> r\<^sub>5 y q'' qs')
   then show ?case by simp
@@ -210,11 +203,11 @@ next
   show ?case
   proof (cases "y = x")
     case True
-    with "9.prems"(3) show ?thesis using "9.IH"(1)[OF e _ "9.prems"(4)] by simp
+    with "9.prems"(3) show ?thesis using "9.IH"(1)[OF e _ "9.prems"(4,5)] by simp
   next
     case False
     with "9.prems"(2) have "y \<in> set xs" by simp
-    then show ?thesis using "9.IH"(2)[OF e refl es _ "9.prems"(3,4)] by simp
+    then show ?thesis using "9.IH"(2)[OF e refl es _ "9.prems"(3,4,5)] by simp
   qed
 next
   case (10 \<M> V \<Sigma> q \<Sigma>' qs')
@@ -224,16 +217,18 @@ next
   obtain \<Gamma> \<Sigma>\<^sub>1 where m: "check_module \<M> V \<Sigma> q q' = Ok (\<Gamma>, \<Sigma>\<^sub>1)"
     using "11.prems"(1) by (cases "check_module \<M> V \<Sigma> q q'") auto
   have ms: "check_modules \<M> V \<Sigma>\<^sub>1 q qs = Ok \<Sigma>'" using "11.prems"(1) m by simp
-  have "loads_all_in \<M> (qs @ qs')" using "11.IH"(2)[OF m refl ms "11.prems"(2)] .
-  then show ?case using "11.IH"(1)[OF m] by simp
+  have "loads_all_in \<M> (qs @ qs')" using "11.IH"(2)[OF m refl ms "11.prems"(2,3)] .
+  then show ?case using "11.IH"(1)[OF m] "11.prems"(3) by simp
 qed
 
-context loading
+end
+
+context wf_loading
 begin
 
 (* Loading terminates for a program the type checker accepts *)
 corollary check_program_loads_dom: "check_program \<M> = None \<Longrightarrow> loads_dom [] [main]"
-  using check_loads(1)[of \<M> "[]" predefined_classes main main _ "[]"] loads_all_Nil
+  using check_loads(1)[OF disjoint, of "[]" predefined_classes main main _ "[]"] loads_all_Nil
   by (auto simp: check_program_def split: sum.splits)
 
 (* Completeness of the evaluator for a program the type checker accepts *)
