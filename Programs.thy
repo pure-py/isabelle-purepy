@@ -49,7 +49,7 @@ where
            (R, \<Sigma>'') \<leftarrow> check_top_stmt \<Sigma>' q (the (fmlookup \<P> builtins) \<otimes> \<Gamma>' \<otimes> \<Gamma>\<^sub>s) t;
            case R of
              Assigns\<^sub>R \<Delta> _ \<Rightarrow>
-               let S = submods \<M> q; X = (fmdom \<Gamma>' |\<union>| fmdom \<Delta>) |\<inter>| fmdom S in
+               let S = submods \<M> q; X = (fmdom \<Gamma>' |\<union>| fmdom \<Gamma>\<^sub>s) |\<inter>| fmdom S in
                if X = {||} then Ok (S \<otimes> \<Delta>, \<Sigma>'')
                else let x = Min (fset X) in Fail (Located (binder_pos \<iota>s t x) (DuplicateMember x q))
            | Returns\<^sub>R \<Rightarrow> Fail (Located (last_pos t) TopLevelAssertFalse)
