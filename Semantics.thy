@@ -428,9 +428,11 @@ where
 
 locale loading = evaluation +
   fixes \<M> :: program
+  assumes disjoint: "fmdom \<M> |\<inter>| fmdom \<P> = {||}"
 begin
 
-function
+(* Partial, since a program with an import cycle loads forever; module checking rejects such a program *)
+function (domintros)
   loads :: "name list \<Rightarrow> name list \<Rightarrow> name list" and
   submod_loads :: "name list \<Rightarrow> name \<Rightarrow> var list \<Rightarrow> name list" and
   imports_loads :: "name list \<Rightarrow> name \<Rightarrow> import located list \<Rightarrow> name list" and
@@ -443,7 +445,7 @@ where
 
 "submod_loads qs q [] = qs" |
 "submod_loads qs q (x # xs) =
-   (if Qualified q x |\<in>| fmdom \<M> \<and> x \<notin> set (declares (the (fmlookup \<M> q)))
+   (if Qualified q x |\<in>| fmdom \<M> \<and> (case fmlookup \<M> q of Some b \<Rightarrow> x \<notin> set (declares b) | None \<Rightarrow> False)
     then submod_loads (loads qs [Qualified q x]) q xs
     else submod_loads qs q xs)" |
 
