@@ -24,7 +24,6 @@ session "isabelle-purepy" = HOL +
     Operators
     Typing
     Programs
-    Examples
 
 session "isabelle-purepy-python" in "python" = "isabelle-purepy" +
   options [timeout = 1200]
