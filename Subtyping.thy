@@ -115,15 +115,53 @@ where
   (if base_type \<sigma> = TyPrim str then by_rule RuleSubscriptStr (do { int_ok; Ok (TyPrim str) })
    else Fail (SelectsNoRule JudgementSynth (NotSubscriptable \<sigma>)))"
 
-datatype instances = Instance "ty list" | Undetermined | NoInstance
+(* Outcome of matching the type arguments of an ancestor against those of a type: the type parameters bound at
+   their occurrences outside unions, undefined when a type variable or union meets a type with structure,
+   and incomparable when two types with structure differ *)
+datatype arg_match = Matched "(var, ty) fmap" | Undefined | Incomparable
+
+fun merge_match :: "arg_match \<Rightarrow> arg_match \<Rightarrow> arg_match"
+where
+"merge_match Incomparable _ = Incomparable" |
+"merge_match _ Incomparable = Incomparable" |
+"merge_match Undefined _ = Undefined" |
+"merge_match _ Undefined = Undefined" |
+"merge_match (Matched \<gamma>) (Matched \<gamma>') = Matched (\<gamma> ++\<^sub>f \<gamma>')"
+
+(* One-way matching of a type over the type parameters of a class against a type *)
+function (sequential)
+  match_args :: "ty \<Rightarrow> ty \<Rightarrow> arg_match" and match_args_seq :: "ty list \<Rightarrow> ty list \<Rightarrow> arg_match"
+where
+"match_args (TyVar \<alpha>) \<sigma> = Matched (fmupd \<alpha> \<sigma> fmempty)" |
+"match_args (TyUnion _ _) _ = Matched fmempty" |
+"match_args _ (TyVar _) = Undefined" |
+"match_args _ (TyUnion _ _) = Undefined" |
+"match_args (TyList \<rho>) (TyList \<sigma>) = match_args \<rho> \<sigma>" |
+"match_args (TyDict \<rho>) (TyDict \<sigma>) = match_args \<rho> \<sigma>" |
+"match_args (TyTuple \<rho>s) (TyTuple \<sigma>s) = match_args_seq \<rho>s \<sigma>s" |
+"match_args (TyCallable \<rho>s \<rho>) (TyCallable \<sigma>s \<sigma>) = match_args_seq (\<rho> # \<rho>s) (\<sigma> # \<sigma>s)" |
+"match_args (TyClass C \<rho>s) (TyClass D \<sigma>s) = (if C = D then match_args_seq \<rho>s \<sigma>s else Incomparable)" |
+"match_args \<rho> \<sigma> = (if \<rho> = \<sigma> then Matched fmempty else Incomparable)" |
+
+"match_args_seq [] [] = Matched fmempty" |
+"match_args_seq (\<rho> # \<rho>s) (\<sigma> # \<sigma>s) = merge_match (match_args \<rho> \<sigma>) (match_args_seq \<rho>s \<sigma>s)" |
+"match_args_seq _ _ = Incomparable"
+by pat_completeness auto
+
+termination
+by (relation "measures [
+     \<lambda>x. case x of Inl (\<rho>, _) \<Rightarrow> size \<rho> | Inr (\<rho>s, _) \<Rightarrow> size_list size \<rho>s,
+     \<lambda>x. case x of Inl _ \<Rightarrow> 1 | Inr _ \<Rightarrow> 0]") auto
+
+datatype instances = Instance "ty list" | Undefined | Incomparable
 
 fun instance_above :: "class_table \<Rightarrow> name \<Rightarrow> ty \<Rightarrow> instances"
 where
 "instance_above \<Sigma> C (TyClass D \<sigma>s) =
-  (if C \<in> set (ancestors \<Sigma> D) then Instance (ancestor_args \<Sigma> D \<sigma>s C) else NoInstance)" |
-"instance_above \<Sigma> C (TyPrim Never) = (if type_params \<Sigma> C = [] then Instance [] else Undetermined)" |
-"instance_above \<Sigma> C (TyVar _) = Undetermined" |
-"instance_above \<Sigma> C _ = NoInstance"
+  (if C \<in> set (ancestors \<Sigma> D) then Instance (ancestor_args \<Sigma> D \<sigma>s C) else Incomparable)" |
+"instance_above \<Sigma> C (TyPrim Never) = (if type_params \<Sigma> C = [] then Instance [] else Undefined)" |
+"instance_above \<Sigma> C (TyVar _) = Undefined" |
+"instance_above \<Sigma> C _ = Incomparable"
 
 (* Types bound to \<alpha>s by \<gamma>; failure if \<gamma> doesn't bind one of them *)
 definition type_args_of :: "(var, ty) fmap \<Rightarrow> var list \<Rightarrow> ty list may_fail"
@@ -134,65 +172,27 @@ where
 lemma type_args_of_length: "type_args_of \<gamma> \<alpha>s = Ok \<tau>s \<Longrightarrow> length \<tau>s = length \<alpha>s"
   by (auto simp: type_args_of_def dest!: those_sum_Ok list_all2_lengthD)
 
-(* Outcome of matching the type arguments of an ancestor against those of a type: the type parameters bound at
-   their occurrences outside unions, Indeterminate when a type variable or union meets a type with structure,
-   and Clash when two types with structure differ *)
-datatype arg_match = Matched "(var, ty) fmap" | Indeterminate | Clash
-
-fun merge_match :: "arg_match \<Rightarrow> arg_match \<Rightarrow> arg_match"
-where
-"merge_match Clash _ = Clash" |
-"merge_match _ Clash = Clash" |
-"merge_match Indeterminate _ = Indeterminate" |
-"merge_match _ Indeterminate = Indeterminate" |
-"merge_match (Matched \<gamma>) (Matched \<gamma>') = Matched (\<gamma> ++\<^sub>f \<gamma>')"
-
-(* One-way matching of a type over the type parameters of a class against a type *)
-function (sequential)
-  match_args :: "ty \<Rightarrow> ty \<Rightarrow> arg_match" and match_args_seq :: "ty list \<Rightarrow> ty list \<Rightarrow> arg_match"
-where
-"match_args (TyVar \<alpha>) \<sigma> = Matched (fmupd \<alpha> \<sigma> fmempty)" |
-"match_args (TyUnion _ _) _ = Matched fmempty" |
-"match_args _ (TyVar _) = Indeterminate" |
-"match_args _ (TyUnion _ _) = Indeterminate" |
-"match_args (TyList \<rho>) (TyList \<sigma>) = match_args \<rho> \<sigma>" |
-"match_args (TyDict \<rho>) (TyDict \<sigma>) = match_args \<rho> \<sigma>" |
-"match_args (TyTuple \<rho>s) (TyTuple \<sigma>s) = match_args_seq \<rho>s \<sigma>s" |
-"match_args (TyCallable \<rho>s \<rho>) (TyCallable \<sigma>s \<sigma>) = match_args_seq (\<rho> # \<rho>s) (\<sigma> # \<sigma>s)" |
-"match_args (TyClass C \<rho>s) (TyClass D \<sigma>s) = (if C = D then match_args_seq \<rho>s \<sigma>s else Clash)" |
-"match_args \<rho> \<sigma> = (if \<rho> = \<sigma> then Matched fmempty else Clash)" |
-
-"match_args_seq [] [] = Matched fmempty" |
-"match_args_seq (\<rho> # \<rho>s) (\<sigma> # \<sigma>s) = merge_match (match_args \<rho> \<sigma>) (match_args_seq \<rho>s \<sigma>s)" |
-"match_args_seq _ _ = Clash"
-by pat_completeness auto
-
-termination
-by (relation "measures [
-     \<lambda>x. case x of Inl (\<rho>, _) \<Rightarrow> size \<rho> | Inr (\<rho>s, _) \<Rightarrow> size_list size \<rho>s,
-     \<lambda>x. case x of Inl _ \<Rightarrow> 1 | Inr _ \<Rightarrow> 0]") auto
-
 fun instance_below :: "class_table \<Rightarrow> name \<Rightarrow> ty \<Rightarrow> instances"
 where
 "instance_below \<Sigma> C (TyClass D \<sigma>s) =
   (if D \<in> set (ancestors \<Sigma> C) then
      let \<alpha>s = type_params \<Sigma> C in
      case match_args_seq (ancestor_args \<Sigma> C (map TyVar \<alpha>s) D) \<sigma>s of
-       Clash \<Rightarrow> NoInstance
-     | Indeterminate \<Rightarrow> Undetermined
+       arg_match.Incomparable \<Rightarrow> Incomparable
+     | arg_match.Undefined \<Rightarrow> Undefined
      | Matched \<gamma> \<Rightarrow>
          (case type_args_of \<gamma> \<alpha>s of
             Ok \<tau>s \<Rightarrow>
               if list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (ancestor_args \<Sigma> C \<tau>s D) \<sigma>s then Instance \<tau>s
-              else Undetermined
-          | Fail _ \<Rightarrow> Undetermined)
-   else NoInstance)" |
-"instance_below \<Sigma> C (TyPrim object) = (if type_params \<Sigma> C = [] then Instance [] else Undetermined)" |
-"instance_below \<Sigma> C _ = NoInstance"
+              else Undefined
+          | Fail _ \<Rightarrow> Undefined)
+   else Incomparable)" |
+"instance_below \<Sigma> C (TyPrim object) = (if type_params \<Sigma> C = [] then Instance [] else Undefined)" |
+"instance_below \<Sigma> C _ = Incomparable"
 
 definition instance_at :: "class_table \<Rightarrow> name \<Rightarrow> ty \<Rightarrow> instances"
 where
-"instance_at \<Sigma> C \<tau> = (case instance_above \<Sigma> C \<tau> of NoInstance \<Rightarrow> instance_below \<Sigma> C \<tau> | \<iota> \<Rightarrow> \<iota>)"
+"instance_at \<Sigma> C \<tau> = (case instance_above \<Sigma> C \<tau> of Incomparable \<Rightarrow> instance_below \<Sigma> C \<tau> | \<iota> \<Rightarrow> \<iota>)"
 
 (* Pointwise join of contexts binding type variables at types *)
 definition join_cxt :: "class_table \<Rightarrow> (var, ty) fmap \<Rightarrow> (var, ty) fmap \<Rightarrow> (var, ty) fmap"

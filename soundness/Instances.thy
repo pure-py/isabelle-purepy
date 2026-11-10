@@ -387,9 +387,9 @@ proof (induction \<sigma>)
 qed (auto intro: map_idI)
 
 (* Sequence matching clashes when lengths differ or a pair of types clashes *)
-lemma match_args_seq_Clash:
-  "match_args_seq \<rho>s \<sigma>s = Clash
-  \<Longrightarrow> length \<rho>s \<noteq> length \<sigma>s \<or> (\<exists>i < length \<rho>s. match_args (\<rho>s ! i) (\<sigma>s ! i) = Clash)"
+lemma match_args_seq_Incomparable:
+  "match_args_seq \<rho>s \<sigma>s = arg_match.Incomparable
+  \<Longrightarrow> length \<rho>s \<noteq> length \<sigma>s \<or> (\<exists>i < length \<rho>s. match_args (\<rho>s ! i) (\<sigma>s ! i) = arg_match.Incomparable)"
 proof (induction \<rho>s arbitrary: \<sigma>s)
   case Nil
   then show ?case by (cases \<sigma>s) auto
@@ -399,18 +399,18 @@ next
   show ?case
   proof (cases \<sigma>s)
     case (Cons \<sigma> \<sigma>s')
-    with Cons.prems have "match_args \<rho> \<sigma> = Clash \<or> match_args_seq \<rho>s \<sigma>s' = Clash"
+    with Cons.prems have "match_args \<rho> \<sigma> = arg_match.Incomparable \<or> match_args_seq \<rho>s \<sigma>s' = arg_match.Incomparable"
       by (cases "match_args \<rho> \<sigma>"; cases "match_args_seq \<rho>s \<sigma>s'") auto
     then show ?thesis
     proof
-      assume "match_args \<rho> \<sigma> = Clash"
+      assume "match_args \<rho> \<sigma> = arg_match.Incomparable"
       then show ?thesis unfolding Cons by (auto intro: exI[of _ 0])
     next
-      assume "match_args_seq \<rho>s \<sigma>s' = Clash"
+      assume "match_args_seq \<rho>s \<sigma>s' = arg_match.Incomparable"
       from IH[OF this] show ?thesis
       proof
-        assume "\<exists>i < length \<rho>s. match_args (\<rho>s ! i) (\<sigma>s' ! i) = Clash"
-        then obtain i where "i < length \<rho>s" and "match_args (\<rho>s ! i) (\<sigma>s' ! i) = Clash" by blast
+        assume "\<exists>i < length \<rho>s. match_args (\<rho>s ! i) (\<sigma>s' ! i) = arg_match.Incomparable"
+        then obtain i where "i < length \<rho>s" and "match_args (\<rho>s ! i) (\<sigma>s' ! i) = arg_match.Incomparable" by blast
         then show ?thesis unfolding Cons by (auto intro!: exI[of _ "Suc i"])
       qed (simp add: Cons)
     qed
@@ -488,7 +488,7 @@ lemmas subty_structured_inv =
 (* Types matching with a clash: never equivalent under substitution *)
 lemma match_args_clash:
   assumes wf: "wf_class_table \<Sigma>"
-  shows "\<lbrakk> match_args \<rho> \<sigma> = Clash ; wf_ty \<Sigma> \<rho> ; wf_ty \<Sigma> \<sigma> \<rbrakk> \<Longrightarrow> \<not> \<Sigma> \<turnstile> subst \<tau>s \<alpha>s \<rho> \<approx> subst \<upsilon>s \<beta>s \<sigma>"
+  shows "\<lbrakk> match_args \<rho> \<sigma> = arg_match.Incomparable ; wf_ty \<Sigma> \<rho> ; wf_ty \<Sigma> \<sigma> \<rbrakk> \<Longrightarrow> \<not> \<Sigma> \<turnstile> subst \<tau>s \<alpha>s \<rho> \<approx> subst \<upsilon>s \<beta>s \<sigma>"
 proof (induction \<rho> arbitrary: \<sigma>)
   case (TyPrim p)
   show ?case
@@ -522,15 +522,15 @@ next
   show ?case
   proof (cases \<sigma>)
     case (TyTuple \<sigma>s)
-    with TyTuple.prems(1) have "match_args_seq \<rho>s \<sigma>s = Clash" by simp
-    from match_args_seq_Clash[OF this] show ?thesis
+    with TyTuple.prems(1) have "match_args_seq \<rho>s \<sigma>s = arg_match.Incomparable" by simp
+    from match_args_seq_Incomparable[OF this] show ?thesis
     proof
       assume "length \<rho>s \<noteq> length \<sigma>s"
       then show ?thesis
         unfolding TyTuple by (auto dest!: subty_tuple_inv(1)[OF _ refl] list_all2_lengthD simp: subtys_list_all2)
     next
-      assume "\<exists>i < length \<rho>s. match_args (\<rho>s ! i) (\<sigma>s ! i) = Clash"
-      then obtain i where i: "i < length \<rho>s" and clash: "match_args (\<rho>s ! i) (\<sigma>s ! i) = Clash" by blast
+      assume "\<exists>i < length \<rho>s. match_args (\<rho>s ! i) (\<sigma>s ! i) = arg_match.Incomparable"
+      then obtain i where i: "i < length \<rho>s" and clash: "match_args (\<rho>s ! i) (\<sigma>s ! i) = arg_match.Incomparable" by blast
       show ?thesis
       proof
         assume "\<Sigma> \<turnstile> subst \<tau>s \<alpha>s (TyTuple \<rho>s) \<approx> subst \<upsilon>s \<beta>s \<sigma>"
@@ -551,17 +551,17 @@ next
   show ?case
   proof (cases \<sigma>)
     case (TyCallable \<sigma>s \<sigma>\<^sub>0)
-    with TyCallable.prems(1) have "match_args_seq (\<rho>\<^sub>0 # \<rho>s) (\<sigma>\<^sub>0 # \<sigma>s) = Clash" by simp
-    from match_args_seq_Clash[OF this] show ?thesis
+    with TyCallable.prems(1) have "match_args_seq (\<rho>\<^sub>0 # \<rho>s) (\<sigma>\<^sub>0 # \<sigma>s) = arg_match.Incomparable" by simp
+    from match_args_seq_Incomparable[OF this] show ?thesis
     proof
       assume "length (\<rho>\<^sub>0 # \<rho>s) \<noteq> length (\<sigma>\<^sub>0 # \<sigma>s)"
       then show ?thesis
         unfolding TyCallable
         by (auto dest!: subty_callable_inv(1)[OF _ refl] list_all2_lengthD simp: subtys_list_all2)
     next
-      assume "\<exists>i < length (\<rho>\<^sub>0 # \<rho>s). match_args ((\<rho>\<^sub>0 # \<rho>s) ! i) ((\<sigma>\<^sub>0 # \<sigma>s) ! i) = Clash"
+      assume "\<exists>i < length (\<rho>\<^sub>0 # \<rho>s). match_args ((\<rho>\<^sub>0 # \<rho>s) ! i) ((\<sigma>\<^sub>0 # \<sigma>s) ! i) = arg_match.Incomparable"
       then obtain i where i: "i < length (\<rho>\<^sub>0 # \<rho>s)"
-        and clash: "match_args ((\<rho>\<^sub>0 # \<rho>s) ! i) ((\<sigma>\<^sub>0 # \<sigma>s) ! i) = Clash"
+        and clash: "match_args ((\<rho>\<^sub>0 # \<rho>s) ! i) ((\<sigma>\<^sub>0 # \<sigma>s) ! i) = arg_match.Incomparable"
         by blast
       show ?thesis
       proof
@@ -580,14 +580,14 @@ next
         show False
         proof (cases i)
           case 0
-          with clash wf equiv have "match_args \<rho>\<^sub>0 \<sigma>\<^sub>0 = Clash" and "wf_ty \<Sigma> \<rho>\<^sub>0" and "wf_ty \<Sigma> \<sigma>\<^sub>0"
+          with clash wf equiv have "match_args \<rho>\<^sub>0 \<sigma>\<^sub>0 = arg_match.Incomparable" and "wf_ty \<Sigma> \<rho>\<^sub>0" and "wf_ty \<Sigma> \<sigma>\<^sub>0"
             and "\<Sigma> \<turnstile> subst \<tau>s \<alpha>s \<rho>\<^sub>0 \<approx> subst \<upsilon>s \<beta>s \<sigma>\<^sub>0"
             by simp_all
           with TyCallable.IH(2)[OF this(1-3)] show False by blast
         next
           case (Suc j)
           with i have mem: "\<rho>s ! j \<in> set \<rho>s" by simp
-          from Suc clash wf equiv have "match_args (\<rho>s ! j) (\<sigma>s ! j) = Clash" and "wf_ty \<Sigma> (\<rho>s ! j)"
+          from Suc clash wf equiv have "match_args (\<rho>s ! j) (\<sigma>s ! j) = arg_match.Incomparable" and "wf_ty \<Sigma> (\<rho>s ! j)"
             and "wf_ty \<Sigma> (\<sigma>s ! j)" and "\<Sigma> \<turnstile> subst \<tau>s \<alpha>s (\<rho>s ! j) \<approx> subst \<upsilon>s \<beta>s (\<sigma>s ! j)"
             by simp_all
           with TyCallable.IH(1)[OF mem this(1-3)] show False by blast
@@ -608,14 +608,14 @@ next
       from equiv_class_class[OF wf equiv[unfolded TyClass, simplified] this]
       have CD: "C = D" and args: "list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> subst \<tau>s \<alpha>s \<rho> \<approx> subst \<upsilon>s \<beta>s \<sigma>) \<rho>s \<sigma>s"
         by (auto simp: list_all2_map1 list_all2_map2)
-      with TyClass.prems(1) have "match_args_seq \<rho>s \<sigma>s = Clash" unfolding TyClass by simp
-      from match_args_seq_Clash[OF this] show False
+      with TyClass.prems(1) have "match_args_seq \<rho>s \<sigma>s = arg_match.Incomparable" unfolding TyClass by simp
+      from match_args_seq_Incomparable[OF this] show False
       proof
         assume "length \<rho>s \<noteq> length \<sigma>s"
         with args show False by (auto dest: list_all2_lengthD)
       next
-        assume "\<exists>i < length \<rho>s. match_args (\<rho>s ! i) (\<sigma>s ! i) = Clash"
-        then obtain i where i: "i < length \<rho>s" and clash: "match_args (\<rho>s ! i) (\<sigma>s ! i) = Clash" by blast
+        assume "\<exists>i < length \<rho>s. match_args (\<rho>s ! i) (\<sigma>s ! i) = arg_match.Incomparable"
+        then obtain i where i: "i < length \<rho>s" and clash: "match_args (\<rho>s ! i) (\<sigma>s ! i) = arg_match.Incomparable" by blast
         with args have equiv: "\<Sigma> \<turnstile> subst \<tau>s \<alpha>s (\<rho>s ! i) \<approx> subst \<upsilon>s \<beta>s (\<sigma>s ! i)" and "i < length \<sigma>s"
           by (auto simp: list_all2_conv_all_nth)
         then have "wf_ty \<Sigma> (\<rho>s ! i)" and "wf_ty \<Sigma> (\<sigma>s ! i)" using TyClass.prems(2, 3) i unfolding TyClass by auto

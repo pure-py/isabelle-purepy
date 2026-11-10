@@ -35,8 +35,8 @@ where
                         (shapes_seq \<Sigma> (field_types \<Sigma> D \<sigma>s)),
                       shapes \<Sigma> \<tau> (insert (HeadClass C) H))
             | _ \<Rightarrow> None)
-       | NoInstance \<Rightarrow> None
-       | Undetermined \<Rightarrow> None
+       | Incomparable \<Rightarrow> None
+       | Undefined \<Rightarrow> None
    | _ \<Rightarrow> None)" |
 "split \<Sigma> \<Gamma> (ShapeConstr C \<tau>s ks H) (PatConstr q _) =
   (case resolve_name \<Gamma> q of
@@ -48,8 +48,8 @@ where
               Some (map (\<lambda>ks'. ShapeConstr D \<sigma>s (ks @ ks') (typed_heads \<Sigma> H (TyClass D \<sigma>s)))
                       (shapes_seq \<Sigma> (drop (length ks) (field_types \<Sigma> D \<sigma>s))),
                     [ShapeConstr C \<tau>s ks (insert (HeadClass D) H)])
-        | NoInstance \<Rightarrow> None
-        | Undetermined \<Rightarrow> None)
+        | Incomparable \<Rightarrow> None
+        | Undefined \<Rightarrow> None)
    | _ \<Rightarrow> None)" |
 "split \<Sigma> \<Gamma> _ _ = None"
 

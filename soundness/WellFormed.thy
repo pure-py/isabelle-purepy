@@ -390,11 +390,11 @@ proof (cases "instance_above \<Sigma> C \<tau>")
   with assms(3) have "\<tau>s' = \<tau>s" by (simp add: instance_at_def)
   with instance_above_wf[OF assms(1, 2) Instance] show ?thesis by simp
 next
-  case NoInstance
+  case Incomparable
   with assms(3) have "instance_below \<Sigma> C \<tau> = Instance \<tau>s" by (simp add: instance_at_def)
   from instance_below_wf[OF assms(2) this] show ?thesis .
 next
-  case Undetermined
+  case Undefined
   with assms(3) show ?thesis by (simp add: instance_at_def)
 qed
 

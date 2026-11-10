@@ -427,11 +427,11 @@ proof -
       with Instance \<tau>s' show ?thesis by (cases p) (auto split: if_splits)
     qed (use Instance in auto)
   next
-    case NoInstance
+    case Incomparable
     with assms(3) have below: "instance_below \<Sigma> C \<tau> = Instance \<tau>s" by (simp add: instance_at_def)
     from instance_below_length[OF below] show ?thesis .
   next
-    case Undetermined
+    case Undefined
     with assms(3) show ?thesis by (simp add: instance_at_def)
   qed
   with instance_at_wf[OF assms(1-3)] assms(4) show ?thesis by auto

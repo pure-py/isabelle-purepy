@@ -448,7 +448,7 @@ proof (cases "instance_above \<Sigma> C \<sigma>")
     with Instance show ?thesis by (cases p) (auto split: if_splits intro: SubtyNever)
   qed (use Instance in auto)
 next
-  case NoInstance
+  case Incomparable
   with assms(1) have below: "instance_below \<Sigma> C \<sigma> = Instance \<sigma>s" by (simp add: instance_at_def)
   show ?thesis
   proof (cases \<sigma>)
@@ -469,7 +469,7 @@ next
     with below show ?thesis by (cases p) (auto split: if_splits intro: SubtyObject)
   qed (use below in auto)
 next
-  case Undetermined
+  case Undefined
   with assms(1) show ?thesis by (simp add: instance_at_def)
 qed
 
@@ -523,7 +523,7 @@ proof -
       with Instance sub show ?thesis by (cases p) (auto split: if_splits dest: subty_never_inv)
     qed (use Instance in auto)
   next
-    case NoInstance
+    case Incomparable
     with inst have below: "instance_below \<Sigma> C \<sigma> = Instance \<sigma>s" by (simp add: instance_at_def)
     show ?thesis
     proof (cases \<sigma>)
@@ -570,7 +570,7 @@ proof -
       with len\<tau>s' show ?thesis by simp
     qed (use below in auto)
   next
-    case Undetermined
+    case Undefined
     with inst show ?thesis by (simp add: instance_at_def)
   qed
   then have "\<Sigma> \<turnstile> TyClass C ?\<tau>s' <: TyClass C (map (inst \<eta>) \<sigma>s)"
@@ -580,14 +580,14 @@ qed
 
 (* Class type below a type other than a union at which C has no instance: C not an ancestor *)
 lemma instance_at_none:
-  assumes none: "instance_at \<Sigma> C \<sigma> = NoInstance" and nonunion: "\<not> is_union \<sigma>" and wf: "wf_ty \<Sigma> \<sigma>"
+  assumes none: "instance_at \<Sigma> C \<sigma> = Incomparable" and nonunion: "\<not> is_union \<sigma>" and wf: "wf_ty \<Sigma> \<sigma>"
     and C: "C |\<in>| fmdom \<Sigma>" and range: "C \<noteq> range_class" and sub: "\<Sigma> \<turnstile> TyClass D \<upsilon>s <: inst \<eta> \<sigma>"
     and wfD: "wf_ty \<Sigma> (TyClass D \<upsilon>s)" and anc: "C \<in> set (ancestors \<Sigma> D)"
   shows False
 proof -
   let ?\<alpha>s = "type_params \<Sigma> C" and ?\<tau>s' = "ancestor_args \<Sigma> D \<upsilon>s C"
   have D: "D |\<in>| fmdom \<Sigma>" using wfD by simp
-  from none have above: "instance_above \<Sigma> C \<sigma> = NoInstance" and below: "instance_below \<Sigma> C \<sigma> = NoInstance"
+  from none have above: "instance_above \<Sigma> C \<sigma> = Incomparable" and below: "instance_below \<Sigma> C \<sigma> = Incomparable"
     by (auto simp: instance_at_def split: instances.splits)
   show False
   proof (cases \<sigma>)
@@ -599,7 +599,7 @@ proof -
       by auto
     from above have "C \<notin> set (ancestors \<Sigma> E)" unfolding TyClass by (auto split: if_splits)
     with ancestors_comparable[OF wf_class_table D anc ED] have E: "E \<in> set (ancestors \<Sigma> C)" by blast
-    with below have clash: "match_args_seq ?\<rho>s \<sigma>s\<^sub>E = Clash"
+    with below have clash: "match_args_seq ?\<rho>s \<sigma>s\<^sub>E = arg_match.Incomparable"
       unfolding TyClass by (auto simp: Let_def split: if_splits arg_match.splits sum.splits)
     from ancestor_args_wf[OF wf_class_table wfD anc] have len\<tau>s': "length ?\<tau>s' = length ?\<alpha>s" by simp
     have "ancestor_args \<Sigma> D \<upsilon>s E = map (subst ?\<tau>s' ?\<alpha>s) ?\<rho>s"
@@ -611,13 +611,13 @@ proof -
     have wf\<rho>s: "\<forall>\<rho> \<in> set ?\<rho>s. wf_ty \<Sigma> \<rho>"
       using ancestor_args_wf[OF wf_class_table _ E, of "map TyVar ?\<alpha>s"] C by auto
     have wf\<sigma>s\<^sub>E: "\<forall>\<sigma>' \<in> set \<sigma>s\<^sub>E. wf_ty \<Sigma> \<sigma>'" using wf unfolding TyClass by simp
-    from match_args_seq_Clash[OF clash] show False
+    from match_args_seq_Incomparable[OF clash] show False
     proof
       assume "length ?\<rho>s \<noteq> length \<sigma>s\<^sub>E"
       with equiv' show False by (auto dest: list_all2_lengthD)
     next
-      assume "\<exists>i < length ?\<rho>s. match_args (?\<rho>s ! i) (\<sigma>s\<^sub>E ! i) = Clash"
-      then obtain i where i: "i < length ?\<rho>s" and clash_i: "match_args (?\<rho>s ! i) (\<sigma>s\<^sub>E ! i) = Clash" by blast
+      assume "\<exists>i < length ?\<rho>s. match_args (?\<rho>s ! i) (\<sigma>s\<^sub>E ! i) = arg_match.Incomparable"
+      then obtain i where i: "i < length ?\<rho>s" and clash_i: "match_args (?\<rho>s ! i) (\<sigma>s\<^sub>E ! i) = arg_match.Incomparable" by blast
       with equiv' have eq: "\<Sigma> \<turnstile> subst ?\<tau>s' ?\<alpha>s (?\<rho>s ! i) \<approx> inst \<eta> (\<sigma>s\<^sub>E ! i)" and "i < length \<sigma>s\<^sub>E"
         by (auto simp: list_all2_conv_all_nth)
       obtain \<beta>s where "inst \<eta> (\<sigma>s\<^sub>E ! i) = subst (map \<eta> \<beta>s) \<beta>s (\<sigma>s\<^sub>E ! i)" by (rule inst_as_subst)
@@ -1641,10 +1641,10 @@ proof (induction p arbitrary: \<tau> \<Delta> v rule: measure_induct_rule[where 
                 Instance \<sigma>s \<Rightarrow>
                   Some (pattern_bindings
                     (map2 (check_pat_at \<Sigma> \<Gamma>) (field_patterns \<Sigma> C (ps, kps)) (field_types \<Sigma> C \<sigma>s)))
-              | NoInstance \<Rightarrow> None
-              | Undetermined \<Rightarrow>
+              | Incomparable \<Rightarrow> None
+              | Undefined \<Rightarrow>
                   Some (Fail (Violates
-                    (if instance_above \<Sigma> C \<sigma> = Undetermined then RuleInstanceAbove else RuleInstanceBelow)
+                    (if instance_above \<Sigma> C \<sigma> = Undefined then RuleInstanceAbove else RuleInstanceBelow)
                     (PatternClassUndetermined (short_name C) \<sigma>)))"
     from prems(1) cls
     have fm: "check_field_map (PatternArityMismatch (short_name C)) (UnknownFieldInPattern (short_name C))
@@ -1888,7 +1888,7 @@ proof (induction p arbitrary: \<tau> \<Delta> v rule: measure_induct_rule[where 
       assume \<sigma>: "\<sigma> \<in> set (disjuncts \<tau>)" and f: "?f \<sigma> = None" and v: "\<turnstile> v : Ty (inst \<eta> \<sigma>)"
       note nonunion = disjuncts_nonunion[OF \<sigma>]
       have wf\<sigma>: "wf_ty \<Sigma> \<sigma>" using disjuncts_wf[OF prems(3) \<sigma>] by simp
-      from f have none: "instance_at \<Sigma> C \<sigma> = NoInstance" by (auto split: instances.splits)
+      from f have none: "instance_at \<Sigma> C \<sigma> = Incomparable" by (auto split: instances.splits)
       have "match \<rho> (PatConstr q (ps, kps)) v = NoMatch"
       proof (cases v)
         case (VObject D zvs)

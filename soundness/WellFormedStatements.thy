@@ -229,10 +229,10 @@ next
                           Instance \<sigma>s \<Rightarrow>
                             Some (pattern_bindings
                               (map2 (check_pat_at \<Sigma> \<Gamma>) (field_patterns \<Sigma> C (ps, kps)) (field_types \<Sigma> C \<sigma>s)))
-                        | NoInstance \<Rightarrow> None
-                        | Undetermined \<Rightarrow>
+                        | Incomparable \<Rightarrow> None
+                        | Undefined \<Rightarrow>
                             Some (Fail (Violates
-                              (if instance_above \<Sigma> C \<sigma> = Undetermined then RuleInstanceAbove
+                              (if instance_above \<Sigma> C \<sigma> = Undefined then RuleInstanceAbove
                                else RuleInstanceBelow)
                               (PatternClassUndetermined (short_name C) \<sigma>))))
                 (disjuncts \<tau>)) = Ok \<Delta>"
@@ -241,10 +241,10 @@ next
               Instance \<sigma>s \<Rightarrow>
                 Some (pattern_bindings
                   (map2 (check_pat_at \<Sigma> \<Gamma>) (field_patterns \<Sigma> C (ps, kps)) (field_types \<Sigma> C \<sigma>s)))
-            | NoInstance \<Rightarrow> None
-            | Undetermined \<Rightarrow>
+            | Incomparable \<Rightarrow> None
+            | Undefined \<Rightarrow>
                 Some (Fail (Violates
-                  (if instance_above \<Sigma> C \<sigma> = Undetermined then RuleInstanceAbove else RuleInstanceBelow)
+                  (if instance_above \<Sigma> C \<sigma> = Undefined then RuleInstanceAbove else RuleInstanceBelow)
                   (PatternClassUndetermined (short_name C) \<sigma>)))"
   from check_pattern_class_dom[OF "8.prems"(2) cls] have C: "C |\<in>| fmdom \<Sigma>" by simp
   from fm have len_kps: "length ps + length kps = length (field_names \<Sigma> C)"

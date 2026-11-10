@@ -292,10 +292,10 @@ where
                  Instance \<sigma>s \<Rightarrow>
                    Some (pattern_bindings
                      (map2 (check_pat_at \<Sigma> \<Gamma>) (field_patterns \<Sigma> C (ps, kps)) (field_types \<Sigma> C \<sigma>s)))
-               | NoInstance \<Rightarrow> None
-               | Undetermined \<Rightarrow>
+               | Incomparable \<Rightarrow> None
+               | Undefined \<Rightarrow>
                    Some (Fail (Violates
-                     (if instance_above \<Sigma> C \<sigma> = Undetermined then RuleInstanceAbove else RuleInstanceBelow)
+                     (if instance_above \<Sigma> C \<sigma> = Undefined then RuleInstanceAbove else RuleInstanceBelow)
                      (PatternClassUndetermined (short_name C) \<sigma>))))
        (disjuncts \<tau>))
  })" |

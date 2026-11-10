@@ -18,7 +18,7 @@ where
 "head_typed \<Sigma> (HeadLiteral l) \<tau> = (\<Sigma> \<turnstile> TyLiteral l <: \<tau>)" |
 "head_typed \<Sigma> (HeadClass C) (TyUnion \<sigma> \<tau>) = (head_typed \<Sigma> (HeadClass C) \<sigma> \<or> head_typed \<Sigma> (HeadClass C) \<tau>)" |
 "head_typed \<Sigma> (HeadClass C) (TyPrim Sized) = (C = range_class)" |
-"head_typed \<Sigma> (HeadClass C) \<tau> = (instance_below \<Sigma> C \<tau> \<noteq> NoInstance)" |
+"head_typed \<Sigma> (HeadClass C) \<tau> = (instance_below \<Sigma> C \<tau> \<noteq> Incomparable)" |
 "head_typed \<Sigma> (HeadList _) (TyList _) = True" |
 "head_typed \<Sigma> (HeadList _) _ = False"
 
