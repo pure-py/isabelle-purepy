@@ -1,6 +1,5 @@
 """Running a program by the generated reference interpreter, after checking it by the generated type checker"""
 
-import dataclasses
 import pathlib
 import sys
 import threading
@@ -10,7 +9,8 @@ from purepy_conformance import Exit
 
 from . import syntax
 from .check_program import Diagnostic, diagnostic, exit_code, format_diagnostic, parse_program
-from .generated import Contexts, Eval, Option, Programs, Sum_Type, Syntax
+from .generated import Contexts, Eval, Option, Programs, Sum_Type, Syntax, Values
+from .messages import unparse_value
 from .syntax import Program
 
 # Exit statuses of a run which doesn't end as in Python, other than undefined behaviour
@@ -36,56 +36,17 @@ def check(entry_path: pathlib.Path) -> Diagnostic | tuple[Program, Any]:
             raise AssertionError(f"unexpected result: {result}")
 
 
-def args(x: Any) -> list[Any]:
-    return [getattr(x, f.name) for f in dataclasses.fields(x)]
-
-
 def kind(x: Any) -> str:
     return type(x).__name__.rstrip("_")
 
 
-def qualified(q: Any) -> str:
-    return ".".join(Syntax.variables(q))
-
-
-def to_str(v: Any, nested: bool = False) -> str:
-    """String printed by Python for v, or the representation of v inside a container if nested"""
-    match kind(v):
-        case "VLit":
-            (lit,) = args(v)
-            match kind(lit):
-                case "LitInt":
-                    return str(args(lit)[0])
-                case "LitFloat":
-                    return repr(args(lit)[0])
-                case "LitString":
-                    w = args(lit)[0]
-                    return repr(w) if nested else str(w)
-                case "LitBool":
-                    return "True" if args(lit)[0] else "False"
-                case _:
-                    return "None"
-        case "VList":
-            return "[" + ", ".join(to_str(u, True) for u in args(v)[0]) + "]"
-        case "VTuple":
-            us = args(v)[0]
-            return (
-                "(" + ", ".join(to_str(u, True) for u in us) + ("," if len(us) == 1 else "") + ")"
-            )
-        case "VDict":
-            return "{" + ", ".join(f"{w!r}: {to_str(u, True)}" for w, u in args(v)[0]) + "}"
-        case "VObject":
-            c, fields = args(v)
-            x = Syntax.variables(c)[-1]
-            return f"{x}(" + ", ".join(f"{y}={to_str(u, True)}" for y, u in fields) + ")"
-        case "VClass":
-            return f"<class '{qualified(args(v)[0])}'>"
-        case "VPrim":
-            return f"<built-in function {kind(args(v)[0])[4:].lower()}>"
-        case "VModStub" | "VModLoaded":
-            return f"<module '{qualified(args(v)[0])}'>"
-        case k:
-            return f"<{k}>"
+def printed(v: Any) -> str:
+    """String printed by Python for v"""
+    match v:
+        case Values.VLit(Syntax.LitString(w)):
+            return str(w)
+        case _:
+            return unparse_value(v)
 
 
 def report(kappa: Any) -> int:
@@ -108,7 +69,7 @@ def evaluate(sigma: Any, M: Program, argv: list[str], fuel: int) -> int:
     match Eval.run_program(sigma, M, fuel, argv):
         case Eval.Done((vs, kappa)):
             for v in vs:
-                print(to_str(v))
+                print(printed(v))
             return report(kappa)
         case Eval.Stuck():
             print("purepy: stuck", file=sys.stderr)

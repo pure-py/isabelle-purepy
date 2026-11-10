@@ -31,6 +31,7 @@ type TopStmt = Any
 type ModuleBody = Any
 type Program = Any
 type Reason = Any
+type Val = Any
 
 
 def parse_name(name: str) -> Name:

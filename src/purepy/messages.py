@@ -1,5 +1,5 @@
 """Messages for the reasons of the generated type checker, with names, types, expressions and patterns
-unparsed to Python source"""
+unparsed to Python source, and values in the representation given by Python"""
 
 import ast
 import builtins
@@ -9,7 +9,7 @@ from functools import reduce
 
 from purepy_conformance import Classification, excluded
 
-from .generated import Option, Reasons, Syntax
+from .generated import Option, Reasons, Syntax, Values
 from .syntax import (
     BOP_AST,
     PRIMITIVE,
@@ -21,6 +21,7 @@ from .syntax import (
     Qualifier,
     Reason,
     Ty,
+    Val,
     node,
     unparse_name,
 )
@@ -197,6 +198,30 @@ def unparse_pat(p: Pat) -> str:
             return f"{unparse_name(q)}({', '.join(args)})"
         case _:
             raise AssertionError(f"unexpected pattern: {p}")
+
+
+def unparse_value(v: Val) -> str:
+    """Representation of v given by Python"""
+    match v:
+        case Values.VLit(ell):
+            return repr(lit_value(ell))
+        case Values.VList(us):
+            return "[" + ", ".join(map(unparse_value, us)) + "]"
+        case Values.VTuple(us):
+            return "(" + ", ".join(map(unparse_value, us)) + ("," if len(us) == 1 else "") + ")"
+        case Values.VDict(wus):
+            return "{" + ", ".join(f"{w!r}: {unparse_value(u)}" for w, u in wus) + "}"
+        case Values.VObject(c, fields):
+            x = Syntax.variables(c)[-1]
+            return f"{x}(" + ", ".join(f"{y}={unparse_value(u)}" for y, u in fields) + ")"
+        case Values.VClass(c):
+            return f"<class '{unparse_name(c)}'>"
+        case Values.VPrim(f):
+            return f"<built-in function {type(f).__name__.removeprefix('Prim').lower()}>"
+        case Values.VModStub(q) | Values.VModLoaded(q, _):
+            return f"<module '{unparse_name(q)}'>"
+        case _:
+            return f"<{type(v).__name__.rstrip('_')}>"
 
 
 def builtin_type(tau: Ty) -> type | None:
