@@ -163,4 +163,38 @@ where
        most_specific = Set.filter (\<lambda>(\<tau>, _). \<forall>(\<tau>', _) \<in> overloads. \<Sigma> \<turnstile> \<tau> <: \<tau>') overloads in
    if is_singleton most_specific then Some (snd (the_elem most_specific)) else None)"
 
+lemma unop_overload_types:
+  "unop_overload \<Sigma> op \<sigma> \<omega> \<Longrightarrow>
+   op = UOpNot \<and> \<omega> = (TyPrim bool, TyPrim bool)
+   \<or> op \<in> {UOpPos, UOpNeg} \<and> (\<omega> = (TyPrim int, TyPrim int) \<or> \<omega> = (TyPrim float, TyPrim float))"
+  by (induction rule: unop_overload.induct) auto
+
+lemma resolve_unop_overload:
+  assumes "resolve_unop \<Sigma> op \<sigma> = Some \<tau>'"
+  obtains \<tau> where "unop_overload \<Sigma> op \<sigma> (\<tau>, \<tau>')"
+proof -
+  let ?M = "Set.filter (\<lambda>(\<tau>, _). \<forall>(\<tau>', _) \<in> unop_overloads \<Sigma> op \<sigma>. \<Sigma> \<turnstile> \<tau> <: \<tau>') (unop_overloads \<Sigma> op \<sigma>)"
+  from assms have "is_singleton ?M" and \<tau>': "\<tau>' = snd (the_elem ?M)"
+    by (auto simp: resolve_unop_def Let_def split: if_splits)
+  then have "the_elem ?M \<in> unop_overloads \<Sigma> op \<sigma>"
+    by (metis (no_types, lifting) Set.filter_eq mem_Collect_eq insertI1 is_singleton_the_elem)
+  with \<tau>' that show thesis by (cases "the_elem ?M") (auto simp: unop_overloads_def)
+qed
+
+lemma resolve_binop_overload:
+  assumes "resolve_binop \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2 = Some \<tau>"
+  obtains \<tau>\<^sub>1 \<tau>\<^sub>2 where "binop_overload \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2 ((\<tau>\<^sub>1, \<tau>\<^sub>2), \<tau>)"
+proof -
+  let ?M = "Set.filter
+    (\<lambda>((\<tau>\<^sub>1, \<tau>\<^sub>2), _). \<forall>((\<tau>\<^sub>1', \<tau>\<^sub>2'), _) \<in> binop_overloads \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2. \<Sigma> \<turnstile> \<tau>\<^sub>1 <: \<tau>\<^sub>1' \<and> \<Sigma> \<turnstile> \<tau>\<^sub>2 <: \<tau>\<^sub>2')
+    (binop_overloads \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2)"
+  from assms have "is_singleton ?M" and \<tau>: "\<tau> = snd (the_elem ?M)"
+    by (auto simp: resolve_binop_def Let_def split: if_splits)
+  then obtain \<omega> where M: "?M = {\<omega>}" by (auto simp: is_singleton_def)
+  then have "\<omega> \<in> ?M" by simp
+  then have "\<omega> \<in> binop_overloads \<Sigma> op \<sigma>\<^sub>1 \<sigma>\<^sub>2" by simp
+  moreover from \<tau> have "\<tau> = snd \<omega>" unfolding M by simp
+  ultimately show thesis using that by (cases \<omega>) (auto simp: binop_overloads_def)
+qed
+
 end

@@ -272,7 +272,7 @@ where
 "run_submod_loads 0 qs q xs = OutOfFuel" |
 "run_submod_loads (Suc n) qs q [] = Done qs" |
 "run_submod_loads (Suc n) qs q (x # xs) =
-  (if q |\<notin>| fmdom \<P> \<and> Qualified q x |\<in>| fmdom \<M> \<and> x \<notin> set (declares (the (fmlookup \<M> q)))
+  (if Qualified q x |\<in>| fmdom \<M> \<and> (case fmlookup \<M> q of Some b \<Rightarrow> x \<notin> set (declares b) | None \<Rightarrow> False)
    then fbind (run_loads n qs [Qualified q x]) (\<lambda>qs'. run_submod_loads n qs' q xs)
    else run_submod_loads n qs q xs)" |
 

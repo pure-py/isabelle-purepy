@@ -24,29 +24,33 @@ where
        else Some (map (\<lambda>k. ShapeDict \<tau> (with_keys \<beta> [w] [k]) W) (shapes \<Sigma> \<tau> {}), [ShapeDict \<tau> \<beta> (insert w W)])
    | None \<Rightarrow> None)" |
 "split \<Sigma> \<Gamma> (ShapeRest \<tau> H) (PatConstr q _) =
-  (let C = pattern_class \<Gamma> q in
-   if below_excluded \<Sigma> C H then None
-   else case instance_at \<Sigma> C \<tau> of
-     Instance \<tau>s \<Rightarrow>
-       (case meet \<Sigma> \<tau> (TyClass C \<tau>s) of
-          TyClass D \<sigma>s \<Rightarrow>
-            Some (map (\<lambda>ks. ShapeConstr D \<sigma>s ks (typed_heads \<Sigma> H (TyClass D \<sigma>s)))
-                    (shapes_seq \<Sigma> (field_types \<Sigma> D \<sigma>s)),
-                  shapes \<Sigma> \<tau> (insert (HeadClass C) H))
-        | _ \<Rightarrow> undefined)
-   | NoInstance \<Rightarrow> None
-   | Undetermined \<Rightarrow> undefined)" |
+  (case resolve_name \<Gamma> q of
+     Some (Type C) \<Rightarrow>
+       if below_excluded \<Sigma> C H then None
+       else case instance_at \<Sigma> C \<tau> of
+         Instance \<tau>s \<Rightarrow>
+           (case meet \<Sigma> \<tau> (TyClass C \<tau>s) of
+              TyClass D \<sigma>s \<Rightarrow>
+                Some (map (\<lambda>ks. ShapeConstr D \<sigma>s ks (typed_heads \<Sigma> H (TyClass D \<sigma>s)))
+                        (shapes_seq \<Sigma> (field_types \<Sigma> D \<sigma>s)),
+                      shapes \<Sigma> \<tau> (insert (HeadClass C) H))
+            | _ \<Rightarrow> None)
+       | Incomparable \<Rightarrow> None
+       | Undefined \<Rightarrow> None
+   | _ \<Rightarrow> None)" |
 "split \<Sigma> \<Gamma> (ShapeConstr C \<tau>s ks H) (PatConstr q _) =
-  (let D = pattern_class \<Gamma> q in
-   case instance_at \<Sigma> D (TyClass C \<tau>s) of
-     Instance \<sigma>s \<Rightarrow>
-       if D = C \<or> \<not> \<Sigma> \<turnstile> TyClass D \<sigma>s <: TyClass C \<tau>s \<or> below_excluded \<Sigma> D H then None
-       else
-         Some (map (\<lambda>ks'. ShapeConstr D \<sigma>s (ks @ ks') (typed_heads \<Sigma> H (TyClass D \<sigma>s)))
-                 (shapes_seq \<Sigma> (drop (length ks) (field_types \<Sigma> D \<sigma>s))),
-               [ShapeConstr C \<tau>s ks (insert (HeadClass D) H)])
-   | NoInstance \<Rightarrow> None
-   | Undetermined \<Rightarrow> undefined)" |
+  (case resolve_name \<Gamma> q of
+     Some (Type D) \<Rightarrow>
+       (case instance_at \<Sigma> D (TyClass C \<tau>s) of
+          Instance \<sigma>s \<Rightarrow>
+            if D = C \<or> \<not> \<Sigma> \<turnstile> TyClass D \<sigma>s <: TyClass C \<tau>s \<or> below_excluded \<Sigma> D H then None
+            else
+              Some (map (\<lambda>ks'. ShapeConstr D \<sigma>s (ks @ ks') (typed_heads \<Sigma> H (TyClass D \<sigma>s)))
+                      (shapes_seq \<Sigma> (drop (length ks) (field_types \<Sigma> D \<sigma>s))),
+                    [ShapeConstr C \<tau>s ks (insert (HeadClass D) H)])
+        | Incomparable \<Rightarrow> None
+        | Undefined \<Rightarrow> None)
+   | _ \<Rightarrow> None)" |
 "split \<Sigma> \<Gamma> _ _ = None"
 
 (* Matched shapes and residual of patterns matching shapes ks position by position, as shapes of form f, from
@@ -119,12 +123,15 @@ where
         (map2 (\<lambda>k p. match_shape \<Sigma> \<Gamma> k (node p)) ks (map snd kps)))
    else None)" |
 "match_directly \<Sigma> \<Gamma> (ShapeConstr C \<tau>s ks H) (PatConstr q a) =
-  (let D = pattern_class \<Gamma> q; ps = field_patterns \<Sigma> D a; m = length ps in
-   if D \<in> set (ancestors \<Sigma> C)
-   then
-     seq_result (\<lambda>ks'. ShapeConstr C \<tau>s (ks' @ drop m ks) H) (take m ks)
-       (map2 (\<lambda>k p. match_shape \<Sigma> \<Gamma> k (node p)) (take m ks) ps)
-   else None)" |
+  (case resolve_name \<Gamma> q of
+     Some (Type D) \<Rightarrow>
+       (let ps = field_patterns \<Sigma> D a; m = length ps in
+        if D \<in> set (ancestors \<Sigma> C)
+        then
+          seq_result (\<lambda>ks'. ShapeConstr C \<tau>s (ks' @ drop m ks) H) (take m ks)
+            (map2 (\<lambda>k p. match_shape \<Sigma> \<Gamma> k (node p)) (take m ks) ps)
+        else None)
+   | _ \<Rightarrow> None)" |
 "match_directly \<Sigma> \<Gamma> _ _ = None"
 by pat_completeness auto
 

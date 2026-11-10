@@ -17,7 +17,8 @@ datatype rule =
   | RuleAssign | RuleDeclareAssign | RuleCallStmt
   | RuleAssert | RuleAssertMsg | RuleAssertFalseMsg | RuleReturnNone | RuleReturn | RuleIf | RuleIfElse
   | RuleSeq | RuleMatchPartial | RuleDefSignature | RuleDefBody
-  | RuleCheckVar | RuleCheckAs | RuleCheckTupleNone | RuleCheckListNone | RuleCheckConstr | RulePatConstr
+  | RuleCheckVar | RuleCheckAs | RuleCheckLiteral | RuleCheckTupleNone | RuleCheckListNone | RuleCheckDictNone
+  | RuleCheckConstr | RulePatConstr
   | RuleInstanceAbove | RuleInstanceBelow
   | RulePatShapes
   | RuleTopSeq | RuleClass | RuleClassExtend | RuleTypeAlias
@@ -32,6 +33,7 @@ datatype judgement =
 (* Reasons for ill-formedness *)
 datatype reason =
     DuplicateField var var
+  | DuplicateTypeParameter var var
   | InheritedField var var var
   | UndefinedVariable var
   | UnassignedVariable var
@@ -49,9 +51,13 @@ datatype reason =
   | UnknownConstructorKeyword var "var list"
   | PatternArityMismatch var nat nat
   | UnknownFieldInPattern var "var list"
+  | PatternBindsTwice var
   | RangePattern
+  | RangeBase
   | PatternClassUndetermined var ty
   | SequenceKindMismatch sequence_kind ty sequence_kind
+  | IntLiteralFloatValues ty
+  | DictPatternDictValues ty
   | UnreachableCase "pat located"
   | MissingReturnMatchPartial ty
   | MissingReturnAssertion
@@ -141,6 +147,9 @@ abbreviation by_rule :: "rule \<Rightarrow> 'a may_fail \<Rightarrow> 'a may_fai
 where
 "by_rule n \<equiv> map_sum (violates n) id"
 
+lemma by_rule_Ok [simp]: "by_rule n m = Ok x \<longleftrightarrow> m = Ok x" "Ok x = by_rule n m \<longleftrightarrow> m = Ok x"
+  by (cases m; auto)+
+
 (* Reason r without the rule it violates or the judgement which selects no rule *)
 fun without_rule :: "reason \<Rightarrow> reason"
 where
@@ -193,6 +202,9 @@ fun redeclared :: "('a \<Rightarrow> var) \<Rightarrow> var set \<Rightarrow> 'a
 where
 "redeclared f X [] = None" |
 "redeclared f X (x # xs) = (if f x \<in> X then Some x else redeclared f (insert (f x) X) xs)"
+
+lemma redeclared_None: "redeclared f X xs = None \<Longrightarrow> distinct (map f xs) \<and> set (map f xs) \<inter> X = {}"
+  by (induction xs arbitrary: X) (auto split: if_splits)
 
 (* Redeclaration among bound names ys, declarations xs and pattern variables zs, the latter two at the positions
    of their statements, located at the statement declaring or matching the name again *)
