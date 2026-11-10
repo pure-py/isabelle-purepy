@@ -1,5 +1,4 @@
-"""Messages for the reasons of the generated type checker, with names, types, expressions and patterns
-unparsed to Python source, and values in the representation given by Python"""
+"""Messages for the reasons of the generated type checker"""
 
 import builtins
 import importlib

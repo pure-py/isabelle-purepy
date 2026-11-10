@@ -591,7 +591,7 @@ def unparse_expr(e: Expr) -> str:
                 raise AssertionError(f"unexpected expression: {e}")
 
     def ast_comprehensions(qs: list[Qualifier]) -> list[ast.comprehension]:
-        """Comprehension node per generator in qs, whose conditions are the guards following the generator"""
+        """Comprehension node per generator in qs, with the guards following the generator as its conditions"""
 
         def add(gs: list[ast.comprehension], q: Qualifier) -> list[ast.comprehension]:
             match node(q):
