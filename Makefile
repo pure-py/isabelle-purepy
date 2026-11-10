@@ -22,7 +22,7 @@ build: check-version codegen
 	$(PYTHON) theories.py --check
 	rm -rf python/python_out
 	$(ISABELLE) build -v -e -d $(CODEGEN) -D .
-	$(PYTHON) generated.py $(CODE) $(GENERATED)
+	$(PYTHON) relativise_imports.py $(CODE) $(GENERATED)
 
 # Lint and conformance suite
 check-conformance:
