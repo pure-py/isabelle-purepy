@@ -476,9 +476,9 @@ where
 "ancestors \<Sigma> C = map fst (instantiated_ancestors \<Sigma> C (map TyVar (type_params \<Sigma> C)))"
 
 (* Type arguments of ancestor D of class C at type arguments \<tau>s *)
-definition instantiated_ancestor :: "class_table \<Rightarrow> name \<Rightarrow> ty list \<Rightarrow> name \<Rightarrow> ty list"
+definition ancestor_args :: "class_table \<Rightarrow> name \<Rightarrow> ty list \<Rightarrow> name \<Rightarrow> ty list"
 where
-"instantiated_ancestor \<Sigma> C \<tau>s D = the (map_of (instantiated_ancestors \<Sigma> C \<tau>s) D)"
+"ancestor_args \<Sigma> C \<tau>s D = the (map_of (instantiated_ancestors \<Sigma> C \<tau>s) D)"
 
 (* Fields declared by class C itself, at type arguments \<tau>s *)
 definition declared_fields :: "class_table \<Rightarrow> name \<Rightarrow> ty list \<Rightarrow> (var \<times> ty) list"

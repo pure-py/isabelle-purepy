@@ -419,9 +419,9 @@ proof -
     show ?thesis
     proof (cases \<tau>)
       case (TyClass D \<sigma>s)
-      with Instance have anc: "C \<in> set (ancestors \<Sigma> D)" and "\<tau>s' = instantiated_ancestor \<Sigma> D \<sigma>s C"
+      with Instance have anc: "C \<in> set (ancestors \<Sigma> D)" and "\<tau>s' = ancestor_args \<Sigma> D \<sigma>s C"
         by (auto split: if_splits)
-      with instantiated_ancestor_wf[OF assms(1) assms(2)[unfolded TyClass] anc] \<tau>s' show ?thesis by simp
+      with ancestor_args_wf[OF assms(1) assms(2)[unfolded TyClass] anc] \<tau>s' show ?thesis by simp
     next
       case (TyPrim p)
       with Instance \<tau>s' show ?thesis by (cases p) (auto split: if_splits)

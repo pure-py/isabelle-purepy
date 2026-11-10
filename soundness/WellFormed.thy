@@ -65,16 +65,16 @@ lemma ancestors_instantiated: "set (ancestors \<Sigma> C) = fst ` set (instantia
   by (subst instantiated_ancestors_upto_names[of _ _ _ _ \<tau>s]) simp
 
 (* Type arguments of ancestor D of class C at well-formed type arguments \<tau>s *)
-lemma instantiated_ancestor_wf:
+lemma ancestor_args_wf:
   assumes "wf_class_table \<Sigma>" and "wf_ty \<Sigma> (TyClass C \<tau>s)" and "D \<in> set (ancestors \<Sigma> C)"
-  shows "wf_ty \<Sigma> (TyClass D (instantiated_ancestor \<Sigma> C \<tau>s D))
-    \<and> (\<forall>\<sigma> \<in> set (instantiated_ancestor \<Sigma> C \<tau>s D). fv \<sigma> \<subseteq> \<Union> (fv ` set \<tau>s))"
+  shows "wf_ty \<Sigma> (TyClass D (ancestor_args \<Sigma> C \<tau>s D))
+    \<and> (\<forall>\<sigma> \<in> set (ancestor_args \<Sigma> C \<tau>s D). fv \<sigma> \<subseteq> \<Union> (fv ` set \<tau>s))"
 proof -
   have "map_of (instantiated_ancestors \<Sigma> C \<tau>s) D \<noteq> None"
     using assms(3) by (simp add: map_of_eq_None_iff ancestors_instantiated[of \<Sigma> C \<tau>s])
   then obtain \<sigma>s where "map_of (instantiated_ancestors \<Sigma> C \<tau>s) D = Some \<sigma>s" by blast
   with instantiated_ancestors_wf[OF assms(1, 2) map_of_SomeD[OF this]] show ?thesis
-    by (simp add: instantiated_ancestor_def)
+    by (simp add: ancestor_args_def)
 qed
 
 subsection \<open>Joins and meets\<close>
@@ -346,9 +346,9 @@ lemma instance_above_wf:
   shows "\<forall>\<tau>' \<in> set \<tau>s. fv \<tau>' \<subseteq> fv \<tau> \<and> wf_ty \<Sigma> \<tau>'"
 proof (cases \<tau>)
   case (TyClass D \<sigma>s)
-  with assms(3) have anc: "C \<in> set (ancestors \<Sigma> D)" and \<tau>s: "\<tau>s = instantiated_ancestor \<Sigma> D \<sigma>s C"
+  with assms(3) have anc: "C \<in> set (ancestors \<Sigma> D)" and \<tau>s: "\<tau>s = ancestor_args \<Sigma> D \<sigma>s C"
     by (auto split: if_splits)
-  from instantiated_ancestor_wf[OF assms(1) assms(2)[unfolded TyClass] anc] show ?thesis
+  from ancestor_args_wf[OF assms(1) assms(2)[unfolded TyClass] anc] show ?thesis
     unfolding \<tau>s TyClass by auto
 next
   case (TyPrim p)
@@ -361,7 +361,7 @@ lemma instance_below_wf:
 proof (cases \<tau>)
   case (TyClass D \<sigma>s)
   with assms(2) obtain \<gamma>
-    where "match_args_seq (instantiated_ancestor \<Sigma> C (map TyVar (type_params \<Sigma> C)) D) \<sigma>s = Matched \<gamma>"
+    where "match_args_seq (ancestor_args \<Sigma> C (map TyVar (type_params \<Sigma> C)) D) \<sigma>s = Matched \<gamma>"
       and "type_args_of \<gamma> (type_params \<Sigma> C) = Ok \<tau>s"
     by (auto simp: Let_def split: if_splits arg_match.splits sum.splits)
   with assms(1) show ?thesis

@@ -87,10 +87,10 @@ next
   have range: "range_class |\<in>| fmdom \<Sigma>" using range_lookup by (simp add: predefined_classes_def fmlookup_dom_iff)
   from subty_class_class(1)[OF wf_class_table wf_range_sub[OF TyClass.prems, simplified] refl refl range]
   have "D \<in> set (ancestors \<Sigma> range_class)"
-    and "list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (instantiated_ancestor \<Sigma> range_class [] D) (map (inst \<eta>) \<sigma>s)"
+    and "list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (ancestor_args \<Sigma> range_class [] D) (map (inst \<eta>) \<sigma>s)"
     by auto
   then have "D = range_class" and "\<sigma>s = []"
-    by (auto simp: ancestors_def range_ancestors instantiated_ancestor_def dest: list_all2_lengthD)
+    by (auto simp: ancestors_def range_ancestors ancestor_args_def dest: list_all2_lengthD)
   then show ?case by (simp add: SubtyRefl)
 qed (auto dest!: wf_range_sub subty_structured_inv)
 
@@ -240,9 +240,9 @@ qed simp
 
 lemma instantiate_fields_ancestor:
   assumes "wf_class_table \<Sigma>" and "D |\<in>| fmdom \<Sigma>" and "C \<in> set (ancestors \<Sigma> D)"
-  shows "\<exists>rest. instantiate (fields \<Sigma> D) \<upsilon>s = instantiate (fields \<Sigma> C) (instantiated_ancestor \<Sigma> D \<upsilon>s C) @ rest"
+  shows "\<exists>rest. instantiate (fields \<Sigma> D) \<upsilon>s = instantiate (fields \<Sigma> C) (ancestor_args \<Sigma> D \<upsilon>s C) @ rest"
   using instantiate_fields_upto[OF assms(1, 2) wf_class_table_inherits[OF assms(1, 2)]
-      instantiated_ancestor_mem[OF assms, of \<upsilon>s, unfolded instantiated_ancestors_def]] .
+      ancestor_args_mem[OF assms, of \<upsilon>s, unfolded instantiated_ancestors_def]] .
 
 subsection \<open>Meets with a literal, float or class type\<close>
 
@@ -367,10 +367,10 @@ lemma ancestors_comparable:
   shows "C \<in> set (ancestors \<Sigma> E) \<or> E \<in> set (ancestors \<Sigma> C)"
 proof -
   let ?\<upsilon>s = "map TyVar (type_params \<Sigma> D)"
-  let ?L = "\<lambda>F. instantiated_ancestors \<Sigma> F (instantiated_ancestor \<Sigma> D ?\<upsilon>s F)"
-  from instantiated_ancestors_suffix[OF assms(1, 2) instantiated_ancestor_mem[OF assms(1-3)]]
+  let ?L = "\<lambda>F. instantiated_ancestors \<Sigma> F (ancestor_args \<Sigma> D ?\<upsilon>s F)"
+  from instantiated_ancestors_suffix[OF assms(1, 2) ancestor_args_mem[OF assms(1-3)]]
   obtain pre where C: "instantiated_ancestors \<Sigma> D ?\<upsilon>s = pre @ ?L C" by blast
-  from instantiated_ancestors_suffix[OF assms(1, 2) instantiated_ancestor_mem[OF assms(1, 2, 4)]]
+  from instantiated_ancestors_suffix[OF assms(1, 2) ancestor_args_mem[OF assms(1, 2, 4)]]
   obtain pre' where E: "instantiated_ancestors \<Sigma> D ?\<upsilon>s = pre' @ ?L E" by blast
   let ?W = "instantiated_ancestors \<Sigma> D ?\<upsilon>s"
   have 1: "?L C = drop (length pre) ?W" using C by (simp add: append_eq_conv_conj)
@@ -440,7 +440,7 @@ proof (cases "instance_above \<Sigma> C \<sigma>")
   show ?thesis
   proof (cases \<sigma>)
     case (TyClass E \<sigma>s\<^sub>E)
-    with Instance \<sigma>s have "C \<in> set (ancestors \<Sigma> E)" and "\<sigma>s = instantiated_ancestor \<Sigma> E \<sigma>s\<^sub>E C"
+    with Instance \<sigma>s have "C \<in> set (ancestors \<Sigma> E)" and "\<sigma>s = ancestor_args \<Sigma> E \<sigma>s\<^sub>E C"
       by (auto split: if_splits)
     with subty_ancestor[OF wf_class_table _ this(1), of \<sigma>s\<^sub>E] assms(3) show ?thesis unfolding TyClass by auto
   next
@@ -454,13 +454,13 @@ next
   proof (cases \<sigma>)
     case (TyClass E \<sigma>s\<^sub>E)
     with below have E: "E \<in> set (ancestors \<Sigma> C)"
-      and equiv: "list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (instantiated_ancestor \<Sigma> C \<sigma>s E) \<sigma>s\<^sub>E"
+      and equiv: "list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (ancestor_args \<Sigma> C \<sigma>s E) \<sigma>s\<^sub>E"
       by (auto simp: Let_def split: if_splits arg_match.splits sum.splits)
     have wf\<sigma>s: "wf_ty \<Sigma> (TyClass C \<sigma>s)"
       using instance_at_class_wf[OF wf_class_table assms(3, 1, 4)] .
-    from instantiated_ancestor_wf[OF wf_class_table wf\<sigma>s E]
-    have wf_anc: "wf_ty \<Sigma> (TyClass E (instantiated_ancestor \<Sigma> C \<sigma>s E))" by simp
-    have "\<Sigma> \<turnstile> TyClass E (instantiated_ancestor \<Sigma> C \<sigma>s E) <: TyClass E \<sigma>s\<^sub>E"
+    from ancestor_args_wf[OF wf_class_table wf\<sigma>s E]
+    have wf_anc: "wf_ty \<Sigma> (TyClass E (ancestor_args \<Sigma> C \<sigma>s E))" by simp
+    have "\<Sigma> \<turnstile> TyClass E (ancestor_args \<Sigma> C \<sigma>s E) <: TyClass E \<sigma>s\<^sub>E"
       using equiv by (auto intro!: SubtyClass simp: subtys_list_all2 list_all2_conv_all_nth)
     from subty_trans[OF wf_class_table wf\<sigma>s wf_anc subty_ancestor[OF wf_class_table assms(4) E] this]
     show ?thesis unfolding TyClass by simp
@@ -480,11 +480,11 @@ lemma instance_at_sub:
     and anc: "C \<in> set (ancestors \<Sigma> D)"
   shows "\<Sigma> \<turnstile> TyClass D \<upsilon>s <: inst \<eta> (TyClass C \<sigma>s)"
 proof -
-  let ?\<alpha>s = "type_params \<Sigma> C" and ?\<tau>s' = "instantiated_ancestor \<Sigma> D \<upsilon>s C"
+  let ?\<alpha>s = "type_params \<Sigma> C" and ?\<tau>s' = "ancestor_args \<Sigma> D \<upsilon>s C"
   have D: "D |\<in>| fmdom \<Sigma>" using wfD by simp
   have wf\<sigma>s: "wf_ty \<Sigma> (TyClass C \<sigma>s)" using instance_at_class_wf[OF wf_class_table wf inst C] .
   then have len\<sigma>s: "length \<sigma>s = length ?\<alpha>s" by simp
-  from instantiated_ancestor_wf[OF wf_class_table wfD anc] have wf\<tau>s': "wf_ty \<Sigma> (TyClass C ?\<tau>s')" by simp
+  from ancestor_args_wf[OF wf_class_table wfD anc] have wf\<tau>s': "wf_ty \<Sigma> (TyClass C ?\<tau>s')" by simp
   then have len\<tau>s': "length ?\<tau>s' = length ?\<alpha>s" by simp
   have distinct: "distinct ?\<alpha>s" using wf_class_table_distinct_params[OF wf_class_table C] .
   have "list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) ?\<tau>s' (map (inst \<eta>) \<sigma>s)"
@@ -495,27 +495,27 @@ proof -
     proof (cases \<sigma>)
       case (TyClass E \<sigma>s\<^sub>E)
       let ?\<beta>s = "type_params \<Sigma> E"
-      from Instance \<sigma>s' have CE: "C \<in> set (ancestors \<Sigma> E)" and \<sigma>s: "\<sigma>s = instantiated_ancestor \<Sigma> E \<sigma>s\<^sub>E C"
+      from Instance \<sigma>s' have CE: "C \<in> set (ancestors \<Sigma> E)" and \<sigma>s: "\<sigma>s = ancestor_args \<Sigma> E \<sigma>s\<^sub>E C"
         unfolding TyClass by (auto split: if_splits)
       have E: "E |\<in>| fmdom \<Sigma>" and len\<^sub>E: "length \<sigma>s\<^sub>E = length ?\<beta>s" using wf unfolding TyClass by auto
       from subty_class_class(1)[OF wf_class_table sub[unfolded TyClass, simplified] refl refl D]
       have ED: "E \<in> set (ancestors \<Sigma> D)"
-        and equiv: "list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (instantiated_ancestor \<Sigma> D \<upsilon>s E) (map (inst \<eta>) \<sigma>s\<^sub>E)"
+        and equiv: "list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (ancestor_args \<Sigma> D \<upsilon>s E) (map (inst \<eta>) \<sigma>s\<^sub>E)"
         by auto
-      from instantiated_ancestor_wf[OF wf_class_table wfD ED]
-      have len\<^sub>D: "length (instantiated_ancestor \<Sigma> D \<upsilon>s E) = length ?\<beta>s" by simp
-      have "?\<tau>s' = instantiated_ancestor \<Sigma> E (instantiated_ancestor \<Sigma> D \<upsilon>s E) C"
-        using instantiated_ancestor_compose(2)[OF wf_class_table D ED CE] .
-      also have "\<dots> = map (subst (instantiated_ancestor \<Sigma> D \<upsilon>s E) ?\<beta>s)
-                       (instantiated_ancestor \<Sigma> E (map TyVar ?\<beta>s) C)"
-        using instantiated_ancestor_params[OF wf_class_table E len\<^sub>D CE] .
-      finally have \<tau>s': "?\<tau>s' = map (subst (instantiated_ancestor \<Sigma> D \<upsilon>s E) ?\<beta>s)
-                                (instantiated_ancestor \<Sigma> E (map TyVar ?\<beta>s) C)" .
+      from ancestor_args_wf[OF wf_class_table wfD ED]
+      have len\<^sub>D: "length (ancestor_args \<Sigma> D \<upsilon>s E) = length ?\<beta>s" by simp
+      have "?\<tau>s' = ancestor_args \<Sigma> E (ancestor_args \<Sigma> D \<upsilon>s E) C"
+        using ancestor_args_compose(2)[OF wf_class_table D ED CE] .
+      also have "\<dots> = map (subst (ancestor_args \<Sigma> D \<upsilon>s E) ?\<beta>s)
+                       (ancestor_args \<Sigma> E (map TyVar ?\<beta>s) C)"
+        using ancestor_args_params[OF wf_class_table E len\<^sub>D CE] .
+      finally have \<tau>s': "?\<tau>s' = map (subst (ancestor_args \<Sigma> D \<upsilon>s E) ?\<beta>s)
+                                (ancestor_args \<Sigma> E (map TyVar ?\<beta>s) C)" .
       have wfE: "wf_ty \<Sigma> (TyClass E \<sigma>s\<^sub>E)" using wf unfolding TyClass .
-      have "map (inst \<eta>) \<sigma>s = instantiated_ancestor \<Sigma> E (map (inst \<eta>) \<sigma>s\<^sub>E) C"
-        unfolding \<sigma>s by (simp add: instantiated_ancestor_inst[OF wf_class_table wfE CE])
-      also have "\<dots> = map (subst (map (inst \<eta>) \<sigma>s\<^sub>E) ?\<beta>s) (instantiated_ancestor \<Sigma> E (map TyVar ?\<beta>s) C)"
-        using instantiated_ancestor_params[OF wf_class_table E _ CE, of "map (inst \<eta>) \<sigma>s\<^sub>E"] len\<^sub>E by simp
+      have "map (inst \<eta>) \<sigma>s = ancestor_args \<Sigma> E (map (inst \<eta>) \<sigma>s\<^sub>E) C"
+        unfolding \<sigma>s by (simp add: ancestor_args_inst[OF wf_class_table wfE CE])
+      also have "\<dots> = map (subst (map (inst \<eta>) \<sigma>s\<^sub>E) ?\<beta>s) (ancestor_args \<Sigma> E (map TyVar ?\<beta>s) C)"
+        using ancestor_args_params[OF wf_class_table E _ CE, of "map (inst \<eta>) \<sigma>s\<^sub>E"] len\<^sub>E by simp
       finally show ?thesis
         unfolding \<tau>s' using subst_equiv[OF equiv] by (auto simp: list_all2_conv_all_nth)
     next
@@ -528,21 +528,21 @@ proof -
     show ?thesis
     proof (cases \<sigma>)
       case (TyClass E \<sigma>s\<^sub>E)
-      let ?\<rho>s = "instantiated_ancestor \<Sigma> C (map TyVar ?\<alpha>s) E"
+      let ?\<rho>s = "ancestor_args \<Sigma> C (map TyVar ?\<alpha>s) E"
       from below obtain \<gamma> where E: "E \<in> set (ancestors \<Sigma> C)" and m: "match_args_seq ?\<rho>s \<sigma>s\<^sub>E = Matched \<gamma>"
         and args: "Subtyping.type_args_of \<gamma> ?\<alpha>s = Ok \<sigma>s"
         unfolding TyClass by (auto simp: Let_def split: if_splits arg_match.splits sum.splits)
       from subty_class_class(1)[OF wf_class_table sub[unfolded TyClass, simplified] refl refl D]
       have ED: "E \<in> set (ancestors \<Sigma> D)"
-        and equiv: "list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (instantiated_ancestor \<Sigma> D \<upsilon>s E) (map (inst \<eta>) \<sigma>s\<^sub>E)"
+        and equiv: "list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (ancestor_args \<Sigma> D \<upsilon>s E) (map (inst \<eta>) \<sigma>s\<^sub>E)"
         by auto
-      have "instantiated_ancestor \<Sigma> D \<upsilon>s E = instantiated_ancestor \<Sigma> C ?\<tau>s' E"
-        using instantiated_ancestor_compose(2)[OF wf_class_table D anc E] .
-      also have "\<dots> = map (subst ?\<tau>s' ?\<alpha>s) ?\<rho>s" using instantiated_ancestor_params[OF wf_class_table C len\<tau>s' E] .
+      have "ancestor_args \<Sigma> D \<upsilon>s E = ancestor_args \<Sigma> C ?\<tau>s' E"
+        using ancestor_args_compose(2)[OF wf_class_table D anc E] .
+      also have "\<dots> = map (subst ?\<tau>s' ?\<alpha>s) ?\<rho>s" using ancestor_args_params[OF wf_class_table C len\<tau>s' E] .
       finally have equiv': "list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> subst ?\<tau>s' ?\<alpha>s \<rho> \<approx> inst \<eta> \<sigma>) ?\<rho>s \<sigma>s\<^sub>E"
         using equiv by (simp add: list_all2_map1 list_all2_map2)
       have wf\<rho>s: "\<forall>\<rho> \<in> set ?\<rho>s. wf_ty \<Sigma> \<rho>"
-        using instantiated_ancestor_wf[OF wf_class_table _ E, of "map TyVar ?\<alpha>s"] C by auto
+        using ancestor_args_wf[OF wf_class_table _ E, of "map TyVar ?\<alpha>s"] C by auto
       have wf\<sigma>s\<^sub>E: "\<forall>\<sigma>' \<in> set \<sigma>s\<^sub>E. wf_ty \<Sigma> \<sigma>'" using wf unfolding TyClass by simp
       have "\<Sigma> \<turnstile> subst ?\<tau>s' ?\<alpha>s (TyVar \<alpha>) \<approx> subst (map (inst \<eta>) \<sigma>s) ?\<alpha>s (TyVar \<alpha>)" if \<alpha>: "\<alpha> \<in> set ?\<alpha>s" for \<alpha>
       proof -
@@ -585,31 +585,31 @@ lemma instance_at_none:
     and wfD: "wf_ty \<Sigma> (TyClass D \<upsilon>s)" and anc: "C \<in> set (ancestors \<Sigma> D)"
   shows False
 proof -
-  let ?\<alpha>s = "type_params \<Sigma> C" and ?\<tau>s' = "instantiated_ancestor \<Sigma> D \<upsilon>s C"
+  let ?\<alpha>s = "type_params \<Sigma> C" and ?\<tau>s' = "ancestor_args \<Sigma> D \<upsilon>s C"
   have D: "D |\<in>| fmdom \<Sigma>" using wfD by simp
   from none have above: "instance_above \<Sigma> C \<sigma> = NoInstance" and below: "instance_below \<Sigma> C \<sigma> = NoInstance"
     by (auto simp: instance_at_def split: instances.splits)
   show False
   proof (cases \<sigma>)
     case (TyClass E \<sigma>s\<^sub>E)
-    let ?\<rho>s = "instantiated_ancestor \<Sigma> C (map TyVar ?\<alpha>s) E"
+    let ?\<rho>s = "ancestor_args \<Sigma> C (map TyVar ?\<alpha>s) E"
     from subty_class_class(1)[OF wf_class_table sub[unfolded TyClass, simplified] refl refl D]
     have ED: "E \<in> set (ancestors \<Sigma> D)"
-      and equiv: "list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (instantiated_ancestor \<Sigma> D \<upsilon>s E) (map (inst \<eta>) \<sigma>s\<^sub>E)"
+      and equiv: "list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (ancestor_args \<Sigma> D \<upsilon>s E) (map (inst \<eta>) \<sigma>s\<^sub>E)"
       by auto
     from above have "C \<notin> set (ancestors \<Sigma> E)" unfolding TyClass by (auto split: if_splits)
     with ancestors_comparable[OF wf_class_table D anc ED] have E: "E \<in> set (ancestors \<Sigma> C)" by blast
     with below have clash: "match_args_seq ?\<rho>s \<sigma>s\<^sub>E = Clash"
       unfolding TyClass by (auto simp: Let_def split: if_splits arg_match.splits sum.splits)
-    from instantiated_ancestor_wf[OF wf_class_table wfD anc] have len\<tau>s': "length ?\<tau>s' = length ?\<alpha>s" by simp
-    have "instantiated_ancestor \<Sigma> D \<upsilon>s E = map (subst ?\<tau>s' ?\<alpha>s) ?\<rho>s"
-      using instantiated_ancestor_compose(2)[OF wf_class_table D anc E]
-        instantiated_ancestor_params[OF wf_class_table C len\<tau>s' E]
+    from ancestor_args_wf[OF wf_class_table wfD anc] have len\<tau>s': "length ?\<tau>s' = length ?\<alpha>s" by simp
+    have "ancestor_args \<Sigma> D \<upsilon>s E = map (subst ?\<tau>s' ?\<alpha>s) ?\<rho>s"
+      using ancestor_args_compose(2)[OF wf_class_table D anc E]
+        ancestor_args_params[OF wf_class_table C len\<tau>s' E]
       by simp
     with equiv have equiv': "list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> subst ?\<tau>s' ?\<alpha>s \<rho> \<approx> inst \<eta> \<sigma>) ?\<rho>s \<sigma>s\<^sub>E"
       by (simp add: list_all2_map1 list_all2_map2)
     have wf\<rho>s: "\<forall>\<rho> \<in> set ?\<rho>s. wf_ty \<Sigma> \<rho>"
-      using instantiated_ancestor_wf[OF wf_class_table _ E, of "map TyVar ?\<alpha>s"] C by auto
+      using ancestor_args_wf[OF wf_class_table _ E, of "map TyVar ?\<alpha>s"] C by auto
     have wf\<sigma>s\<^sub>E: "\<forall>\<sigma>' \<in> set \<sigma>s\<^sub>E. wf_ty \<Sigma> \<sigma>'" using wf unfolding TyClass by simp
     from match_args_seq_Clash[OF clash] show False
     proof
@@ -1743,7 +1743,7 @@ proof (induction p arbitrary: \<tau> \<Delta> v rule: measure_induct_rule[where 
           using ValObj[OF wfD names typed] below wfC\<eta> unfolding vD by (auto intro: wf_val_sub)
         (* Field names of C: the first fields of D *)
         from instantiate_fields_ancestor[OF wf_class_table D anc, of \<upsilon>s] obtain rest
-          where fieldsD: "instantiate (fields \<Sigma> D) \<upsilon>s = instantiate (fields \<Sigma> C) (instantiated_ancestor \<Sigma> D \<upsilon>s C) @ rest"
+          where fieldsD: "instantiate (fields \<Sigma> D) \<upsilon>s = instantiate (fields \<Sigma> C) (ancestor_args \<Sigma> D \<upsilon>s C) @ rest"
           by blast
         have "field_names \<Sigma> D = field_names \<Sigma> C @ map fst rest"
           using map_fst_instantiate[of \<Sigma> D \<upsilon>s] map_fst_instantiate[of \<Sigma> C] unfolding fieldsD by simp

@@ -120,7 +120,7 @@ datatype instances = Instance "ty list" | Undetermined | NoInstance
 fun instance_above :: "class_table \<Rightarrow> name \<Rightarrow> ty \<Rightarrow> instances"
 where
 "instance_above \<Sigma> C (TyClass D \<sigma>s) =
-  (if C \<in> set (ancestors \<Sigma> D) then Instance (instantiated_ancestor \<Sigma> D \<sigma>s C) else NoInstance)" |
+  (if C \<in> set (ancestors \<Sigma> D) then Instance (ancestor_args \<Sigma> D \<sigma>s C) else NoInstance)" |
 "instance_above \<Sigma> C (TyPrim Never) = (if type_params \<Sigma> C = [] then Instance [] else Undetermined)" |
 "instance_above \<Sigma> C (TyVar _) = Undetermined" |
 "instance_above \<Sigma> C _ = NoInstance"
@@ -177,13 +177,13 @@ where
 "instance_below \<Sigma> C (TyClass D \<sigma>s) =
   (if D \<in> set (ancestors \<Sigma> C) then
      let \<alpha>s = type_params \<Sigma> C in
-     case match_args_seq (instantiated_ancestor \<Sigma> C (map TyVar \<alpha>s) D) \<sigma>s of
+     case match_args_seq (ancestor_args \<Sigma> C (map TyVar \<alpha>s) D) \<sigma>s of
        Clash \<Rightarrow> NoInstance
      | Indeterminate \<Rightarrow> Undetermined
      | Matched \<gamma> \<Rightarrow>
          (case type_args_of \<gamma> \<alpha>s of
             Ok \<tau>s \<Rightarrow>
-              if list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (instantiated_ancestor \<Sigma> C \<tau>s D) \<sigma>s then Instance \<tau>s
+              if list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (ancestor_args \<Sigma> C \<tau>s D) \<sigma>s then Instance \<tau>s
               else Undetermined
           | Fail _ \<Rightarrow> Undetermined)
    else NoInstance)" |

@@ -132,18 +132,18 @@ proof -
   from instantiated_ancestors_wf[OF assms(1) \<open>wf_ty \<Sigma> _\<close> this] show ?thesis by simp
 qed
 
-lemma instantiated_ancestor_mem:
+lemma ancestor_args_mem:
   assumes "wf_class_table \<Sigma>" and "C |\<in>| fmdom \<Sigma>" and "D \<in> set (ancestors \<Sigma> C)"
-  shows "(D, instantiated_ancestor \<Sigma> C \<tau>s D) \<in> set (instantiated_ancestors \<Sigma> C \<tau>s)"
+  shows "(D, ancestor_args \<Sigma> C \<tau>s D) \<in> set (instantiated_ancestors \<Sigma> C \<tau>s)"
 proof -
   from assms(3) obtain \<sigma>s where "(D, \<sigma>s) \<in> set (instantiated_ancestors \<Sigma> C \<tau>s)"
     using ancestors_instantiated[of \<Sigma> C \<tau>s] by auto
   with instantiated_ancestors_distinct[OF assms(1, 2)] show ?thesis
-    by (simp add: instantiated_ancestor_def)
+    by (simp add: ancestor_args_def)
 qed
 
-lemma instantiated_ancestor_head [simp]: "C |\<in>| fmdom \<Sigma> \<Longrightarrow> instantiated_ancestor \<Sigma> C \<tau>s C = \<tau>s"
-  unfolding instantiated_ancestor_def instantiated_ancestors_def by (auto dest!: fcard_fmdom_Suc)
+lemma ancestor_args_head [simp]: "C |\<in>| fmdom \<Sigma> \<Longrightarrow> ancestor_args \<Sigma> C \<tau>s C = \<tau>s"
+  unfolding ancestor_args_def instantiated_ancestors_def by (auto dest!: fcard_fmdom_Suc)
 
 lemma ancestors_head [simp]: "C |\<in>| fmdom \<Sigma> \<Longrightarrow> C \<in> set (ancestors \<Sigma> C)"
   unfolding ancestors_def instantiated_ancestors_def by (auto dest!: fcard_fmdom_Suc)
@@ -162,22 +162,22 @@ proof -
 qed
 
 (* Ancestor of an ancestor: an ancestor, with the type arguments composed *)
-lemma instantiated_ancestor_compose:
+lemma ancestor_args_compose:
   assumes "wf_class_table \<Sigma>" and "C |\<in>| fmdom \<Sigma>" and "D \<in> set (ancestors \<Sigma> C)" and "E \<in> set (ancestors \<Sigma> D)"
   shows "E \<in> set (ancestors \<Sigma> C)"
-    and "instantiated_ancestor \<Sigma> C \<tau>s E = instantiated_ancestor \<Sigma> D (instantiated_ancestor \<Sigma> C \<tau>s D) E"
+    and "ancestor_args \<Sigma> C \<tau>s E = ancestor_args \<Sigma> D (ancestor_args \<Sigma> C \<tau>s D) E"
 proof -
-  let ?\<sigma>s = "instantiated_ancestor \<Sigma> C \<tau>s D"
+  let ?\<sigma>s = "ancestor_args \<Sigma> C \<tau>s D"
   have D: "D |\<in>| fmdom \<Sigma>" using ancestors_dom[OF assms(1-3)] .
-  from instantiated_ancestors_suffix[OF assms(1, 2) instantiated_ancestor_mem[OF assms(1-3)]]
+  from instantiated_ancestors_suffix[OF assms(1, 2) ancestor_args_mem[OF assms(1-3)]]
   obtain pre where suffix: "instantiated_ancestors \<Sigma> C \<tau>s = pre @ instantiated_ancestors \<Sigma> D ?\<sigma>s" by blast
-  from instantiated_ancestor_mem[OF assms(1) D assms(4), of ?\<sigma>s]
-  have mem: "(E, instantiated_ancestor \<Sigma> D ?\<sigma>s E) \<in> set (instantiated_ancestors \<Sigma> C \<tau>s)"
+  from ancestor_args_mem[OF assms(1) D assms(4), of ?\<sigma>s]
+  have mem: "(E, ancestor_args \<Sigma> D ?\<sigma>s E) \<in> set (instantiated_ancestors \<Sigma> C \<tau>s)"
     unfolding suffix by simp
   then show "E \<in> set (ancestors \<Sigma> C)" using ancestors_instantiated[of \<Sigma> C \<tau>s] by force
   from mem instantiated_ancestors_distinct[OF assms(1, 2)]
-  show "instantiated_ancestor \<Sigma> C \<tau>s E = instantiated_ancestor \<Sigma> D ?\<sigma>s E"
-    by (simp add: instantiated_ancestor_def)
+  show "ancestor_args \<Sigma> C \<tau>s E = ancestor_args \<Sigma> D ?\<sigma>s E"
+    by (simp add: ancestor_args_def)
 qed
 
 lemma ancestors_antisym:
@@ -186,23 +186,23 @@ lemma ancestors_antisym:
 proof -
   let ?\<tau>s = "map TyVar (type_params \<Sigma> C)"
   have D: "D |\<in>| fmdom \<Sigma>" using ancestors_dom[OF assms(1-3)] .
-  from instantiated_ancestors_suffix[OF assms(1, 2) instantiated_ancestor_mem[OF assms(1-3), of ?\<tau>s]]
+  from instantiated_ancestors_suffix[OF assms(1, 2) ancestor_args_mem[OF assms(1-3), of ?\<tau>s]]
   obtain pre where C: "instantiated_ancestors \<Sigma> C ?\<tau>s
-                       = pre @ instantiated_ancestors \<Sigma> D (instantiated_ancestor \<Sigma> C ?\<tau>s D)"
+                       = pre @ instantiated_ancestors \<Sigma> D (ancestor_args \<Sigma> C ?\<tau>s D)"
     by blast
-  from instantiated_ancestors_suffix[OF assms(1) D instantiated_ancestor_mem[OF assms(1) D assms(4)]]
-  obtain pre' where "instantiated_ancestors \<Sigma> D (instantiated_ancestor \<Sigma> C ?\<tau>s D)
+  from instantiated_ancestors_suffix[OF assms(1) D ancestor_args_mem[OF assms(1) D assms(4)]]
+  obtain pre' where "instantiated_ancestors \<Sigma> D (ancestor_args \<Sigma> C ?\<tau>s D)
                      = pre' @ instantiated_ancestors \<Sigma> C
-                                (instantiated_ancestor \<Sigma> D (instantiated_ancestor \<Sigma> C ?\<tau>s D) C)"
+                                (ancestor_args \<Sigma> D (ancestor_args \<Sigma> C ?\<tau>s D) C)"
     by blast
   moreover have "length (instantiated_ancestors \<Sigma> C ?\<tau>s)
                  = length (instantiated_ancestors \<Sigma> C
-                             (instantiated_ancestor \<Sigma> D (instantiated_ancestor \<Sigma> C ?\<tau>s D) C))"
+                             (ancestor_args \<Sigma> D (ancestor_args \<Sigma> C ?\<tau>s D) C))"
     using instantiated_ancestors_upto_names[of "fcard (fmdom \<Sigma>)" \<Sigma> C ?\<tau>s]
     unfolding instantiated_ancestors_def by (metis length_map)
   ultimately have "length pre = 0" using C by auto
   with C have "hd (instantiated_ancestors \<Sigma> C ?\<tau>s)
-               = hd (instantiated_ancestors \<Sigma> D (instantiated_ancestor \<Sigma> C ?\<tau>s D))"
+               = hd (instantiated_ancestors \<Sigma> D (ancestor_args \<Sigma> C ?\<tau>s D))"
     by simp
   then show ?thesis
     unfolding instantiated_ancestors_def using fcard_fmdom_Suc[OF assms(2)] by auto
@@ -235,11 +235,11 @@ proof (induction n arbitrary: C \<tau>s)
   qed simp
 qed simp
 
-lemma instantiated_ancestor_subst:
+lemma ancestor_args_subst:
   assumes "wf_class_table \<Sigma>" and "C |\<in>| fmdom \<Sigma>" and "length \<tau>s = length (type_params \<Sigma> C)"
     and "D \<in> set (ancestors \<Sigma> C)"
-  shows "instantiated_ancestor \<Sigma> C (map (subst \<tau>s' \<alpha>s) \<tau>s) D
-         = map (subst \<tau>s' \<alpha>s) (instantiated_ancestor \<Sigma> C \<tau>s D)"
+  shows "ancestor_args \<Sigma> C (map (subst \<tau>s' \<alpha>s) \<tau>s) D
+         = map (subst \<tau>s' \<alpha>s) (ancestor_args \<Sigma> C \<tau>s D)"
 proof -
   have "instantiated_ancestors \<Sigma> C (map (subst \<tau>s' \<alpha>s) \<tau>s)
         = map (\<lambda>(D, \<sigma>s). (D, map (subst \<tau>s' \<alpha>s) \<sigma>s)) (instantiated_ancestors \<Sigma> C \<tau>s)"
@@ -247,36 +247,36 @@ proof -
     by (rule instantiated_ancestors_upto_subst[OF assms(1, 2) wf_class_table_inherits[OF assms(1, 2)] assms(3)])
   moreover from assms(4) obtain \<sigma>s where "map_of (instantiated_ancestors \<Sigma> C \<tau>s) D = Some \<sigma>s"
     using ancestors_instantiated[of \<Sigma> C \<tau>s] by (auto dest: weak_map_of_SomeI)
-  ultimately show ?thesis by (simp add: instantiated_ancestor_def map_of_map)
+  ultimately show ?thesis by (simp add: ancestor_args_def map_of_map)
 qed
 
-lemma instantiated_ancestor_inst:
+lemma ancestor_args_inst:
   assumes "wf_class_table \<Sigma>" and "wf_ty \<Sigma> (TyClass C \<tau>s)" and "D \<in> set (ancestors \<Sigma> C)"
-  shows "instantiated_ancestor \<Sigma> C (map (inst \<eta>) \<tau>s) D = map (inst \<eta>) (instantiated_ancestor \<Sigma> C \<tau>s D)"
+  shows "ancestor_args \<Sigma> C (map (inst \<eta>) \<tau>s) D = map (inst \<eta>) (ancestor_args \<Sigma> C \<tau>s D)"
 proof -
   have "finite (\<Union> (fv ` set \<tau>s))" by (simp add: finite_fv)
   then obtain \<alpha>s where \<alpha>s: "\<And>\<tau>. fv \<tau> \<subseteq> \<Union> (fv ` set \<tau>s) \<Longrightarrow> inst \<eta> \<tau> = subst (map \<eta> \<alpha>s) \<alpha>s \<tau>"
     using inst_subst_cover by blast
   have \<tau>s: "map (inst \<eta>) \<tau>s = map (subst (map \<eta> \<alpha>s) \<alpha>s) \<tau>s" by (intro map_cong[OF refl] \<alpha>s) auto
-  have anc: "map (subst (map \<eta> \<alpha>s) \<alpha>s) (instantiated_ancestor \<Sigma> C \<tau>s D)
-             = map (inst \<eta>) (instantiated_ancestor \<Sigma> C \<tau>s D)"
-    using instantiated_ancestor_wf[OF assms] by (intro map_cong[OF refl]) (auto simp: \<alpha>s)
+  have anc: "map (subst (map \<eta> \<alpha>s) \<alpha>s) (ancestor_args \<Sigma> C \<tau>s D)
+             = map (inst \<eta>) (ancestor_args \<Sigma> C \<tau>s D)"
+    using ancestor_args_wf[OF assms] by (intro map_cong[OF refl]) (auto simp: \<alpha>s)
   have "C |\<in>| fmdom \<Sigma>" and "length \<tau>s = length (type_params \<Sigma> C)" using assms(2) by simp_all
-  from instantiated_ancestor_subst[OF assms(1) this assms(3), of "map \<eta> \<alpha>s" \<alpha>s] show ?thesis
+  from ancestor_args_subst[OF assms(1) this assms(3), of "map \<eta> \<alpha>s" \<alpha>s] show ?thesis
     unfolding \<tau>s by (simp add: anc)
 qed
 
 (* Type arguments of ancestor D of class C at \<tau>s, as the substitution of \<tau>s into those at the type parameters *)
-lemma instantiated_ancestor_params:
+lemma ancestor_args_params:
   assumes "wf_class_table \<Sigma>" and "C |\<in>| fmdom \<Sigma>" and "length \<tau>s = length (type_params \<Sigma> C)"
     and "D \<in> set (ancestors \<Sigma> C)"
-  shows "instantiated_ancestor \<Sigma> C \<tau>s D
-         = map (subst \<tau>s (type_params \<Sigma> C)) (instantiated_ancestor \<Sigma> C (map TyVar (type_params \<Sigma> C)) D)"
+  shows "ancestor_args \<Sigma> C \<tau>s D
+         = map (subst \<tau>s (type_params \<Sigma> C)) (ancestor_args \<Sigma> C (map TyVar (type_params \<Sigma> C)) D)"
 proof -
   have "map (subst \<tau>s (type_params \<Sigma> C)) (map TyVar (type_params \<Sigma> C)) = \<tau>s"
     using assms(3) wf_class_table_distinct_params[OF assms(1, 2)]
     by (auto simp: map_of_zip_nth intro: nth_equalityI)
-  with instantiated_ancestor_subst[OF assms(1, 2) _ assms(4), where \<tau>s = "map TyVar (type_params \<Sigma> C)"
+  with ancestor_args_subst[OF assms(1, 2) _ assms(4), where \<tau>s = "map TyVar (type_params \<Sigma> C)"
       and \<tau>s' = \<tau>s and \<alpha>s = "type_params \<Sigma> C"]
   show ?thesis by simp
 qed
@@ -305,8 +305,8 @@ qed simp
 
 lemma subty_ancestor:
   assumes "wf_class_table \<Sigma>" and "C |\<in>| fmdom \<Sigma>" and "D \<in> set (ancestors \<Sigma> C)"
-  shows "\<Sigma> \<turnstile> TyClass C \<tau>s <: TyClass D (instantiated_ancestor \<Sigma> C \<tau>s D)"
-  using instantiated_ancestor_mem[OF assms, of \<tau>s]
+  shows "\<Sigma> \<turnstile> TyClass C \<tau>s <: TyClass D (ancestor_args \<Sigma> C \<tau>s D)"
+  using ancestor_args_mem[OF assms, of \<tau>s]
   unfolding instantiated_ancestors_def
   by (rule subty_ancestors_upto[OF assms(1, 2) wf_class_table_inherits[OF assms(1, 2)]])
 
@@ -314,7 +314,7 @@ lemma subty_ancestor:
 lemma subty_class_class:
   assumes "wf_class_table \<Sigma>"
   shows "\<Sigma> \<turnstile> \<sigma> <: \<tau> \<Longrightarrow> \<sigma> = TyClass C \<tau>s \<Longrightarrow> \<tau> = TyClass D \<sigma>s \<Longrightarrow> C |\<in>| fmdom \<Sigma>
-    \<Longrightarrow> D \<in> set (ancestors \<Sigma> C) \<and> list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (instantiated_ancestor \<Sigma> C \<tau>s D) \<sigma>s"
+    \<Longrightarrow> D \<in> set (ancestors \<Sigma> C) \<and> list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (ancestor_args \<Sigma> C \<tau>s D) \<sigma>s"
     and "\<Sigma> \<turnstile> \<sigma>s' [<:] \<tau>s' \<Longrightarrow> True"
 proof (induction arbitrary: C \<tau>s rule: subty_subtys.inducts)
   case (SubtyRefl \<tau>)
@@ -327,7 +327,7 @@ next
   from wf_class_table_baseD[OF assms SubtyClassExtend(6) base] have E: "E |\<in>| fmdom \<Sigma>" by simp
   from SubtyClassExtend(3)[OF refl SubtyClassExtend(5) E, unfolded \<tau>s' C']
   have anc: "D \<in> set (ancestors \<Sigma> E)"
-    and equiv: "list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (instantiated_ancestor \<Sigma> E ?\<rho>s D) \<sigma>s"
+    and equiv: "list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (ancestor_args \<Sigma> E ?\<rho>s D) \<sigma>s"
     by auto
   note chain = instantiated_ancestors_base[OF assms SubtyClassExtend(6) base, of \<tau>s]
   have "D \<noteq> C"
@@ -341,8 +341,8 @@ next
   qed
   with anc have "D \<in> set (ancestors \<Sigma> C)"
     using ancestors_instantiated[of \<Sigma> C \<tau>s] ancestors_instantiated[of \<Sigma> E ?\<rho>s] unfolding chain by auto
-  moreover have "instantiated_ancestor \<Sigma> C \<tau>s D = instantiated_ancestor \<Sigma> E ?\<rho>s D"
-    using \<open>D \<noteq> C\<close> unfolding instantiated_ancestor_def chain by simp
+  moreover have "ancestor_args \<Sigma> C \<tau>s D = ancestor_args \<Sigma> E ?\<rho>s D"
+    using \<open>D \<noteq> C\<close> unfolding ancestor_args_def chain by simp
   ultimately show ?case using equiv by simp
 next
   case (SubtyClass \<sigma>s' \<tau>s' C')
@@ -355,11 +355,11 @@ lemma equiv_class_class:
   shows "C = D" and "list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) \<tau>s \<sigma>s"
 proof -
   from subty_class_class(1)[OF assms(1) _ refl refl assms(3)] assms(2) have D: "D \<in> set (ancestors \<Sigma> C)"
-    and equiv: "list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (instantiated_ancestor \<Sigma> C \<tau>s D) \<sigma>s"
+    and equiv: "list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (ancestor_args \<Sigma> C \<tau>s D) \<sigma>s"
     by auto
   from subty_class_class(1)[OF assms(1) _ refl refl assms(4)] assms(2) have "C \<in> set (ancestors \<Sigma> D)" by auto
   from ancestors_antisym[OF assms(1, 3) D this] show "C = D" .
-  with equiv show "list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) \<tau>s \<sigma>s" using instantiated_ancestor_head[OF assms(3)] by simp
+  with equiv show "list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) \<tau>s \<sigma>s" using ancestor_args_head[OF assms(3)] by simp
 qed
 
 

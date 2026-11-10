@@ -193,9 +193,9 @@ qed
 lemma ancestors_ext: "C |\<in>| fmdom \<Sigma> \<Longrightarrow> ancestors \<Sigma>' C = ancestors \<Sigma> C"
   by (simp add: ancestors_def instantiated_ancestors_ext type_params_ext)
 
-lemma instantiated_ancestor_ext:
-  "C |\<in>| fmdom \<Sigma> \<Longrightarrow> instantiated_ancestor \<Sigma>' C \<tau>s D = instantiated_ancestor \<Sigma> C \<tau>s D"
-  by (simp add: instantiated_ancestor_def instantiated_ancestors_ext)
+lemma ancestor_args_ext:
+  "C |\<in>| fmdom \<Sigma> \<Longrightarrow> ancestor_args \<Sigma>' C \<tau>s D = ancestor_args \<Sigma> C \<tau>s D"
+  by (simp add: ancestor_args_def instantiated_ancestors_ext)
 
 lemma fields_ext:
   assumes "C |\<in>| fmdom \<Sigma>"
@@ -355,7 +355,7 @@ lemma instance_above_ext:
 proof (cases \<tau>)
   case (TyPrim p)
   then show ?thesis using assms by (cases p) (simp_all add: type_params_ext)
-qed (use assms in \<open>auto simp: ancestors_ext instantiated_ancestor_ext\<close>)
+qed (use assms in \<open>auto simp: ancestors_ext ancestor_args_ext\<close>)
 
 lemma instance_below_ext:
   assumes "wf_ty \<Sigma> \<tau>" and "C |\<in>| fmdom \<Sigma>"
@@ -363,22 +363,22 @@ lemma instance_below_ext:
 proof (cases \<tau>)
   case (TyClass D \<sigma>s)
   let ?\<alpha>s = "type_params \<Sigma> C"
-  have eq: "list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma>' \<turnstile> \<rho> \<approx> \<sigma>) (instantiated_ancestor \<Sigma> C \<tau>s D) \<sigma>s
-          = list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (instantiated_ancestor \<Sigma> C \<tau>s D) \<sigma>s"
-    if m: "match_args_seq (instantiated_ancestor \<Sigma> C (map TyVar ?\<alpha>s) D) \<sigma>s = Matched \<gamma>"
+  have eq: "list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma>' \<turnstile> \<rho> \<approx> \<sigma>) (ancestor_args \<Sigma> C \<tau>s D) \<sigma>s
+          = list_all2 (\<lambda>\<rho> \<sigma>. \<Sigma> \<turnstile> \<rho> \<approx> \<sigma>) (ancestor_args \<Sigma> C \<tau>s D) \<sigma>s"
+    if m: "match_args_seq (ancestor_args \<Sigma> C (map TyVar ?\<alpha>s) D) \<sigma>s = Matched \<gamma>"
     and args: "type_args_of \<gamma> ?\<alpha>s = Ok \<tau>s" and anc: "D \<in> set (ancestors \<Sigma> C)" for \<gamma> \<tau>s
   proof -
     have wf\<sigma>s: "\<forall>\<sigma> \<in> set \<sigma>s. wf_ty \<Sigma> \<sigma>" using assms(1) TyClass by simp
     have "wf_ty \<Sigma> \<tau>" if "\<tau> \<in> set \<tau>s" for \<tau>
       using type_args_of_elem[OF args that] match_args_seq_bound[OF m _ wf\<sigma>s] by blast
     then have "wf_ty \<Sigma> (TyClass C \<tau>s)" using assms(2) type_args_of_length[OF args] by simp
-    from instantiated_ancestor_wf[OF wf_table this anc]
-    have "\<forall>\<rho> \<in> set (instantiated_ancestor \<Sigma> C \<tau>s D). wf_ty \<Sigma> \<rho>" by simp
+    from ancestor_args_wf[OF wf_table this anc]
+    have "\<forall>\<rho> \<in> set (ancestor_args \<Sigma> C \<tau>s D). wf_ty \<Sigma> \<rho>" by simp
     with wf\<sigma>s show ?thesis unfolding list_all2_conv_all_nth by (auto simp: subty_ext nth_mem)
   qed
   show ?thesis
     using assms TyClass
-    by (auto simp: Let_def ancestors_ext type_params_ext instantiated_ancestor_ext eq
+    by (auto simp: Let_def ancestors_ext type_params_ext ancestor_args_ext eq
         split: arg_match.splits sum.splits)
 next
   case (TyPrim p)
