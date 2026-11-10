@@ -49,6 +49,11 @@ jobs:
       - name: Lint, run conformance suite and build wheel
         run: make wheel
 
+      - name: Run conformance suite and evaluator tests under the reference interpreter
+        run: |
+          uv run --locked ./test/check-conformance.sh "python -m purepy" --no-lint
+          uv run --locked ./test/evaluator/run.py
+
       - name: Install type checker, with the conformance package, into site
         run: uv pip install --target site dist/*.whl
 
@@ -57,8 +62,7 @@ jobs:
           name: site
           path: site
 
-  # Run the programs of the suite under other Python runtimes and the reference interpreter, with harness and type
-  # checker under CPython
+  # Run the programs of the suite under other Python runtimes, with harness and type checker under CPython
   runtimes:
     name: conformance suite under ${{ matrix.runtime }}
     needs: build
@@ -70,7 +74,6 @@ jobs:
           - runtime: GraalPy
             version: "graalpy-25.2"
           - runtime: Pyodide
-          - runtime: the reference interpreter
     steps:
       - uses: actions/checkout@v7
 
@@ -86,12 +89,6 @@ jobs:
         with:
           python-version: ${{ matrix.version }}
           update-environment: false
-
-      - name: Set up Python for the reference interpreter
-        if: matrix.runtime == 'the reference interpreter'
-        uses: actions/setup-python@v7
-        with:
-          python-version-file: .python-version
 
       - name: Set up uv for Pyodide
         if: matrix.runtime == 'Pyodide'
@@ -115,11 +112,3 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}/site
         run: test/check-conformance.sh "$PYODIDE_PYTHON" --no-lint
-
-      - name: Run tests with the reference interpreter
-        if: matrix.runtime == 'the reference interpreter'
-        env:
-          PYTHONPATH: ${{ github.workspace }}/site
-        run: |
-          test/check-conformance.sh "python3 -m purepy" --no-lint
-          python3 test/evaluator/run.py
