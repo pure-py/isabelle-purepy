@@ -1,5 +1,5 @@
 (* Soundness of pattern matching and of dispatch over the cases of a match statement *)
-theory Dispatch
+theory Match
   imports Calls Instances "HOL-Library.Multiset"
 begin
 

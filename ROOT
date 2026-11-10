@@ -49,7 +49,7 @@ session "isabelle-purepy-soundness" in "soundness" = "isabelle-purepy" +
     Attributes
     Comprehensions
     Calls
-    Dispatch
+    Match
     Statements
     WellFormedTopLevel
     ExtensionTopLevel

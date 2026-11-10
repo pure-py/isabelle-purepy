@@ -106,7 +106,7 @@ Run the `Release` GitHub Action manually. The version number of a release is tha
 | `soundness/Attributes.thy`            | Soundness of evaluation of subscripts and attributes                                                   |
 | `soundness/Comprehensions.thy`        | Soundness of evaluation of comprehensions                                                              |
 | `soundness/Calls.thy`                 | Soundness of call evaluation                                                                           |
-| `soundness/Dispatch.thy`              | Soundness of pattern matching and of dispatch over the cases of a match statement                      |
+| `soundness/Match.thy`                 | Soundness of pattern matching and of dispatch over the cases of a match statement                      |
 | `soundness/Statements.thy`            | Soundness of statement evaluation                                                                      |
 | `soundness/WellFormedTopLevel.thy`    | Well-formedness of the class tables and contexts produced by type regions and modules                  |
 | `soundness/ExtensionTopLevel.thy`     | Stability of module checking under extension of the class table; settled class tables                  |
