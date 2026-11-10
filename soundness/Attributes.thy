@@ -3,7 +3,7 @@ theory Attributes
   imports Expressions
 begin
 
-context evaluation
+context wf_evaluation
 begin
 
 (* Element at an integer index of a sequence with elements satisfying P, or an index error *)

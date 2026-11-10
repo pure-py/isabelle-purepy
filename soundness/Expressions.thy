@@ -3,7 +3,7 @@ theory Expressions
   imports ResultTyping
 begin
 
-context evaluation
+context wf_evaluation
 begin
 
 (* Value at the instance by \<eta> of a scheme bound to a name checked against \<tau>, typed at the instance of \<tau> *)

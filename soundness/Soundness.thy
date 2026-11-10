@@ -3,7 +3,7 @@ theory Soundness
   imports TopLevel
 begin
 
-context loading
+context wf_loading
 begin
 
 theorem type_soundness:

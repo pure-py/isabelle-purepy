@@ -3,7 +3,7 @@ theory TopLevel
   imports Attributes Comprehensions Calls Statements ExtensionTopLevel
 begin
 
-context evaluation
+context wf_evaluation
 begin
 
 subsection \<open>Statements\<close>
@@ -273,7 +273,7 @@ qed
 
 end
 
-context loading
+context wf_loading
 begin
 
 subsection \<open>Loaded modules\<close>

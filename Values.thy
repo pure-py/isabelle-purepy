@@ -441,8 +441,6 @@ where
 
 locale evaluation =
   fixes \<Sigma> :: class_table
-  assumes wf_class_table: "wf_class_table \<Sigma>"
-    and predefined: "predefined_classes \<subseteq>\<^sub>f \<Sigma>"
 begin
 
 type_synonym overload = "(val \<Rightarrow> val \<Rightarrow> bool) \<times> (val \<Rightarrow> val \<Rightarrow> val result)"
@@ -525,6 +523,13 @@ where
   (if \<Sigma> \<turnstile> type_of v <: TyPrim bool then Val (VLit (LitBool (v \<noteq> VLit (LitBool True)))) else Aborts Excluded)" |
 "unop_meaning UOpPos v = (if \<Sigma> \<turnstile> type_of v <: TyPrim float then Val v else Aborts Excluded)" |
 "unop_meaning UOpNeg v = (if \<Sigma> \<turnstile> type_of v <: TyPrim float then Val (negate v) else Aborts Excluded)"
+
+end
+
+locale wf_evaluation = evaluation +
+  assumes wf_class_table: "wf_class_table \<Sigma>"
+    and predefined: "predefined_classes \<subseteq>\<^sub>f \<Sigma>"
+begin
 
 lemma range_lookup: "fmlookup \<Sigma> range_class = fmlookup predefined_classes range_class"
   using predefined by (auto simp: fmsubset.rep_eq map_le_def predefined_classes_def)

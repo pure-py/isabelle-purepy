@@ -53,7 +53,7 @@ definition typed_by_rule :: "class_table \<Rightarrow> cxt \<Rightarrow> expr \<
 where
 "typed_by_rule \<Sigma> \<Gamma> e \<tau> = (synth_expr \<Sigma> \<Gamma> e = Ok \<tau> \<or> check_expr' \<Sigma> \<Gamma> e \<tau> = Some (Ok ()) \<and> wf_ty \<Sigma> \<tau>)"
 
-context evaluation
+context wf_evaluation
 begin
 
 abbreviation result_typed :: "val result \<Rightarrow> ty \<Rightarrow> bool"

@@ -428,7 +428,6 @@ where
 
 locale loading = evaluation +
   fixes \<M> :: program
-  assumes disjoint: "fmdom \<M> |\<inter>| fmdom \<P> = {||}"
 begin
 
 (* Partial, since a program with an import cycle loads forever; module checking rejects such a program *)
@@ -482,5 +481,8 @@ EvalProgram: "loads [] [main], \<E> \<A> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<
 EvalProgramAbort: "loads [] [main], \<E> \<A> \<Rightarrow>\<^sub>m\<^sub>o\<^sub>d\<^sub>s (vs, Aborts\<^sub>\<omega> \<kappa>) \<Longrightarrow> eval_program \<A> vs \<kappa>"
 
 end
+
+locale wf_loading = loading + wf_evaluation +
+  assumes disjoint: "fmdom \<M> |\<inter>| fmdom \<P> = {||}"
 
 end

@@ -209,7 +209,7 @@ where
 "unbound_entry (PUScheme _ _) = True" |
 "unbound_entry _ = False"
 
-context evaluation
+context wf_evaluation
 begin
 
 (* Definitions ds checked at signatures \<pi>s in \<Gamma> extended by those signatures, their type parameters fresh
