@@ -200,6 +200,15 @@ where
 "callable_scheme (TyScheme _ (TyCallable _ _)) = True" |
 "callable_scheme _ = False"
 
+(* Entry of a variable which may be unbound: unbound, declared without assignment or possibly unassigned *)
+fun unbound_entry :: "cxt_entry \<Rightarrow> bool"
+where
+"unbound_entry Unbound = True" |
+"unbound_entry (DU _) = True" |
+"unbound_entry (PU _ _) = True" |
+"unbound_entry (PUScheme _ _) = True" |
+"unbound_entry _ = False"
+
 context evaluation
 begin
 
@@ -248,7 +257,9 @@ ValPrim:
   \<Longrightarrow> \<turnstile> VPrim f : Ty \<tau>" |
 ValPredef: "\<turnstile> VPredef q : PredefName" |
 ValMod: "\<turnstile> VModStub q : ModStub q" |
-ValModLoaded: "\<eta> \<turnstile> \<rho> : \<Gamma> \<Longrightarrow> \<turnstile> VModLoaded q \<rho> : ModChecked q \<Gamma>" |
+ValModLoaded:
+  "\<lbrakk> \<eta> \<turnstile> \<rho> \<otimes> fmconst (fmdom' \<Gamma> - fmdom' \<rho>) VUnbound : \<Gamma> ; fmdom \<rho> |\<subseteq>| fmdom \<Gamma> \<rbrakk>
+  \<Longrightarrow> \<turnstile> VModLoaded q \<rho> : ModChecked q \<Gamma>" |
 ValClass: "C |\<in>| fmdom \<Sigma> \<Longrightarrow> \<turnstile> VClass C : Type C" |
 ValTypeAlias: "\<turnstile> VTypeAlias q \<chi>s i : TypeAlias \<Gamma> q \<chi>s i" |
 ValUnbound: "\<theta> = Unbound \<or> (\<exists>\<tau>. \<theta> = DU \<tau>) \<Longrightarrow> \<turnstile> VUnbound : \<theta>" |
@@ -509,17 +520,15 @@ lemma wf_dict_update:
   "\<lbrakk> \<forall>w v. (w, v) \<in> set \<delta> \<longrightarrow> \<turnstile> v : Ty \<tau> ; wf_ty \<Sigma> \<tau> \<rbrakk> \<Longrightarrow> \<turnstile> VDict (update [] \<delta>) : Ty (TyDict \<tau>)"
   using set_update[of "[]" \<delta>] by (auto intro!: ValDict SubtyRefl distinct_update)
 
-lemma wf_mod_checked: "\<turnstile> v : ModChecked q \<Gamma> \<Longrightarrow> \<exists>\<rho> \<eta>. v = VModLoaded q \<rho> \<and> \<eta> \<turnstile> \<rho> : \<Gamma>"
+(* Loaded module, with its environment typed by the context of the module once the members absent from the
+   environment are unbound *)
+lemma wf_mod_checked:
+  "\<turnstile> v : ModChecked q \<Gamma>
+  \<Longrightarrow> \<exists>\<rho> \<eta>. v = VModLoaded q \<rho> \<and> \<eta> \<turnstile> \<rho> \<otimes> fmconst (fmdom' \<Gamma> - fmdom' \<rho>) VUnbound : \<Gamma> \<and> fmdom \<rho> |\<subseteq>| fmdom \<Gamma>"
   by (erule wf_val.cases) auto
 
 lemma wf_mod_loaded: "\<turnstile> VModLoaded q \<rho> : \<theta> \<Longrightarrow> \<exists>\<Gamma>. \<theta> = ModChecked q \<Gamma>"
   by (erule wf_val.cases) (auto elim: WfTyE WfSchemeE)
-
-(* Member of a module environment typed by the context of the module, which is closed *)
-lemma module_member:
-  "\<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; tyvars \<Gamma> = {} ; fmlookup \<Gamma> x = Some \<theta> ; \<theta> \<noteq> TypeVar \<rbrakk>
-  \<Longrightarrow> \<exists>v. fmlookup \<rho> x = Some v \<and> \<turnstile> v : \<theta> \<and> fv_entry \<theta> = {}"
-  using wf_env_lookup[of \<eta> \<rho> \<Gamma> x \<theta>] tyvars_entry[of \<Gamma> x \<theta>] by (auto simp: inst_entry_closed)
 
 inductive_cases WfTypeE: "\<turnstile> v : Type C"
 
@@ -529,6 +538,38 @@ lemma wf_type_entry: "\<turnstile> v : Type C \<Longrightarrow> v = VClass C"
 
 lemma module_member_TypeVar: "tyvars \<Gamma> = {} \<Longrightarrow> fmlookup \<Gamma> x \<noteq> Some TypeVar"
   by (force simp: tyvars_def fmlookup_dom'_iff)
+
+lemma unbound_entry_iff: "unbound_entry \<theta> \<longleftrightarrow> \<turnstile> VUnbound : \<theta>"
+  by (cases \<theta>) (auto intro: ValUnbound ValPU ValPUScheme dest: wf_unbound)
+
+(* Member of a loaded module whose entry is not that of a variable which may be unbound: in the module's
+   environment, typed by the entry, which is closed *)
+lemma module_member:
+  assumes "\<turnstile> VModLoaded q \<rho> : ModChecked q \<Gamma>" and "tyvars \<Gamma> = {}" and "fmlookup \<Gamma> x = Some \<theta>"
+    and "\<not> unbound_entry \<theta>"
+  shows "\<exists>v. fmlookup \<rho> x = Some v \<and> \<turnstile> v : \<theta> \<and> fv_entry \<theta> = {}"
+proof -
+  from wf_mod_checked[OF assms(1)] obtain \<eta>
+    where env: "\<eta> \<turnstile> \<rho> \<otimes> fmconst (fmdom' \<Gamma> - fmdom' \<rho>) VUnbound : \<Gamma>" by auto
+  have "\<theta> \<noteq> TypeVar" using assms(2, 3) by (auto dest: module_member_TypeVar)
+  from wf_env_lookup[OF env assms(3) this] obtain v
+    where look: "fmlookup (\<rho> \<otimes> fmconst (fmdom' \<Gamma> - fmdom' \<rho>) VUnbound) x = Some v"
+    and v: "\<turnstile> v : inst_entry \<eta> \<theta>"
+    by blast
+  have closed: "fv_entry \<theta> = {}" using tyvars_entry[OF assms(3)] assms(2) by blast
+  with v have v': "\<turnstile> v : \<theta>" by (simp add: inst_entry_closed)
+  have "fmlookup \<rho> x = Some v"
+  proof (cases "fmlookup \<rho> x")
+    case None
+    with assms(3) have "x \<in> fmdom' \<Gamma> - fmdom' \<rho>" by (auto simp: fmlookup_dom'_iff)
+    with look have "v = VUnbound" by (auto simp: fmlookup_fmconst fmlookup_dom_iff)
+    with v' assms(4) show ?thesis by (simp add: unbound_entry_iff)
+  next
+    case (Some v')
+    with look show ?thesis by (auto simp: fmlookup_fmconst fmlookup_dom_iff fmlookup_dom'_iff)
+  qed
+  with v' closed show ?thesis by blast
+qed
 
 end
 

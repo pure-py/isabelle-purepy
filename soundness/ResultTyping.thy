@@ -82,7 +82,8 @@ lemma class_of_name_entry: "class_of_name \<Gamma> e = Some C \<Longrightarrow> 
 definition sound_name :: "env \<Rightarrow> expr \<Rightarrow> val result \<Rightarrow> bool"
 where
 "sound_name \<rho> e r =
-  (\<forall>\<eta> \<Gamma> \<theta>. \<eta> \<turnstile> \<rho> : \<Gamma> \<longrightarrow> expr_entry \<Gamma> e = Some \<theta> \<longrightarrow> wf_result (\<lambda>v. \<turnstile> v : inst_entry \<eta> \<theta>) r)"
+  (\<forall>\<eta> \<Gamma> \<theta>. \<eta> \<turnstile> \<rho> : \<Gamma> \<longrightarrow> expr_entry \<Gamma> e = Some \<theta> \<longrightarrow> \<not> unbound_entry \<theta>
+     \<longrightarrow> wf_result (\<lambda>v. \<turnstile> v : inst_entry \<eta> \<theta>) r)"
 
 definition sound_expr :: "env \<Rightarrow> expr \<Rightarrow> val result \<Rightarrow> bool"
 where
@@ -339,7 +340,8 @@ lemma sound_expr_has_type_at:
   by (cases e) (auto simp: sound_expr_def)
 
 lemma sound_expr_name:
-  "\<lbrakk> sound_expr \<rho> e r ; \<eta> \<turnstile> \<rho> : \<Gamma> ; expr_entry \<Gamma> e = Some \<theta> \<rbrakk> \<Longrightarrow> wf_result (\<lambda>v. \<turnstile> v : inst_entry \<eta> \<theta>) r"
+  "\<lbrakk> sound_expr \<rho> e r ; \<eta> \<turnstile> \<rho> : \<Gamma> ; expr_entry \<Gamma> e = Some \<theta> ; \<not> unbound_entry \<theta> \<rbrakk>
+  \<Longrightarrow> wf_result (\<lambda>v. \<turnstile> v : inst_entry \<eta> \<theta>) r"
   by (simp add: sound_expr_def sound_name_def)
 
 lemma expr_entry_dotted: "dotted_name e = Some q \<Longrightarrow> expr_entry \<Gamma> e = entry_of \<Gamma> e"

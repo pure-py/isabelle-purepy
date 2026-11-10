@@ -170,7 +170,7 @@ next
     unfolding sound_name_def
   proof (intro allI impI)
     fix \<eta> \<Gamma> \<theta>
-    assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "expr_entry \<Gamma> (ExprSubscript e e') = Some \<theta>"
+    assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and "expr_entry \<Gamma> (ExprSubscript e e') = Some \<theta>" and "\<not> unbound_entry \<theta>"
     then obtain C where "class_of_name \<Gamma> (node e) = Some C" by auto
     from sound_expr_class[OF callee env class_of_name_entry[OF this]] nonclass
     show "wf_result (\<lambda>v'. \<turnstile> v' : inst_entry \<eta> \<theta>) (mlet r (getitem v))" by simp
@@ -291,8 +291,8 @@ qed
 lemma sound_expr_module_env:
   assumes "sound_expr \<rho> e (Val v)" and "\<eta> \<turnstile> \<rho> : \<Gamma>" and "dotted_name e = Some q"
     and "lookup \<Gamma> q = Some (ModChecked q' \<Gamma>')"
-  shows "\<exists>\<rho>' \<eta>'. v = VModLoaded q' \<rho>' \<and> \<eta>' \<turnstile> \<rho>' : \<Gamma>'"
-  using sound_expr_module[OF assms, unfolded wf_result.simps(1)] by (rule wf_mod_checked)
+  shows "\<exists>\<rho>'. v = VModLoaded q' \<rho>' \<and> \<turnstile> v : ModChecked q' \<Gamma>'"
+  using sound_expr_module[OF assms, unfolded wf_result.simps(1)] by (auto dest: wf_mod_checked)
 
 (* Attribute of an expression with a value which is not a loaded module, typed through the type synthesised by
    the expression *)
@@ -322,7 +322,7 @@ lemma sound_name_attr:
   unfolding sound_name_def
 proof (intro allI impI)
   fix \<eta> \<Gamma> \<theta>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and entry: "expr_entry \<Gamma> (ExprAttribute e x) = Some \<theta>"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and entry: "expr_entry \<Gamma> (ExprAttribute e x) = Some \<theta>" and "\<not> unbound_entry \<theta>"
   from entry obtain q q' \<Gamma>' where "dotted_name (node e) = Some q" and "lookup \<Gamma> q = Some (ModChecked q' \<Gamma>')"
     and "fmlookup \<Gamma>' x = Some \<theta>"
     unfolding expr_entry_simps by (rule entry_of_attribute)
@@ -390,13 +390,12 @@ qed
 (* Member of a loaded module named by an entry of the context of the module, typed by the entry *)
 lemma module_attr_entry:
   assumes "sound_expr \<rho> (node e) (Val (VModLoaded q' \<rho>'))" and "\<eta> \<turnstile> \<rho> : \<Gamma>" and "dotted_name (node e) = Some q"
-    and "lookup \<Gamma> q = Some (ModChecked q'' \<Gamma>')" and "fmlookup \<Gamma>' x = Some \<theta>"
+    and "lookup \<Gamma> q = Some (ModChecked q'' \<Gamma>')" and "fmlookup \<Gamma>' x = Some \<theta>" and "\<not> unbound_entry \<theta>"
   obtains v where "fmlookup \<rho>' x = Some v" and "\<turnstile> v : \<theta>" and "fv_entry \<theta> = {}"
 proof -
-  from sound_expr_module_env[OF assms(1-4)] obtain \<eta>' where env': "\<eta>' \<turnstile> \<rho>' : \<Gamma>'" by auto
+  from sound_expr_module_env[OF assms(1-4)] have mod: "\<turnstile> VModLoaded q' \<rho>' : ModChecked q' \<Gamma>'" by auto
   have closed: "tyvars \<Gamma>' = {}" using lookup_wf[OF wf_env_wf_cxt[OF assms(2)] assms(4)] by simp
-  with assms(5) have "\<theta> \<noteq> TypeVar" by (auto dest: module_member_TypeVar)
-  from module_member[OF env' closed assms(5) this] that show thesis by blast
+  from module_member[OF mod closed assms(5, 6)] that show thesis by blast
 qed
 
 (* Attribute of a loaded module typed at \<tau>, as a member of the module typed at \<tau> *)
@@ -407,18 +406,17 @@ lemma attr_module_typed:
   using assms(3)
 proof (cases rule: attr_typed)
   case (module_ty q q'' \<Gamma>' \<sigma>)
-  from module_attr_entry[OF assms(1, 2) module_ty(1-3)] obtain v where lookup: "fmlookup \<rho>' x = Some v"
-    and "\<turnstile> v : Ty \<sigma>" and "fv \<sigma> = {}"
-    by auto
+  obtain v where lookup: "fmlookup \<rho>' x = Some v" and "\<turnstile> v : Ty \<sigma>" and "fv \<sigma> = {}"
+    by (rule module_attr_entry[OF assms(1, 2) module_ty(1-3)]) simp_all
   then have "\<turnstile> v : Ty (inst \<eta> \<sigma>)" by (simp add: inst_closed_ty)
   from that[OF lookup wf_val_inst_sub[OF this module_ty(4) has_type_wf[OF wf_env_wf_cxt[OF env] assms(3)]
       wf_env_wf_inst[OF env]]]
   show thesis .
 next
   case (module_scheme q q'' \<Gamma>' \<alpha>s \<sigma> \<tau>s)
-  from module_attr_entry[OF assms(1, 2) module_scheme(1-3)] obtain v where lookup: "fmlookup \<rho>' x = Some v"
-    and "\<turnstile> v : Scheme (TyScheme \<alpha>s \<sigma>)" and "fv_entry (Scheme (TyScheme \<alpha>s \<sigma>)) = {}"
-    by blast
+  obtain v where lookup: "fmlookup \<rho>' x = Some v" and "\<turnstile> v : Scheme (TyScheme \<alpha>s \<sigma>)"
+    and "fv_entry (Scheme (TyScheme \<alpha>s \<sigma>)) = {}"
+    by (rule module_attr_entry[OF assms(1, 2) module_scheme(1-3)]) simp_all
   then have "\<turnstile> v : inst_entry \<eta> (Scheme (TyScheme \<alpha>s \<sigma>))" by (simp only: inst_entry_closed)
   from scheme_instance_typed[OF this wf_env_wf_inst[OF env] has_type_wf[OF wf_env_wf_cxt[OF env] assms(3)]
       module_scheme(4, 5)]
@@ -440,11 +438,12 @@ lemma sound_name_module:
 proof (intro allI impI)
   fix \<eta> \<Gamma> \<theta>
   assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and entry: "expr_entry \<Gamma> (ExprAttribute e x) = Some \<theta>"
+    and bound: "\<not> unbound_entry \<theta>"
   from entry obtain q q'' \<Gamma>' where q: "dotted_name (node e) = Some q"
     and mod: "lookup \<Gamma> q = Some (ModChecked q'' \<Gamma>')" and x: "fmlookup \<Gamma>' x = Some \<theta>"
     unfolding expr_entry_simps by (rule entry_of_attribute)
   obtain v where "fmlookup \<rho>' x = Some v" and "\<turnstile> v : \<theta>" and "fv_entry \<theta> = {}"
-    by (rule module_attr_entry[OF assms(1) env q mod x])
+    by (rule module_attr_entry[OF assms(1) env q mod x bound])
   with assms(2)[OF this(1)] show "wf_result (\<lambda>v. \<turnstile> v : inst_entry \<eta> \<theta>) r" by (simp add: inst_entry_closed)
 qed
 
@@ -502,7 +501,7 @@ proof (intro conjI allI impI)
     by (cases rule: attr_typed) (auto dest: sound_expr_module[OF assms env] sound_expr_synth_at[OF assms env])
 next
   fix \<eta> \<Gamma> \<theta>
-  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and entry: "expr_entry \<Gamma> (ExprAttribute e x) = Some \<theta>"
+  assume env: "\<eta> \<turnstile> \<rho> : \<Gamma>" and entry: "expr_entry \<Gamma> (ExprAttribute e x) = Some \<theta>" and "\<not> unbound_entry \<theta>"
   from entry obtain q q' \<Gamma>' where "dotted_name (node e) = Some q" and "lookup \<Gamma> q = Some (ModChecked q' \<Gamma>')"
     and "fmlookup \<Gamma>' x = Some \<theta>"
     unfolding expr_entry_simps by (rule entry_of_attribute)

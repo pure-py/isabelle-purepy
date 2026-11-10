@@ -37,7 +37,8 @@ qed auto
 
 (* Entry of a name in a typed environment *)
 lemma wf_env_resolve:
-  "\<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; lookup \<Gamma> q = Some \<theta> ; \<theta> \<noteq> TypeVar \<rbrakk> \<Longrightarrow> \<exists>v. resolve \<rho> q = Some v \<and> \<turnstile> v : inst_entry \<eta> \<theta>"
+  "\<lbrakk> \<eta> \<turnstile> \<rho> : \<Gamma> ; lookup \<Gamma> q = Some \<theta> ; \<theta> \<noteq> TypeVar ; \<not> unbound_entry \<theta> \<rbrakk>
+  \<Longrightarrow> \<exists>v. resolve \<rho> q = Some v \<and> \<turnstile> v : inst_entry \<eta> \<theta>"
 proof (induction q arbitrary: \<theta>)
   case (Simple x)
   then show ?case by (auto dest: wf_env_lookup)
@@ -46,11 +47,10 @@ next
   from Qualified(3) obtain q' \<Gamma>' where q: "lookup \<Gamma> q = Some (ModChecked q' \<Gamma>')" and x: "fmlookup \<Gamma>' x = Some \<theta>"
     by (auto split: option.splits cxt_entry.splits)
   have closed: "tyvars \<Gamma>' = {}" using lookup_wf[OF wf_env_wf_cxt[OF Qualified(2)] q] by simp
-  from Qualified(1)[OF Qualified(2) q] obtain v where "resolve \<rho> q = Some v" and "\<turnstile> v : ModChecked q' \<Gamma>'"
+  from Qualified(1)[OF Qualified(2) q] obtain v where "resolve \<rho> q = Some v" and v: "\<turnstile> v : ModChecked q' \<Gamma>'"
     by auto
-  moreover from this(2) obtain \<rho>' \<eta>' where "v = VModLoaded q' \<rho>'" and "\<eta>' \<turnstile> \<rho>' : \<Gamma>'"
-    by (auto dest: wf_mod_checked)
-  moreover from module_member[OF this(2) closed x Qualified(4)] obtain v' where "fmlookup \<rho>' x = Some v'"
+  moreover from v obtain \<rho>' where "v = VModLoaded q' \<rho>'" by (auto dest: wf_mod_checked)
+  moreover from module_member[OF v[unfolded this] closed x Qualified(5)] obtain v' where "fmlookup \<rho>' x = Some v'"
     and "\<turnstile> v' : \<theta>" and "fv_entry \<theta> = {}"
     by blast
   ultimately show ?case by (simp add: inst_entry_closed)
@@ -68,7 +68,8 @@ next
     and x: "fmlookup \<Gamma>' x = Some (Scheme \<pi>)"
     by (auto split: option.splits cxt_entry.splits)
   from wf_env_resolve[OF assms(1) q'] obtain v where "\<turnstile> v : ModChecked q'' \<Gamma>'" by auto
-  then obtain \<rho>' \<eta>' where "\<eta>' \<turnstile> \<rho>' : \<Gamma>'" by (auto dest: wf_mod_checked)
+  then obtain \<rho>' \<eta>' where "\<eta>' \<turnstile> \<rho>' \<otimes> fmconst (fmdom' \<Gamma>' - fmdom' \<rho>') VUnbound : \<Gamma>'"
+    by (auto dest: wf_mod_checked)
   from wf_env_scheme[OF this x] show ?thesis .
 qed
 
