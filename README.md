@@ -110,5 +110,6 @@ Run the `Release` GitHub Action manually. The version number of a release is tha
 | `soundness/Statements.thy`            | Soundness of statement evaluation                                                                      |
 | `soundness/WellFormedModules.thy`     | Well-formedness of the class tables and contexts produced by type regions and modules                  |
 | `soundness/ExtensionModules.thy`      | Stability of module checking under extension of the class table; settled class tables                  |
+| `soundness/Modules.thy`               | Soundness of top-level statement, module and program evaluation                                        |
 | `soundness/Soundness.thy`             | Type soundness                                                                                         |
 <!-- /theories -->
