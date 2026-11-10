@@ -1,22 +1,11 @@
-"""Constructors of syntax shared by the evaluator tests; mutual recursion running out of fuel"""
+"""Mutual recursion running out of fuel"""
 
-from purepy.generated import Eval, Finite_Map, Option, Strings, Syntax, Values
-from purepy.syntax import parse_name
+from purepy.generated import Eval, Finite_Map, Option, Syntax, Values
 
 
 def chars(s):
     """Identifier or string: a Python str"""
     return s
-
-
-def name(*xs):
-    """Name of the variables xs, as the parser gives it"""
-    return parse_name(".".join(xs))
-
-
-def aborts_o(k):
-    """Outcome of an abort, printing nothing"""
-    return ([], Values.Aborts_omega(k))
 
 
 def lit(n):
@@ -25,10 +14,6 @@ def lit(n):
 
 def var(x):
     return Syntax.ExprVar(chars(x))
-
-
-def lookup(m, x):
-    return Finite_Map.fmlookup(Strings.equal_var(), m)(chars(x))
 
 
 def ret(e):

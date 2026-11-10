@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Evaluator tests: each test_eval_* function of each *_tests.py module here, run against the generated evaluator
-of src/purepy/generated (make build). The tests build syntax directly, without the type checker, so they also reach
-the aborting cases that the type system rules out"""
+of src/purepy/generated (make build)"""
 
 import importlib
 import pathlib
