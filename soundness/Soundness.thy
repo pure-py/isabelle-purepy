@@ -12,7 +12,7 @@ theorem type_soundness:
 proof -
   note st = check_module_stable(1)[OF assms(1) wf_class_table_predefined fmsubset_refl settled_predefined, THEN conjunct1]
   have settled: "settled \<M> \<Sigma>" using stableD(3)[OF st] .
-  have chk: "check_module \<M> [] \<Sigma> main main = Ok (\<Gamma>, \<Sigma>)" using stableD(5)[OF st fmsubset_refl wf_class_table] .
+  have chk: "check_module \<M> [] \<Sigma> main main = Ok (\<Gamma>, \<Sigma>)" using stableD(5)[OF st fmsubset_refl wf_class_table] by simp
   have main: "loadable main" using check_module_loadable(1)[OF settled chk refl refl refl] .
   have dom: "loads_dom [] [main]" and fresh: "fresh [] (loads [] [main])"
     using loads_list[of "[main]" "[]"] main by auto
@@ -40,8 +40,8 @@ proof -
     case EvalProgram
     then show ?thesis by simp
   next
-    case (EvalProgramAbort vs')
-    from mods_sound[OF this(2) loaded settled ord mods] show ?thesis by (cases \<kappa>) auto
+    case EvalProgramAbort
+    from mods_sound[OF this loaded settled ord mods] show ?thesis by (cases \<kappa>) auto
   qed
 qed
 
