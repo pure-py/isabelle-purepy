@@ -3,7 +3,7 @@ theory Comprehensions
   imports Expressions
 begin
 
-context evaluation
+context wf_evaluation
 begin
 
 (* Element of a list comprehension typed under its qualifiers at a subtype of the element type *)

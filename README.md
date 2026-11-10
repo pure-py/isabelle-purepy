@@ -20,10 +20,10 @@ To browse the theories with the prover running, open the session directory in th
 ./vscode.sh
 ```
 
-## Type checker (`purepy`)
+## Type checker and reference interpreter (`purepy`)
 
-The `purepy` package in `src/purepy/` contains the generated type checker and the code which runs it on source
-files.
+The `purepy` package in `src/purepy/` contains the generated type checker and reference interpreter, and the
+code which runs them on source files.
 
 Install the wheel attached to the latest [release](https://github.com/pure-py/isabelle-purepy/releases) as a
 standalone command-line tool with `uv tool install <wheel URL>`. Then check a single module, or a whole program
@@ -34,7 +34,25 @@ purepy --check --module path/to/module.py
 purepy --check path/to/main.py
 ```
 
-From a checkout, after `make build`, the same checks run with `uv run --locked python -m purepy --check`.
+Without `--check`, `purepy` checks the program and, if it is well-formed, runs it by the reference interpreter,
+with any further arguments as `sys.argv[1:]`:
+
+```bash
+purepy path/to/main.py arg1 arg2
+```
+
+An ill-formed program is rejected with the same message and exit status as `--check` gives. Otherwise the
+program runs, printing what it prints, and `purepy` exits with:
+
+- the program's own exit status, when the run ends as in Python;
+- 4, when the run has undefined behaviour in PurePy;
+- 6, when the interpreter gets stuck, which cannot happen for a well-formed program;
+- 7, when the run nests deeper than `--fuel` allows (default 100000).
+
+`purepy --implementation` prints `purepy`, identifying the tool to the conformance suite as an implementation of
+PurePy rather than of Python.
+
+From a checkout, after `make build`, the same commands run with `uv run --locked python -m purepy`.
 
 ## Tests
 
@@ -44,7 +62,12 @@ After `make build`:
 make check-conformance
 ```
 
-The conformance suite comes from the pinned specification.
+The conformance suite comes from the pinned specification. The tests are run by Python unless another
+interpreter is given, such as the generated reference interpreter:
+
+```bash
+uv run --locked ./test/check-conformance.sh "python -m purepy"
+```
 
 ## Development
 
@@ -84,6 +107,8 @@ Run the `Release` GitHub Action manually. The version number of a release is tha
 | `Values.thy`                          | Values, results and functions on values                                                                |
 | `Semantics.thy`                       | Evaluation judgements                                                                                  |
 | `Determinism.thy`                     | Inversion lemmas and determinism of evaluation                                                         |
+| `Eval.thy`                            | Evaluation as a function with fuel, and its executable code equations                                  |
+| `Correctness.thy`                     | Soundness and completeness of the evaluator against the evaluation judgements                          |
 | `Subtyping.thy`                       | Subtyping and its transitivity, join and meet; element, subscript and attribute types                  |
 | `Shapes.thy`                          | Heads and shapes for pattern matching; head and shape typing; shapes of a type                         |
 | `Patterns.thy`                        | Pattern checking; matched and remaining types of patterns                                              |
@@ -91,7 +116,6 @@ Run the `Release` GitHub Action manually. The version number of a release is tha
 | `Operators.thy`                       | Equality types and operator overloads                                                                  |
 | `Typing.thy`                          | Static outcomes; typing of expressions, statements and type definitions                                |
 | `Programs.thy`                        | Typing of imports, modules and programs                                                                |
-| `Examples.thy`                        | Example evaluations                                                                                    |
 | `python/Codegen.thy`                  | Operator resolution and subtyping in executable form; Python generation                                |
 | `soundness/WellFormed.thy`            | Well-formedness and type variables of the types produced by operations on types and contexts           |
 | `soundness/WellFormedExpressions.thy` | Well-formedness and type variables of the types synthesised for expressions and matched by patterns    |
@@ -112,4 +136,5 @@ Run the `Release` GitHub Action manually. The version number of a release is tha
 | `soundness/ExtensionTopLevel.thy`     | Stability of module checking under extension of the class table; settled class tables                  |
 | `soundness/TopLevel.thy`              | Soundness of top-level statement, module and program evaluation                                        |
 | `soundness/Soundness.thy`             | Type soundness                                                                                         |
+| `soundness/LoadsTermination.thy`      | Termination of the order of loading of a well-formed program                                           |
 <!-- /theories -->

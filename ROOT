@@ -15,6 +15,8 @@ session "isabelle-purepy" = HOL +
     Values
     Semantics
     Determinism
+    Eval
+    Correctness
     Subtyping
     Shapes
     Patterns
@@ -22,7 +24,6 @@ session "isabelle-purepy" = HOL +
     Operators
     Typing
     Programs
-    Examples
 
 session "isabelle-purepy-python" in "python" = "isabelle-purepy" +
   options [timeout = 1200]
@@ -55,3 +56,4 @@ session "isabelle-purepy-soundness" in "soundness" = "isabelle-purepy" +
     ExtensionTopLevel
     TopLevel
     Soundness
+    LoadsTermination

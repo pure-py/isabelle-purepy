@@ -5,7 +5,7 @@ begin
 
 no_notation (ASCII) comp (infixl \<open>o\<close> 55)
 
-context evaluation
+context wf_evaluation
 begin
 
 subsection \<open>Values at types\<close>
@@ -261,7 +261,7 @@ lemma meet_class:
     = (if \<Sigma> \<turnstile> \<sigma> <: TyClass C \<tau>s then \<sigma> else if \<Sigma> \<turnstile> TyClass C \<tau>s <: \<sigma> then TyClass C \<tau>s else TyPrim Never)"
   by (cases \<sigma>) auto
 
-context evaluation
+context wf_evaluation
 begin
 
 subsection \<open>Matched and remaining types at a disjunct\<close>
@@ -425,7 +425,7 @@ proof -
   then show ?thesis using assms(2, 3) by (simp add: list_all2_conv_all_nth)
 qed
 
-context evaluation
+context wf_evaluation
 begin
 
 subsection \<open>Objects matched by constructor patterns\<close>
@@ -773,7 +773,7 @@ proof (induction xs)
                       cases "foldr seq_compose_match ys (Match fmempty)") auto
 qed (cases "foldr seq_compose_match ys (Match fmempty)", auto)
 
-context evaluation
+context wf_evaluation
 begin
 
 subsection \<open>Soundness of pattern matching\<close>

@@ -49,6 +49,9 @@ jobs:
       - name: Lint, run conformance suite and build wheel
         run: make wheel
 
+      - name: Run conformance suite under the reference interpreter
+        run: uv run --locked ./test/check-conformance.sh "python -m purepy" --no-lint
+
       - name: Install type checker, with the conformance package, into site
         run: uv pip install --target site dist/*.whl
 

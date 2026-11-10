@@ -3,7 +3,7 @@ theory Statements
   imports Match
 begin
 
-context evaluation
+context wf_evaluation
 begin
 
 subsection \<open>Statements\<close>

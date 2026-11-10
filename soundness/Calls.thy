@@ -3,7 +3,7 @@ theory Calls
   imports ResultTyping
 begin
 
-context evaluation
+context wf_evaluation
 begin
 
 lemma entry_of_expr_entry: "entry_of \<Gamma> e = Some \<theta> \<Longrightarrow> expr_entry \<Gamma> e = Some \<theta>"

@@ -17,6 +17,7 @@ from purepy_conformance import (
 
 from purepy.check_program import check_module, check_program
 from purepy.rules import JUDGEMENT, RULE, spec_names
+from purepy.run_program import OUT_OF_FUEL
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 TEST = ROOT / "test"
@@ -28,7 +29,7 @@ CITATION = re.compile(r"# judgement: ([a-z0-9-]+)(?:, rule: ([a-z0-9-]+))?$")
 def check_lint(r: Results) -> None:
     with r.test("mypy and ruff"):
         sources = sorted(str(path) for path in SRC.glob("*.py")) + [
-            str(TEST / "check-conformance.py")
+            str(TEST / "check-conformance.py"),
         ]
         for tool in (
             ["mypy", "--strict", "--python-version", PYTHON_VERSION],
@@ -86,16 +87,26 @@ def check_citations(r: Results) -> None:
                 r.fail(f"{show(c)} reached by no test citing it")
 
 
+def check_out_of_fuel(r: Results) -> None:
+    with r.test("run out of fuel"):
+        proc = run(
+            [sys.executable, "-m", "purepy", "--fuel", "100", str(TEST / "out-of-fuel" / "main.py")]
+        )
+        if proc.returncode != OUT_OF_FUEL:
+            r.fail(f"exit {proc.returncode}, expected {OUT_OF_FUEL}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--no-lint", action="store_true")
     args, conformance_args = parser.parse_known_args()
     if not args.no_lint:
-        lint = Results()
-        check_lint(lint)
-        check_citations(lint)
-        lint.summary()
-        if lint.failed:
+        r = Results()
+        check_lint(r)
+        check_citations(r)
+        check_out_of_fuel(r)
+        r.summary()
+        if r.failed:
             sys.exit(1)
     purepy_conformance.main(
         [

@@ -22,6 +22,13 @@ def main() -> None:
             text,
             flags=re.MULTILINE,
         )
+        # Imports inside expressions, from code printings
+        text = re.sub(
+            r'__import__\("(\w+)"\)',
+            lambda m: f'__import__(__package__ + ".{m.group(1)}", fromlist=["{m.group(1)}"])'
+            if m.group(1) in modules else m.group(0),
+            text,
+        )
         (package / f"{module}.py").write_text(text)
 
 
