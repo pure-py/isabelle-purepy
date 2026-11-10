@@ -1,6 +1,6 @@
 (* Type soundness *)
 theory Soundness
-  imports Modules
+  imports TopLevel
 begin
 
 context loading

@@ -1,6 +1,6 @@
 (* Stability of module checking under extension of the class table; settled class tables *)
-theory ExtensionModules
-  imports WellFormedModules
+theory ExtensionTopLevel
+  imports WellFormedTopLevel
 begin
 
 subsection \<open>Top-level statements\<close>

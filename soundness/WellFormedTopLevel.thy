@@ -1,5 +1,5 @@
 (* Well-formedness of the class tables and contexts produced by type regions and modules *)
-theory WellFormedModules
+theory WellFormedTopLevel
   imports ExtensionStatements
 begin
 

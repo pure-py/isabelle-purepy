@@ -1,6 +1,6 @@
 (* Soundness of top-level statement, module and program evaluation *)
-theory Modules
-  imports Attributes Comprehensions Calls Statements ExtensionModules
+theory TopLevel
+  imports Attributes Comprehensions Calls Statements ExtensionTopLevel
 begin
 
 context evaluation
