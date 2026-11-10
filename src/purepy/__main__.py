@@ -12,6 +12,7 @@ def main() -> None:
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--module", action="store_true")
     parser.add_argument("--fuel", type=int, default=DEFAULT_FUEL)
+    parser.add_argument("--implementation", action="version", version="%(prog)s")
     parser.add_argument("args", nargs="*", help="command-line arguments of the program run")
 
     args = parser.parse_args()

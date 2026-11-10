@@ -49,6 +49,9 @@ program runs, printing what it prints, and `purepy` exits with:
 - 6, when the interpreter gets stuck, which cannot happen for a well-formed program;
 - 7, when the run nests deeper than `--fuel` allows (default 100000).
 
+`purepy --implementation` prints `purepy`, identifying the tool to the conformance suite as an implementation of
+PurePy rather than of Python.
+
 From a checkout, after `make build`, the same commands run with `uv run --locked python -m purepy`.
 
 ## Tests
