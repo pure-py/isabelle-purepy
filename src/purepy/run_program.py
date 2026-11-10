@@ -13,16 +13,16 @@ from .check_program import Diagnostic, diagnostic, exit_code, format_diagnostic,
 from .generated import Contexts, Eval, Option, Programs, Sum_Type, Syntax
 from .syntax import Program
 
-# Exit statuses of a run which does not end as Python's would, besides Exit.UNDEFINED
-STUCK = 6  # no rule applies, which type soundness rules out
+# Exit statuses of a run which doesn't end as in Python, other than undefined behaviour
+STUCK = 6  # stuck run, ruled out by type soundness
 OUT_OF_FUEL = 7
 
 DEFAULT_FUEL = 100_000
 
 
 def check(entry_path: pathlib.Path) -> Diagnostic | tuple[Program, Any]:
-    """Diagnostic of an ill-formed program, or the program with its class table, by one check of the program as
-    Programs.check_program checks it"""
+    """Diagnostic of an ill-formed program at entry_path, or the program with the class table from the type
+    checker"""
     try:
         M = parse_program(entry_path)
     except syntax.ParserRejects as e:
@@ -49,7 +49,7 @@ def qualified(q: Any) -> str:
 
 
 def to_str(v: Any, nested: bool = False) -> str:
-    """Value as Python's str writes it, or its repr inside a container"""
+    """String printed by Python for v, or the representation of v inside a container if nested"""
     match kind(v):
         case "VLit":
             (lit,) = args(v)
@@ -89,7 +89,7 @@ def to_str(v: Any, nested: bool = False) -> str:
 
 
 def report(kappa: Any) -> int:
-    """Exit status for termination kind kappa, after writing an exception as Python would"""
+    """Write termination kind kappa to standard error, except for a system exit, and return its exit status"""
     match kind(kappa):
         case "SystemExit":
             return int(kappa.a)
@@ -123,9 +123,8 @@ def evaluate(sigma: Any, M: Program, argv: list[str], fuel: int) -> int:
 def run_program(
     entry_path: pathlib.Path, args: list[str] | None = None, fuel: int = DEFAULT_FUEL
 ) -> int:
-    """Exit status of the program at entry_path, run with command-line arguments args, so that sys.argv is the
-    path followed by args. The interpreter recurses as deeply as derivations nest, so it
-    runs in a thread with a large stack."""
+    """Run the program at entry_path with command-line arguments args and return the exit status. The
+    interpreter recurses as deeply as derivations nest, so the run gets a thread with a large stack."""
     match check(entry_path):
         case Diagnostic() as d:
             print(format_diagnostic(d, entry_path))
