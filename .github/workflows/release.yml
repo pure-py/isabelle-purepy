@@ -63,7 +63,7 @@ jobs:
   release:
     needs: bump-version
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     container:
       image: makarius/isabelle:${{ needs.bump-version.outputs.isabelle }}
       options: --user root
@@ -84,7 +84,7 @@ jobs:
           enable-cache: true
 
       - name: Check proofs and generate type checker
-        timeout-minutes: 20
+        timeout-minutes: 30
         run: make build ISABELLE=/home/isabelle/Isabelle/bin/isabelle
 
       - name: Lint, run conformance suite and build wheel

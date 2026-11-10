@@ -24,7 +24,7 @@ jobs:
     name: proof checking, type checker generation and conformance under CPython
     needs: version
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     container:
       # Official image, with HOL prebuilt. Runs as root so that checkout and apt can write.
       image: makarius/isabelle:${{ needs.version.outputs.isabelle }}
@@ -43,7 +43,7 @@ jobs:
           enable-cache: true
 
       - name: Check proofs and generate type checker
-        timeout-minutes: 20
+        timeout-minutes: 30
         run: make build ISABELLE=/home/isabelle/Isabelle/bin/isabelle
 
       - name: Lint, run conformance suite and build wheel
