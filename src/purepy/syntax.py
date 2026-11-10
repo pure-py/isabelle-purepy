@@ -6,7 +6,7 @@ from typing import Any
 
 from purepy_conformance import Classification, excluded
 
-from .generated import Option, Positions, Syntax
+from .generated import Option, Positions, Syntax, Values
 
 BY_DESIGN = Classification.BY_DESIGN
 FOR_NOW = Classification.FOR_NOW
@@ -225,6 +225,17 @@ def lit(v: object) -> Lit:
             raise AssertionError(f"unexpected literal: {type(v).__name__}")
 
 
+def lit_value(ell: Lit) -> bool | int | float | str | None:
+    match ell:
+        case Syntax.LitInt(v) | Syntax.LitBool(v) | Syntax.LitFloat(v) | Syntax.LitString(v):
+            assert isinstance(v, bool | int | float | str)
+            return v
+        case Syntax.LitNone():
+            return None
+        case _:
+            raise AssertionError(f"unexpected literal: {ell}")
+
+
 def name(e: ast.expr) -> Name | None:
     match e:
         case ast.Name(id=x):
@@ -329,6 +340,32 @@ def annotation(e: ast.expr | None) -> TyExpr:
             FOR_NOW if excluded_for_now(e) else BY_DESIGN,
         )
     return psi
+
+
+def unparse_type(tau: Ty) -> str:
+    match tau:
+        case Syntax.TyPrim(nu):
+            return PRIMITIVE[type(nu)]
+        case Syntax.TyList(sigma):
+            return f"list[{unparse_type(sigma)}]"
+        case Syntax.TyTuple(taus):
+            return f"tuple[{', '.join(unparse_type(c) for c in taus)}]"
+        case Syntax.TyDict(sigma):
+            return f"dict[str, {unparse_type(sigma)}]"
+        case Syntax.TyCallable(sigmas, tau_):
+            params = ", ".join(unparse_type(p) for p in sigmas)
+            return f"Callable[[{params}], {unparse_type(tau_)}]"
+        case Syntax.TyLiteral(ell):
+            return f"Literal[{lit_value(ell)!r}]"
+        case Syntax.TyVar(alpha):
+            return str(alpha)
+        case Syntax.TyClass(c, taus):
+            args = ", ".join(unparse_type(a) for a in taus)
+            return unparse_name(c) if len(taus) == 0 else f"{unparse_name(c)}[{args}]"
+        case Syntax.TyUnion(sigma, tau_):
+            return f"{unparse_type(sigma)} | {unparse_type(tau_)}"
+        case _:
+            raise AssertionError(f"unexpected type: {tau}")
 
 
 BOP: dict[type[ast.operator | ast.cmpop], Any] = {
@@ -501,6 +538,76 @@ def qualifier(g: ast.comprehension) -> list[Qualifier]:
             raise SyntacticallyExcluded(g, "unpacking in comprehensions")
 
 
+def unparse_expr(e: Expr) -> str:
+    def ast_expr(e: Expr) -> ast.expr:
+        match node(e):
+            case Syntax.ExprVar(x):
+                return ast.Name(x)
+            case Syntax.ExprLiteral(ell):
+                return ast.Constant(lit_value(ell))
+            case Syntax.ExprCall(f, (es, kws)):
+                return ast.Call(
+                    ast_expr(f),
+                    [ast_expr(e_) for e_ in es],
+                    [ast.keyword(x, ast_expr(e_)) for x, e_ in kws],
+                )
+            case Syntax.ExprDict(kvs):
+                return ast.Dict([ast_expr(k) for k, _ in kvs], [ast_expr(v) for _, v in kvs])
+            case Syntax.ExprAttribute(e_, x):
+                return ast.Attribute(ast_expr(e_), x)
+            case Syntax.ExprSubscript(e_, e__):
+                return ast.Subscript(ast_expr(e_), ast_expr(e__))
+            case Syntax.ExprBinOp(op, e_, e__):
+                op_ = BOP_AST[type(op)]
+                if issubclass(op_, ast.cmpop):
+                    return ast.Compare(ast_expr(e_), [op_()], [ast_expr(e__)])
+                return ast.BinOp(ast_expr(e_), op_(), ast_expr(e__))
+            case Syntax.ExprUnOp(op, e_):
+                return ast.UnaryOp(UOP_AST[type(op)](), ast_expr(e_))
+            case Syntax.ExprAnd(e_, e__):
+                return ast.BoolOp(ast.And(), [ast_expr(e_), ast_expr(e__)])
+            case Syntax.ExprOr(e_, e__):
+                return ast.BoolOp(ast.Or(), [ast_expr(e_), ast_expr(e__)])
+            case Syntax.ExprCond(e_, e__, e___):
+                return ast.IfExp(ast_expr(e__), ast_expr(e_), ast_expr(e___))
+            case Syntax.ExprList(es):
+                return ast.List([ast_expr(e_) for e_ in es])
+            case Syntax.ExprTuple(es):
+                return ast.Tuple([ast_expr(e_) for e_ in es])
+            case Syntax.ExprListComp(e_, qs):
+                return ast.ListComp(ast_expr(e_), ast_comprehensions(qs))
+            case Syntax.ExprDictComp(e_, e__, qs):
+                return ast.DictComp(ast_expr(e_), ast_expr(e__), ast_comprehensions(qs))
+            case Syntax.ExprLambda(xs, e_):
+                args = ast.arguments(
+                    posonlyargs=[],
+                    args=[ast.arg(x) for x in xs],
+                    kwonlyargs=[],
+                    kw_defaults=[],
+                    defaults=[],
+                )
+                return ast.Lambda(args, ast_expr(e_))
+            case _:
+                raise AssertionError(f"unexpected expression: {e}")
+
+    def ast_comprehensions(qs: list[Qualifier]) -> list[ast.comprehension]:
+        """Comprehension node per generator in qs, whose conditions are the guards following the generator"""
+
+        def add(gs: list[ast.comprehension], q: Qualifier) -> list[ast.comprehension]:
+            match node(q):
+                case Syntax.Generator(x, e):
+                    return [*gs, ast.comprehension(ast.Name(x), ast_expr(e), [], 0)]
+                case Syntax.Guard(e):
+                    *gs_, g = gs
+                    return [*gs_, ast.comprehension(g.target, g.iter, [*g.ifs, ast_expr(e)], 0)]
+                case _:
+                    raise AssertionError(f"unexpected qualifier: {q}")
+
+        return reduce(add, qs, [])
+
+    return ast.unparse(ast_expr(e))
+
+
 def bound(pattern: ast.pattern) -> list[Var]:
     """Variables bound by pattern, in order and with repetitions"""
     match pattern:
@@ -581,6 +688,54 @@ def key(k: ast.expr) -> str:
             raise SyntacticallyExcluded(
                 k, "dictionary pattern key other than a string literal", BY_DESIGN
             )
+
+
+def unparse_pat(p: Pat) -> str:
+    match node(p):
+        case Syntax.PatLiteral(ell):
+            return ast.unparse(ast.Constant(lit_value(ell)))
+        case Syntax.PatVar(x):
+            return str(x)
+        case Syntax.PatWildcard():
+            return "_"
+        case Syntax.PatAs(p_, x):
+            return f"{unparse_pat(p_)} as {x}"
+        case Syntax.PatList(ps):
+            return "[" + ", ".join(map(unparse_pat, ps)) + "]"
+        case Syntax.PatTuple(ps):
+            return "(" + ", ".join(map(unparse_pat, ps)) + ")"
+        case Syntax.PatDict(kps):
+            items = (f"{ast.unparse(ast.Constant(w))}: {unparse_pat(q)}" for w, q in kps)
+            return "{" + ", ".join(items) + "}"
+        case Syntax.PatConstr(q, (ps, kps)):
+            args = [unparse_pat(p_) for p_ in ps] + [f"{x}={unparse_pat(p_)}" for x, p_ in kps]
+            return f"{unparse_name(q)}({', '.join(args)})"
+        case _:
+            raise AssertionError(f"unexpected pattern: {p}")
+
+
+def unparse_value(v: Val) -> str:
+    """Representation of v given by Python"""
+    match v:
+        case Values.VLit(ell):
+            return repr(lit_value(ell))
+        case Values.VList(us):
+            return "[" + ", ".join(map(unparse_value, us)) + "]"
+        case Values.VTuple(us):
+            return "(" + ", ".join(map(unparse_value, us)) + ("," if len(us) == 1 else "") + ")"
+        case Values.VDict(wus):
+            return "{" + ", ".join(f"{w!r}: {unparse_value(u)}" for w, u in wus) + "}"
+        case Values.VObject(c, fields):
+            x = Syntax.variables(c)[-1]
+            return f"{x}(" + ", ".join(f"{y}={unparse_value(u)}" for y, u in fields) + ")"
+        case Values.VClass(c):
+            return f"<class '{unparse_name(c)}'>"
+        case Values.VPrim(f):
+            return f"<built-in function {type(f).__name__.removeprefix('Prim').lower()}>"
+        case Values.VModStub(q) | Values.VModLoaded(q, _):
+            return f"<module '{unparse_name(q)}'>"
+        case _:
+            return f"<{type(v).__name__.rstrip('_')}>"
 
 
 def stmt(s: ast.stmt) -> Stmt:

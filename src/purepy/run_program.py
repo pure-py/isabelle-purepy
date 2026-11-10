@@ -10,8 +10,7 @@ from purepy_conformance import Exit
 from . import syntax
 from .check_program import Diagnostic, diagnostic, exit_code, format_diagnostic, parse_program
 from .generated import Contexts, Eval, Option, Programs, Sum_Type, Syntax, Values
-from .messages import unparse_value
-from .syntax import Program
+from .syntax import Program, unparse_value
 
 # Exit statuses of a run which doesn't end as in Python, other than undefined behaviour
 STUCK = 6  # stuck run, ruled out by type soundness
