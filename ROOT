@@ -24,7 +24,6 @@ session "isabelle-purepy" = HOL +
     Operators
     Typing
     Programs
-    LoadsTermination
     Examples
 
 session "isabelle-purepy-python" in "python" = "isabelle-purepy" +
@@ -58,3 +57,4 @@ session "isabelle-purepy-soundness" in "soundness" = "isabelle-purepy" +
     ExtensionTopLevel
     TopLevel
     Soundness
+    LoadsTermination

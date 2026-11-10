@@ -121,7 +121,6 @@ Run the `Release` GitHub Action manually. The version number of a release is tha
 | `Operators.thy`                       | Equality types and operator overloads                                                                  |
 | `Typing.thy`                          | Static outcomes; typing of expressions, statements and type definitions                                |
 | `Programs.thy`                        | Typing of imports, modules and programs                                                                |
-| `LoadsTermination.thy`                | Termination of the order of loading of a well-formed program                                           |
 | `Examples.thy`                        | Example evaluations                                                                                    |
 | `python/Codegen.thy`                  | Operator resolution and subtyping in executable form; Python generation                                |
 | `soundness/WellFormed.thy`            | Well-formedness and type variables of the types produced by operations on types and contexts           |
@@ -143,4 +142,5 @@ Run the `Release` GitHub Action manually. The version number of a release is tha
 | `soundness/ExtensionTopLevel.thy`     | Stability of module checking under extension of the class table; settled class tables                  |
 | `soundness/TopLevel.thy`              | Soundness of top-level statement, module and program evaluation                                        |
 | `soundness/Soundness.thy`             | Type soundness                                                                                         |
+| `soundness/LoadsTermination.thy`      | Termination of the order of loading of a well-formed program                                           |
 <!-- /theories -->

@@ -1,6 +1,6 @@
 (* Termination of the order of loading of a well-formed program *)
 theory LoadsTermination
-    imports Programs Correctness
+    imports WellFormedTopLevel "isabelle-purepy.Correctness"
 begin
 
 (* Modules checked by submodules, from q, for the variables xs in turn *)
