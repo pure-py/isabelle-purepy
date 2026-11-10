@@ -52,4 +52,5 @@ session "isabelle-purepy-soundness" in "soundness" = "isabelle-purepy" +
     Dispatch
     Statements
     WellFormedModules
+    ExtensionModules
     Soundness
