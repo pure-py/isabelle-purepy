@@ -108,5 +108,6 @@ Run the `Release` GitHub Action manually. The version number of a release is tha
 | `soundness/Calls.thy`                 | Soundness of call evaluation                                                                           |
 | `soundness/Dispatch.thy`              | Soundness of pattern matching and of dispatch over the cases of a match statement                      |
 | `soundness/Statements.thy`            | Soundness of statement evaluation                                                                      |
+| `soundness/WellFormedModules.thy`     | Well-formedness of the class tables and contexts produced by type regions and modules                  |
 | `soundness/Soundness.thy`             | Type soundness                                                                                         |
 <!-- /theories -->
