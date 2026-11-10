@@ -49,15 +49,18 @@ function (sequential) match :: "env \<Rightarrow> pat \<Rightarrow> val \<Righta
     "env \<Rightarrow> name \<Rightarrow> pat located list \<Rightarrow> (var \<times> pat located) list \<Rightarrow> (var \<times> val) list \<Rightarrow> match_result"
 where
 "match \<rho> (PatLiteral l) v =
-  (if is_bool (VLit l) \<and> is_number v then NoMatch
+  (if is_int_lit l \<and> is_float v then MatchAborts Excluded
+   else if is_bool (VLit l) \<and> is_number v then NoMatch
    else case eq (VLit l) v of Val True \<Rightarrow> Match \<epsilon> | Val False \<Rightarrow> NoMatch | Aborts \<kappa> \<Rightarrow> MatchAborts \<kappa>)" |
 "match \<rho> (PatVar x) v = Match (fmupd x v \<epsilon>)" |
 "match \<rho> PatWildcard v = Match \<epsilon>" |
 "match \<rho> (PatAs p x) v = match \<rho> (node p) v \<otimes> Match (fmupd x v \<epsilon>)" |
 "match \<rho> (PatList ps) (VList vs) = (if length ps = length vs then match_all \<rho> ps vs else NoMatch)" |
 "match \<rho> (PatList ps) (VTuple vs) = MatchAborts Excluded" |
+"match \<rho> (PatList ps) (VObject C xvs) = (if C = range_class then MatchAborts Excluded else NoMatch)" |
 "match \<rho> (PatTuple ps) (VTuple vs) = (if length ps = length vs then match_all \<rho> ps vs else NoMatch)" |
 "match \<rho> (PatTuple ps) (VList vs) = MatchAborts Excluded" |
+"match \<rho> (PatTuple ps) (VObject C xvs) = (if C = range_class then MatchAborts Excluded else NoMatch)" |
 "match \<rho> (PatDict kps) (VDict \<delta>) =
   (if set (map fst kps) \<subseteq> set (map fst \<delta>) then match_dict \<rho> kps \<delta> else NoMatch)" |
 "match \<rho> (PatConstr q (ps, kps)) v =
@@ -112,8 +115,6 @@ abbreviation false :: val where "false \<equiv> VLit (LitBool False)"
 definition type_args_of :: "expr located \<Rightarrow> ty_expr list option"
 where
 "type_args_of e' = those (map type_expr_of (subscript_args e'))"
-
-type_synonym elif_block = "(expr located \<times> stmt located) list \<times> stmt located option"
 
 inductive
   eval_expr  :: "env \<Rightarrow> expr \<Rightarrow> val result \<Rightarrow> bool"            ("_, _ \<Rightarrow>\<^sub>e _" [60,0,60] 60) and
@@ -371,6 +372,18 @@ where
      (name_of [''dataclasses''], fmap_of_list
        [name ''dataclasses'', (var ''dataclass'', VPredef (name_of [''dataclasses'', ''dataclass'']))])])"
 
+lemma prim_entry_callable:
+  "\<lbrakk> fmlookup (\<E> \<A>) q = Some \<rho> ; fmlookup \<rho> x = Some (VPrim f) ; fmlookup \<P> q = Some \<Gamma> ; fmlookup \<Gamma> x = Some \<theta> \<rbrakk>
+  \<Longrightarrow> \<exists>\<sigma>s \<tau>. \<theta> = Ty (TyCallable \<sigma>s \<tau>)"
+  by (auto simp: \<E>_def \<P>_def builtins_def name_of_def fmlookup_of_list split: if_splits)
+
+lemma prim_entry_types:
+  "\<lbrakk> fmlookup (\<E> \<A>) q = Some \<rho> ; fmlookup \<rho> x = Some (VPrim f) ; fmlookup \<P> q = Some \<Gamma> ; fmlookup \<Gamma> x = Some \<theta> \<rbrakk>
+  \<Longrightarrow> f = PrimLen \<and> \<theta> = Ty (TyCallable [TyPrim Sized] (TyPrim int))
+    \<or> f = PrimRound \<and> \<theta> = Ty (TyCallable [TyPrim float] (TyPrim int))
+    \<or> f = PrimExit \<and> \<theta> = Ty (TyCallable [TyPrim int] (TyPrim Never))"
+  by (auto simp: \<E>_def \<P>_def builtins_def name_of_def fmlookup_of_list split: if_splits)
+
 function (sequential) extend_val :: "val \<Rightarrow> val \<Rightarrow> val"
 and extend_env :: "env \<Rightarrow> env \<Rightarrow> env"
 where
@@ -415,8 +428,10 @@ where
 
 locale loading = evaluation +
   fixes \<M> :: program
+  assumes disjoint: "fmdom \<M> |\<inter>| fmdom \<P> = {||}"
 begin
 
+(* Partial, since a program with an import cycle loads forever; module checking rejects such a program *)
 function (domintros)
   loads :: "name list \<Rightarrow> name list \<Rightarrow> name list" and
   submod_loads :: "name list \<Rightarrow> name \<Rightarrow> var list \<Rightarrow> name list" and
@@ -430,7 +445,7 @@ where
 
 "submod_loads qs q [] = qs" |
 "submod_loads qs q (x # xs) =
-   (if Qualified q x |\<in>| fmdom \<M> \<and> x \<notin> set (declares (the (fmlookup \<M> q)))
+   (if Qualified q x |\<in>| fmdom \<M> \<and> (case fmlookup \<M> q of Some b \<Rightarrow> x \<notin> set (declares b) | None \<Rightarrow> False)
     then submod_loads (loads qs [Qualified q x]) q xs
     else submod_loads qs q xs)" |
 

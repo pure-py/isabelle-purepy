@@ -41,6 +41,18 @@ definition tyvars :: "cxt \<Rightarrow> var set"
 where
 "tyvars \<Gamma> = Set.filter (\<lambda>x. fmlookup \<Gamma> x = Some TypeVar) (fmdom' \<Gamma>) \<union> \<Union> (fv_entry ` fmran' \<Gamma>)"
 
+lemma tyvars_entry: "fmlookup \<Gamma> x = Some \<theta> \<Longrightarrow> fv_entry \<theta> \<subseteq> tyvars \<Gamma>"
+  by (force simp: tyvars_def fmlookup_dom'_iff fmlookup_ran'_iff)
+
+lemma tyvars_add: "tyvars (\<Gamma> \<otimes> \<Delta>) \<subseteq> tyvars \<Gamma> \<union> tyvars \<Delta>"
+  by (fastforce simp: tyvars_def fmlookup_dom'_iff fmlookup_ran'_iff split: if_splits)
+
+lemma tyvars_single: "\<theta> \<noteq> TypeVar \<Longrightarrow> tyvars (fmupd x \<theta> fmempty) = fv_entry \<theta>"
+  by (auto simp: tyvars_def fmlookup_dom'_iff fmlookup_ran'_iff split: if_splits)
+
+lemma tyvars_fmconst: "tyvars (fmconst (set \<alpha>s) TypeVar) \<subseteq> set \<alpha>s"
+  by (auto simp: tyvars_def fmlookup_dom'_iff fmlookup_ran'_iff fmlookup_fmconst split: if_splits)
+
 fun lookup :: "cxt \<Rightarrow> name \<Rightarrow> cxt_entry option"
 where
 "lookup \<Gamma> (Simple x) = fmlookup \<Gamma> x" |
@@ -57,6 +69,9 @@ where
    | Some (Scheme \<pi>) \<Rightarrow> Some (Scheme \<pi>)
    | Some PredefName \<Rightarrow> Some PredefName
    | _ \<Rightarrow> None)"
+
+lemma resolve_name_TypeVar: "resolve_name \<Gamma> q = Some \<theta> \<Longrightarrow> \<theta> \<noteq> TypeVar"
+  by (auto simp: resolve_name_def split: option.splits cxt_entry.splits)
 
 definition range_class :: name where "range_class = name_of [''builtins'', ''range'']"
 
@@ -128,6 +143,22 @@ by (relation "measure (\<lambda>p. case p of Inl \<theta> \<Rightarrow> size \<t
 definition entry_of :: "cxt \<Rightarrow> expr \<Rightarrow> cxt_entry option"
 where
 "entry_of \<Gamma> e = Option.bind (dotted_name e) (resolve_name \<Gamma>)"
+
+lemma resolve_name_lookup: "resolve_name \<Gamma> q = Some \<theta> \<Longrightarrow> lookup \<Gamma> q = Some \<theta>"
+  by (auto simp: resolve_name_def split: option.splits cxt_entry.splits)
+
+(* Entry of an attribute name, as a member of the module bound to the name of the object *)
+lemma entry_of_attribute:
+  assumes "entry_of \<Gamma> (ExprAttribute e x) = Some \<theta>"
+  obtains q q' \<Gamma>' where "dotted_name (node e) = Some q" and "lookup \<Gamma> q = Some (ModChecked q' \<Gamma>')"
+    and "fmlookup \<Gamma>' x = Some \<theta>"
+proof -
+  from assms obtain q where q: "dotted_name (node e) = Some q" and "lookup \<Gamma> (Qualified q x) = Some \<theta>"
+    by (cases "dotted_name (node e)") (auto simp: entry_of_def dest: resolve_name_lookup)
+  from this(2) obtain q' \<Gamma>' where "lookup \<Gamma> q = Some (ModChecked q' \<Gamma>')" and "fmlookup \<Gamma>' x = Some \<theta>"
+    by (auto split: option.splits cxt_entry.splits)
+  with q show thesis by (rule that)
+qed
 
 definition class_of_name :: "cxt \<Rightarrow> expr \<Rightarrow> name option"
 where

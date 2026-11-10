@@ -141,6 +141,11 @@ where
 "is_number (VLit (LitFloat _)) = True" |
 "is_number _ = False"
 
+fun is_float :: "val \<Rightarrow> bool"
+where
+"is_float (VLit (LitFloat _)) = True" |
+"is_float _ = False"
+
 (* Value of a number as an extended real; None for nan or a non-number *)
 fun as_number :: "val \<Rightarrow> ereal option"
 where
@@ -237,6 +242,15 @@ where
 "in_elems v [] = Val False" |
 "in_elems v (v' # vs) = (if eq v v' = Val False then in_elems v vs else eq v v')"
 
+lemma eq_lit_abort: "eq_lit l l' = Aborts \<kappa> \<Longrightarrow> \<kappa> = Undef"
+  by (induction l l' rule: eq_lit.induct) (auto split: if_splits)
+
+lemma eq_abort: "eq v v' = Aborts \<kappa> \<Longrightarrow> \<kappa> = Undef" "eq_elems vs vs' = Aborts \<kappa> \<Longrightarrow> \<kappa> = Undef"
+  by (induction v v' and vs vs' rule: eq_eq_elems.induct) (auto dest: eq_lit_abort split: val.splits if_splits)
+
+lemma in_elems_abort: "in_elems v vs = Aborts \<kappa> \<Longrightarrow> \<kappa> = Undef"
+  by (induction vs) (auto dest: eq_abort(1) split: if_splits)
+
 fun elems :: "val \<Rightarrow> val list option"
 where
 "elems (VList vs) = Some vs" |
@@ -275,6 +289,21 @@ fun update :: "(str \<times> val) list \<Rightarrow> (str \<times> val) list \<R
 where
 "update \<delta> [] = \<delta>" |
 "update \<delta> ((w, v) # \<delta>') = update (setitem \<delta> w v) \<delta>'"
+
+lemma set_setitem: "set (setitem \<delta> w v) \<subseteq> insert (w, v) (set \<delta>)"
+  by (induction \<delta>) (auto split: if_splits)
+
+lemma fst_setitem: "fst ` set (setitem \<delta> w v) = insert w (fst ` set \<delta>)"
+  by (induction \<delta> w v rule: setitem.induct) (simp_all add: insert_commute)
+
+lemma distinct_setitem: "distinct (map fst \<delta>) \<Longrightarrow> distinct (map fst (setitem \<delta> w v))"
+  by (induction \<delta> w v rule: setitem.induct) (auto simp: fst_setitem)
+
+lemma set_update: "set (update \<delta> \<delta>') \<subseteq> set \<delta> \<union> set \<delta>'"
+  by (induction \<delta> \<delta>' rule: update.induct) (auto dest: set_setitem[THEN subsetD])
+
+lemma distinct_update: "distinct (map fst \<delta>) \<Longrightarrow> distinct (map fst (update \<delta> \<delta>'))"
+  by (induction \<delta> \<delta>' rule: update.induct) (auto intro: distinct_setitem)
 
 fun dict_entries :: "val list \<Rightarrow> (str \<times> val) list option"
 where
@@ -410,7 +439,10 @@ where
 "resolve \<rho> (Simple x) = fmlookup \<rho> x" |
 "resolve \<rho> (Qualified q y) = (case resolve \<rho> q of Some (VModLoaded _ \<rho>') \<Rightarrow> fmlookup \<rho>' y | _ \<Rightarrow> None)"
 
-locale evaluation = fixes \<Sigma> :: class_table
+locale evaluation =
+  fixes \<Sigma> :: class_table
+  assumes wf_class_table: "wf_class_table \<Sigma>"
+    and predefined: "predefined_classes \<subseteq>\<^sub>f \<Sigma>"
 begin
 
 type_synonym overload = "(val \<Rightarrow> val \<Rightarrow> bool) \<times> (val \<Rightarrow> val \<Rightarrow> val result)"
@@ -493,6 +525,26 @@ where
   (if \<Sigma> \<turnstile> type_of v <: TyPrim bool then Val (VLit (LitBool (v \<noteq> VLit (LitBool True)))) else Aborts Excluded)" |
 "unop_meaning UOpPos v = (if \<Sigma> \<turnstile> type_of v <: TyPrim float then Val v else Aborts Excluded)" |
 "unop_meaning UOpNeg v = (if \<Sigma> \<turnstile> type_of v <: TyPrim float then Val (negate v) else Aborts Excluded)"
+
+lemma range_lookup: "fmlookup \<Sigma> range_class = fmlookup predefined_classes range_class"
+  using predefined by (auto simp: fmsubset.rep_eq map_le_def predefined_classes_def)
+
+lemma range_fields:
+  "field_names \<Sigma> range_class = [var ''start'', var ''stop'']"
+  "field_types \<Sigma> range_class \<tau>s = [TyPrim int, TyPrim int]"
+proof -
+  have "range_class |\<in>| fmdom \<Sigma>" using range_lookup by (simp add: predefined_classes_def fmlookup_dom_iff)
+  from wf_class_table_inherits[OF wf_class_table this] obtain n where n: "fcard (fmdom \<Sigma>) = Suc n"
+    by (cases "fcard (fmdom \<Sigma>)") simp_all
+  have "fields \<Sigma> range_class = FieldScheme [] [(var ''start'', TyPrim int), (var ''stop'', TyPrim int)]"
+    using range_lookup n
+    by (simp add: fields_def instantiated_ancestors_def Let_def type_params_def base_def declared_fields_def
+        predefined_classes_def resolve_type_def check_type_head_def check_predefined_def ensure_def
+        type_context_def \<P>_def fmlookup_of_list fmconst_def)
+  then show "field_names \<Sigma> range_class = [var ''start'', var ''stop'']"
+    and "field_types \<Sigma> range_class \<tau>s = [TyPrim int, TyPrim int]"
+    by (simp_all add: field_names_def field_types_def)
+qed
 
 end
 

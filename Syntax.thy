@@ -96,6 +96,11 @@ datatype ty =
   | TyClass name "ty list"
   | TyUnion ty ty
 
+fun is_int_lit :: "lit \<Rightarrow> bool"
+where
+"is_int_lit (LitInt _) = True" |
+"is_int_lit _ = False"
+
 datatype sequence_kind = TupleKind | ListKind | RangeKind
 
 datatype ty_scheme = TyScheme "var list" ty
@@ -121,6 +126,8 @@ datatype stmt =
   | StmtMatch "expr located" "(pat located \<times> stmt located) list"
   | StmtMutualRegion "func located list"
 and func = Def var "var list" "(var \<times> ty_expr) list" ty_expr "stmt located"
+
+type_synonym elif_block = "(expr located \<times> stmt located) list \<times> stmt located option"
 
 type_synonym fields = "(var \<times> ty_expr) list"
 
@@ -191,6 +198,9 @@ where
   \<Union> (set (map (binds_pat \<circ> node) ps)) \<union> \<Union> (set (map (binds_pat \<circ> node \<circ> snd) kps))" |
 "binds_pat (PatDict kps) = \<Union> (set (map (binds_pat \<circ> node \<circ> snd) kps))" |
 "binds_pat _ = {}"
+
+lemma finite_binds_pat: "finite (binds_pat p)"
+  by (induction p rule: binds_pat.induct) auto
 
 (* Variables bound by the patterns of the match statements in s, each at the position of its match statement,
    in order and with repeats *)
@@ -331,16 +341,6 @@ where
 "fv_ty (TyUnion \<sigma> \<tau>) = fv_ty \<sigma> \<union> fv_ty \<tau>" |
 "fv_ty _ = {}"
 
-fun subterms :: "ty \<Rightarrow> ty list"
-where
-"subterms (TyUnion \<sigma> \<tau>) = subterms \<sigma> @ subterms \<tau>" |
-"subterms (TyList \<tau>) = TyList \<tau> # subterms \<tau>" |
-"subterms (TyDict \<tau>) = TyDict \<tau> # subterms \<tau>" |
-"subterms (TyTuple \<tau>s) = TyTuple \<tau>s # concat (map subterms \<tau>s)" |
-"subterms (TyCallable \<tau>s \<tau>) = TyCallable \<tau>s \<tau> # concat (map subterms \<tau>s) @ subterms \<tau>" |
-"subterms (TyClass C \<tau>s) = TyClass C \<tau>s # concat (map subterms \<tau>s)" |
-"subterms \<tau> = [\<tau>]"
-
 fun captures_expr :: "expr \<Rightarrow> var set" and captures_quals :: "qualifier located list \<Rightarrow> var set"
 where
 "captures_expr (ExprVar _) = {}" |
@@ -377,6 +377,9 @@ where
       \<and> set ys \<inter> binds_stmt s = {} \<and> set (declares_stmt (node s)) \<inter> binds_stmt s = {}
    then Some (fmconst (assigns_stmt (node s) - set ys) u)
    else None)"
+
+lemma scope_stmt_Some: "scope_stmt u ys s = Some m \<Longrightarrow> m = fmconst (assigns_stmt (node s) - set ys) u"
+  by (simp add: scope_stmt_def split: if_splits)
 
 definition scope_top :: "'a \<Rightarrow> var list \<Rightarrow> top_stmt \<Rightarrow> (var, 'a) fmap option"
 where
@@ -501,6 +504,50 @@ where
      else map_option (\<lambda>q. TyExprName q \<psi>s) (dotted_name (node e))
    })" |
 "type_expr_of _ = None"
+
+(* Type expression denoted by a subscript: a class or alias name applied to type arguments, or a type headed by
+   a predefined name *)
+lemma type_expr_of_subscript:
+  assumes "type_expr_of (At p (ExprSubscript e e')) = Some \<psi>"
+  shows "(\<exists>q \<psi>s. dotted_name (node e) = Some q \<and> \<psi> = TyExprName q \<psi>s)
+    \<or> node e = ExprVar (var ''Literal'') \<and> (\<exists>l. \<psi> = TyExprLiteral l)
+    \<or> node e = ExprVar (var ''Callable'') \<and> (\<exists>\<psi>s \<psi>'. \<psi> = TyExprCallable \<psi>s \<psi>')
+    \<or> node e = ExprVar (var ''list'') \<and> (\<exists>\<psi>'. \<psi> = TyExprList \<psi>')
+    \<or> node e = ExprVar (var ''tuple'') \<and> (\<exists>\<psi>s. \<psi> = TyExprTuple \<psi>s)
+    \<or> node e = ExprVar (var ''dict'') \<and> (\<exists>\<psi>'. \<psi> = TyExprDict \<psi>')"
+proof (cases "node e")
+  case (ExprVar x)
+  consider "x = var ''Literal''" | "x = var ''Callable''" | "x = var ''list''" | "x = var ''tuple''"
+    | "x = var ''dict''" | "x \<notin> {var ''Literal'', var ''Callable'', var ''list'', var ''tuple'', var ''dict''}"
+    by blast
+  then show ?thesis
+  proof cases
+    case 1
+    with assms ExprVar show ?thesis by (auto simp: Let_def split: expr.splits lit.splits)
+  next
+    case 2
+    with assms ExprVar show ?thesis
+      by (auto simp: Let_def bind_eq_Some_conv split: located.splits expr.splits list.splits)
+  next
+    case 3
+    with assms ExprVar obtain \<psi>s where "(case \<psi>s of [\<psi>'] \<Rightarrow> Some (TyExprList \<psi>') | _ \<Rightarrow> None) = Some \<psi>"
+      by (auto simp: Let_def bind_eq_Some_conv)
+    with 3 ExprVar show ?thesis by (cases \<psi>s rule: remdups_adj.cases) auto
+  next
+    case 4
+    with assms ExprVar show ?thesis by (auto simp: Let_def bind_eq_Some_conv)
+  next
+    case 5
+    with assms ExprVar obtain \<psi>s
+      where "(case \<psi>s of [TyExprPrim str, \<psi>'] \<Rightarrow> Some (TyExprDict \<psi>') | _ \<Rightarrow> None) = Some \<psi>"
+      by (auto simp: Let_def bind_eq_Some_conv)
+    with 5 ExprVar show ?thesis
+      by (cases \<psi>s rule: remdups_adj.cases) (auto split: list.split_asm ty_expr.split_asm prim_ty.split_asm)
+  next
+    case 6
+    with assms ExprVar show ?thesis by (auto simp: Let_def bind_eq_Some_conv)
+  qed
+qed (use assms in \<open>auto simp: Let_def bind_eq_Some_conv\<close>)
 
 consts
   binds :: "'a \<Rightarrow> var set"
