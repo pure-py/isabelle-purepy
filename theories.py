@@ -38,7 +38,9 @@ def main() -> None:
     before, rest = text.split(BEGIN, 1)
     after = rest.split(END, 1)[1]
     updated = before + BEGIN + table() + END + after
-    if sys.argv[1:] == ["--check"]:
+    if sys.argv[1:] == ["--list"]:
+        print(" ".join(map(str, theories())))
+    elif sys.argv[1:] == ["--check"]:
         if updated != text:
             sys.exit("README.md theories out of date: run ./theories.py")
     else:
