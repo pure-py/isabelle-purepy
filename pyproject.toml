@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "purepy"
 description = "reference implementation"
-version = "0.27.5"
+version = "0.27.6"
 requires-python = ">=3.12"
 dependencies = [
     "purepy-conformance @ https://github.com/pure-py/pure-py-spec/releases/download/v0.27.6/purepy_conformance-0.27.6-py3-none-any.whl",
