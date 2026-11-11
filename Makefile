@@ -20,6 +20,7 @@ build: check-version codegen
 	@test "$$(cat .python-version)" = "$$(cat $(CODEGEN)/.python-version)" || \
 		{ echo "code generator targets Python $$(cat $(CODEGEN)/.python-version), not $$(cat .python-version)"; exit 1; }
 	$(PYTHON) theories.py --check
+	$(PYTHON) names.py --check
 	rm -rf python/python_out
 	$(ISABELLE) build -v -e -d $(CODEGEN) -D .
 	$(PYTHON) relativise_imports.py $(CODE) $(GENERATED)
