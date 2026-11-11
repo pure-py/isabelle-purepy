@@ -16,14 +16,16 @@ check-version:
 codegen:
 	@test -e $(CODEGEN)/Python.thy -a ! -e $(CODEGEN)/.git || ./fetch-codegen.sh
 
-build: check-version codegen
+build: check-version codegen names.txt
 	@test "$$(cat .python-version)" = "$$(cat $(CODEGEN)/.python-version)" || \
 		{ echo "code generator targets Python $$(cat $(CODEGEN)/.python-version), not $$(cat .python-version)"; exit 1; }
 	$(PYTHON) theories.py --check
-	$(PYTHON) names.py --check
 	rm -rf python/python_out
 	$(ISABELLE) build -v -e -d $(CODEGEN) -D .
 	$(PYTHON) relativise_imports.py $(CODE) $(GENERATED)
+
+names.txt: names.py theories.py ROOT $(shell $(PYTHON) theories.py --list)
+	$(PYTHON) names.py
 
 # Lint and conformance suite
 check-conformance:

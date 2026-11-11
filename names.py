@@ -3,7 +3,6 @@
 
 import pathlib
 import re
-import sys
 
 from theories import theories
 
@@ -43,11 +42,7 @@ def index() -> str:
 
 
 def main() -> None:
-    if sys.argv[1:] == ["--check"]:
-        if not INDEX.exists() or INDEX.read_text() != index():
-            sys.exit("names.txt out of date: run ./names.py")
-    else:
-        INDEX.write_text(index())
+    INDEX.write_text(index())
 
 
 if __name__ == "__main__":
