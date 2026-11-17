@@ -30,10 +30,10 @@ jobs:
       image: makarius/isabelle:${{ needs.version.outputs.isabelle }}
       options: --user root
     steps:
-      - name: Install make and git
+      - name: Install make, git and zip
         run: |
           apt-get update -q
-          apt-get install -y -q --no-install-recommends make git
+          apt-get install -y -q --no-install-recommends make git zip
 
       - uses: actions/checkout@v7
 
@@ -48,6 +48,19 @@ jobs:
 
       - name: Lint, run conformance suite and build wheel
         run: make wheel
+
+      - name: Build sources archive
+        run: make dist/isabelle-purepy-sources.zip
+
+      # Attached by the release workflow to a release of this commit
+      - name: Keep release files
+        uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: |
+            dist/*.whl
+            dist/isabelle-purepy-sources.zip
+            names.txt
 
       - name: Run conformance suite under the reference interpreter
         run: uv run --locked ./test/check-conformance.sh "python -m purepy" --no-lint
