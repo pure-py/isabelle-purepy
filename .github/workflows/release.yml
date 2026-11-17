@@ -16,6 +16,22 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: main
+          fetch-depth: 0
+
+      # Release older commit when later commits change only README, since build workflow skips such commits
+      - name: Find latest commit on main with passing build
+        id: build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          read -r RUN COMMIT < <(gh run list --workflow build.yml --branch main --status success --limit 1 \
+            --json databaseId,headSha --jq '.[0] | "\(.databaseId) \(.headSha)"')
+          test -n "$COMMIT" || { echo "no passing build on main"; exit 1; }
+          CHANGED="$(git diff --name-only "$COMMIT" HEAD | grep -vx README.md || true)"
+          test -z "$CHANGED" || { echo "commits after $COMMIT change $CHANGED"; exit 1; }
+          git checkout -q "$COMMIT"
+          echo "run=$RUN" >> "$GITHUB_OUTPUT"
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
 
       - name: Check version against pinned conformance suite
         id: version
@@ -31,23 +47,17 @@ jobs:
             exit 1
           fi
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
-          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Download files kept by passing build
         env:
           GH_TOKEN: ${{ github.token }}
-          COMMIT: ${{ steps.version.outputs.commit }}
-        run: |
-          RUN="$(gh run list --workflow build.yml --commit "$COMMIT" --status success --limit 1 \
-            --json databaseId --jq '.[0].databaseId')"
-          test -n "$RUN" || { echo "no passing build of $COMMIT"; exit 1; }
-          gh run download "$RUN" --name release --dir release
+        run: gh run download "${{ steps.build.outputs.run }}" --name release --dir release
 
       - name: Create release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          target_commitish: ${{ steps.version.outputs.commit }}
+          target_commitish: ${{ steps.build.outputs.commit }}
           files: |
             release/dist/*
             release/names.txt
