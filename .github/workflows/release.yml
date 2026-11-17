@@ -68,10 +68,10 @@ jobs:
       image: makarius/isabelle:${{ needs.bump-version.outputs.isabelle }}
       options: --user root
     steps:
-      - name: Install make and git
+      - name: Install make, git and zip
         run: |
           apt-get update -q
-          apt-get install -y -q --no-install-recommends make git
+          apt-get install -y -q --no-install-recommends make git zip
 
       - name: Checkout tagged commit
         uses: actions/checkout@v7
@@ -90,8 +90,14 @@ jobs:
       - name: Lint, run conformance suite and build wheel
         run: make wheel
 
+      - name: Build sources archive
+        run: make dist/isabelle-purepy-sources.zip
+
       - name: Create release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.bump-version.outputs.tag }}
-          files: dist/*.whl
+          files: |
+            dist/*.whl
+            dist/isabelle-purepy-sources.zip
+            names.txt
