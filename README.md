@@ -89,11 +89,7 @@ After changing dependencies or metadata in `pyproject.toml`, run `uv lock` and c
 ## Release workflow
 
 Run the `Release` GitHub Action manually. The version number of a release is that of the pinned
-`purepy-conformance` release. A release attaches these files:
-
-- wheel
-- `names.txt`
-- `isabelle-purepy-sources.zip`: output of `make dist`
+`purepy-conformance` release.
 
 ## Theories
 
