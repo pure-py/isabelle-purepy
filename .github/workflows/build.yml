@@ -7,34 +7,16 @@ on:
     types: [submitted]
   workflow_dispatch:
 
+# Separate group for each review other than an approval, so the review doesn't cancel a build
 concurrency:
-  group: build-${{ github.event.pull_request.number || github.ref }}
+  group: >-
+    build-${{ github.event_name == 'pull_request_review' && github.event.review.state != 'approved' && github.run_id
+    || github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-  pull-requests: read
-
 jobs:
-  # Skip build when pull request changes only README
-  changes:
-    if: github.event_name != 'pull_request_review' || github.event.review.state == 'approved'
-    runs-on: ubuntu-latest
-    outputs:
-      build: ${{ steps.files.outputs.build }}
-    steps:
-      - id: files
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
-        run: |
-          if [ -z "$PR" ] || gh pr diff "$PR" --repo "$GITHUB_REPOSITORY" --name-only | grep -qvx README.md; then
-            echo "build=true" >> "$GITHUB_OUTPUT"
-          fi
-
   version:
-    needs: changes
-    if: needs.changes.outputs.build == 'true'
+    if: github.event_name != 'pull_request_review' || github.event.review.state == 'approved'
     runs-on: ubuntu-latest
     outputs:
       isabelle: ${{ steps.read.outputs.isabelle }}
