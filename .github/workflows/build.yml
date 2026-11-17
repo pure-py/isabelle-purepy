@@ -49,8 +49,11 @@ jobs:
       - name: Lint, run conformance suite and build wheel
         run: make wheel
 
+      # Allow git on checkout, since container user doesn't own checkout
       - name: Build sources archive
-        run: make dist/isabelle-purepy-sources.zip
+        run: |
+          git config --global --add safe.directory '*'
+          make dist/isabelle-purepy-sources.zip
 
       # Attached by the release workflow to a release of this commit
       - name: Keep release files
