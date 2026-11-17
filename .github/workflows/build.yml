@@ -1,32 +1,36 @@
 name: build
 
 on:
-  push:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+  pull_request_review:
+    types: [submitted]
   workflow_dispatch:
 
 concurrency:
-  group: build-${{ github.ref }}
+  group: build-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
-  # Skip build when only README changes
+  # Skip build when pull request changes only README
   changes:
+    if: github.event_name != 'pull_request_review' || github.event.review.state == 'approved'
     runs-on: ubuntu-latest
     outputs:
-      build: ${{ github.event_name == 'workflow_dispatch' || steps.paths.outputs.build == 'true' }}
+      build: ${{ steps.files.outputs.build }}
     steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - id: paths
-        uses: dorny/paths-filter@v4
-        with:
-          predicate-quantifier: every
-          filters: |
-            build:
-              - '**'
-              - '!README.md'
+      - id: files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -z "$PR" ] || gh pr diff "$PR" --repo "$GITHUB_REPOSITORY" --name-only | grep -qvx README.md; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
 
   version:
     needs: changes
@@ -49,10 +53,10 @@ jobs:
       image: makarius/isabelle:${{ needs.version.outputs.isabelle }}
       options: --user root
     steps:
-      - name: Install make, git and zip
+      - name: Install make and git
         run: |
           apt-get update -q
-          apt-get install -y -q --no-install-recommends make git zip
+          apt-get install -y -q --no-install-recommends make git
 
       - uses: actions/checkout@v7
 
@@ -67,22 +71,6 @@ jobs:
 
       - name: Lint, run conformance suite and build wheel
         run: make wheel
-
-      # Allow git on checkout, since container user doesn't own checkout
-      - name: Build sources archive
-        run: |
-          git config --global --add safe.directory '*'
-          make dist/isabelle-purepy-sources.zip
-
-      # Attached by the release workflow to a release of this commit
-      - name: Keep release files
-        uses: actions/upload-artifact@v4
-        with:
-          name: release
-          path: |
-            dist/*.whl
-            dist/isabelle-purepy-sources.zip
-            names.txt
 
       - name: Run conformance suite under the reference interpreter
         run: uv run --locked ./test/check-conformance.sh "python -m purepy" --no-lint
