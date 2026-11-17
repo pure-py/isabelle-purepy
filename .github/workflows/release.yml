@@ -1,16 +1,18 @@
 name: Release
 
-# Release main without rebuilding
 on:
   workflow_dispatch:
 
 permissions:
   contents: write
-  actions: read
 
 jobs:
-  release:
+  version:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      commit: ${{ steps.version.outputs.commit }}
+      isabelle: ${{ steps.version.outputs.isabelle }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -32,23 +34,50 @@ jobs:
           fi
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
           echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "isabelle=$(cat .isabelle-version)" >> "$GITHUB_OUTPUT"
 
-      - name: Download files kept by passing build
-        env:
-          GH_TOKEN: ${{ github.token }}
-          COMMIT: ${{ steps.version.outputs.commit }}
+  release:
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    container:
+      image: makarius/isabelle:${{ needs.version.outputs.isabelle }}
+      options: --user root
+    steps:
+      - name: Install make, git and zip
         run: |
-          RUN="$(gh run list --workflow build.yml --commit "$COMMIT" --status success --limit 1 \
-            --json databaseId --jq '.[0].databaseId')"
-          test -n "$RUN" || { echo "no passing build of $COMMIT"; exit 1; }
-          gh run download "$RUN" --name release --dir release || \
-            { echo "build of $COMMIT skipped; run the build workflow on main"; exit 1; }
+          apt-get update -q
+          apt-get install -y -q --no-install-recommends make git zip
+
+      - name: Checkout released commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.version.outputs.commit }}
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+
+      - name: Check proofs and generate type checker
+        timeout-minutes: 30
+        run: make build ISABELLE=/home/isabelle/Isabelle/bin/isabelle
+
+      - name: Lint, run conformance suite and build wheel
+        run: make wheel
+
+      - name: Build sources archive
+        run: |
+          # Allow git on checkout, since container user doesn't own checkout
+          git config --global --add safe.directory '*'
+          make dist/isabelle-purepy-sources.zip
 
       - name: Create release
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          target_commitish: ${{ steps.version.outputs.commit }}
+          tag_name: ${{ needs.version.outputs.tag }}
+          target_commitish: ${{ needs.version.outputs.commit }}
           files: |
-            release/dist/*
-            release/names.txt
+            dist/*.whl
+            dist/isabelle-purepy-sources.zip
+            names.txt
