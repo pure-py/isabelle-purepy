@@ -7,13 +7,6 @@ on:
     types: [submitted]
   workflow_dispatch:
 
-# Separate group for each review other than an approval, so the review doesn't cancel a build
-concurrency:
-  group: >-
-    build-${{ github.event_name == 'pull_request_review' && github.event.review.state != 'approved' && github.run_id
-    || github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
 jobs:
   version:
     if: github.event_name != 'pull_request_review' || github.event.review.state == 'approved'
