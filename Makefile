@@ -44,4 +44,10 @@ dist: codegen
 	git -C $(CODEGEN) archive --format=tar HEAD | tar -x -C $(DEST)/$(CODEGEN)
 	rm -rf $(DEST)/.github $(DEST)/.claude $(DEST)/fetch-codegen.sh
 
+# Self-contained copy as an archive
+dist/isabelle-purepy-sources.zip: codegen
+	rm -rf $@ dist/sources && $(MAKE) dist DEST=dist/sources
+	cd dist/sources && zip -q -r -9 ../$(@F) .
+	rm -rf dist/sources
+
 .PHONY: default check-version codegen build check-conformance wheel dist
