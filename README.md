@@ -88,8 +88,9 @@ After changing dependencies or metadata in `pyproject.toml`, run `uv lock` and c
 
 ## Release workflow
 
-Run the `Release` GitHub Action manually. The version number of a release is that of the pinned
-`purepy-conformance` release.
+Set the version in `pyproject.toml` to the version of the pinned `purepy-conformance` release. For a further
+release against the same `purepy-conformance` release, use a post-release suffix, as in 0.27.12.post1. Once the
+latest commit on `main` has a passing build, run the `Release` GitHub Action manually.
 
 ## Theories
 

@@ -2,8 +2,6 @@ name: build
 
 on:
   push:
-    paths-ignore:
-      - README.md
   workflow_dispatch:
 
 concurrency:
@@ -11,7 +9,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Skip build when only README changes
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ github.event_name == 'workflow_dispatch' || steps.paths.outputs.build == 'true' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - id: paths
+        uses: dorny/paths-filter@v4
+        with:
+          predicate-quantifier: every
+          filters: |
+            build:
+              - '**'
+              - '!README.md'
+
   version:
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
     runs-on: ubuntu-latest
     outputs:
       isabelle: ${{ steps.read.outputs.isabelle }}
@@ -30,10 +49,10 @@ jobs:
       image: makarius/isabelle:${{ needs.version.outputs.isabelle }}
       options: --user root
     steps:
-      - name: Install make and git
+      - name: Install make, git and zip
         run: |
           apt-get update -q
-          apt-get install -y -q --no-install-recommends make git
+          apt-get install -y -q --no-install-recommends make git zip
 
       - uses: actions/checkout@v7
 
@@ -48,6 +67,22 @@ jobs:
 
       - name: Lint, run conformance suite and build wheel
         run: make wheel
+
+      # Allow git on checkout, since container user doesn't own checkout
+      - name: Build sources archive
+        run: |
+          git config --global --add safe.directory '*'
+          make dist/isabelle-purepy-sources.zip
+
+      # Attached by the release workflow to a release of this commit
+      - name: Keep release files
+        uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: |
+            dist/*.whl
+            dist/isabelle-purepy-sources.zip
+            names.txt
 
       - name: Run conformance suite under the reference interpreter
         run: uv run --locked ./test/check-conformance.sh "python -m purepy" --no-lint
